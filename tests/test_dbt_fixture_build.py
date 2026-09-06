@@ -4,9 +4,11 @@ tests/conftest.py builds four warehouses for this module and a test names the on
 it reads: `fixture_project_root` is the base two-profile build (17 of the 26 test
 functions), `divergent_fixture_root` adds a second ADRD run on a different date
 plus an un-stamped NSCLC run (6), and `solo_fixture_roots` holds one warehouse per
-profile for the invariance comparison (1). The remaining 4 take no fixture: they
-read model source or `_marts.yml`, so they still guard when a build breaks. No
-network, no real API, everything under tmp_path_factory.
+profile for the invariance comparison (1). Those three numbers count requests, not
+functions: 22 of the 26 take a warehouse, and two ask for two roots each, which is
+why they sum past 26. The remaining 4 take no fixture — they read model source,
+`_marts.yml` or `models/staging/_sources.yml`, so they still guard when a build
+breaks. No network, no real API, everything under tmp_path_factory.
 """
 
 import json
@@ -59,7 +61,8 @@ SEGMENT_MARTS_WITH_PROFILE = [
 # test_shared_dimension_contracts_state_the_per_profile_grain, which reads the
 # contract source rather than the built warehouse so that it keeps reporting when a
 # build is broken -- a fixture-backed guard errors instead of naming the drift,
-# which is how the R27 blackout hid this module for a whole task.
+# which is how the R27 blackout hid this module for six tasks: the fixture build
+# went red at Task 6's bd60666 and green again at Task 12's 19fabf2.
 SHARED_DIMS_WITH_PROFILE = ["dim_condition", "dim_sponsor", "dim_geography"]
 
 # The files test_window_frames_partition_by_profile reads. A separate list from
@@ -1038,9 +1041,11 @@ def test_shared_dimension_contracts_state_the_per_profile_grain() -> None:
     Read from the contract source, not ``dbt_target/manifest.json`` like
     test_segment_mart_contracts_declare_the_profile, so it keeps reporting while a
     build is broken: a manifest-backed version of this test errors rather than
-    naming the drift, which is the R27 failure mode that hid this module for a task.
-    It takes no fixture_project_root for the same reason. Contract column order is
-    checked because dbt's enforced contract compares the model's columns
+    naming the drift, which is the R27 failure mode that hid this module for six
+    tasks (the commits bounding that span are named on
+    ``SHARED_DIMS_WITH_PROFILE``). It takes no fixture_project_root for the same
+    reason. Contract column order is checked because dbt's enforced contract
+    compares the model's columns
     positionally, so a declaration that drifts from select order surfaces as a
     build failure several layers away from the line that caused it.
 
@@ -1104,12 +1109,13 @@ def test_shared_dimension_contracts_state_the_per_profile_grain() -> None:
     date_code = _strip_sql_comments((marts / "dim_date.sql").read_text(encoding="utf-8"))
     assert "indication_profile_id" not in date_code
 
-    # A19's defect, in the only form CI can reach while the fixture build is in
-    # blackout: this task re-hashed dim_sponsor.sponsor_key to
-    # (sponsor_normalized, indication_profile_id) and bridge_trial_sponsor had to
-    # follow, or the bridge's rows point at keys no dim_sponsor row has. The
-    # dbt `relationships` test that normally catches that never runs here, and
-    # neither does the python orphan check in this module.
+    # A19's defect, restated statically: this task re-hashed dim_sponsor.sponsor_key
+    # to (sponsor_normalized, indication_profile_id) and bridge_trial_sponsor had to
+    # follow, or the bridge's rows point at keys no dim_sponsor row has. dbt's own
+    # relationships test on exactly that column (_marts.yml:347) catches the orphan
+    # whenever a build runs; this guard is the version that still names the drifted
+    # inputs when a build does not run, which is why the assertion is on the key's
+    # inputs and not on row counts.
     sponsor_code = _strip_sql_comments((marts / "dim_sponsor.sql").read_text(encoding="utf-8"))
     bridge_code = _strip_sql_comments(
         (marts / "bridge_trial_sponsor.sql").read_text(encoding="utf-8")
