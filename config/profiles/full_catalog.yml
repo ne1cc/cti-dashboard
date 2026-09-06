@@ -74,6 +74,9 @@ ingestion:
 # pages are the whole registry, so a single retained bronze run matters here
 # more than anywhere else on the volume — and a special case is a knob nobody
 # will remember to re-tune.
+# bronze_runs_to_keep is decisive for this profile and this profile only: it is
+# ingest_only, so it has no silver and no transform, and the bronze horizon is
+# the sole thing bounding its raw pages.
 retention:
   bronze_runs_to_keep: 1
   snapshot_runs_to_keep: 6

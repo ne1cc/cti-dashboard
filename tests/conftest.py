@@ -36,11 +36,24 @@ def project_root_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.fixture(autouse=True)
 def _clear_config_cache():
+    """Clear the cached config *and* profile registry around every test.
+
+    Both are ``lru_cache``d singletons resolved against ``CTI_PROJECT_ROOT``, so a
+    registry left warm by an earlier test module hands a later one profiles
+    pointing at the repo's real ``data/`` tree — fatal for any test that runs a
+    real (non-dry) prune. Repo-wide rather than per-module so no future prune test
+    has to remember it. Called unconditionally, not via ``getattr``: if an
+    accessor stops being a cached singleton this fails loudly instead of quietly
+    removing the pin.
+    """
     from src.config import get_config
+    from src.profiles import get_registry
 
     get_config.cache_clear()
+    get_registry.cache_clear()
     yield
     get_config.cache_clear()
+    get_registry.cache_clear()
 
 
 def materialize_with_checks(*, assets, asset_checks, run_config=None, raise_on_error=False):

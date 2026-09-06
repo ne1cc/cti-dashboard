@@ -1,13 +1,18 @@
 """Run-directory retention: what may be deleted, and what must never be.
 
-The invariant under test is not "old runs disappear" — it is that a run's bronze
-is never removed while its silver is absent, because build_silver_entities
-raises FileNotFoundError for a missing bronze dir and the transform then has no
-input to re-derive that run from (src/transform/build_silver_entities.py:59).
+The invariant under test is not "old runs disappear" — it is that a *refreshable*
+profile's bronze is never removed while its silver is absent, because
+build_silver_entities raises FileNotFoundError for a missing bronze dir and the
+transform then has no input to re-derive that run from
+(src/transform/build_silver_entities.py:59). An ``ingest_only`` profile has no
+silver and no transform ever, so that guard is skipped for it and its bronze
+honors ``bronze_runs_to_keep`` — otherwise the largest consumer on the volume
+would be unbounded.
 
 Every deletion in this file lands inside a pytest ``tmp_path``: the fixtures
-point ``CTI_PROJECT_ROOT`` at a temp copy of the config tree, so no test can
-reach ``data/`` in the working tree.
+point ``CTI_PROJECT_ROOT`` at a temp copy of the config tree, ``tests/conftest.py``
+clears the cached config and profile registry around every test, and the one test
+that drives a real prune through the CLI injects a registry it built itself.
 """
 
 import re
@@ -31,27 +36,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 ADRD_PROFILE_YAML = REPO_ROOT / "config/profiles/adrd.yml"
 ONCOLOGY_PROFILE_YAML = REPO_ROOT / "config/profiles/oncology_nsclc.yml"
 FULL_CATALOG_PROFILE_YAML = REPO_ROOT / "config/profiles/full_catalog.yml"
-
-
-@pytest.fixture(autouse=True)
-def _clear_registry_cache():
-    """Keep `prune_all()`'s default registry bound to *this* test's temp root.
-
-    The default registry comes from a cached singleton, so without clearing it a
-    `prune_all()` in one test hands the next test profiles resolved against the
-    previous test's temp root — which exists on disk and would be pruned. The
-    lookup is defensive on purpose: the singleton accessor is being replaced by
-    direct `ProfileRegistry()` construction elsewhere in this plan, and when it
-    goes away there is simply no cache to clear.
-    """
-    import src.profiles as profiles
-
-    clear = getattr(getattr(profiles, "get_registry", None), "cache_clear", None)
-    if clear is not None:
-        clear()
-    yield
-    if clear is not None:
-        clear()
 
 
 MINIMAL_RETENTION_YAML = """\
@@ -261,24 +245,36 @@ def test_failed_runs_are_never_pruned_candidates(tmp_path, monkeypatch):
     assert not (cfg.paths.bronze_api_responses / "run_id=20260902T000000Z_old10000").is_dir()
 
 
-def test_bronze_never_keeps_fewer_runs_than_snapshots(profile_with_runs):
-    """snapshot_runs_to_keep > bronze_runs_to_keep is incoherent: dbt needs a
-    manifest for every silver run it globs."""
-    with pytest.raises(RetentionError, match="bronze_runs_to_keep"):
+def test_bronze_deeper_than_snapshots_is_refused(profile_with_runs):
+    """`bronze_runs_to_keep > snapshot_runs_to_keep` strands bytes: the runs
+    between the two horizons lose the manifest that is the prune's only index, so
+    their page directories are invisible to every later prune. The guard used to
+    refuse the opposite, harmless direction (snapshot deeper than bronze — that is
+    what the shipped 1/6 is); this asserts the reversal in both directions."""
+    with pytest.raises(RetentionError, match="bronze_runs_to_keep.*exceeds"):
         prune_profile(
-            profile_with_runs, RetentionConfig(bronze_runs_to_keep=1, snapshot_runs_to_keep=8)
+            profile_with_runs, RetentionConfig(bronze_runs_to_keep=8, snapshot_runs_to_keep=1)
         )
 
+    # The safe direction — snapshots deeper than bronze — must not raise. It is
+    # what every shipped config does.
+    prune_profile(
+        profile_with_runs, RetentionConfig(bronze_runs_to_keep=1, snapshot_runs_to_keep=8)
+    )
 
-def test_bronze_without_silver_is_kept_even_for_an_ingest_only_profile(tmp_path, monkeypatch):
-    """full_catalog has no silver by design, so the missing-silver guard keeps
-    its pages to the *snapshot* depth rather than bronze_runs_to_keep. Recorded
-    here because it is the guard's cost, not an accident of the test."""
+
+def test_an_ingest_only_profile_honors_its_bronze_horizon(tmp_path, monkeypatch):
+    """An `ingest_only` profile has no silver — never had, never will — so the
+    missing-silver guard is skipped for it and `bronze_runs_to_keep` is what
+    bounds its raw pages. Reverses the earlier assertion, which let the guard
+    collapse full_catalog's bronze depth to the snapshot depth and left ~6 runs of
+    a whole-registry pull on a 1 GB volume."""
     from src.profiles import load_profile
 
     monkeypatch.setenv("CTI_PROJECT_ROOT", str(tmp_path))
     _temp_config_tree(tmp_path)
     profile = load_profile(FULL_CATALOG_PROFILE_YAML)
+    assert profile.ingest_only
     cfg = profile.config
     assert not cfg.paths.silver.exists()
     for i in range(3):
@@ -287,8 +283,43 @@ def test_bronze_without_silver_is_kept_even_for_an_ingest_only_profile(tmp_path,
     removed = prune_profile(
         profile, RetentionConfig(bronze_runs_to_keep=1, snapshot_runs_to_keep=2)
     )
-    # Only the run that is also past the snapshot depth may go; the middle run's
-    # silver is absent, so its bronze stays.
+    # Bronze depth 1: both older page directories go, including the one the
+    # snapshot horizon keeps a manifest for. Nothing is unrecoverable — there is
+    # no transform for this profile to re-derive anything.
+    assert {r.run_id for r in removed} == {
+        "20260901T000000Z_run00000000",
+        "20260902T000000Z_run00000001",
+    }
+    assert not (cfg.paths.bronze_api_responses / "run_id=20260901T000000Z_run00000000").exists()
+    assert not (cfg.paths.bronze_api_responses / "run_id=20260902T000000Z_run00000001").exists()
+    assert (cfg.paths.bronze_api_responses / "run_id=20260903T000000Z_run00000002").is_dir()
+    # The two horizons stay independent: the manifest of the run inside the
+    # snapshot depth survives, so the prune can still see it next week.
+    manifests = sorted(p.name for p in cfg.paths.bronze_manifests.glob("manifest_*.json"))
+    assert manifests == [
+        "manifest_20260902T000000Z_run00000001.json",
+        "manifest_20260903T000000Z_run00000002.json",
+    ]
+
+
+def test_a_refreshable_profile_keeps_bronze_while_its_silver_is_missing(tmp_path, monkeypatch):
+    """The other half of the ruling: for a profile that does have a transform, a
+    run whose silver was never built must keep its bronze, or the run becomes
+    unrecoverable — so its pages are pruned only where the snapshot horizon prunes
+    too."""
+    from src.profiles import load_profile
+
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(tmp_path))
+    _temp_config_tree(tmp_path)
+    profile = load_profile(ADRD_PROFILE_YAML)
+    assert not profile.ingest_only
+    cfg = profile.config
+    for i in range(3):
+        _mk_run(cfg, f"2026090{i + 1}T000000Z_run{i:08d}", with_silver=False)
+
+    removed = prune_profile(
+        profile, RetentionConfig(bronze_runs_to_keep=1, snapshot_runs_to_keep=2)
+    )
     assert {r.run_id for r in removed} == {"20260901T000000Z_run00000000"}
     assert (cfg.paths.bronze_api_responses / "run_id=20260902T000000Z_run00000001").is_dir()
     assert (cfg.paths.bronze_api_responses / "run_id=20260903T000000Z_run00000002").is_dir()
@@ -467,12 +498,17 @@ def test_prune_all_reaches_every_profile_including_ingest_only(tmp_path, monkeyp
     assert catalog.ingest_only
     for i in range(2):
         _mk_run(adrd.config, f"2026090{i + 1}T000000Z_run{i:08d}")
-    # Past the snapshot depth, so the ingest_only profile has a removal to make.
+    # Past the *bronze* depth, and there is no silver anywhere: only the
+    # ingest_only exemption on the missing-silver guard can act on these.
     for i in range(8):
         _mk_run(catalog.config, f"2026091{i}T000000Z_run{i:08d}", with_silver=False)
 
     removed = prune_all(_FakeRegistry([adrd, catalog]))
     assert {r.profile_id for r in removed} == {"adrd", "full_catalog"}
+    pages = sorted(p.name for p in catalog.config.paths.bronze_api_responses.iterdir())
+    assert pages == ["run_id=20260917T000000Z_run00000007"], "bronze_runs_to_keep must bite"
+    # The snapshot horizon is untouched by that: six runs still have an index.
+    assert len(list(catalog.config.paths.bronze_manifests.glob("manifest_*.json"))) == 6
 
 
 def test_prune_all_refuses_an_empty_registry(tmp_path, monkeypatch):
@@ -561,17 +597,17 @@ def test_retention_config_defaults_when_absent(project_root_tmp: Path) -> None:
 def test_shipped_configs_agree_on_the_horizon() -> None:
     """One knob, no special cases: the deploy docs and the volume budget both
     assume adrd, oncology_nsclc, full_catalog and the default config say the
-    same thing (and that the snapshot horizon is inside the guard)."""
+    same thing (and that the horizon is one the guard will accept)."""
     from src.config import load_config
     from src.profiles import load_profile
-    from src.utils.retention import _SNAPSHOT_SLACK
 
     expected = RetentionConfig(bronze_runs_to_keep=1, snapshot_runs_to_keep=6)
     assert load_config().retention == expected
     for yml in sorted((REPO_ROOT / "config/profiles").glob("*.yml")):
         assert load_profile(yml).config.retention == expected, yml.name
-    assert expected.snapshot_runs_to_keep - expected.bronze_runs_to_keep <= _SNAPSHOT_SLACK, (
-        "the shipped horizon must stay inside prune's own coherence guard"
+    assert expected.bronze_runs_to_keep <= expected.snapshot_runs_to_keep, (
+        "bronze deeper than the snapshot depth is the ordering prune's coherence "
+        "guard refuses, so the shipped horizon must not be inside it"
     )
 
 
@@ -591,15 +627,32 @@ def test_cli_parser_prune_data_is_dry_run_opt_in():
 
 def test_cli_prune_data_deletes_inside_the_temp_root_only(tmp_path, monkeypatch):
     """End-to-end through ``python -m src.cli prune-data``: the horizon comes
-    from config/profiles/adrd.yml and every removed path is inside tmp_path."""
+    from config/profiles/adrd.yml and every removed path is inside tmp_path.
+
+    This is the only test in the suite that runs a real (non-dry) prune, so its
+    safety is stated in the test body rather than left to global cache state: the
+    root the modules compute is asserted to *be* the temp root, and the registry
+    ``prune_all`` falls back to is replaced with one built here, holding profiles
+    whose deletion roots were checked to sit inside that temp tree. A cached
+    singleton from an earlier test module therefore cannot contribute a profile
+    pointing at the repo's ``data/``.
+    """
     from src.cli import main
     from src.profiles import load_profile
+    from src.utils.paths import project_root
+    from src.utils.retention import _retention_roots
 
     monkeypatch.setenv("CTI_PROJECT_ROOT", str(tmp_path))
     _temp_config_tree(tmp_path)
     adrd = load_profile(ADRD_PROFILE_YAML)
     for i in range(2):
         _mk_run(adrd.config, f"2026090{i + 1}T000000Z_run{i:08d}")
+
+    root = project_root()
+    assert root == tmp_path.resolve(), "the prune must not be looking at the real data tree"
+    for path in _retention_roots(adrd.config.paths):
+        assert path.is_relative_to(root), path
+    monkeypatch.setattr("src.profiles.get_registry", lambda: _FakeRegistry([adrd]))
 
     assert main(["prune-data"]) == 0
     pages = adrd.config.paths.bronze_api_responses
@@ -608,15 +661,16 @@ def test_cli_prune_data_deletes_inside_the_temp_root_only(tmp_path, monkeypatch)
 
 
 def test_cli_prune_data_reports_a_refusal_as_failure(tmp_path, monkeypatch):
-    """A retention block that would delete live history must exit non-zero, not
-    print '0 run(s) removed' and let `make pipeline` call it a success."""
+    """A retention block the coherence guard refuses — bronze deeper than the
+    snapshot horizon, which strands raw pages — must exit non-zero, not print
+    '0 run(s) removed' and let `make pipeline` call it a success."""
     from src.cli import main
 
     monkeypatch.setenv("CTI_PROJECT_ROOT", str(tmp_path))
     config_dir = _temp_config_tree(tmp_path)
     adrd = config_dir / "profiles/adrd.yml"
     text, hits = re.subn(
-        r"(snapshot_runs_to_keep:\s*)\d+",
+        r"(bronze_runs_to_keep:\s*)\d+",
         r"\g<1>40",
         adrd.read_text(encoding="utf-8"),
     )

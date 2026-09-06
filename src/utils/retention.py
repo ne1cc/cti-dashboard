@@ -2,13 +2,15 @@
 
 Two independent horizons:
 
-* bronze (raw API pages) — the most expensive bytes and only needed to re-derive
+* bronze (raw API pages) — the most expensive bytes (measured 2026-09-05: 78.8 MB
+  of bronze against 9.9 MB of silver for one run) and only needed to re-derive
   silver, so it keeps `bronze_runs_to_keep` runs.
 * snapshots (silver parquet + manifest + summary) — these *are* the warehouse's
   history; dbt globs them, so pruning one deletes a snapshot_date from every
   trend and time-series mart. `snapshot_runs_to_keep` is therefore allowed to
-  exceed `bronze_runs_to_keep` — but only by a bounded slack, checked below
-  rather than documented and hoped for.
+  run deeper than `bronze_runs_to_keep`, and the depth it runs to is not capped:
+  snapshots are the cheap bytes and the longitudinal record, raw pages are the
+  expensive bytes and only exist to re-derive silver.
 
 The manifests directory belongs to the *snapshot* horizon, not the bronze one:
 `summary_*.parquet` is dbt's `ingestion_manifests` source, and `manifest_*.json`
@@ -16,12 +18,12 @@ is what `load_manifests` reads to decide anything at all. Emptying it to
 `bronze_runs_to_keep` (1) would leave the next prune unable to see the history it
 is supposed to bound, and silver would then grow one run per week forever.
 
-Known hazard, deliberately not tuned away: the shipped horizon keeps bronze
-shallower than snapshots, which is the coherent direction. If
-`bronze_runs_to_keep` is ever set *above* `snapshot_runs_to_keep`, the runs
-between the two horizons lose their manifest and silver while keeping their raw
-pages — and a page directory with no manifest is invisible to every later prune,
-so those bytes are stranded. Keep the two equal, or bronze shallower.
+What is enforced, in `prune_profile`, is `bronze_runs_to_keep <=
+snapshot_runs_to_keep`. The reverse strands bytes: the runs between the two
+horizons lose their manifest and silver while keeping their raw pages, and a page
+directory with no manifest is invisible to every later prune, so those bytes can
+only be reclaimed by hand. A horizon deep enough to hit that is one config edit
+away and fails silently, which is why it is a refusal rather than a comment.
 
 Silver is shared between profiles (config/shared_paths.yml) and its per-run files
 are keyed by run id alone (`silver/silver_trials/run_id=X.parquet`), so nothing in
@@ -52,13 +54,6 @@ from src.ingest.snapshot_manifest import load_manifests
 if TYPE_CHECKING:
     from src.profiles import IndicationProfile, ProfileRegistry
 
-# How much longer silver/manifests are kept than raw bronze pages. Snapshots are
-# cheap (measured 2026-09-05: 9.9 MB of silver vs 78.8 MB of bronze for one run)
-# and they are the longitudinal record, so the depth is deliberately larger — but
-# every snapshot held beyond bronze depth is history that can never be re-derived
-# from raw pages again, so the allowance is bounded rather than open-ended.
-_SNAPSHOT_SLACK = 5
-
 # A run id becomes a path component in every deletion target below, and it is
 # read out of manifest *content*. new_run_id() (src/ingest/snapshot_manifest.py:
 # 39) emits UTC-compact + hex, so anything else — a slash, a dot-dot, an empty
@@ -67,7 +62,8 @@ _RUN_ID = re.compile(r"[0-9A-Za-z_]+")
 
 
 class RetentionError(Exception):
-    """Refusal to prune under a config that would delete live warehouse history."""
+    """Refusal to prune under a config that would delete live warehouse history
+    or strand raw pages beyond the reach of every later prune."""
 
 
 @dataclass(frozen=True)
@@ -122,12 +118,16 @@ def prune_profile(
     dry_run: bool = False,
 ) -> list[PrunedRun]:
     cfg = retention or profile.config.retention
-    if cfg.snapshot_runs_to_keep > cfg.bronze_runs_to_keep + _SNAPSHOT_SLACK:
+    if cfg.bronze_runs_to_keep > cfg.snapshot_runs_to_keep:
         raise RetentionError(
-            f"retention.snapshot_runs_to_keep ({cfg.snapshot_runs_to_keep}) exceeds "
-            f"retention.bronze_runs_to_keep ({cfg.bronze_runs_to_keep}) + slack "
-            f"({_SNAPSHOT_SLACK}): dbt globs silver for runs whose manifest must "
-            "still exist. Raise bronze_runs_to_keep instead of lowering the budget."
+            f"retention.bronze_runs_to_keep ({cfg.bronze_runs_to_keep}) exceeds "
+            f"retention.snapshot_runs_to_keep ({cfg.snapshot_runs_to_keep}): the runs "
+            "between the two horizons lose their manifest and silver while keeping "
+            "their raw pages, and a page directory no manifest names is invisible "
+            "to every later prune — those bytes strand. Raw pages are the "
+            "expensive bytes and exist only to re-derive silver, so lower "
+            "bronze_runs_to_keep to at or below the snapshot depth; keeping "
+            "snapshots deeper than bronze is the safe direction."
         )
 
     paths = profile.config.paths
@@ -146,10 +146,24 @@ def prune_profile(
     snapshot_victims = set(runs_to_prune(success_ids, cfg.snapshot_runs_to_keep))
     bronze_victims = set(runs_to_prune(success_ids, cfg.bronze_runs_to_keep))
 
-    # A snapshot may only be dropped when its bronze is going too, and bronze
-    # may only be dropped once its silver exists (otherwise the run is
-    # unrecoverable: build_silver_entities raises FileNotFoundError, line 59).
-    unsafe = {r for r in bronze_victims if r not in silver_runs and r not in snapshot_victims}
+    # Bronze may only be dropped once its silver exists, otherwise the run is
+    # unrecoverable: build_silver_entities raises FileNotFoundError for a missing
+    # page directory (src/transform/build_silver_entities.py:59). And a snapshot
+    # may only be dropped when its bronze is going too.
+    #
+    # The silver half of that is a no-op for an `ingest_only` profile, so it is
+    # skipped: no transform ever runs for full_catalog, silver never exists by
+    # design, and the guard therefore protected nothing while making
+    # `bronze_runs_to_keep` inert — its bronze would have been pruned only where
+    # the snapshot horizon prunes too, i.e. ~6 runs of a whole-registry pull kept
+    # forever on a 1 GB volume. `config/profiles/full_catalog.yml` sets bronze to
+    # 1 precisely because those are the largest single consumer, so for that
+    # profile the bronze horizon is the only thing that bounds them. A
+    # *refreshable* profile with no silver yet is the case the guard exists for —
+    # it still has a transform to feed — and keeps the protection.
+    unsafe: set[str] = set()
+    if not profile.ingest_only:
+        unsafe = {r for r in bronze_victims if r not in silver_runs and r not in snapshot_victims}
     bronze_victims -= unsafe
     for run_id in sorted(unsafe):
         logger.warning(
@@ -253,8 +267,9 @@ def _snapshot_artifacts(paths: PathsConfig, run_id: str) -> list[Path]:
 
 
 def prune_all(registry: ProfileRegistry | None = None, *, dry_run: bool = False) -> list[PrunedRun]:
-    """Prune every discovered profile, including ingest_only (its bronze is the
-    largest single consumer on the volume)."""
+    """Prune every discovered profile, including ingest_only. Its bronze is the
+    largest single consumer on the volume and, with no silver ever to wait for,
+    `bronze_runs_to_keep` is the only horizon that bounds it."""
     if registry is None:
         from src.profiles import get_registry
 

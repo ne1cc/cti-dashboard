@@ -90,8 +90,9 @@ ingestion:
 
 # How many past runs survive `make prune-data` (src/utils/retention.py).
 # bronze = raw API pages, the expensive bytes; snapshot = silver + manifest,
-# i.e. the warehouse's longitudinal depth. Snapshot depth may exceed bronze
-# depth, but only by the slack the prune module refuses to go past.
+# i.e. the warehouse's longitudinal depth. bronze_runs_to_keep may not exceed
+# snapshot_runs_to_keep — the prune refuses it, because raw pages left behind by
+# a deleted manifest can never be discovered by a later prune.
 retention:
   bronze_runs_to_keep: 1
   snapshot_runs_to_keep: 6

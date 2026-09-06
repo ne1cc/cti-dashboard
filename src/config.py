@@ -66,10 +66,12 @@ class RetentionConfig(BaseModel):
 
     bronze_runs_to_keep counts *success* ingestion runs whose raw pages are
     retained; snapshot_runs_to_keep counts runs whose silver + manifest are
-    retained — i.e. the warehouse's longitudinal depth. Snapshot depth may
-    exceed bronze depth, but only by the slack src/utils/retention.py refuses to
-    go past; the manifests dbt reads stay on the snapshot horizon, so every
-    silver run it globs still has a manifest.
+    retained — i.e. the warehouse's longitudinal depth. Snapshot depth may run
+    deeper than bronze depth by any amount (snapshots are the cheap bytes and the
+    history); bronze deeper than snapshot is what src/utils/retention.py refuses,
+    because the runs in between keep raw pages no later prune can discover. An
+    ingest_only profile never has silver, so for it bronze_runs_to_keep is the
+    only horizon that bounds its raw pages at all.
     """
 
     model_config = ConfigDict(extra="ignore")
