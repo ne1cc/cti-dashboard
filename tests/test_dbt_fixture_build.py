@@ -7,6 +7,7 @@ No network, no real API, everything under tmp_path_factory.
 
 import json
 import os
+import re
 from pathlib import Path
 
 import duckdb
@@ -35,6 +36,32 @@ SEGMENT_MARTS_WITH_PROFILE = [
     "mart_feasibility_priority_queue",
 ]
 
+# The files test_window_frames_partition_by_profile reads. A separate list from
+# the one above on purpose: that one pins which contracts declare the column,
+# this one pins which models' window frames must be profile-scoped, and Tasks
+# 11-12 extend them differently -- mart_trial_similarity joins this list with
+# Task 12's fix to its unprofiled row_number() (mart_trial_similarity.sql:73-74),
+# not before. The two with no windows today are listed because the guard exists
+# to catch the first window someone adds to them.
+MARTS_WITH_PROFILE_SCOPED_WINDOWS = [
+    "mart_trial_activity",
+    "mart_site_overlap",
+    "mart_condition_geography_trends",
+    "mart_recruiting_competition",
+    "mart_feasibility_priority_queue",
+]
+
+_SQL_COMMENT_RE = re.compile(r"--[^\n]*|\{#.*?#\}", re.DOTALL)
+_OVER_KEYWORD_RE = re.compile(r"\bover\b", re.IGNORECASE)
+_PARTITION_BY_RE = re.compile(r"\bpartition\s+by\b", re.IGNORECASE)
+# A frame is either inline, `over (partition by ...)`, or a reference to a named
+# window, `over trailing_3m`. Neither branch nests, so a frame this cannot read
+# fails the count check in _window_frames rather than going unchecked.
+_FRAME_RE = re.compile(
+    r"\bover\b\s*(?:\((?P<inline>[^()]*)\)|(?P<named>[a-z_][a-z0-9_]*))",
+    re.IGNORECASE,
+)
+
 
 def test_dbt_build_passes_on_fixture_snapshot(fixture_project_root: Path) -> None:
     # The session fixture asserts dbt's exit code before returning; this pins
@@ -58,6 +85,36 @@ def _rows(root: Path, sql: str) -> list[tuple]:
     finally:
         os.chdir(start)
         con.close()
+
+
+def _window_frames(sql: str, model: str) -> list[str]:
+    """The text of every window frame in a model's SQL, comment markup removed.
+
+    Reads the whole file as one string because frames span lines, and resolves
+    a named-window reference to its `window name as (...)` definition. The
+    final assert is what keeps this honest: a frame shape the regex cannot read
+    (nested parens, an `over` used some other way) shrinks the frame list while
+    the keyword count stays put, and that has to be a failure rather than a
+    shorter list of things the guard silently stopped checking.
+    """
+    code = _SQL_COMMENT_RE.sub(" ", sql)
+    frames: list[str] = []
+    for match in _FRAME_RE.finditer(code):
+        inline = match.group("inline")
+        if inline is not None:
+            frames.append(inline)
+            continue
+        named = match.group("named")
+        definition = re.search(rf"\b{named}\b\s+as\s*\(([^()]*)\)", code, re.IGNORECASE)
+        assert definition is not None, f"{model}: 'over {named}' references an undeclared window"
+        frames.append(definition.group(1))
+    parsed = len(frames)
+    keywords = len(_OVER_KEYWORD_RE.findall(code))
+    assert parsed == keywords, (
+        f"{model}: {keywords} window keywords but {parsed} readable frames -- "
+        "the guard cannot check a frame it cannot parse"
+    )
+    return frames
 
 
 @pytest.mark.parametrize("model", STAGING_WITH_PROFILE)
@@ -248,10 +305,13 @@ def test_bridge_trial_condition_taxonomy_groups(fixture_project_root: Path) -> N
 def test_segment_marts_are_grained_per_profile(fixture_project_root: Path) -> None:
     """The four segment marts that build in this commit, at profile x segment.
 
-    Only mart_site_overlap changes its total here (14 pooled -> 28): both
-    profiles list the same 14 facilities, and a facility shared between two
-    profiles is not overlap within either profile's query scope. The other three
-    keep their totals because the ADRD and NSCLC taxonomies are disjoint, so no
+    Only mart_site_overlap changes its total here: 28, the sum of the 14 rows
+    this test measures per profile. The pooled 14 it displaces is derived, not
+    measured -- nothing at this SHA builds the pre-migration table, and the
+    derivation is that both profiles list the same 14 facilities, so pooling
+    would merge them to 14. A facility shared between two profiles is not
+    overlap within either profile's query scope. The other three keep their
+    totals because the ADRD and NSCLC taxonomies are disjoint, so no
     (condition_group, state, phase) key existed for pooling to merge -- their
     partition rewrites are correctness by construction, and this fixture cannot
     discriminate them. The asymmetric-fixture measurement that can is recorded
@@ -303,6 +363,7 @@ def test_mart_feasibility_priority_queue_shape(fixture_project_root: Path) -> No
       assertion here. priority_rank restarting per profile is likewise
       unverifiable while all scores tie.
     """
+    # PREDICTED — never produced by a committed build; re-measure at Task 12
     assert _rows(
         fixture_project_root,
         "select indication_profile_id, count(*) from main_marts.mart_feasibility_priority_queue"
@@ -312,11 +373,13 @@ def test_mart_feasibility_priority_queue_shape(fixture_project_root: Path) -> No
     # now hashes the profile: the same segment in two profiles is two rows with
     # two keys. 6 + 4 = 10 matches mart_recruiting_competition's 6 + 4, so no
     # profile was dropped by the 5e/5f joins that replaced the cross joins.
+    # PREDICTED — never produced by a committed build; re-measure at Task 12
     assert _rows(
         fixture_project_root,
         "select count(*), count(distinct priority_queue_key)"
         " from main_marts.mart_feasibility_priority_queue",
     ) == [(10, 10)]
+    # PREDICTED — never produced by a committed build; re-measure at Task 12
     for profile in ("adrd", "oncology_nsclc"):
         ranks = _rows(
             fixture_project_root,
@@ -327,6 +390,7 @@ def test_mart_feasibility_priority_queue_shape(fixture_project_root: Path) -> No
         assert ranks == [(1, 1)], profile
     # Carried forward unchanged: no score may leave [0, 1] now that the
     # normalization is partitioned per profile.
+    # PREDICTED — never produced by a committed build; re-measure at Task 12
     assert _rows(
         fixture_project_root,
         "select count(*) from main_marts.mart_feasibility_priority_queue "
@@ -361,6 +425,40 @@ def test_segment_mart_contracts_declare_the_profile(fixture_project_root: Path) 
         column = models[name]["columns"]["indication_profile_id"]
         assert column["data_type"] == "VARCHAR", name
         assert name in not_null_models, name
+
+
+def test_window_frames_partition_by_profile() -> None:
+    """No frame in Task 10's marts may normalize across the whole warehouse.
+
+    Asserted against the model source, not the built tables, because nothing on
+    this fixture can discriminate the two: every segment holds exactly one
+    recruiting trial, so a pooled `percent_rank()` and a per-profile one both
+    return 0.0, and a global `rank()` over all-tied scores still yields (1, 1).
+    Deleting a `partition by indication_profile_id` would leave every value
+    assertion in this file green. It takes no fixture_project_root for the same
+    reason -- the built warehouse is in blackout until Task 12, and this guard
+    has to run today.
+
+    Two rules over MARTS_WITH_PROFILE_SCOPED_WINDOWS, applied by _window_frames
+    to the whole file (frames span lines, so a line-by-line scan would find
+    almost nothing and look green): an empty or whitespace-only frame is banned
+    outright, and a frame with a `partition by` must partition by the profile.
+    That list is provisional -- Tasks 11-12 extend it, mart_trial_similarity
+    joining when Task 12 gives its row_number() a profile. Not caught: a frame
+    with an `order by` and no `partition by` at all, which reads as a deliberate
+    global and stays a reviewer's job.
+    """
+    from src.utils.paths import project_root
+
+    marts = project_root() / "dbt_clinical_trials/models/marts"
+    for model in MARTS_WITH_PROFILE_SCOPED_WINDOWS:
+        sql = (marts / f"{model}.sql").read_text(encoding="utf-8")
+        for frame in _window_frames(sql, model):
+            assert frame.strip(), f"{model}: unbounded frame 'over ()' normalizes across profiles"
+            if _PARTITION_BY_RE.search(frame):
+                assert "indication_profile_id" in frame, (
+                    f"{model}: frame partitions without the profile: 'over ({frame.strip()})'"
+                )
 
 
 def test_mart_data_reliability_reconciles(fixture_project_root: Path) -> None:
