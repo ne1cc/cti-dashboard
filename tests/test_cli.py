@@ -336,6 +336,55 @@ def test_cli_parser_quality_report():
     assert args.update_schema_baseline is True
 
 
+def test_cli_quality_report_updates_a_baseline_per_profile_tree(project_root_tmp, monkeypatch):
+    """`--update-schema-baseline` loops the registry so each profile's
+    baseline is frozen against a run that profile actually made — the loop's
+    own comment at src/cli.py:208-210 says updating only the default tree
+    "would freeze every other profile's baseline against a run it never
+    made", and reviewer F5 measured that no test reached the loop at all
+    (task-13-review-quality.md §2D: the only prior coverage asserted the
+    parser sets the flag).
+
+    Each profile's tree holds its own bronze run, so its baseline must name
+    its own run id; a collapsed loop leaves the non-default trees with no
+    baseline file at all."""
+    import json
+
+    from src.ingest.snapshot_manifest import write_manifest
+    from src.profiles import get_registry
+    from src.quality.schema_drift import BASELINE_FILENAME
+    from tests.test_build_silver import make_manifest, make_study, write_bronze_page
+
+    runs: dict[str, str] = {}
+    profiles = get_registry().refreshable()
+    assert len(profiles) >= 2, "a one-profile loop cannot test a per-profile flag"
+    for index, indication_profile in enumerate(profiles):
+        profile_cfg = indication_profile.config
+        run_id = f"20260904T120000Z_b000000{index}"
+        runs[indication_profile.profile_id] = run_id
+        write_bronze_page(
+            profile_cfg.paths.bronze_api_responses / f"run_id={run_id}", 1, [make_study("NCT1")]
+        )
+        profile_cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+        write_manifest(profile_cfg.paths.bronze_manifests, make_manifest(run_id, record_count=1))
+
+    # main() reaches build_report() with its default output; keep that write
+    # inside the temp root instead of the checkout's reports/ directory.
+    monkeypatch.setattr(
+        "src.quality.data_quality_report.REPORT_PATH",
+        project_root_tmp / "reports" / "data_quality_report.md",
+    )
+    assert main(["quality-report", "--update-schema-baseline"]) == 0
+
+    for pid, run_id in runs.items():
+        baseline = (
+            get_registry().get(pid).config.paths.bronze_api_responses.parent / BASELINE_FILENAME
+        )
+        assert baseline.exists(), f"no schema baseline in {pid}'s tree"
+        payload = json.loads(baseline.read_text(encoding="utf-8"))
+        assert payload["source_run_id"] == run_id, f"{pid}'s baseline froze another profile's run"
+
+
 def test_cli_parser_transform_profile_accepts_indication():
     parser = build_parser()
     args = parser.parse_args(["transform", "--profile", "oncology_nsclc"])
