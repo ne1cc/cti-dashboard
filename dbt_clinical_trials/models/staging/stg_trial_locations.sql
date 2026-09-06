@@ -4,6 +4,7 @@
 -- is a best-effort matching key (documented limitation).
 select
     ingestion_run_id,
+    indication_profile_id,
     nct_id,
     facility_name,
     facility_normalized,

@@ -6,11 +6,23 @@ No network, no real API, everything under tmp_path_factory.
 """
 
 import json
+import os
 from pathlib import Path
 
 import duckdb
+import pytest
 
 FIXTURE_RUN_ID = "20260901T120000Z_fixture01"
+
+STAGING_WITH_PROFILE = [
+    "stg_trials",
+    "stg_trial_conditions",
+    "stg_trial_interventions",
+    "stg_trial_locations",
+    "stg_trial_outcomes",
+    "stg_trial_sponsors",
+    "stg_trial_snapshots",
+]
 
 
 def test_dbt_build_passes_on_fixture_snapshot(fixture_project_root: Path) -> None:
@@ -21,11 +33,52 @@ def test_dbt_build_passes_on_fixture_snapshot(fixture_project_root: Path) -> Non
 
 
 def _rows(root: Path, sql: str) -> list[tuple]:
+    """Query the fixture warehouse with the fixture tree as the working directory.
+
+    Staging models are views over relative globs, so DuckDB resolves them against
+    the process cwd; without the chdir a staging test reads the developer's real
+    data/ tree. Materialized marts are unaffected.
+    """
     con = duckdb.connect(str(root / "data/warehouse/clinical_trials.duckdb"), read_only=True)
+    start = Path(os.getcwd())
     try:
+        os.chdir(root)
         return con.execute(sql).fetchall()
     finally:
+        os.chdir(start)
         con.close()
+
+
+@pytest.mark.parametrize("model", STAGING_WITH_PROFILE)
+def test_staging_models_expose_the_profile(fixture_project_root: Path, model: str) -> None:
+    """Every row the warehouse reads must be attributable to exactly one
+    profile; staging is where that becomes non-negotiable."""
+    rows = _rows(
+        fixture_project_root,
+        f"select count(*), count(distinct indication_profile_id)"
+        f" from main_staging.{model} where indication_profile_id is not null",
+    )
+    assert rows[0][0] > 0, f"{model} has no profile-stamped rows"
+    assert rows[0][1] == 2, f"{model} should cover both fixture profiles, got {rows[0][1]}"
+
+
+def test_silver_source_glob_is_profile_agnostic() -> None:
+    """Silver is one shared tree keyed by indication_profile_id, not a tree per
+    profile. Asserted here because the failure mode is a *successful* build with
+    one profile's data missing."""
+    import yaml
+
+    from src.utils.paths import project_root
+
+    sources = yaml.safe_load(
+        (project_root() / "dbt_clinical_trials/models/staging/_sources.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    silver = next(s for s in sources["sources"] if s["name"] == "silver")
+    assert silver["meta"]["external_location"] == (
+        "read_parquet('data/silver/{name}/*.parquet', union_by_name=true)"
+    )
 
 
 def test_dim_trial_grain_is_trial_x_profile(fixture_project_root: Path) -> None:
