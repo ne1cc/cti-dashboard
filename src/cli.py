@@ -119,6 +119,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    prune = subparsers.add_parser(
+        "prune-data",
+        help="Delete run artifacts past the per-profile retention horizon.",
+    )
+    prune.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report what would be removed without removing it.",
+    )
+
     return parser
 
 
@@ -278,6 +288,24 @@ def main(argv: list[str] | None = None) -> int:
         for path in sorted(dirs):
             ensure_dir(path)
             print(path)
+        return 0
+
+    if args.command == "prune-data":
+        from src.utils.retention import prune_all
+
+        try:
+            pruned = prune_all(dry_run=args.dry_run)
+        except Exception as exc:
+            log.error("Prune failed: {}", exc)
+            return 1
+        for entry in pruned:
+            log.info(
+                "[{}] pruned {} ({} path(s))",
+                entry.profile_id,
+                entry.run_id,
+                len(entry.removed),
+            )
+        log.info("Prune complete: {} run(s) removed.", len(pruned))
         return 0
 
     return 2

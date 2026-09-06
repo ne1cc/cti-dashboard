@@ -69,6 +69,15 @@ ingestion:
   page_file_pattern: "run_id={run_id}/page={page:05d}.json"
   manifest_file_pattern: "manifest_{run_id}.json"
 
+# Run retention for this profile (make prune-data, src/utils/retention.py).
+# Deliberately the same horizon as the condition profiles: this profile's
+# pages are the whole registry, so a single retained bronze run matters here
+# more than anywhere else on the volume — and a special case is a knob nobody
+# will remember to re-tune.
+retention:
+  bronze_runs_to_keep: 1
+  snapshot_runs_to_keep: 6
+
 guardrails:
   disclaimer: >-
     Public-registry-based full-catalog snapshot for analytical

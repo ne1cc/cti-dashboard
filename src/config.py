@@ -61,12 +61,40 @@ class IngestionConfig(BaseModel):
     manifest_file_pattern: str = "manifest_{run_id}.json"
 
 
+class RetentionConfig(BaseModel):
+    """How many past runs survive a prune, per profile.
+
+    bronze_runs_to_keep counts *success* ingestion runs whose raw pages are
+    retained; snapshot_runs_to_keep counts runs whose silver + manifest are
+    retained — i.e. the warehouse's longitudinal depth. Snapshot depth may
+    exceed bronze depth, but only by the slack src/utils/retention.py refuses to
+    go past; the manifests dbt reads stay on the snapshot horizon, so every
+    silver run it globs still has a manifest.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    bronze_runs_to_keep: int = 1
+    snapshot_runs_to_keep: int = 6
+
+    @classmethod
+    def from_raw(cls, raw: dict[str, Any] | None) -> "RetentionConfig":
+        """Build from a config block, treating absent or empty as the defaults.
+
+        A bare `retention:` line in YAML parses to None, and `cls(**None)` is a
+        TypeError raised from inside the code path that deletes files. Loading
+        retention must never be the thing that fails.
+        """
+        return cls(**(raw or {}))
+
+
 class ProjectConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     api: ApiConfig
     paths: PathsConfig
     ingestion: IngestionConfig
+    retention: RetentionConfig = RetentionConfig()
     scope: dict[str, Any] = {}
     guardrails: dict[str, Any] = {}
 
@@ -92,7 +120,8 @@ def load_config(config_path: str | Path | None = None) -> ProjectConfig:
     return ProjectConfig(
         api=ApiConfig(**api_raw),
         paths=PathsConfig(**paths_raw),
-        ingestion=IngestionConfig(**raw.get("ingestion", {})),
+        ingestion=IngestionConfig(**(raw.get("ingestion") or {})),
+        retention=RetentionConfig.from_raw(raw.get("retention")),
         scope=raw.get("scope", {}),
         guardrails=raw.get("guardrails", {}),
     )

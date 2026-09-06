@@ -40,6 +40,7 @@ from src.config import (
     IngestionConfig,
     PathsConfig,
     ProjectConfig,
+    RetentionConfig,
 )
 from src.transform.normalize_conditions import ConditionTaxonomy, load_taxonomy
 from src.utils.paths import project_root, resolve_path
@@ -145,7 +146,8 @@ def _build_project_config(raw: dict[str, Any], shared: SharedPaths) -> ProjectCo
             http=HttpConfig(**http_raw),
         ),
         paths=PathsConfig(**paths_raw),
-        ingestion=IngestionConfig(**raw.get("ingestion", {})),
+        ingestion=IngestionConfig(**(raw.get("ingestion") or {})),
+        retention=RetentionConfig.from_raw(raw.get("retention")),
         scope=raw.get("scope", {}),
         guardrails=raw.get("guardrails", {}),
     )

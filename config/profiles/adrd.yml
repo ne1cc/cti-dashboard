@@ -86,6 +86,12 @@ ingestion:
   page_file_pattern: "run_id={run_id}/page={page:05d}.json"
   manifest_file_pattern: "manifest_{run_id}.json"
 
+# Run retention for this profile (make prune-data, src/utils/retention.py).
+# Same horizon as every other profile — one knob, no special cases.
+retention:
+  bronze_runs_to_keep: 1
+  snapshot_runs_to_keep: 6
+
 guardrails:
   disclaimer: >-
     Public-registry-based planning signals for analytical portfolio

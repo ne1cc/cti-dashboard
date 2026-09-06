@@ -10,7 +10,7 @@ CONDITION   ?= Alzheimer Disease
 .DEFAULT_GOAL := help
 
 .PHONY: help setup init-dirs env ingest full-refresh ingest-full-catalog full-catalog-full-refresh \
-        orchestrate orchestrate-full-refresh \
+        orchestrate orchestrate-full-refresh prune-data prune-data-dry \
         transform dbt-deps dbt-seed dbt-run dbt-test \
         dbt-docs quality-report dashboard test lint format clean pipeline
 
@@ -50,6 +50,12 @@ orchestrate: ## Run ingest + transform for all indication profiles in config/pro
 
 orchestrate-full-refresh: ## Force full re-ingest + transform for all indication profiles
 	$(PYTHON) -m src.cli orchestrate --full-refresh
+
+prune-data: ## Delete run artifacts past the per-profile retention horizon
+	$(PYTHON) -m src.cli prune-data
+
+prune-data-dry: ## Report what prune-data would delete
+	$(PYTHON) -m src.cli prune-data --dry-run
 
 transform: ## Flatten bronze JSON into silver Parquet entities (Phase 3)
 	$(PYTHON) -m src.cli transform
