@@ -382,24 +382,213 @@ def test_every_bronze_tree_is_profile_scoped() -> None:
 # The deployed entry command must be multi-profile by construction
 # ---------------------------------------------------------------------------
 
+# The exact, ordered prerequisite list `make pipeline` is allowed to have. The
+# plan mandates it verbatim: nothing dropped, nothing inserted.
+PIPELINE_PREREQS = ["orchestrate", "prune-data", "dbt-run", "dbt-test", "quality-report"]
+
+# The commands `make -n pipeline` must print, in the order make walks them
+# (`dbt-run` pulls in `dbt-seed`). Matched on the subcommand rather than the
+# whole line so `DBT_FLAGS` can change without this guard needing an edit.
+PIPELINE_RECIPES = [
+    "src.cli orchestrate",
+    "src.cli prune-data",
+    "dbt seed",
+    "dbt run",
+    "dbt test",
+    "src.cli quality-report",
+]
+
+
+def _makefile_text() -> str:
+    from src.utils.paths import project_root
+
+    return (project_root() / "Makefile").read_text(encoding="utf-8")
+
+
+def _pipeline_prereq_lists() -> list[list[str]]:
+    """Prerequisites of every top-level ``pipeline:`` line, one list per line.
+
+    Two details matter here:
+
+    * ``[ \\t]*`` rather than ``\\s*`` — a ``pipeline:`` with no prerequisites and
+      a recipe on the next line must not capture its own recipe as a prerequisite.
+    * the ``## …`` help text lives on the same line and is a comment to make, so
+      it is dropped before splitting. Left in, rewording the description to
+      contain the word ``ingest`` would fail a *correct* Makefile (and ``make
+      help`` needs that comment, so it is not going away).
+    """
+    import re
+
+    return [
+        m.group(1).split("##")[0].split()
+        for m in re.finditer(r"^pipeline:[ \t]*(.*)$", _makefile_text(), re.MULTILINE)
+    ]
+
+
+def _target_recipe(lines: list[str], target: str) -> list[str] | None:
+    """The recipe lines of a ``target:`` rule.
+
+    ``None`` when the rule is absent, ``[]`` when it is declared but owns no
+    recipe — which is exactly how ``make pipeline`` can refresh nothing while
+    every prerequisite name is still spelled correctly.
+    """
+    head = target + ":"
+    start = None
+    for i, ln in enumerate(lines):
+        declared = ln.split("##")[0].rstrip()
+        if declared == head or declared.startswith(head + " "):
+            start = i
+            break
+    if start is None:
+        return None
+    recipe: list[str] = []
+    for ln in lines[start + 1 :]:
+        if not ln.startswith("\t"):
+            break
+        recipe.append(ln[1:].strip())
+    return recipe
+
+
+def _lines_make_runs_anyway(makefile: str) -> list[str]:
+    """Recipe lines make executes *even under* ``-n``, so a dry run is not inert.
+
+    GNU make runs ``+``-prefixed lines and any line containing ``$(MAKE)``
+    whatever ``-n`` says (verified on 3.81). An empty result means the
+    ``make -n`` below cannot touch the working tree — hard requirement, since
+    ``pipeline``'s real recipes include a non-dry ``prune-data``.
+    """
+    forced = [
+        ln.strip()
+        for ln in makefile.splitlines()
+        if ln.startswith("\t") and ln[1:].lstrip().startswith("+")
+    ]
+    if "$(MAKE)" in makefile:
+        forced.append("a line containing $(MAKE)")
+    return forced
+
 
 def test_make_pipeline_orchestrates_and_prunes() -> None:
     """`make pipeline` is what the container runs (entrypoint.sh:51). If it still
     names `ingest transform` directly it is single-profile by construction, and
     the second profile never refreshes — silently, with exit 0.
 
-    Asserted on the target's prerequisites so a rename cannot dodge the guard.
+    Asserted on the target's prerequisites so a rename cannot dodge the guard —
+    and on the *whole* ordered list, not on a couple of names plus a relative
+    order. Checking only that `orchestrate` and `prune-data` are present and that
+    `orchestrate < prune-data < dbt-run` let `pipeline: orchestrate prune-data
+    dbt-run` pass green while quietly dropping `dbt-test` and `quality-report`
+    off the deployed refresh.
+    """
+    defs = _pipeline_prereq_lists()
+    # make *accumulates* prerequisites across repeated definitions, so a second
+    # `pipeline: ingest transform` anywhere below would re-add the single-profile
+    # step — and a first-match regex (`re.search`) cannot see it. Verified: with
+    # such a line appended, `make -n pipeline` prints
+    # `src.cli ingest --condition "Alzheimer Disease"` after the good chain.
+    assert len(defs) == 1, f"`pipeline:` must be defined exactly once, found {len(defs)}: {defs}"
+    prereqs = defs[0]
+    assert prereqs == PIPELINE_PREREQS, prereqs
+    # Kept as explicit diagnostics: the shape this task exists to remove.
+    assert "ingest" not in prereqs, prereqs
+    assert "transform" not in prereqs, prereqs
+
+
+def test_makefile_serializes_pipeline_prerequisites() -> None:
+    """The chain is only correct if its prerequisites run *in that order*.
+
+    `pipeline`'s prerequisites include a destructive step: `prune-data`, whose
+    recipe is a real prune with no `--dry-run`. make builds the prerequisites of
+    a single target **concurrently** under `-j`, and `MAKEFLAGS` can carry `-j` in
+    from a developer shell or the container image without anyone typing it — so
+    `make -j8 pipeline` can prune bronze/silver that `orchestrate` is still
+    writing. `.NOTPARALLEL:` forces prerequisites to be built one at a time, in
+    the listed order.
+
+    Honest scope: what this guards is make's job *scheduling*, which is not
+    observable in a dry run. `make -n -j8 pipeline` prints prerequisites in
+    listed order every time whether or not `.NOTPARALLEL:` is present (verified
+    on this host's GNU Make 3.81: 5/5 in order with `-j8` once `.NOTPARALLEL:`
+    was added, 1 of 5 runs inverted without it). So this is an assertion about
+    the declaration; `test_make_pipeline_recipes_are_reachable_and_ordered`
+    covers the recipe layer serially.
     """
     import re
 
+    assert re.search(r"^\.NOTPARALLEL[ \t]*:", _makefile_text(), re.MULTILINE), (
+        "Makefile has no `.NOTPARALLEL:` declaration, so `make -j pipeline` builds "
+        "`pipeline`'s prerequisites concurrently and `prune-data` can delete a tree "
+        "`orchestrate` is still writing"
+    )
+
+
+def test_make_pipeline_recipes_are_reachable_and_ordered() -> None:
+    """Text-only assertions cannot see the recipe layer, and recipes are what runs.
+
+    Stub or empty `orchestrate`'s recipe and every prerequisite-name assertion
+    above still stays green while `make pipeline` refreshes nothing. `make -n`
+    prints the *recipes*, so it can see this: the six steps must all be reachable
+    from `pipeline`, in order, and the single-profile `ingest` chain must not be.
+    A `-` prefix is the one exception — make strips `@`, `-` and `+` before
+    echoing, so `test_pipeline_step_recipes_are_not_error_ignored` covers it.
+
+    Strictly `-n`: nothing here executes. That is only true while the Makefile is
+    free of `+`-prefixed recipe lines and `$(MAKE)` lines — GNU make executes those
+    even under `-n` (verified on 3.81) — so the pre-flight below is load-bearing,
+    not tidiness. The real `pipeline` target is never invoked.
+    """
+    import os
+    import shutil
+    import subprocess
+
     from src.utils.paths import project_root
 
-    makefile = (project_root() / "Makefile").read_text(encoding="utf-8")
-    match = re.search(r"^pipeline:\s*(.*)$", makefile, re.MULTILINE)
-    assert match, "no `pipeline:` target"
-    prereqs = match.group(1).split()
-    assert "orchestrate" in prereqs, prereqs
-    assert "prune-data" in prereqs, prereqs
-    assert "ingest" not in prereqs, prereqs
-    assert "transform" not in prereqs, prereqs
-    assert prereqs.index("orchestrate") < prereqs.index("prune-data") < prereqs.index("dbt-run")
+    if shutil.which("make") is None:
+        pytest.skip("`make` is not installed on this host")
+
+    makefile = _makefile_text()
+    # Pre-flight: prove the dry-run below really is inert.
+    not_inert = _lines_make_runs_anyway(makefile)
+    assert not not_inert, f"make runs these even under -n, so this guard is not dry: {not_inert}"
+
+    # A MAKEFLAGS inherited from the caller could carry -j; serial is what the
+    # dry-run ordering claim rests on.
+    env = {k: v for k, v in os.environ.items() if k != "MAKEFLAGS"}
+    proc = subprocess.run(
+        ["make", "-n", "pipeline"],
+        cwd=project_root(),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert proc.returncode == 0, proc.stderr
+    lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+    steps = (next((s for s in PIPELINE_RECIPES if s in ln), None) for ln in lines)
+    found = [s for s in steps if s]
+    assert found == PIPELINE_RECIPES, proc.stdout
+    assert "src.cli ingest" not in proc.stdout, proc.stdout
+    # The deployed prune must stay a real prune: `--dry-run` here means retention
+    # silently switched off with exit 0.
+    assert "dry-run" not in proc.stdout, proc.stdout
+
+
+def test_pipeline_step_recipes_are_not_error_ignored() -> None:
+    """The one recipe edit `make -n` cannot reveal: a leading `-`.
+
+    make strips `@`, `-` and `+` before echoing a command, so a dry run prints
+    `uv run python -m src.cli orchestrate` identically whether or not the recipe
+    says `-$(PYTHON) -m src.cli orchestrate`. The `-` matters: it tells make to
+    swallow that step's exit status, so `pipeline` reaches the prune/dbt stages
+    (and, on the deployed path, exits 0) even when the refresh failed.
+
+    So this one is asserted on the text: every target `pipeline` reaches must own
+    at least one recipe line, and none of those lines may carry an error-ignore
+    prefix.
+    """
+    lines = _makefile_text().splitlines()
+    # `dbt-run` pulls in `dbt-seed`; both are on the deployed path.
+    for step in [*PIPELINE_PREREQS, "dbt-seed"]:
+        recipe = _target_recipe(lines, step)
+        assert recipe is not None, f"no `{step}:` target in the Makefile"
+        assert recipe, f"`{step}` is declared with an empty recipe"
+        ignored = [ln for ln in recipe if ln.startswith("-")]
+        assert not ignored, f"`{step}` ignores its own failures (make's `-` prefix): {ignored}"

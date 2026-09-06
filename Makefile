@@ -14,6 +14,11 @@ CONDITION   ?= Alzheimer Disease
         transform dbt-deps dbt-seed dbt-run dbt-test \
         dbt-docs quality-report dashboard test lint format clean pipeline
 
+# make builds one target's prerequisites *concurrently* under -j, and `pipeline`'s
+# include a destructive `prune-data`, which must never run against a tree
+# `orchestrate` is still writing. -j can arrive via MAKEFLAGS with no one typing it.
+.NOTPARALLEL:
+
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
