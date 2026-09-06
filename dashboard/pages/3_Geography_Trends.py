@@ -4,11 +4,13 @@ import plotly.express as px
 import streamlit as st
 from components import data
 from components.guardrails import guarded_footer, page_setup
+from components.profile import render_profile_selector
 
 page_setup("Geography Trends")
-data.require_warehouse()
+profile_id = render_profile_selector()
+data.require_warehouse(profile_id)
 
-trends = data.condition_geography_trends()
+trends = data.condition_geography_trends(profile_id)
 
 condition_options = sorted(trends["condition_group"].dropna().unique())
 default_index = (

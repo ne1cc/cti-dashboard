@@ -6,11 +6,13 @@ import streamlit as st
 from components import data
 from components.filters import segment_filters
 from components.guardrails import guarded_footer, page_setup
+from components.profile import render_profile_selector
 
 page_setup("Feasibility Review Priority Queue")
-data.require_warehouse()
+profile_id = render_profile_selector()
+data.require_warehouse(profile_id)
 
-queue = data.priority_queue()
+queue = data.priority_queue(profile_id)
 filtered = segment_filters(queue)
 
 band_options = ["priority_review", "review", "watch"]

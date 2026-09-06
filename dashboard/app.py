@@ -3,11 +3,13 @@
 import streamlit as st
 from components import data
 from components.guardrails import guarded_footer, page_setup, proxy_caption
+from components.profile import render_profile_selector
 
 page_setup("Recruitment Competition Intelligence — Overview")
-data.require_warehouse()
+profile_id = render_profile_selector()
+data.require_warehouse(profile_id)
 
-metrics = data.overview_metrics()
+metrics = data.overview_metrics(profile_id)
 
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Trials tracked", f"{int(metrics['total_trials']):,}")
@@ -22,7 +24,7 @@ st.caption(
 proxy_caption()
 
 st.subheader("Top of the Feasibility Review Priority Queue")
-queue = data.priority_queue()
+queue = data.priority_queue(profile_id)
 st.dataframe(
     queue.head(10)[
         [

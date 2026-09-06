@@ -3,13 +3,15 @@
 import streamlit as st
 from components import data
 from components.guardrails import guarded_footer, page_setup
+from components.profile import render_profile_selector
 
 from src.analysis.roi_scenarios import compute_scenarios, load_roi_config
 
 page_setup("Data Reliability & Assumptions")
-data.require_warehouse()
+profile_id = render_profile_selector()
+data.require_warehouse(profile_id)
 
-reliability = data.data_reliability()
+reliability = data.data_reliability(profile_id)
 
 st.subheader("Ingestion runs")
 st.dataframe(

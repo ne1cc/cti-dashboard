@@ -3,14 +3,16 @@
 import streamlit as st
 from components import data
 from components.guardrails import guarded_footer, page_setup
+from components.profile import render_profile_selector
 
 page_setup("Trial Explorer")
-data.require_warehouse()
+profile_id = render_profile_selector()
+data.require_warehouse(profile_id)
 
-trials = data.trial_explorer()
+trials = data.trial_explorer(profile_id)
 
 col1, col2 = st.columns(3)[:2]
-col1.metric("Trials in warehouse", f"{len(trials):,}")
+col1.metric("Trials in this profile", f"{len(trials):,}")
 col2.metric(
     "Currently recruiting",
     f"{int((trials['overall_status'] == 'RECRUITING').sum()):,}",
@@ -18,29 +20,13 @@ col2.metric(
 
 statuses = sorted(trials["overall_status"].dropna().unique())
 phases = sorted(trials["phase"].dropna().unique())
-indications = (
-    sorted(trials["indication_profile_id"].dropna().unique())
-    if "indication_profile_id" in trials.columns
-    else []
-)
 
-has_multiple_indications = len(indications) > 1
-if has_multiple_indications:
-    fcol1, fcol2, fcol3, fcol4 = st.columns(4)
-    ind_sel = fcol1.multiselect("Indication", indications, default=[])
-    status_sel = fcol2.multiselect("Overall status", statuses, default=[])
-    phase_sel = fcol3.multiselect("Phase", phases, default=[])
-    search = fcol4.text_input("Search title / sponsor / NCT ID")
-else:
-    fcol1, fcol2, fcol3 = st.columns(3)
-    ind_sel = []
-    status_sel = fcol1.multiselect("Overall status", statuses, default=[])
-    phase_sel = fcol2.multiselect("Phase", phases, default=[])
-    search = fcol3.text_input("Search title / sponsor / NCT ID")
+fcol1, fcol2, fcol3 = st.columns(3)
+status_sel = fcol1.multiselect("Overall status", statuses, default=[])
+phase_sel = fcol2.multiselect("Phase", phases, default=[])
+search = fcol3.text_input("Search title / sponsor / NCT ID")
 
 filtered = trials
-if ind_sel:
-    filtered = filtered[filtered["indication_profile_id"].isin(ind_sel)]
 if status_sel:
     filtered = filtered[filtered["overall_status"].isin(status_sel)]
 if phase_sel:
