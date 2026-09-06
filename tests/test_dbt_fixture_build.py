@@ -172,15 +172,24 @@ def test_mart_feasibility_priority_queue_is_profile_scoped(fixture_project_root:
 def test_fct_trial_snapshot_one_current_record_per_trial(
     fixture_project_root: Path,
 ) -> None:
+    # 20 rows, 20 of them current: the fixture's two runs land on one
+    # snapshot_date on purpose, so each profile's own max(snapshot_date) marks
+    # all ten of its rows current. With a per-profile second date the sum would
+    # drop below the count; assert_one_current_record_per_trial.sql is what
+    # forbids two current rows for the same (profile, nct_id).
     assert _rows(
         fixture_project_root,
         "select count(*), sum(case when current_record_flag then 1 else 0 end) "
         "from main_marts.fct_trial_snapshot",
-    ) == [(10, 10)]
+    ) == [(20, 20)]
 
 
 def test_fct_trial_site_us_scope(fixture_project_root: Path) -> None:
-    assert _rows(fixture_project_root, "select count(*) from main_marts.fct_trial_site") == [(14,)]
+    # 28 = the fixture's 14 U.S. facility listings under each of the two
+    # profiles. Reaching it needed indication_profile_id in the mart's qualify
+    # partition, not just in its column list: a profile-free qualify keeps one
+    # row per nct_id and silently drops one profile's sites.
+    assert _rows(fixture_project_root, "select count(*) from main_marts.fct_trial_site") == [(28,)]
     assert (
         _rows(
             fixture_project_root,
@@ -197,15 +206,22 @@ def test_fct_trial_site_us_scope(fixture_project_root: Path) -> None:
 
 
 def test_bridge_trial_condition_taxonomy_groups(fixture_project_root: Path) -> None:
+    # 25 = 12 adrd + 13 oncology_nsclc rows, both profiles' condition groups
+    # mapped by their own taxonomy.
     assert _rows(
         fixture_project_root,
         "select count(*) from main_marts.bridge_trial_condition",
-    ) == [(12,)]
+    ) == [(25,)]
+    # Scoped to adrd rather than widened to the union of both taxonomies: the
+    # exact ADRD expectation is the useful one, and a union would keep passing
+    # if one profile's groups leaked into the other. The nsclc half is pinned
+    # by test_bridge_trial_condition_is_profile_scoped.
     groups = {
         r[0]
         for r in _rows(
             fixture_project_root,
-            "select distinct condition_group from main_marts.bridge_trial_condition",
+            "select distinct condition_group from main_marts.bridge_trial_condition "
+            "where indication_profile_id = 'adrd'",
         )
     }
     assert groups == {

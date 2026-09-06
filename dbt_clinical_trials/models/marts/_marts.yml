@@ -2,7 +2,7 @@ version: 2
 
 models:
   - name: dim_trial
-    description: One row per NCT ID (current record from latest snapshot).
+    description: One row per profile per NCT ID (current record from that profile's latest snapshot).
     contract:
       enforced: true
     columns:
@@ -11,9 +11,15 @@ models:
         tests: [not_null, unique]
       - name: nct_id
         data_type: VARCHAR
-        tests: [not_null, unique]
+        # Not unique: the same registry record appears once per indication
+        # profile that lists it. The grain is (indication_profile_id, nct_id),
+        # asserted by tests/assert_one_current_record_per_trial.sql and by
+        # trial_key's uniqueness below.
+        tests: [not_null]
       - name: indication_profile_id
         data_type: VARCHAR
+        description: Indication profile whose query scope produced this row. Part of the model's grain.
+        tests: [not_null]
       - name: registry_url
         data_type: VARCHAR
         description: Public ClinicalTrials.gov record URL derived from the NCT ID.
@@ -140,7 +146,7 @@ models:
         data_type: BOOLEAN
 
   - name: fct_trial_snapshot
-    description: One row per NCT ID per complete snapshot date.
+    description: One row per profile per NCT ID per complete snapshot date.
     contract:
       enforced: true
     columns:
@@ -156,6 +162,10 @@ models:
               field: trial_key
       - name: nct_id
         data_type: VARCHAR
+        tests: [not_null]
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this row. Part of the model's grain.
         tests: [not_null]
       - name: snapshot_date
         data_type: DATE
@@ -204,7 +214,7 @@ models:
         data_type: BOOLEAN
 
   - name: fct_trial_site
-    description: One row per trial x U.S. facility x snapshot date.
+    description: One row per profile per trial per U.S. facility per snapshot date.
     contract:
       enforced: true
     columns:
@@ -225,6 +235,10 @@ models:
         data_type: VARCHAR
       - name: nct_id
         data_type: VARCHAR
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this row. Part of the model's grain.
+        tests: [not_null]
       - name: ingestion_run_id
         data_type: VARCHAR
       - name: snapshot_date
@@ -249,6 +263,7 @@ models:
         data_type: VARCHAR
 
   - name: bridge_trial_condition
+    description: One row per profile per trial per condition group.
     contract:
       enforced: true
     columns:
@@ -267,6 +282,10 @@ models:
         tests: [not_null]
       - name: nct_id
         data_type: VARCHAR
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this row. Part of the model's grain.
+        tests: [not_null]
       - name: dementia_relevance_flag
         data_type: BOOLEAN
       - name: mapping_confidence
@@ -275,6 +294,7 @@ models:
         data_type: BIGINT
 
   - name: bridge_trial_sponsor
+    description: One row per profile per trial per sponsor/collaborator role.
     contract:
       enforced: true
     columns:
@@ -292,6 +312,10 @@ models:
         data_type: VARCHAR
       - name: nct_id
         data_type: VARCHAR
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this row. Part of the model's grain.
+        tests: [not_null]
       - name: sponsor_name
         data_type: VARCHAR
       - name: sponsor_normalized
