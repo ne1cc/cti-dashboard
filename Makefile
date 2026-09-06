@@ -81,7 +81,7 @@ quality-report: ## Build the data-quality report (Phase 5)
 dashboard: ## Launch the Streamlit dashboard (Phase 6)
 	uv run streamlit run dashboard/app.py
 
-pipeline: ingest transform dbt-run dbt-test quality-report ## Full end-to-end refresh
+pipeline: orchestrate prune-data dbt-run dbt-test quality-report ## Full refresh of every refreshable profile
 
 test: ## Run Python unit tests
 	uv run pytest

@@ -376,3 +376,30 @@ def test_every_bronze_tree_is_profile_scoped() -> None:
         assert f"/{profile.profile_id}/" in p.bronze_api_responses.as_posix(), p
         assert f"/{profile.profile_id}/" in p.bronze_manifests.as_posix(), p
     get_registry.cache_clear()
+
+
+# ---------------------------------------------------------------------------
+# The deployed entry command must be multi-profile by construction
+# ---------------------------------------------------------------------------
+
+
+def test_make_pipeline_orchestrates_and_prunes() -> None:
+    """`make pipeline` is what the container runs (entrypoint.sh:51). If it still
+    names `ingest transform` directly it is single-profile by construction, and
+    the second profile never refreshes — silently, with exit 0.
+
+    Asserted on the target's prerequisites so a rename cannot dodge the guard.
+    """
+    import re
+
+    from src.utils.paths import project_root
+
+    makefile = (project_root() / "Makefile").read_text(encoding="utf-8")
+    match = re.search(r"^pipeline:\s*(.*)$", makefile, re.MULTILINE)
+    assert match, "no `pipeline:` target"
+    prereqs = match.group(1).split()
+    assert "orchestrate" in prereqs, prereqs
+    assert "prune-data" in prereqs, prereqs
+    assert "ingest" not in prereqs, prereqs
+    assert "transform" not in prereqs, prereqs
+    assert prereqs.index("orchestrate") < prereqs.index("prune-data") < prereqs.index("dbt-run")
