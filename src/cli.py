@@ -270,6 +270,11 @@ def main(argv: list[str] | None = None) -> int:
                     p.duckdb.parent,
                 }
             )
+        if not dirs:
+            log.error(
+                "No profiles in the registry; refusing to report an empty data tree as success."
+            )
+            return 1
         for path in sorted(dirs):
             ensure_dir(path)
             print(path)

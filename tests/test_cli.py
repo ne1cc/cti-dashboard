@@ -466,3 +466,22 @@ def test_cli_main_init_data_dirs_creates_every_profile_tree(tmp_path, monkeypatc
     assert (tmp_path / "data/gold").is_dir()
     # DuckDB does not create parent directories for a new database file.
     assert (tmp_path / "data/warehouse").is_dir()
+
+
+def test_cli_main_init_data_dirs_fails_on_empty_registry(tmp_path, monkeypatch):
+    """A mis-mounted config/profiles/ must not boot as success.
+
+    entrypoint.sh guards the boot with `init-data-dirs … || exit 1`, so exiting 0
+    on an empty tree means the container comes up with no data directories and
+    DuckDB fails later on a missing parent — the symptom instead of the cause.
+    """
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(tmp_path))
+
+    class FakeRegistry:
+        def all(self):
+            return []
+
+    monkeypatch.setattr("src.cli.get_registry", lambda: FakeRegistry())
+
+    assert main(["init-data-dirs"]) != 0
+    assert not list((tmp_path / "data").glob("bronze/**"))
