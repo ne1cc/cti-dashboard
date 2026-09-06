@@ -24,6 +24,17 @@ STAGING_WITH_PROFILE = [
     "stg_trial_snapshots",
 ]
 
+# The five segment marts Task 10 re-grained from (segment) to
+# (profile x segment). The shared dimensions and mart_trial_similarity are
+# Tasks 11-12.
+SEGMENT_MARTS_WITH_PROFILE = [
+    "mart_trial_activity",
+    "mart_site_overlap",
+    "mart_condition_geography_trends",
+    "mart_recruiting_competition",
+    "mart_feasibility_priority_queue",
+]
+
 
 def test_dbt_build_passes_on_fixture_snapshot(fixture_project_root: Path) -> None:
     # The session fixture asserts dbt's exit code before returning; this pins
@@ -234,17 +245,122 @@ def test_bridge_trial_condition_taxonomy_groups(fixture_project_root: Path) -> N
     }
 
 
-def test_mart_feasibility_priority_queue_shape(fixture_project_root: Path) -> None:
+def test_segment_marts_are_grained_per_profile(fixture_project_root: Path) -> None:
+    """The four segment marts that build in this commit, at profile x segment.
+
+    Only mart_site_overlap changes its total here (14 pooled -> 28): both
+    profiles list the same 14 facilities, and a facility shared between two
+    profiles is not overlap within either profile's query scope. The other three
+    keep their totals because the ADRD and NSCLC taxonomies are disjoint, so no
+    (condition_group, state, phase) key existed for pooling to merge -- their
+    partition rewrites are correctness by construction, and this fixture cannot
+    discriminate them. The asymmetric-fixture measurement that can is recorded
+    in task-10-report.md.
+    """
+    expected = {
+        "mart_trial_activity": [("adrd", 16), ("oncology_nsclc", 18)],
+        "mart_site_overlap": [("adrd", 14), ("oncology_nsclc", 14)],
+        "mart_condition_geography_trends": [("adrd", 14), ("oncology_nsclc", 16)],
+        "mart_recruiting_competition": [("adrd", 6), ("oncology_nsclc", 4)],
+    }
+    for model, want in expected.items():
+        rows = _rows(
+            fixture_project_root,
+            f"select indication_profile_id, count(*) from main_marts.{model} group by 1 order by 1",
+        )
+        assert rows == want, model
+    # mart_recruiting_competition's band is a distribution, so it is worth
+    # recording what it is on this fixture: every segment holds exactly one
+    # recruiting trial, percent_rank() ties all of them at 0.0 and every band
+    # is 'low' -- the partition-by-profile rewrite is therefore NOT observable in
+    # these values, and asserting a non-degenerate band here would be a lie.
     assert _rows(
         fixture_project_root,
-        "select count(*) from main_marts.mart_feasibility_priority_queue",
-    ) == [(6,)]
+        "select indication_profile_id, min(density_percentile),"
+        " max(density_percentile), count(distinct competition_signal_band)"
+        " from main_marts.mart_recruiting_competition group by 1 order by 1",
+    ) == [("adrd", 0.0, 0.0, 1), ("oncology_nsclc", 0.0, 0.0, 1)]
+
+
+def test_mart_feasibility_priority_queue_shape(fixture_project_root: Path) -> None:
+    """Segments pinned per profile, replacing one pooled count.
+
+    The leg this replaces was `count(*) == [(6,)]`. Measured values here come
+    from the fixture tree built with these models. Two honest caveats, both
+    about what this fixture cannot show:
+
+    * Step 5d's `run_reliability` reads mart_data_reliability.indication_profile_id,
+      which Task 12 adds, so the queue does not build in this commit's state.
+      The numbers below were measured with that one column forward-ported in a
+      scratch copy of the fixture tree; the queue legs are therefore a
+      prediction for the committed tree until Task 12 lands, and the ledger
+      records them as errors, not passes.
+    * `[(1, 1)]`, not the plan's `[(1, 6)]`: every fixture segment holds exactly
+      one recruiting trial, so every min-max denominator is 0, all ten scores
+      are 0.0, and rank() ties every row at 1. A spread across 1..6 needs
+      uneven segment sizes, which this fixture does not have -- that is a
+      prediction about a richer fixture (Task 12's divergent-date work), not an
+      assertion here. priority_rank restarting per profile is likewise
+      unverifiable while all scores tie.
+    """
+    assert _rows(
+        fixture_project_root,
+        "select indication_profile_id, count(*) from main_marts.mart_feasibility_priority_queue"
+        " group by 1 order by 1",
+    ) == [("adrd", 6), ("oncology_nsclc", 4)]
+    # One queue row per (profile, condition_group, state, phase), and the key
+    # now hashes the profile: the same segment in two profiles is two rows with
+    # two keys. 6 + 4 = 10 matches mart_recruiting_competition's 6 + 4, so no
+    # profile was dropped by the 5e/5f joins that replaced the cross joins.
+    assert _rows(
+        fixture_project_root,
+        "select count(*), count(distinct priority_queue_key)"
+        " from main_marts.mart_feasibility_priority_queue",
+    ) == [(10, 10)]
+    for profile in ("adrd", "oncology_nsclc"):
+        ranks = _rows(
+            fixture_project_root,
+            "select min(priority_rank), max(priority_rank)"
+            " from main_marts.mart_feasibility_priority_queue"
+            f" where indication_profile_id = '{profile}'",
+        )
+        assert ranks == [(1, 1)], profile
+    # Carried forward unchanged: no score may leave [0, 1] now that the
+    # normalization is partitioned per profile.
     assert _rows(
         fixture_project_root,
         "select count(*) from main_marts.mart_feasibility_priority_queue "
         "where feasibility_review_priority_score < 0 "
         "or feasibility_review_priority_score > 1",
     ) == [(0,)]
+
+
+def test_segment_mart_contracts_declare_the_profile(fixture_project_root: Path) -> None:
+    """Each of the five segment marts groups by indication_profile_id, so each
+    must say so in its contract as a VARCHAR not_null column. A mart that keeps
+    the column only in its select list still builds, and its docs then describe
+    a grain the table does not have."""
+    manifest = json.loads(
+        (fixture_project_root / "dbt_target/manifest.json").read_text(encoding="utf-8")
+    )
+    models = {
+        node["name"]: node
+        for node in manifest["nodes"].values()
+        if node["resource_type"] == "model"
+        and node["original_file_path"].startswith("models/marts/")
+    }
+    not_null_models = {
+        dep.split(".")[-1]
+        for node in manifest["nodes"].values()
+        if node["resource_type"] == "test"
+        and node.get("column_name") == "indication_profile_id"
+        and node.get("test_metadata", {}).get("name") == "not_null"
+        for dep in node["depends_on"]["nodes"]
+    }
+    for name in SEGMENT_MARTS_WITH_PROFILE:
+        column = models[name]["columns"]["indication_profile_id"]
+        assert column["data_type"] == "VARCHAR", name
+        assert name in not_null_models, name
 
 
 def test_mart_data_reliability_reconciles(fixture_project_root: Path) -> None:

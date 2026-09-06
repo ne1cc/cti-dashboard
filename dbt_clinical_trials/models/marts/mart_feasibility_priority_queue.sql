@@ -1,18 +1,28 @@
 -- Feasibility Review Priority Queue.
--- Grain: condition_group x state x phase at the latest complete snapshot.
+-- Grain: indication profile x condition_group x state x phase at that
+-- profile's latest complete snapshot.
 -- Ranks segments for HUMAN feasibility review using a weighted blend of
 -- normalized public-registry signals. This is a triage aid — a potential
 -- competition signal, NOT a recruitment forecast and NOT a measure of
 -- patient availability. Weights live in the feasibility_score_weights seed
--- (mirrored in config/score_weights.yml).
+-- (mirrored in config/score_weights.yml); the seed is a global configuration
+-- object shared by every profile by design, so `weights` stays uncrossed.
+-- Every min()/max() below is partitioned by profile: unpartitioned, the
+-- min-max normalization rescales one indication's segments against whatever
+-- other profiles happen to be in the warehouse, silently moving every score
+-- and every priority_band threshold.
 with latest_snapshot as (
-    select max(snapshot_date) as snapshot_date
+    select indication_profile_id, max(snapshot_date) as snapshot_date
     from {{ ref('fct_trial_snapshot') }}
+    group by 1
 ),
 
 history_depth as (
-    select count(distinct snapshot_date) > 1 as has_multi_snapshot_history
+    select
+        indication_profile_id,
+        count(distinct snapshot_date) > 1 as has_multi_snapshot_history
     from {{ ref('fct_trial_snapshot') }}
+    group by 1
 ),
 
 weights as (
@@ -30,28 +40,42 @@ weights as (
     from {{ ref('feasibility_score_weights') }}
 ),
 
+-- Latest successful run *per profile*: mart_data_reliability is one row per
+-- ingestion run, and a global `limit 1` would price profile A's data
+-- confidence with profile B's location completeness.
 run_reliability as (
-    select usable_location_share
-    from {{ ref('mart_data_reliability') }}
-    where status = 'success'
-    order by snapshot_date desc
-    limit 1
+    select indication_profile_id, usable_location_share
+    from (
+        select
+            indication_profile_id,
+            usable_location_share,
+            row_number() over (
+                partition by indication_profile_id
+                order by snapshot_date desc, ingestion_run_id desc
+            ) as rn
+        from {{ ref('mart_data_reliability') }}
+        where status = 'success'
+    )
+    where rn = 1
 ),
 
 competition as (
     select c.*
     from {{ ref('mart_recruiting_competition') }} c
-    inner join latest_snapshot using (snapshot_date)
+    inner join latest_snapshot ls using (indication_profile_id, snapshot_date)
 ),
 
 -- Trials listing at least one facility that also hosts other recruiting
--- trials (best-effort facility identity; a listing signal only).
+-- trials *within the same profile's listings* (best-effort facility
+-- identity; a listing signal only).
 overlapping_trials as (
-    select distinct f.nct_id
+    select distinct
+        f.indication_profile_id, f.nct_id
     from {{ ref('fct_trial_site') }} f
-    inner join latest_snapshot ls on f.snapshot_date = ls.snapshot_date
+    inner join latest_snapshot ls using (indication_profile_id, snapshot_date)
     inner join {{ ref('mart_site_overlap') }} o
-        on o.snapshot_date = f.snapshot_date
+        on o.indication_profile_id = f.indication_profile_id
+        and o.snapshot_date = f.snapshot_date
         and o.facility_normalized = f.facility_normalized
         and coalesce(o.city_normalized, '') = coalesce(f.city_normalized, '')
         and o.state_normalized = f.state_normalized
@@ -60,6 +84,7 @@ overlapping_trials as (
 
 segment_trials as (
     select
+        a.indication_profile_id,
         a.condition_group,
         a.state_normalized,
         a.phase_normalized,
@@ -73,14 +98,17 @@ segment_trials as (
             'count(distinct a.nct_id)',
         ) }} as record_quality_ok_share
     from {{ ref('int_condition_geography_activity') }} a
-    inner join latest_snapshot ls on a.snapshot_date = ls.snapshot_date
-    left join overlapping_trials ot on a.nct_id = ot.nct_id
+    inner join latest_snapshot ls using (indication_profile_id, snapshot_date)
+    left join overlapping_trials ot
+        on a.nct_id = ot.nct_id
+        and a.indication_profile_id = ot.indication_profile_id
     where a.overall_status = 'RECRUITING'
-    group by 1, 2, 3
+    group by 1, 2, 3, 4
 ),
 
 inputs as (
     select
+        c.indication_profile_id,
         c.condition_group,
         c.state_normalized,
         c.phase_normalized,
@@ -107,37 +135,38 @@ inputs as (
             as data_confidence_input
     from competition c
     inner join segment_trials s
-        using (condition_group, state_normalized, phase_normalized)
-    cross join history_depth h
-    cross join run_reliability r
+        using (indication_profile_id, condition_group, state_normalized, phase_normalized)
+    inner join history_depth h using (indication_profile_id)
+    inner join run_reliability r using (indication_profile_id)
 ),
 
 normalized as (
     select
         *,
         coalesce({{ safe_divide(
-            'recruiting_trial_count - min(recruiting_trial_count) over ()',
-            'max(recruiting_trial_count) over ()'
-            ' - min(recruiting_trial_count) over ()',
+            'recruiting_trial_count - min(recruiting_trial_count) over (partition by indication_profile_id)',
+            'max(recruiting_trial_count) over (partition by indication_profile_id)'
+            ' - min(recruiting_trial_count) over (partition by indication_profile_id)',
         ) }}, 0) as normalized_recruiting_trial_count,
         coalesce({{ safe_divide(
-            'recent_growth_input - min(recent_growth_input) over ()',
-            'max(recent_growth_input) over ()'
-            ' - min(recent_growth_input) over ()',
+            'recent_growth_input - min(recent_growth_input) over (partition by indication_profile_id)',
+            'max(recent_growth_input) over (partition by indication_profile_id)'
+            ' - min(recent_growth_input) over (partition by indication_profile_id)',
         ) }}, 0) as normalized_recent_recruiting_growth,
         coalesce({{ safe_divide(
-            'sponsor_hhi - min(sponsor_hhi) over ()',
-            'max(sponsor_hhi) over () - min(sponsor_hhi) over ()',
+            'sponsor_hhi - min(sponsor_hhi) over (partition by indication_profile_id)',
+            'max(sponsor_hhi) over (partition by indication_profile_id)'
+            ' - min(sponsor_hhi) over (partition by indication_profile_id)',
         ) }}, 0) as normalized_sponsor_concentration,
         coalesce({{ safe_divide(
-            'site_overlap_share - min(site_overlap_share) over ()',
-            'max(site_overlap_share) over ()'
-            ' - min(site_overlap_share) over ()',
+            'site_overlap_share - min(site_overlap_share) over (partition by indication_profile_id)',
+            'max(site_overlap_share) over (partition by indication_profile_id)'
+            ' - min(site_overlap_share) over (partition by indication_profile_id)',
         ) }}, 0) as normalized_site_overlap,
         coalesce({{ safe_divide(
-            'data_confidence_input - min(data_confidence_input) over ()',
-            'max(data_confidence_input) over ()'
-            ' - min(data_confidence_input) over ()',
+            'data_confidence_input - min(data_confidence_input) over (partition by indication_profile_id)',
+            'max(data_confidence_input) over (partition by indication_profile_id)'
+            ' - min(data_confidence_input) over (partition by indication_profile_id)',
         ) }}, 0) as normalized_data_confidence_adjustment
     from inputs
 ),
@@ -174,10 +203,11 @@ scored as (
 
 select
     {{ generate_surrogate_key([
-        'condition_group', 'state_normalized', 'phase_normalized',
-        'snapshot_date',
+        'indication_profile_id', 'condition_group', 'state_normalized',
+        'phase_normalized', 'snapshot_date',
     ]) }} as priority_queue_key,
     snapshot_date,
+    indication_profile_id,
     condition_group,
     state_normalized,
     phase_normalized,
@@ -191,8 +221,13 @@ select
             then 'review'
         else 'watch'
     end as priority_band,
-    rank() over (order by feasibility_review_priority_score desc)
-        as priority_rank,
+    -- Ranked *within* an indication: rank 1 is the top segment to review for
+    -- that profile, so a second profile cannot push the first one's queue
+    -- past rank 1 and make it read as unimportant.
+    rank() over (
+        partition by indication_profile_id
+        order by feasibility_review_priority_score desc
+    ) as priority_rank,
     recruiting_trial_count,
     listed_site_count,
     new_recruiting_90d,

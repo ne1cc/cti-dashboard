@@ -329,11 +329,16 @@ models:
 
   - name: mart_trial_activity
     description: >
-      Segment activity per snapshot. Counts are registry listings,
-      not patient availability.
+      Segment activity per snapshot, per indication profile. Grain: profile x
+      snapshot_date x condition_group x state x phase x overall_status. Counts
+      are registry listings, not patient availability.
     contract:
       enforced: true
     columns:
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this segment. Part of the model's grain.
+        tests: [not_null]
       - name: trial_count
         data_type: BIGINT
         tests: [not_null]
@@ -362,11 +367,18 @@ models:
 
   - name: mart_recruiting_competition
     description: >
-      Potential competition signal per recruiting segment. Not a
+      Potential competition signal per recruiting segment, per indication
+      profile. Grain: profile x snapshot_date x condition_group x state x
+      phase; density_percentile and competition_signal_band rank a segment
+      against the other segments of the same profile only. Not a
       recruitment forecast.
     contract:
       enforced: true
     columns:
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this segment. Part of the model's grain.
+        tests: [not_null]
       - name: recruiting_trial_count
         data_type: BIGINT
         tests: [not_null]
@@ -408,9 +420,19 @@ models:
         data_type: DOUBLE
 
   - name: mart_site_overlap
+    description: >
+      Facility-level trial overlap per snapshot, per indication profile.
+      Grain: profile x snapshot_date x facility (normalized name + city +
+      state). repeated_site_participation_flag means more than one recruiting
+      trial within that profile's listings; a facility shared between two
+      profiles' trial sets is not overlap within either query scope.
     contract:
       enforced: true
     columns:
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this facility listing. Part of the model's grain.
+        tests: [not_null]
       - name: facility_normalized
         data_type: VARCHAR
         tests: [not_null]
@@ -437,9 +459,17 @@ models:
         data_type: BOOLEAN
 
   - name: mart_condition_geography_trends
+    description: >
+      Monthly condition x geography trend, per indication profile. Grain:
+      profile x month x condition_group x state. The 3-month rolling average
+      and baseline are computed within one profile's series only.
     contract:
       enforced: true
     columns:
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this segment. Part of the model's grain.
+        tests: [not_null]
       - name: activity_month
         data_type: TIMESTAMP
         tests: [not_null]
@@ -524,13 +554,24 @@ models:
 
   - name: mart_feasibility_priority_queue
     description: >
-      Ranked segments for human feasibility review. Triage signal from
+      Ranked segments for human feasibility review, one ranking per
+      indication profile. Grain: profile x condition_group x state x phase at
+      that profile's latest complete snapshot; every normalized component and
+      priority_rank is computed within one profile. Triage signal from
       public registry listings; not a recruitment forecast.
     contract:
       enforced: true
     columns:
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this segment. Part of the model's grain.
+        tests: [not_null]
       - name: priority_queue_key
         data_type: VARCHAR
+        description: >
+          Surrogate key over indication_profile_id x condition_group x
+          state_normalized x phase_normalized x snapshot_date, so the same
+          segment label under two profiles is two queue entries.
         tests: [not_null, unique]
       - name: feasibility_review_priority_score
         data_type: DOUBLE

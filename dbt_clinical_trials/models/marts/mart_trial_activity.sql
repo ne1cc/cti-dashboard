@@ -1,7 +1,9 @@
--- Segment-level trial activity per snapshot.
--- Grain: snapshot_date x condition_group x state x phase x overall_status.
--- Counts are counts of registry listings, not patient availability.
+-- Segment-level trial activity per snapshot, per indication profile.
+-- Grain: profile x snapshot_date x condition_group x state x phase x
+-- overall_status. Counts are counts of registry listings, not patient
+-- availability.
 select
+    indication_profile_id,
     snapshot_date,
     condition_group,
     state_normalized,
@@ -19,4 +21,4 @@ select
     count(distinct nct_id) filter (record_quality_flag != 'ok')
         as flagged_record_count
 from {{ ref('int_condition_geography_activity') }}
-group by 1, 2, 3, 4, 5
+group by 1, 2, 3, 4, 5, 6

@@ -1,7 +1,10 @@
--- Facility-level trial overlap per snapshot.
--- Grain: snapshot_date x facility (normalized name + city + state).
+-- Facility-level trial overlap per snapshot, per indication profile.
+-- Grain: profile x snapshot_date x facility (normalized name + city + state).
 -- Facility identity is best-effort string matching of public listings;
 -- repeated participation is a listing signal, not a site-capacity claim.
+-- The flag counts recruiting trials *within one profile's listings*: a
+-- facility shared between two profiles' trial sets is not overlap within
+-- either query scope, which is what the dashboard's site cards claim.
 with sites as (
     select * from {{ ref('int_trial_site_activity') }}
     -- Overlap requires a facility identity; listings without a facility
@@ -10,6 +13,7 @@ with sites as (
 )
 
 select
+    indication_profile_id,
     snapshot_date,
     facility_normalized,
     city_normalized,
@@ -25,4 +29,4 @@ select
     (count(distinct nct_id) filter (overall_status = 'RECRUITING')) > 1
         as repeated_site_participation_flag
 from sites
-group by 1, 2, 3, 4
+group by 1, 2, 3, 4, 5
