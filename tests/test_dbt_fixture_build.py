@@ -255,7 +255,7 @@ def test_segment_marts_are_grained_per_profile(fixture_project_root: Path) -> No
     (condition_group, state, phase) key existed for pooling to merge -- their
     partition rewrites are correctness by construction, and this fixture cannot
     discriminate them. The asymmetric-fixture measurement that can is recorded
-    in task-10-report.md.
+    in the message of commit 5a1930f.
     """
     expected = {
         "mart_trial_activity": [("adrd", 16), ("oncology_nsclc", 18)],
