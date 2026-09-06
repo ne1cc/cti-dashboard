@@ -13,8 +13,8 @@ models:
         data_type: VARCHAR
         # Not unique: the same registry record appears once per indication
         # profile that lists it. The grain is (indication_profile_id, nct_id),
-        # asserted by tests/assert_one_current_record_per_trial.sql and by
-        # trial_key's uniqueness below.
+        # guarded by unique_dim_trial_trial_key declared above and by
+        # tests/test_dbt_fixture_build.py::test_dim_trial_grain_is_trial_x_profile.
         tests: [not_null]
       - name: indication_profile_id
         data_type: VARCHAR

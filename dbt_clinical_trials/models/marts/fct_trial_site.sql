@@ -8,8 +8,11 @@ select
     ]) }} as trial_site_key,
     {{ generate_surrogate_key(['nct_id', 'indication_profile_id']) }} as trial_key,
     -- site_key deliberately stays profile-free: a facility is a physical place
-    -- both profiles may list, and mart_site_overlap compares facilities within
-    -- a profile by filtering on the profile, not by re-hashing the place.
+    -- both profiles may list. Narrowing a facility question to one profile is
+    -- the consumer's filter (indication_profile_id), not something to fold into
+    -- the hash. No consumer filters that way yet: mart_site_overlap groups
+    -- facilities by snapshot_date, facility, city and state with no profile
+    -- column and never references site_key. Task 11 owns the profile view.
     {{ generate_surrogate_key([
         'facility_normalized', 'city_normalized', 'state_normalized',
     ]) }} as site_key,
