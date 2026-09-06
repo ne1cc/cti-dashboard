@@ -748,3 +748,35 @@ def test_marts_contracts_enforced(fixture_project_root: Path) -> None:
     for name, node in marts.items():
         assert node["contract"]["enforced"] is True, name
         assert {c["name"] for c in node["columns"].values()}, name
+
+
+def test_every_trial_grain_mart_contracts_the_profile(fixture_project_root: Path) -> None:
+    """Composite grain is only real if the contract says so: an undeclared column
+    fails the build, but a *declared nullable* column would let a future model
+    drop the profile and still compile.
+
+    ``test_marts_contracts_enforced`` proves every mart has an enforced contract
+    and never proves *which* columns are in it, so it stays green whether or not
+    ``indication_profile_id`` is declared. This closes that gap over the 15
+    trial-grain marts; ``dim_date`` is excluded because the calendar spine is
+    global on purpose (Task 11). Read from ``_marts.yml`` rather than the built
+    manifest so the not_null test is checked where it is authored.
+    """
+    import yaml
+
+    from src.utils.paths import project_root
+
+    doc = yaml.safe_load(
+        (project_root() / "dbt_clinical_trials/models/marts/_marts.yml").read_text(encoding="utf-8")
+    )
+    trial_grain = {name for name in (m["name"] for m in doc["models"]) if name != "dim_date"}
+    assert len(trial_grain) == 15
+    for model in doc["models"]:
+        if model["name"] not in trial_grain:
+            continue
+        column = next(
+            (c for c in model.get("columns", []) if c["name"] == "indication_profile_id"),
+            None,
+        )
+        assert column is not None, f"{model['name']} does not contract the profile"
+        assert "not_null" in (column.get("tests") or []), model["name"]

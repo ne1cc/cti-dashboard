@@ -2,6 +2,7 @@
 -- explanation and the mandatory interpretation note.
 -- Compile with: dbt compile --select analysis_top_priority_segments
 select
+    indication_profile_id,
     priority_rank,
     condition_group,
     state_normalized,

@@ -531,13 +531,24 @@ models:
         data_type: DOUBLE
 
   - name: mart_data_reliability
-    description: One row per ingestion run with reconciliation shares.
+    description: >
+      One row per ingestion run with reconciliation shares; each run belongs to
+      exactly one indication profile. Grain: ingestion_run_id x
+      indication_profile_id — the run alone is already unique, because a run
+      never spans profiles, so ingestion_run_id keeps its unique test. The
+      profile is taken from silver when silver exists and from the manifest
+      otherwise, since a manifest written before profile stamping defaults its
+      profile field.
     contract:
       enforced: true
     columns:
       - name: ingestion_run_id
         data_type: VARCHAR
         tests: [not_null, unique]
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile this run refreshed. Part of the model's grain.
+        tests: [not_null]
       - name: snapshot_date
         data_type: DATE
       - name: started_at_utc
@@ -717,21 +728,28 @@ models:
     description: >
       Deterministic trial-pair comparability -- a structural/design
       signal, not clinical equivalence and not itself a competition
-      signal. One row per (nct_id_a, nct_id_b) pair, nct_id_a's top 25
-      matches only.
+      signal. Grain: indication_profile_id x nct_id_a x nct_id_b; one
+      row per pair within one profile's query scope, nct_id_a's top 25
+      matches per profile only. A pair listed under two profiles is two
+      rows, and a trial's top-25 can no longer be occupied by another
+      indication's trials.
     contract:
       enforced: true
     columns:
       - name: trial_similarity_key
         data_type: VARCHAR
+        description: >
+          Surrogate key over indication_profile_id x nct_id_a x nct_id_b, so
+          the same trial pair under two profiles is two rows with two keys.
         tests: [not_null, unique]
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this pair. Part of the model's grain, and the partition the top-25 cap is applied within.
+        tests: [not_null]
       - name: nct_id_a
         data_type: VARCHAR
         tests: [not_null]
       - name: nct_id_b
-        data_type: VARCHAR
-        tests: [not_null]
-      - name: indication_profile_id
         data_type: VARCHAR
         tests: [not_null]
       - name: similarity_score

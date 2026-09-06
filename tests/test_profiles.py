@@ -362,6 +362,26 @@ def test_dbt_bronze_source_reads_the_configured_manifests_dir() -> None:
         assert matches(profile.config.paths.bronze_manifests), profile.profile_id
 
 
+def test_dbt_ingest_only_var_matches_registry() -> None:
+    """dbt duplicates the ingest_only list as a var; this test is the seam.
+
+    Drift here is asymmetric and nasty: a profile missing from the var fails
+    assert_snapshot_completeness forever (bronze-only, no silver), while a stale
+    entry stops real reconciliation failures from ever being reported.
+    """
+    from src.profiles import get_registry
+    from src.utils.paths import project_root
+
+    get_registry.cache_clear()
+    expected = sorted(p.profile_id for p in get_registry().all() if p.ingest_only)
+    get_registry.cache_clear()
+
+    project = yaml.safe_load(
+        (project_root() / "dbt_clinical_trials/dbt_project.yml").read_text(encoding="utf-8")
+    )
+    assert sorted(project["vars"]["ingest_only_profiles"]) == expected
+
+
 def test_no_top_level_config_declares_a_private_silver_tree() -> None:
     """One silver root, from config/shared_paths.yml.
 
