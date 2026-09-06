@@ -1,8 +1,12 @@
 """Hermetic end-to-end test: fixture bronze snapshot through the full dbt graph.
 
-The session fixture in tests/conftest.py builds one warehouse from
-tests/fixtures/bronze_snapshot; every test in this module asserts against it.
-No network, no real API, everything under tmp_path_factory.
+tests/conftest.py builds four warehouses for this module and a test names the one
+it reads: `fixture_project_root` is the base two-profile build (17 of the 26 test
+functions), `divergent_fixture_root` adds a second ADRD run on a different date
+plus an un-stamped NSCLC run (6), and `solo_fixture_roots` holds one warehouse per
+profile for the invariance comparison (1). The remaining 4 take no fixture: they
+read model source or `_marts.yml`, so they still guard when a build breaks. No
+network, no real API, everything under tmp_path_factory.
 """
 
 import json
@@ -14,14 +18,6 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from tests.conftest import (
-    DIVERGENT_ADRD_RUN2_ID,
-    FIXTURE_RUN_ID,
-    NSCLC_FIXTURE_RUN_ID,
-    UNSTAMPED_MANIFEST_PROFILE,
-    UNSTAMPED_NSCLC_RUN_ID,
-)
-
 # These are the strings tests/conftest.py writes into the warehouses it builds, so
 # this module imports them rather than keeping a second copy: this file used to
 # re-declare FIXTURE_RUN_ID locally, which was harmless while it was the only
@@ -29,6 +25,13 @@ from tests.conftest import (
 # other run ids were needed -- an edited conftest id would leave the assertions
 # describing a warehouse that no longer exists. Same pattern as
 # tests/test_orchestration_assets.py:10.
+from tests.conftest import (
+    DIVERGENT_ADRD_RUN2_ID,
+    FIXTURE_RUN_ID,
+    NSCLC_FIXTURE_RUN_ID,
+    UNSTAMPED_MANIFEST_PROFILE,
+    UNSTAMPED_NSCLC_RUN_ID,
+)
 
 STAGING_WITH_PROFILE = [
     "stg_trials",
@@ -54,8 +57,9 @@ SEGMENT_MARTS_WITH_PROFILE = [
 # The three shared dimensions Task 11 turned into per-profile views of global
 # entities: their statistics and their keys are both (entity, profile). Used by
 # test_shared_dimension_contracts_state_the_per_profile_grain, which reads the
-# contract source rather than the built warehouse because the fixture build is in
-# blackout until Task 12 (Ruling R27).
+# contract source rather than the built warehouse so that it keeps reporting when a
+# build is broken -- a fixture-backed guard errors instead of naming the drift,
+# which is how the R27 blackout hid this module for a whole task.
 SHARED_DIMS_WITH_PROFILE = ["dim_condition", "dim_sponsor", "dim_geography"]
 
 # The files test_window_frames_partition_by_profile reads. A separate list from
@@ -686,9 +690,20 @@ def test_profile_scores_are_bit_identical_built_alone_or_alongside(
     normalization and a per-profile one then agree by construction (the base
     fixture's scores are all 0.0 and its ranks all 1 -- see
     `test_mart_feasibility_priority_queue_shape`). Here ADRD's numbers depend on
-    its own 8 segments and NSCLC's on its own 4, so a single forgotten
-    `partition by indication_profile_id` in any of the fourteen models moves at
-    least one value on one side.
+    its own 8 segments and NSCLC's on its own 4, so a forgotten
+    `partition by indication_profile_id` *can* surface as a byte difference.
+
+    Which shapes surface is measured (2026-09-06), not assumed. Pooling the queue's
+    five min/max normalizers -- frames partitioned on the profile *alone*, 15
+    occurrences -- goes red at `mart_feasibility_priority_queue/adrd: 8 rows built
+    alongside another profile vs 8 built alone`. Pooling
+    `mart_recruiting_competition`'s three `percent_rank() over (partition by
+    indication_profile_id, snapshot_date)` frames stays green: no value moves on
+    this fixture, so this test cannot see that shape. The shape is not unprotected,
+    only unprotected *here*: the same poison fails
+    `test_window_frames_partition_by_profile` in 0.3 s, naming the model and the
+    frame. Read the loop below as "every model gets compared", not "every frame
+    shape gets caught".
 
     `mart_data_reliability` is deliberately not in the list: it is one row per
     ingestion run, and NSCLC's second warehouse run exists only in the divergent
@@ -867,13 +882,16 @@ def test_shared_dimensions_are_per_profile(fixture_project_root: Path) -> None:
     ) == [(10,)]
 
 
-# ``(rows, joined, differing_when_scoped, differing_when_pooled)`` for one shared
-# dimension. `scoped` re-derives the dimension's own statistic from the model it
+# ``(rows, joined, differs_when_scoped, joined_pooled, differs_when_pooled)`` for
+# one shared dimension -- the same five fields the pinned tuples below are read
+# against. `scoped` re-derives the dimension's own statistic from the model it
 # reads, grouped by (profile, entity); `pooled` derives the same statistic with the
 # profile taken out of the group by, i.e. what a dimension that counted globally
 # and then copied the number into each of its rows would emit. Comparing a
 # dimension against `scoped` can only say it is self-consistent; comparing it
 # against `pooled` is what can say the profile in its group by is load-bearing.
+# `joined_pooled` is what keeps that second comparison honest: a pooled
+# counterfactual that matched no rows would report "0 differ" for free.
 _SCOPING_QUERIES = {
     "dim_sponsor": (
         """
@@ -975,9 +993,14 @@ def test_shared_dimension_stats_are_scoped_to_their_profile(
         dimensions are built;
       * on the **pooled** counterfactual, 0 of 14 and 0 of 18 rows differ on the
         base fixture (the non-discrimination, measured) and 4 of 14 and 4 of 18
-        differ on the divergent one. A dimension that dropped
-        `indication_profile_id` from its group by while keeping it in its select
-        list would emit the pooled number on every row and go red 8 times over.
+        differ on the divergent one. So this is the leg that catches a per-profile
+        row set whose statistic was computed across profiles: that defect puts the
+        pooled number on eight rows here and this assertion names all eight. What
+        it cannot catch is the cruder form -- literally dropping
+        `indication_profile_id` from the dim's group by -- because that model never
+        reaches a warehouse: measured 2026-09-06, dbt's binder rejects it (its
+        surrogate key still names the column). The source-level grain guard covers
+        that instead, and does go red on it, naming `dim_geography`.
 
     The two examples name which rows those are, since the counts alone would not
     survive a fixture edit as an explanation. CA is the interesting one: its
@@ -1013,13 +1036,13 @@ def test_shared_dimension_contracts_state_the_per_profile_grain() -> None:
     same inputs, and dim_date must stay global.
 
     Read from the contract source, not ``dbt_target/manifest.json`` like
-    test_segment_mart_contracts_declare_the_profile, because the fixture build is
-    in blackout until Task 12 (Ruling R27) and a manifest-backed version of this
-    test would error rather than guard. It takes no fixture_project_root for the
-    same reason. Contract column order is checked because dbt's enforced contract
-    compares the model's columns positionally: a declaration that drifts from
-    select order fails the build, which today is invisible behind the queue's
-    binder error.
+    test_segment_mart_contracts_declare_the_profile, so it keeps reporting while a
+    build is broken: a manifest-backed version of this test errors rather than
+    naming the drift, which is the R27 failure mode that hid this module for a task.
+    It takes no fixture_project_root for the same reason. Contract column order is
+    checked because dbt's enforced contract compares the model's columns
+    positionally, so a declaration that drifts from select order surfaces as a
+    build failure several layers away from the line that caused it.
 
     Every SQL assertion reads the model through _strip_sql_comments. These are
     string searches over source text, so an un-stripped ``group by

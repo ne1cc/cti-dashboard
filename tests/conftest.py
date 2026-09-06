@@ -532,8 +532,20 @@ def solo_fixture_roots(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Pa
     The control half of score invariance: a profile's numbers can only be shown
     unaffected by a second profile by building it both ways. Two more `dbt
     build`s, so it is a fixture the invariance test asks for and nothing else
-    does; each root carries the identical bronze of its profile's runs in
-    `divergent_fixture_root`.
+    does.
+
+    What each root holds is not symmetric, and the asymmetry is worth knowing
+    before reading the comparison. ADRD's solo build carries exactly the two ADRD
+    runs `divergent_fixture_root` carries. NSCLC's carries only its base run --
+    `UNSTAMPED_NSCLC_RUN` is absent, because that run exists to make a manifest
+    disagree with silver about which profile owns it, a concern of the divergent
+    build alone. So NSCLC's side moves two variables at once (a second profile
+    loaded, and one more same-profile run) and its assertion is the stronger of the
+    two: a profile's numbers must survive a run *and* a neighbour arriving. That
+    one passes, which is the measured fact that the extra run contributes nothing to
+    the invaried models. The narrow single-variable claim -- NSCLC unchanged by
+    another profile alone, same runs -- would need a third root built from the base
+    page only; it is not asserted here.
     """
     return {
         "adrd": _build_fixture_root(
