@@ -12,10 +12,15 @@ select distinct
     ]) }} as trial_sponsor_key,
     {{ generate_surrogate_key(['s.nct_id', 's.indication_profile_id']) }}
         as trial_key,
-    -- sponsor_key stays profile-free for the same reason site_key does: the
-    -- organization is the same body whichever query scope listed it, and
-    -- dim_sponsor scopes its rows per profile rather than re-hashing it.
-    {{ generate_surrogate_key(['s.sponsor_normalized']) }} as sponsor_key,
+    -- sponsor_key hashes the same two inputs dim_sponsor does, because
+    -- dim_sponsor's rows are per profile: its trial_count and
+    -- lead_sponsor_trial_count describe one profile's listings, so a key built
+    -- from the sponsor alone could not address one of those rows. The
+    -- organization is still one body across query scopes; this key addresses
+    -- its per-profile *row*, which is what the bridge points at.
+    {{ generate_surrogate_key([
+        's.sponsor_normalized', 's.indication_profile_id',
+    ]) }} as sponsor_key,
     s.nct_id,
     s.indication_profile_id,
     s.sponsor_name,

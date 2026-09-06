@@ -36,13 +36,22 @@ SEGMENT_MARTS_WITH_PROFILE = [
     "mart_feasibility_priority_queue",
 ]
 
+# The three shared dimensions Task 11 turned into per-profile views of global
+# entities: their statistics and their keys are both (entity, profile). Used by
+# test_shared_dimension_contracts_state_the_per_profile_grain, which reads the
+# contract source rather than the built warehouse because the fixture build is in
+# blackout until Task 12 (Ruling R27).
+SHARED_DIMS_WITH_PROFILE = ["dim_condition", "dim_sponsor", "dim_geography"]
+
 # The files test_window_frames_partition_by_profile reads. A separate list from
-# the one above on purpose: that one pins which contracts declare the column,
-# this one pins which models' window frames must be profile-scoped, and Tasks
-# 11-12 extend them differently -- mart_trial_similarity joins this list with
-# Task 12's fix to its unprofiled row_number() (mart_trial_similarity.sql:73-74),
-# not before. The two with no windows today are listed because the guard exists
-# to catch the first window someone adds to them.
+# SEGMENT_MARTS_WITH_PROFILE on purpose: that one pins which contracts declare
+# the column, this one pins which models' window frames must be profile-scoped,
+# and Tasks 11-12 extend them differently -- mart_trial_similarity joins this
+# list with Task 12's fix to its unprofiled row_number()
+# (mart_trial_similarity.sql:73-74), not before. The two with no windows today
+# are listed because the guard exists to catch the first window someone adds to
+# them. Task 11's three shared dims add no window frames (measured: zero `over`
+# keywords in dim_condition/dim_sponsor/dim_geography), so they join neither list.
 MARTS_WITH_PROFILE_SCOPED_WINDOWS = [
     "mart_trial_activity",
     "mart_site_overlap",
@@ -425,6 +434,160 @@ def test_segment_mart_contracts_declare_the_profile(fixture_project_root: Path) 
         column = models[name]["columns"]["indication_profile_id"]
         assert column["data_type"] == "VARCHAR", name
         assert name in not_null_models, name
+
+
+def test_shared_dimensions_are_per_profile_with_per_profile_stats(
+    fixture_project_root: Path,
+) -> None:
+    """A sponsor or state listed by both indications gets two rows, each keyed
+    to its profile; dim_condition gets two rows only when its entity is shared,
+    and on this fixture it never is.
+
+    Every number below was measured on 2026-09-06 against a copy-tree build of
+    the committed models -- the recipe Tasks 8-10 used, since this module is
+    itself in the R27 blackout -- and the pre-Task-11 half was measured by
+    rebuilding the four HEAD versions of the changed models in a second copy.
+    Not predicted. Three limits, all of them the fixture's:
+
+    * Row multiplicity IS provable, and `>` is the discriminating form rather
+      than `>=`: the pre-Task-11 dims grouped by the entity alone, so a
+      regression that drops ``indication_profile_id`` from the group by returns
+      (7, 7) for dim_sponsor and (9, 9) for dim_geography and turns both the
+      ``>`` and the exact-value assert red. ``>=`` would have passed there.
+    * Value scoping is NOT provable here, and that was measured rather than
+      assumed. Both profiles list the same ten nct_ids -- the dim_trial
+      self-join at the bottom pins that at 10 -- so every shared entity's
+      per-profile ``trial_count`` equals its pooled ``count(distinct nct_id)``:
+      14/14 dim_sponsor rows and 18/18 dim_geography rows measured equal to the
+      unscoped number, and their two rows per entity are identical. No value
+      assertion can tell "counted within its profile" from "counted globally
+      then copied" while membership is symmetric, so none is made. PREDICTED --
+      the scoping leg belongs to Task 12, whose Amendment A16 fixture gives the
+      profiles divergent dates and asymmetric membership.
+    * dim_condition is excluded from the multiplicity loop by measurement: 21
+      rows, 21 distinct condition_normalized, 0 entities listed by both
+      profiles. condition_normalized is taxonomy-free text (normalize_text of
+      the raw string) and the two bronze fixtures describe different
+      conditions, so the entity sets are disjoint and ``count(*) >
+      count(distinct entity)`` is false for a reason unrelated to this task.
+      Its profile partition and composite-key uniqueness are asserted instead.
+    """
+    shapes = {
+        "dim_sponsor": ("sponsor_normalized", 14, 7),
+        "dim_geography": ("state_code", 18, 9),
+    }
+    for model, (entity, rows_want, entities_want) in shapes.items():
+        rows = _rows(
+            fixture_project_root,
+            f"select count(*), count(distinct {entity}) from main_marts.{model}",
+        )
+        assert rows[0][0] > rows[0][1], f"{model}: rows should be entity x profile"
+        assert rows == [(rows_want, entities_want)], model
+        dupes = _rows(
+            fixture_project_root,
+            f"select count(*) from (select {entity}, count(*) c from main_marts.{model}"
+            f" group by 1 having c > 1)",
+        )
+        assert dupes == [(entities_want,)], f"{model}: every entity should be shared"
+
+    assert _rows(
+        fixture_project_root,
+        "select indication_profile_id, count(*) from main_marts.dim_condition"
+        " group by 1 order by 1",
+    ) == [("adrd", 10), ("oncology_nsclc", 11)]
+    assert _rows(
+        fixture_project_root,
+        "select count(*), count(distinct condition_key), count(distinct indication_profile_id)"
+        " from main_marts.dim_condition",
+    ) == [(21, 21, 2)]
+
+    # Step 2's key change, asserted where it bites: the bridge and the dimension
+    # must hash the same two inputs. Measured counterfactual -- re-hashing the
+    # bridge's sponsor_key from sponsor_normalized alone, as it was before this
+    # task, leaves 7 of its 7 distinct keys with no dim_sponsor row to join, so
+    # this leg is red under exactly the regression A19 names.
+    assert _rows(
+        fixture_project_root,
+        "select count(*) from (select distinct sponsor_key from main_marts.bridge_trial_sponsor) b"
+        " left join main_marts.dim_sponsor d using (sponsor_key) where d.sponsor_key is null",
+    ) == [(0,)]
+
+    # Step 4: a global dim_date means no profile column on the built table and a
+    # calendar spine with one row per day and no gap -- which is what a
+    # per-profile dim_date would break, independently of today's date.
+    assert _rows(
+        fixture_project_root,
+        "select count(*) from information_schema.columns where table_schema = 'main_marts'"
+        " and table_name = 'dim_date' and column_name = 'indication_profile_id'",
+    ) == [(0,)]
+    assert _rows(
+        fixture_project_root,
+        "select count(*) = count(distinct date_day),"
+        " max(date_day) - min(date_day) + 1 = count(*) from main_marts.dim_date",
+    ) == [(True, True)]
+
+    # The fixture-overlap premise of the PREDICTED note above, not a claim about
+    # Step 4. Task 12's asymmetric membership moves this number, and when it
+    # does the non-discrimination argument in the docstring lapses with it --
+    # that is the point of asserting it.
+    assert _rows(
+        fixture_project_root,
+        "select count(*) from main_marts.dim_trial d1"
+        " inner join main_marts.dim_trial d2 using (nct_id)"
+        " where d1.indication_profile_id = 'adrd'"
+        " and d2.indication_profile_id = 'oncology_nsclc'",
+    ) == [(10,)]
+
+
+def test_shared_dimension_contracts_state_the_per_profile_grain() -> None:
+    """The three shared dims must declare indication_profile_id as a not-null
+    VARCHAR in the position it holds in their select list, dim_geography must
+    stop claiming state_code is unique, and dim_date must stay global.
+
+    Read from the contract source, not ``dbt_target/manifest.json`` like
+    test_segment_mart_contracts_declare_the_profile, because the fixture build is
+    in blackout until Task 12 (Ruling R27) and a manifest-backed version of this
+    test would error rather than guard. It takes no fixture_project_root for the
+    same reason. Contract column order is checked because dbt's enforced contract
+    compares the model's columns positionally: a declaration that drifts from
+    select order fails the build, which today is invisible behind the queue's
+    binder error.
+    """
+    import yaml
+
+    from src.utils.paths import project_root
+
+    marts = project_root() / "dbt_clinical_trials/models/marts"
+    doc = yaml.safe_load((marts / "_marts.yml").read_text(encoding="utf-8"))
+    declared = {model["name"]: [c["name"] for c in model["columns"]] for model in doc["models"]}
+    columns = {model["name"]: {c["name"]: c for c in model["columns"]} for model in doc["models"]}
+
+    for name in SHARED_DIMS_WITH_PROFILE:
+        profile = columns[name]["indication_profile_id"]
+        assert profile["data_type"] == "VARCHAR", name
+        assert profile["tests"] == ["not_null"], name
+        key = declared[name][0]
+        assert key.endswith("_key"), name
+        assert columns[name][key]["tests"] == ["not_null", "unique"], name
+        # The key hashes entity x profile, so it is the only thing that can
+        # enforce the grain now that the entity alone does not.
+        assert declared[name].index("indication_profile_id") == 1, name
+        sql = (marts / f"{name}.sql").read_text(encoding="utf-8")
+        assert "group by indication_profile_id" in sql, name
+        key_args = re.search(r"generate_surrogate_key\(\[([^\]]*)\]\)", sql, re.DOTALL)
+        assert key_args is not None, name
+        assert "indication_profile_id" in key_args.group(1), (
+            f"{name}: key must hash the profile it is grained by: {key_args.group(1).strip()!r}"
+        )
+
+    # state_code loses unique (TX exists once per profile) and keeps not_null.
+    assert columns["dim_geography"]["state_code"]["tests"] == ["not_null"]
+
+    # dim_date is a calendar spine: no profile column in its contract, and none
+    # anywhere in its SQL, so the grain cannot be widened by accident later.
+    assert "indication_profile_id" not in columns["dim_date"]
+    date_sql = (marts / "dim_date.sql").read_text(encoding="utf-8")
+    assert "indication_profile_id" not in date_sql
 
 
 def test_window_frames_partition_by_profile() -> None:

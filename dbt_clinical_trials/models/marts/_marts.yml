@@ -61,12 +61,21 @@ models:
         data_type: BOOLEAN
 
   - name: dim_condition
+    description: >
+      Normalized condition per indication profile. Grain: profile x
+      condition_normalized. Counts cover one profile's listings; the key hashes
+      both columns because a per-profile row cannot be addressed by the entity
+      alone.
     contract:
       enforced: true
     columns:
       - name: condition_key
         data_type: VARCHAR
         tests: [not_null, unique]
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this row. Part of the model's grain.
+        tests: [not_null]
       - name: condition_normalized
         data_type: VARCHAR
       - name: condition_display_name
@@ -81,12 +90,21 @@ models:
         data_type: BIGINT
 
   - name: dim_sponsor
+    description: >
+      Normalized sponsor per indication profile. Grain: profile x
+      sponsor_normalized. A sponsor listed by two indications is one
+      organization with one row per query scope, each carrying that scope's
+      counts; sponsor_key hashes both columns and matches bridge_trial_sponsor.
     contract:
       enforced: true
     columns:
       - name: sponsor_key
         data_type: VARCHAR
         tests: [not_null, unique]
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this row. Part of the model's grain.
+        tests: [not_null]
       - name: sponsor_normalized
         data_type: VARCHAR
       - name: sponsor_display_name
@@ -99,15 +117,26 @@ models:
         data_type: BIGINT
 
   - name: dim_geography
+    description: >
+      U.S. state per indication profile. Grain: profile x state_code, so a
+      state with trials under both query scopes is two rows with two
+      trial_count / listed_site_count figures.
     contract:
       enforced: true
     columns:
       - name: geography_key
         data_type: VARCHAR
         tests: [not_null, unique]
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this row. Part of the model's grain.
+        tests: [not_null]
       - name: state_code
         data_type: VARCHAR
-        tests: [not_null, unique]
+        # Not unique: the grain is (indication_profile_id, state_code), so e.g.
+        # TX appears once per profile that lists Texas sites. geography_key's
+        # unique test above hashes both columns and so enforces the grain.
+        tests: [not_null]
       - name: geo_level
         data_type: VARCHAR
       - name: country
@@ -310,6 +339,14 @@ models:
               field: trial_key
       - name: sponsor_key
         data_type: VARCHAR
+        description: >
+          Same two inputs as dim_sponsor.sponsor_key (sponsor_normalized x
+          indication_profile_id); re-hashing one side without the other orphans
+          this join.
+        tests:
+          - relationships:
+              to: ref('dim_sponsor')
+              field: sponsor_key
       - name: nct_id
         data_type: VARCHAR
       - name: indication_profile_id
