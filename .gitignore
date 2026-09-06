@@ -33,6 +33,7 @@ htmlcov/
 
 # dbt
 dbt_clinical_trials/target/
+dbt_clinical_trials/dbt_target/
 dbt_clinical_trials/dbt_packages/
 dbt_clinical_trials/logs/
 dbt_clinical_trials/profiles.yml
