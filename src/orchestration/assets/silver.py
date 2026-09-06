@@ -17,13 +17,15 @@ from src.transform.build_silver_entities import run_transform
 def silver_entities(context: AssetExecutionContext) -> MaterializeResult[None]:
     processed_by_profile: dict[str, list[str]] = {}
     for indication_profile in get_registry().refreshable():
-        processed_by_profile[indication_profile.profile_id] = run_transform(
-            run_id=None, force=False, profile=indication_profile
-        )
+        pid = indication_profile.profile_id
+        processed = run_transform(run_id=None, force=False, profile=indication_profile)
+        processed_by_profile[pid] = processed
+        # One bounded line per profile, as bronze does: interpolating the whole
+        # {profile_id: [run_id, ...]} dict would size the log to the backlog.
+        context.log.info(f"[{pid}] transformed {len(processed)} bronze run(s)")
     total = sum(len(runs) for runs in processed_by_profile.values())
     context.log.info(
-        f"Transformed {total} bronze run(s) across "
-        f"{len(processed_by_profile)} profile(s): {processed_by_profile}"
+        f"Transformed {total} bronze run(s) across {len(processed_by_profile)} profile(s)"
     )
     return MaterializeResult(
         metadata={

@@ -10,6 +10,25 @@ from src.utils.dates import utc_now
 from tests.conftest import check_evaluation, materialize_with_checks
 
 
+def _materialization_payload(result, asset_name: str, key: str):
+    """Value of metadata `key` on the materialization event of `asset_name`.
+
+    `MetadataValue.json(obj)` keeps the original python object — it surfaces as
+    `.value` — so this reads the operator-facing fan-out record itself, not a
+    rendering of it. An asset that stopped publishing the key fails here on a
+    message that says so, rather than on a bare KeyError."""
+    for event in result.get_asset_materialization_events():
+        if event.node_name != asset_name:
+            continue
+        metadata = event.step_materialization_data.materialization.metadata
+        assert key in metadata, (
+            f"{asset_name} published no {key!r} metadata — the per-profile fan-out "
+            f"is not visible to an operator (keys present: {sorted(metadata)})"
+        )
+        return metadata[key].value
+    raise AssertionError(f"{asset_name} produced no materialization event")
+
+
 def _success_manifest() -> IngestionManifest:
     return IngestionManifest(
         ingestion_run_id="20260904T120000Z_abc12345",
@@ -25,7 +44,13 @@ def _success_manifest() -> IngestionManifest:
     )
 
 
-def test_bronze_asset_writes_manifest_and_materializes(project_root_tmp, monkeypatch) -> None:
+def test_bronze_asset_emits_one_materialization_for_the_whole_fan_out(
+    project_root_tmp, monkeypatch
+) -> None:
+    """N profiles, one asset key, one event — the per-profile-keys tradeoff the
+    asset's own docstring declines. The per-profile payload inside that event is
+    pinned by `test_bronze_asset_refreshes_every_profile`; the manifest writes are
+    pinned by the `manifest_integrity` tests."""
     manifest = _success_manifest()
 
     def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
@@ -40,13 +65,25 @@ def test_bronze_asset_writes_manifest_and_materializes(project_root_tmp, monkeyp
     assert result.success
     materializations = result.get_asset_materialization_events()
     assert len(materializations) == 1
+    assert materializations[0].node_name == "ctg_raw_pages"
 
 
 def test_bronze_asset_raises_on_failed_run(project_root_tmp, monkeypatch) -> None:
-    manifest = _success_manifest().model_copy(update={"status": "failed"})
+    """One profile's failed pull must not stop the others from being attempted,
+    and the aggregate must name the profile that actually failed. The asset
+    collects and raises once (`src/orchestration/assets/bronze.py:56-60`,
+    `:73-74`), so a test that only asks "did the run go red" cannot tell that
+    apart from an abort inside the loop — or from any unrelated crash in the op."""
+    from src.profiles import get_registry
+
+    success = _success_manifest()
+    failed = success.model_copy(update={"status": "failed", "error": "HTTP 500 on page 2"})
+    seen: list[str] = []
 
     def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
-        return manifest
+        pid = config.profile_id
+        seen.append(pid)
+        return failed if pid == "adrd" else success
 
     monkeypatch.setattr("src.orchestration.assets.bronze.run_ingestion", fake_run_ingestion)
     result = materialize(
@@ -55,6 +92,26 @@ def test_bronze_asset_raises_on_failed_run(project_root_tmp, monkeypatch) -> Non
         raise_on_error=False,
     )
     assert not result.success
+    # `raise_on_error=True` cannot be used here: the retry policy re-raises as
+    # DagsterMaxRetriesExceededError, which names the policy and not the failure.
+    # The user exception is the leaf of dagster's cause chain.
+    step_failures = result.get_step_failure_events()
+    assert len(step_failures) == 1, "one materialization, one aggregated failure"
+    error = step_failures[0].step_failure_data.error
+    while error.cause is not None:
+        error = error.cause
+    assert error.cls_name == "RuntimeError"
+    # The text the code really builds: "Ingestion failed for: " + "; ".join(
+    # f"{pid}: {manifest.error or 'no error detail'}"). Carrying the failed
+    # manifest's own error detail is what separates this from a crash that merely
+    # happened to occur mid-loop, and the profile that succeeded must not be
+    # dragged into the blame.
+    assert "Ingestion failed for: adrd: HTTP 500 on page 2" in error.message
+    assert "oncology_nsclc" not in error.message
+    # Collected, not aborted: the second profile was still attempted. The step
+    # retries this materialization, so `seen` holds the pair once per attempt.
+    assert set(seen) == {"adrd", "oncology_nsclc"}
+    assert seen[:2] == [p.profile_id for p in get_registry().refreshable()]
 
 
 def test_manifest_integrity_passes_on_success_run(project_root_tmp, monkeypatch) -> None:
@@ -248,22 +305,47 @@ def test_bronze_asset_refreshes_every_profile(project_root_tmp, monkeypatch) -> 
     from src.profiles import get_registry
 
     manifest = _success_manifest()
-    seen: list[str] = []
+    seen: list[tuple[str, bool, int | None]] = []
 
     def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
-        seen.append(config.profile_id)
-        return manifest
+        pid = config.profile_id
+        seen.append((pid, full_refresh, max_pages))
+        # Distinct run id per profile: a fan-out that filed one profile's result
+        # under the other's key cannot pass if the payload were all identical.
+        return manifest.model_copy(update={"ingestion_run_id": f"run_for_{pid}"})
 
     monkeypatch.setattr("src.orchestration.assets.bronze.run_ingestion", fake_run_ingestion)
     result = materialize(
         assets=[ctg_raw_pages],
-        run_config={"ops": {"ctg_raw_pages": {"config": IngestParams().model_dump()}}},
+        run_config={
+            "ops": {
+                # Non-default on purpose: `False`/`None` are what the asset would
+                # pass if it dropped the config, so only these values can tell
+                # "forwarded to every profile" from "decorative".
+                "ctg_raw_pages": {
+                    "config": IngestParams(full_refresh=True, max_pages=7).model_dump()
+                }
+            }
+        },
     )
     assert result.success
-    assert seen == [p.profile_id for p in get_registry().refreshable()]
+    ids = [pid for pid, _, _ in seen]
+    assert ids == [p.profile_id for p in get_registry().refreshable()]
     # The line above passes when refreshable() is empty; this pin does not, and an
     # empty registry is the failure worth catching in a test about scope.
-    assert set(seen) == {"adrd", "oncology_nsclc"}
+    assert set(ids) == {"adrd", "oncology_nsclc"}
+    # Both job-level knobs reach both profiles' `run_ingestion` calls.
+    assert set(seen) == {("adrd", True, 7), ("oncology_nsclc", True, 7)}
+    # The per-profile payload is the only operator-facing record of this fan-out.
+    runs = _materialization_payload(result, "ctg_raw_pages", "runs_by_profile")
+    assert set(runs) == {"adrd", "oncology_nsclc"}
+    assert {pid: entry["ingestion_run_id"] for pid, entry in runs.items()} == {
+        "adrd": "run_for_adrd",
+        "oncology_nsclc": "run_for_oncology_nsclc",
+    }, (
+        "each profile's entry must carry its own run: a mis-keyed fan-out report is "
+        "how one profile silently ages behind a green UI"
+    )
 
 
 def test_silver_asset_transforms_every_profile(project_root_tmp, monkeypatch) -> None:
@@ -273,10 +355,17 @@ def test_silver_asset_transforms_every_profile(project_root_tmp, monkeypatch) ->
 
     _patch_quiet_bronze(monkeypatch)
     seen: list[str] = []
+    # Deliberately unequal lengths: a `processed_count` that was zeroed, or made
+    # to count profiles instead of runs, cannot survive the sum below.
+    processed = {
+        "adrd": ["20260904T120000Z_abc12345"],
+        "oncology_nsclc": ["20260904T120000Z_abc12346", "20260904T120000Z_abc12347"],
+    }
 
     def fake_run_transform(run_id=None, force=False, profile=None):
-        seen.append(profile.profile_id if profile else "<default>")
-        return []
+        pid = profile.profile_id if profile else "<default>"
+        seen.append(pid)
+        return list(processed.get(pid, ["<not a refreshable profile>"]))
 
     monkeypatch.setattr("src.orchestration.assets.silver.run_transform", fake_run_transform)
     result = materialize(
@@ -286,14 +375,24 @@ def test_silver_asset_transforms_every_profile(project_root_tmp, monkeypatch) ->
     assert result.success
     assert seen == [p.profile_id for p in get_registry().refreshable()]
     assert "<default>" not in seen
+    # Bronze pins its scope with this set; without the same pin here the line
+    # above is built with the very expression the asset loops, so a registry that
+    # leaked the ingest_only profile would keep this test green.
+    assert set(seen) == {"adrd", "oncology_nsclc"}
+    # Both payload keys are the only operator-facing record of this fan-out.
+    assert _materialization_payload(result, "silver_entities", "processed_runs") == processed
+    count = _materialization_payload(result, "silver_entities", "processed_count")
+    assert count == sum(len(runs) for runs in processed.values())
+    assert count == 3
 
 
 def test_ingest_params_has_no_condition() -> None:
     """Profiles own their condition scope. One free-text `condition` on the job
     config would be applied to every profile in turn — NSCLC queried with an
-    Alzheimer's string."""
-    from src.orchestration.assets.bronze import IngestParams
+    Alzheimer's string.
 
+    Field *names* only: that the two remaining knobs are actually read by the
+    asset is `test_bronze_asset_refreshes_every_profile`'s claim, not this one."""
     assert "condition" not in IngestParams.model_fields
     assert set(IngestParams.model_fields) == {"full_refresh", "max_pages"}
 

@@ -16,17 +16,17 @@ from src.orchestration.checks import (
 # actually runs. This job exists for `dagster dev` and manual backfills; if the
 # two ever diverge, the checks in src/orchestration/checks.py are the ones that
 # will fail loudest, because they loop the registry too.
-# `weekly_refresh_schedule` below is registered on a cron, so this job is one
-# scheduler daemon away from running unattended — no human ever has to
-# materialize it. Nothing in the container arms it today (entrypoint.sh runs
-# `make pipeline` and starts no `dagster dev`, webserver or daemon), but anyone
-# who opens `dagster dev` for any reason, or adds a scheduler, starts a weekly
-# refresh of every profile on the next Monday.
 weekly_refresh = define_asset_job(
     name="weekly_refresh",
     selection=AssetSelection.all(),
 )
 
+# Registered on a cron, so `weekly_refresh` above is one scheduler daemon away
+# from running unattended — no human ever has to materialize it. Nothing in the
+# container arms it today (entrypoint.sh runs `make pipeline` and starts no
+# `dagster dev`, webserver or daemon), but anyone who opens `dagster dev` for
+# any reason, or adds a scheduler, starts a weekly refresh of every profile on
+# the next Monday.
 weekly_refresh_schedule = ScheduleDefinition(
     job=weekly_refresh,
     cron_schedule="0 13 * * 1",  # every Monday 13:00 UTC
