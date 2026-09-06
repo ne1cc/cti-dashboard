@@ -70,10 +70,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--profile",
         default="default",
         help=(
-            "Indication profile ID from config/profiles/ "
-            "(e.g. 'adrd', 'oncology_nsclc', 'full_catalog'). "
-            "Legacy aliases 'default' → adrd and 'full-catalog' → full_catalog are accepted. "
-            "'full_catalog' reads data/bronze/full_catalog and writes data/silver_full_catalog."
+            "Indication profile ID from config/profiles/ (e.g. 'adrd', "
+            "'oncology_nsclc'). Legacy aliases 'default' and 'full-catalog' are "
+            "accepted. ingest_only profiles are refused: they have no taxonomy."
         ),
     )
 
@@ -155,36 +154,23 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if manifest.status in ("success", "partial") else 1
 
     if args.command == "transform":
-        from src.config import load_config
         from src.quality.profiling import profile_run
         from src.transform.build_silver_entities import run_transform
 
-        raw_profile = args.profile
-        profile_id = normalize_profile_id(raw_profile)
-
+        indication_profile = get_registry().get(normalize_profile_id(args.profile))
+        if indication_profile.ingest_only:
+            log.error(
+                "Profile '{}' is ingest_only: no condition taxonomy, so bronze "
+                "cannot be transformed. Use 'orchestrate' for the refreshable profiles.",
+                indication_profile.profile_id,
+            )
+            return 2
         try:
-            if profile_id == "full_catalog":
-                config = load_config("config/full_catalog_config.yml")
-                profile_cfg = config
-            elif raw_profile == "default":
-                config = None
-                registry = get_registry()
-                indication_profile = registry.get("adrd")
-                profile_cfg = None
-            else:
-                registry = get_registry()
-                indication_profile = registry.get(profile_id)
-                config = None
-                profile_cfg = indication_profile.config
-
             processed = run_transform(
-                run_id=args.run_id,
-                force=args.force,
-                config=config,
-                profile=indication_profile,
+                run_id=args.run_id, force=args.force, profile=indication_profile
             )
             for run_id in processed:
-                profile_run(run_id, config=profile_cfg)
+                profile_run(run_id, config=indication_profile.config)
         except Exception as exc:
             log.error("Transform failed: {}", exc)
             return 1

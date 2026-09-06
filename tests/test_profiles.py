@@ -339,7 +339,41 @@ def test_dbt_bronze_source_reads_the_configured_manifests_dir() -> None:
     location: str = manifests["meta"]["external_location"]
 
     configured = load_config().paths.bronze_manifests.relative_to(project_root()).as_posix()
-    assert (
-        f"'{configured}/summary_*.parquet'" in location
-        or "'data/bronze/*/manifests/summary_*.parquet'" in location
-    )
+    assert f"'{configured}/summary_*.parquet'" in location
+
+
+def test_no_top_level_config_declares_a_private_silver_tree() -> None:
+    """One silver root, from config/shared_paths.yml.
+
+    `config/full_catalog_config.yml` used to point `silver:` at
+    data/silver_full_catalog: a tree dbt never globbed and nothing pruned.
+    Profile YAMLs have silver injected, so this is now structural.
+    """
+    import yaml
+
+    from src.profiles import load_shared_paths
+    from src.utils.paths import project_root, resolve_path
+
+    shared = load_shared_paths()
+    config_dir = project_root() / "config"
+    offenders: list[str] = []
+    for yml in sorted(config_dir.glob("*.yml")):
+        raw = yaml.safe_load(yml.read_text(encoding="utf-8")) or {}
+        silver = (raw.get("paths") or {}).get("silver")
+        if silver is not None and resolve_path(silver) != shared.silver:
+            offenders.append(f"{yml.name}: {silver}")
+    assert offenders == []
+
+
+def test_every_bronze_tree_is_profile_scoped() -> None:
+    """Stray `data/bronze/api_responses` (no profile segment) is the skew that
+    made `make pipeline` ingest into one tree and transform from another."""
+    from src.profiles import get_registry
+
+    get_registry.cache_clear()
+    for profile in get_registry().all():
+        p = profile.config.paths
+        assert f"/{profile.profile_id}/" in p.bronze_api_responses.as_posix(), p
+        assert f"/{profile.profile_id}/" in p.bronze_manifests.as_posix(), p
+    get_registry.cache_clear()
+>>>>>>> 2fd97f0 (fix(cli): resolve transform --profile through the registry, retire the shadow silver tree)

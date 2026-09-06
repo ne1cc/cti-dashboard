@@ -134,14 +134,16 @@ collection. This is documented, not hidden.
 
 ## 6. Scaling path (roadmap, not MVP)
 
-- **Full-catalog bronze ingestion (implemented, opt-in).** `config/full_catalog_config.yml`
+- **Full-catalog bronze ingestion (implemented, opt-in).** `config/profiles/full_catalog.yml`
   drops the `query.cond`/`filter.*` params entirely and runs against a parallel
-  `data/bronze_full_catalog/` tree (`make ingest-full-catalog`), snapshotting the
-  entire ClinicalTrials.gov registry (~600k+ studies) instead of just ADRD/US. It
-  shares every ingestion primitive with the default profile (`iter_pages`,
-  `CTGClient`, manifest/reuse logic) — only the config differs — and is invisible
-  to the default `make transform`/`dbt-run`/dashboard, since those only ever read
-  `data/bronze/manifests/`.
+  `data/bronze/full_catalog/` tree (`make ingest-full-catalog`), snapshotting the
+  entire ClinicalTrials.gov registry (~600k+ studies, estimated) instead of just
+  ADRD/US. It shares every ingestion primitive with the default profile
+  (`iter_pages`, `CTGClient`, manifest/reuse logic) — only the config differs —
+  and is invisible to `make transform`/`dbt-run`/dashboard: the profile is marked
+  `ingest_only`, so `transform --profile full_catalog` is refused with exit code 2
+  rather than writing a taxonomy-less silver tree, and the default transform reads
+  only `data/bronze/adrd/manifests/`.
 - **Chunked silver transform (implemented).** `SilverRunWriter`
   (`src/transform/export_parquet.py`) streams flattened rows into one Parquet
   file per entity per run, flushing a row group every 50k rows against fixed
@@ -149,10 +151,11 @@ collection. This is documented, not hidden.
   chunk would infer Arrow `null`), staging to `.tmp` and atomically renaming on
   close. `build_silver_for_run` no longer materializes a full run in memory;
   profiling (`src/quality/profiling.py`) is a single DuckDB streaming aggregate
-  instead of a full pandas re-read; and `transform --profile full-catalog`
-  (`make transform-full-catalog`) writes to `data/silver_full_catalog/` with
-  profile-JSON reconciliation, mirroring the ingest flag. Gold/dbt/dashboard
-  still read only the default-profile silver tree.
+  instead of a full pandas re-read. Every profile `transform` accepts writes
+  through this same writer into the single shared silver root
+  (`data/silver/`, from `config/shared_paths.yml`); gold, dbt, and the dashboard
+  read that root, so a profile reaches the warehouse only once it has a taxonomy
+  and is no longer `ingest_only`.
 - Extending `condition_taxonomy.yml` and `geography_rules.yml` beyond their
   current ADRD/US-only scope (planned): the prerequisite before full-catalog
   silver data is meaningful in the marts.

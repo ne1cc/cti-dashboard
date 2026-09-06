@@ -226,63 +226,70 @@ def test_cli_parser_transform():
     assert args.force is True
 
 
-def test_cli_parser_transform_profile_default():
+def test_cli_parser_transform_defaults_to_legacy_name():
     parser = build_parser()
-    args = parser.parse_args(["transform"])
-    assert args.profile == "default"
+    assert parser.parse_args(["transform"]).profile == "default"
 
 
-def test_cli_parser_transform_profile_full_catalog():
+def test_cli_parser_transform_accepts_any_profile_id():
+    """No `choices=`: adding config/profiles/<x>.yml must be enough to transform it."""
     parser = build_parser()
-    args = parser.parse_args(["transform", "--profile", "full-catalog"])
-    assert args.profile == "full-catalog"
+    assert parser.parse_args(["transform", "--profile", "oncology_nsclc"]).profile == (
+        "oncology_nsclc"
+    )
 
 
-def test_cli_main_transform_full_catalog_passes_config_to_transform_and_profile(monkeypatch):
-    transform_calls = []
-    profile_calls = []
+def test_cli_main_transform_resolves_profile_from_registry(monkeypatch):
+    calls: list[dict] = []
 
     def fake_run_transform(**kwargs):
-        transform_calls.append(kwargs)
+        calls.append({"fn": "transform", **kwargs})
         return ["r1"]
 
     def fake_profile_run(run_id, **kwargs):
-        profile_calls.append({"run_id": run_id, **kwargs})
+        calls.append({"fn": "profile", "run_id": run_id, **kwargs})
         return {}
 
     monkeypatch.setattr("src.transform.build_silver_entities.run_transform", fake_run_transform)
     monkeypatch.setattr("src.quality.profiling.profile_run", fake_profile_run)
 
-    exit_code = main(["transform", "--profile", "full-catalog"])
+    assert main(["transform", "--profile", "oncology_nsclc"]) == 0
+    profile = calls[0]["profile"]
+    assert profile.profile_id == "oncology_nsclc"
+    assert str(profile.config.paths.bronze_manifests).endswith(
+        "data/bronze/oncology_nsclc/manifests"
+    )
+    assert calls[1]["config"] is profile.config
 
-    assert exit_code == 0
-    assert len(transform_calls) == 1
-    assert len(profile_calls) == 1
-    for captured in (*transform_calls, *profile_calls):
-        assert captured["config"] is not None
-        assert str(captured["config"].paths.silver).endswith("silver_full_catalog")
 
-
-def test_cli_main_transform_default_passes_no_config_override(monkeypatch):
-    transform_calls = []
-    profile_calls = []
+def test_cli_main_transform_default_resolves_to_adrd(monkeypatch):
+    calls: list[dict] = []
 
     def fake_run_transform(**kwargs):
-        transform_calls.append(kwargs)
-        return ["r1"]
-
-    def fake_profile_run(run_id, **kwargs):
-        profile_calls.append({"run_id": run_id, **kwargs})
-        return {}
+        calls.append(kwargs)
+        return []
 
     monkeypatch.setattr("src.transform.build_silver_entities.run_transform", fake_run_transform)
-    monkeypatch.setattr("src.quality.profiling.profile_run", fake_profile_run)
+    monkeypatch.setattr("src.quality.profiling.profile_run", lambda *a, **k: {})
 
-    exit_code = main(["transform"])
+    assert main(["transform"]) == 0
+    assert calls[0]["profile"].profile_id == "adrd"
 
-    assert exit_code == 0
-    assert transform_calls[0]["config"] is None
-    assert profile_calls[0]["config"] is None
+
+def test_cli_main_transform_refuses_ingest_only_profile(monkeypatch, caplog):
+    monkeypatch.setattr(
+        "src.transform.build_silver_entities.run_transform",
+        lambda **k: (_ for _ in ()).throw(AssertionError("must not run")),
+    )
+    # Exit 2 = usage error: full_catalog has no taxonomy, so there is nothing
+    # to transform and inventing one would produce a misleading warehouse.
+    assert main(["transform", "--profile", "full_catalog"]) == 2
+
+
+def test_legacy_full_catalog_config_file_is_gone() -> None:
+    from src.utils.paths import project_root
+
+    assert not (project_root() / "config" / "full_catalog_config.yml").exists()
 
 
 def test_cli_parser_quality_report():

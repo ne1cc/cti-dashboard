@@ -81,21 +81,26 @@ erDiagram
 
 An opt-in, additive ingestion profile snapshots the **entire** ClinicalTrials.gov
 registry — all conditions, worldwide, no status/type filter (~600k+ studies as of
-this writing). Run it with `make ingest-full-catalog`. It writes to a completely
-separate bronze tree (`data/bronze_full_catalog/`, `config/full_catalog_config.yml`)
-and cannot interfere with the default ADRD/US pipeline above. Combining
-`--condition` with this profile is rejected: the profile's scope is all
-conditions by definition.
+this writing). Run it with `make ingest-full-catalog` (equivalently
+`python -m src.cli ingest --profile full_catalog`). It writes to a completely
+separate bronze tree (`data/bronze/full_catalog/`, declared in
+`config/profiles/full_catalog.yml`) and cannot interfere with the default
+ADRD/US pipeline above. Combining `--condition` with this profile is rejected:
+the profile's scope is all conditions by definition.
 
-**Bronze + silver.** The opt-in streaming transform mirrors the ingest flag:
-`make transform-full-catalog` (or `python -m src.cli transform --profile
-full-catalog`) flattens the full-catalog bronze tree into
-`data/silver_full_catalog/` with bounded memory (chunked Parquet row groups, no
-full-run materialization) and writes per-run profile/reconciliation JSON. The
-default `make transform` still only reads `data/bronze/`. Gold, dbt marts, and
-the dashboard remain scoped to the default ADRD/US profile; see
-[`docs/architecture.md`](docs/architecture.md) for the remaining scaling work
-(extending the condition/geography rules beyond ADRD/US).
+**Bronze only.** That profile is marked `ingest_only`, so
+`python -m src.cli transform --profile full_catalog` refuses with exit code 2:
+there is no condition taxonomy to group trials by, and a taxonomy-less silver
+tree would be misleading rather than useful. The former
+`make transform-full-catalog` target and `config/full_catalog_config.yml` —
+which wrote a private `data/silver_full_catalog/` tree that dbt never read —
+are retired. The chunked streaming writer that target used
+(`src/transform/export_parquet.py`: bounded-memory Parquet row groups, no
+full-run materialization) is the same one every transformable profile writes
+through. Gold, dbt marts, and the dashboard read the single shared silver root,
+so full-catalog bronze reaches the warehouse only when a taxonomy exists for
+it; see [`docs/architecture.md`](docs/architecture.md) for the remaining
+scaling work (extending the condition/geography rules beyond ADRD/US).
 
 ## 8. Setup instructions
 
