@@ -184,6 +184,33 @@ def test_cli_main_orchestrate_skips_ingest_only_profiles(monkeypatch):
     assert transformed == ["adrd", "oncology_nsclc"]
 
 
+def test_cli_main_orchestrate_fails_when_registry_has_no_refreshable_profiles(monkeypatch):
+    """An empty refreshable() set is a mis-mounted config/profiles/ or every
+    profile marked ingest_only — not a refresh that landed data. `make pipeline`
+    gates on this exit code from Task 5 onward, so it must never be 0."""
+    ingested: list[str] = []
+
+    class FakeManifest:
+        status = "success"
+        error = None
+
+    class EmptyRegistry:
+        def refreshable(self):
+            return []
+
+    def fake_ingest(**kwargs):
+        ingested.append(kwargs["config"].profile_id)
+        return FakeManifest()
+
+    monkeypatch.setattr("src.cli.get_registry", lambda: EmptyRegistry())
+    monkeypatch.setattr("src.ingest.extract_studies.run_ingestion", fake_ingest)
+    monkeypatch.setattr("src.transform.build_silver_entities.run_transform", lambda **kw: [])
+    monkeypatch.setattr("src.quality.profiling.profile_run", lambda run_id: None)
+
+    assert main(["orchestrate"]) != 0
+    assert ingested == []
+
+
 def test_cli_has_no_local_profile_alias_table() -> None:
     """The alias map moved to src.profiles so ingest/transform/dashboard agree."""
     import src.cli

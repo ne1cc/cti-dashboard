@@ -221,6 +221,9 @@ def main(argv: list[str] | None = None) -> int:
             profiles = [registry.get(normalize_profile_id(args.profile))]
         else:
             profiles = registry.refreshable()
+            if not profiles:
+                log.error("No refreshable profiles in the registry; refusing to report success.")
+                return 1
         log.info("Orchestrating {} profile(s): {}", len(profiles), [p.profile_id for p in profiles])
 
         failed: list[str] = []
