@@ -28,7 +28,7 @@ def _success_manifest() -> IngestionManifest:
 def test_bronze_asset_writes_manifest_and_materializes(project_root_tmp, monkeypatch) -> None:
     manifest = _success_manifest()
 
-    def fake_run_ingestion(condition=None, full_refresh=False, max_pages=None):
+    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
         _write_manifest_for_every_profile(manifest)
         return manifest
 
@@ -45,7 +45,7 @@ def test_bronze_asset_writes_manifest_and_materializes(project_root_tmp, monkeyp
 def test_bronze_asset_raises_on_failed_run(project_root_tmp, monkeypatch) -> None:
     manifest = _success_manifest().model_copy(update={"status": "failed"})
 
-    def fake_run_ingestion(condition=None, full_refresh=False, max_pages=None):
+    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
         return manifest
 
     monkeypatch.setattr("src.orchestration.assets.bronze.run_ingestion", fake_run_ingestion)
@@ -60,7 +60,7 @@ def test_bronze_asset_raises_on_failed_run(project_root_tmp, monkeypatch) -> Non
 def test_manifest_integrity_passes_on_success_run(project_root_tmp, monkeypatch) -> None:
     manifest = _success_manifest()
 
-    def fake_run_ingestion(condition=None, full_refresh=False, max_pages=None):
+    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
         _write_manifest_for_every_profile(manifest)
         return manifest
 
@@ -79,7 +79,7 @@ def test_manifest_integrity_fails_when_counts_disagree(project_root_tmp, monkeyp
         update={"record_count": 3, "total_count_reported": 999}
     )
 
-    def fake_run_ingestion(condition=None, full_refresh=False, max_pages=None):
+    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
         _write_manifest_for_every_profile(manifest)
         return manifest
 
@@ -97,7 +97,7 @@ def test_manifest_integrity_fails_when_counts_disagree(project_root_tmp, monkeyp
 def test_manifest_integrity_fails_with_no_success_runs(project_root_tmp, monkeypatch) -> None:
     manifest = _success_manifest()
 
-    def fake_run_ingestion(condition=None, full_refresh=False, max_pages=None):
+    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
         return manifest  # returns, but never writes a manifest file
 
     monkeypatch.setattr("src.orchestration.assets.bronze.run_ingestion", fake_run_ingestion)
@@ -115,7 +115,7 @@ def _patch_quiet_bronze(monkeypatch) -> None:
     """Bronze runs but writes nothing: seeded state fully controls the check."""
     manifest = _success_manifest()
 
-    def fake_run_ingestion(condition=None, full_refresh=False, max_pages=None):
+    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
         return manifest
 
     monkeypatch.setattr("src.orchestration.assets.bronze.run_ingestion", fake_run_ingestion)
@@ -229,7 +229,7 @@ def test_silver_asset_materializes_processed_runs(project_root_tmp, monkeypatch)
     _seed_reconcilable_state()
     _patch_quiet_bronze(monkeypatch)
 
-    def fake_run_transform(run_id=None, force=False):
+    def fake_run_transform(run_id=None, force=False, profile=None):
         return ["20260904T120000Z_abc12345"]
 
     monkeypatch.setattr("src.orchestration.assets.silver.run_transform", fake_run_transform)
@@ -241,11 +241,68 @@ def test_silver_asset_materializes_processed_runs(project_root_tmp, monkeypatch)
     assert len(result.get_asset_materialization_events()) == 2
 
 
+def test_bronze_asset_refreshes_every_profile(project_root_tmp, monkeypatch) -> None:
+    """One materialization must cover everything `make pipeline` covers. Ingesting
+    ADRD only and calling itself a refresh is how a second profile silently ages
+    behind a green UI."""
+    from src.profiles import get_registry
+
+    manifest = _success_manifest()
+    seen: list[str] = []
+
+    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
+        seen.append(config.profile_id)
+        return manifest
+
+    monkeypatch.setattr("src.orchestration.assets.bronze.run_ingestion", fake_run_ingestion)
+    result = materialize(
+        assets=[ctg_raw_pages],
+        run_config={"ops": {"ctg_raw_pages": {"config": IngestParams().model_dump()}}},
+    )
+    assert result.success
+    assert seen == [p.profile_id for p in get_registry().refreshable()]
+    # The line above passes when refreshable() is empty; this pin does not, and an
+    # empty registry is the failure worth catching in a test about scope.
+    assert set(seen) == {"adrd", "oncology_nsclc"}
+
+
+def test_silver_asset_transforms_every_profile(project_root_tmp, monkeypatch) -> None:
+    """`profile=` is how run_transform picks its bronze tree. Called bare it
+    re-transforms ADRD and reports success for NSCLC."""
+    from src.profiles import get_registry
+
+    _patch_quiet_bronze(monkeypatch)
+    seen: list[str] = []
+
+    def fake_run_transform(run_id=None, force=False, profile=None):
+        seen.append(profile.profile_id if profile else "<default>")
+        return []
+
+    monkeypatch.setattr("src.orchestration.assets.silver.run_transform", fake_run_transform)
+    result = materialize(
+        assets=[ctg_raw_pages, silver_entities],
+        run_config={"ops": {"ctg_raw_pages": {"config": IngestParams().model_dump()}}},
+    )
+    assert result.success
+    assert seen == [p.profile_id for p in get_registry().refreshable()]
+    assert "<default>" not in seen
+
+
+def test_ingest_params_has_no_condition() -> None:
+    """Profiles own their condition scope. One free-text `condition` on the job
+    config would be applied to every profile in turn — NSCLC queried with an
+    Alzheimer's string."""
+    from src.orchestration.assets.bronze import IngestParams
+
+    assert "condition" not in IngestParams.model_fields
+    assert set(IngestParams.model_fields) == {"full_refresh", "max_pages"}
+
+
 def test_bronze_silver_check_passes_on_consistent_state(project_root_tmp, monkeypatch) -> None:
     _seed_reconcilable_state()
     _patch_quiet_bronze(monkeypatch)
 
-    def fake_run_transform(run_id=None, force=False):
+    def fake_run_transform(run_id=None, force=False, profile=None):
         return ["20260904T120000Z_abc12345"]
 
     monkeypatch.setattr("src.orchestration.assets.silver.run_transform", fake_run_transform)
@@ -261,7 +318,7 @@ def test_bronze_silver_check_passes_on_consistent_state(project_root_tmp, monkey
 def test_bronze_silver_check_fails_when_silver_missing(project_root_tmp, monkeypatch) -> None:
     _patch_quiet_bronze(monkeypatch)
 
-    def fake_run_transform(run_id=None, force=False):
+    def fake_run_transform(run_id=None, force=False, profile=None):
         return ["20260904T120000Z_abc12345"]
 
     monkeypatch.setattr("src.orchestration.assets.silver.run_transform", fake_run_transform)
@@ -315,7 +372,7 @@ def test_manifest_integrity_checks_each_profiles_own_tree(project_root_tmp, monk
 
     manifest = _success_manifest()
 
-    def fake_run_ingestion(condition=None, full_refresh=False, max_pages=None):
+    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
         _write_manifest_for_every_profile(manifest)
         return manifest
 
@@ -358,7 +415,7 @@ def test_bronze_silver_gate_blames_the_profile_whose_data_is_short(
     assert len(run_ids) >= 2, "the victim must differ from the tree a collapsed gate reads"
     _patch_quiet_bronze(monkeypatch)
 
-    def fake_run_transform(run_id=None, force=False):
+    def fake_run_transform(run_id=None, force=False, profile=None):
         return []
 
     monkeypatch.setattr("src.orchestration.assets.silver.run_transform", fake_run_transform)
