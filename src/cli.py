@@ -157,7 +157,11 @@ def main(argv: list[str] | None = None) -> int:
         from src.quality.profiling import profile_run
         from src.transform.build_silver_entities import run_transform
 
-        indication_profile = get_registry().get(normalize_profile_id(args.profile))
+        try:
+            indication_profile = get_registry().get(normalize_profile_id(args.profile))
+        except KeyError as exc:
+            log.error("Unknown profile: {}", exc)
+            return 2
         if indication_profile.ingest_only:
             log.error(
                 "Profile '{}' is ingest_only: no condition taxonomy, so bronze "

@@ -13,7 +13,7 @@
 # OpenAPI spec: https://clinicaltrials.gov/api/oas/v2
 #
 # A separate opt-in profile exists for full-registry (all conditions,
-# worldwide) bronze ingestion: config/full_catalog_config.yml, run via
+# worldwide) bronze ingestion: config/profiles/full_catalog.yml, run via
 # `make ingest-full-catalog`. It does not affect this file's scope or
 # any silver/gold/dashboard output.
 # ============================================================

@@ -286,6 +286,41 @@ def test_cli_main_transform_refuses_ingest_only_profile(monkeypatch, caplog):
     assert main(["transform", "--profile", "full_catalog"]) == 2
 
 
+def test_cli_main_transform_unknown_profile_is_usage_error_not_data_failure(monkeypatch):
+    """A typo'd profile id exits 2 (usage error), never 1 (data failure).
+
+    `choices=` was removed in favour of registry resolution, so an unknown id
+    used to escape as an uncaught KeyError: exit 1, the same code a real
+    transform failure returns. From Task 5 `make pipeline` gates on these
+    codes, so they must stay distinct.
+    """
+    calls: list[dict] = []
+
+    def failing_run_transform(**kwargs):
+        calls.append(kwargs)
+        raise RuntimeError("bronze unreadable")
+
+    monkeypatch.setattr("src.transform.build_silver_entities.run_transform", failing_run_transform)
+    monkeypatch.setattr("src.quality.profiling.profile_run", lambda *a, **k: {})
+
+    assert main(["transform", "--profile", "no-such-profile"]) == 2
+    assert calls == []
+    # a genuine transform failure on a real profile stays exit 1
+    assert main(["transform", "--profile", "adrd"]) == 1
+    assert [c["profile"].profile_id for c in calls] == ["adrd"]
+
+
+def test_cli_main_transform_refuses_legacy_full_catalog_alias(monkeypatch):
+    """The --profile help text promises 'full-catalog' is still accepted: it
+    normalizes to full_catalog, which is ingest_only and refused the same way."""
+    monkeypatch.setattr(
+        "src.transform.build_silver_entities.run_transform",
+        lambda **k: (_ for _ in ()).throw(AssertionError("must not run")),
+    )
+
+    assert main(["transform", "--profile", "full-catalog"]) == 2
+
+
 def test_legacy_full_catalog_config_file_is_gone() -> None:
     from src.utils.paths import project_root
 
