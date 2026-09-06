@@ -328,6 +328,7 @@ def test_manifest_integrity_checks_each_profiles_own_tree(project_root_tmp, monk
     evaluation = check_evaluation(result, "manifest_integrity")
     assert evaluation is not None and evaluation.passed
     profiles = get_registry().refreshable()
+    assert len(profiles) >= 2, "a one-profile tree cannot show tree selection"
     assert evaluation.metadata["profiles_checked"].value == len(profiles)
     details = evaluation.metadata["details"].value
     for index, indication_profile in enumerate(profiles):
@@ -354,6 +355,7 @@ def test_bronze_silver_gate_blames_the_profile_whose_data_is_short(
     from src.profiles import get_registry
 
     run_ids = _seed_reconcilable_state()
+    assert len(run_ids) >= 2, "the victim must differ from the tree a collapsed gate reads"
     _patch_quiet_bronze(monkeypatch)
 
     def fake_run_transform(run_id=None, force=False):

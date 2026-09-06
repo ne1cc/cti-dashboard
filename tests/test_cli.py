@@ -338,35 +338,63 @@ def test_cli_parser_quality_report():
 
 def test_cli_quality_report_updates_a_baseline_per_profile_tree(project_root_tmp, monkeypatch):
     """`--update-schema-baseline` loops the registry so each profile's
-    baseline is frozen against a run that profile actually made — the loop's
+    baseline is re-frozen against *that profile's* latest run — the loop's
     own comment at src/cli.py:208-210 says updating only the default tree
     "would freeze every other profile's baseline against a run it never
     made", and reviewer F5 measured that no test reached the loop at all
     (task-13-review-quality.md §2D: the only prior coverage asserted the
     parser sets the flag).
 
-    Each profile's tree holds its own bronze run, so its baseline must name
-    its own run id; a collapsed loop leaves the non-default trees with no
-    baseline file at all."""
+    The attribution has to survive build_report's own drift loop, which
+    *creates* a missing baseline as a side effect — a first draft of this
+    test that only asserted baseline existence stayed green under a
+    loop-truncation mutant (measured 2026-09-06). So each tree here starts
+    with a stale baseline frozen on an older run, plus a newer run whose
+    schema drifted from it; only `update_baseline=True` rewrites a baseline
+    that already exists, and each rewritten baseline must name its own
+    profile's newer run."""
     import json
 
     from src.ingest.snapshot_manifest import write_manifest
     from src.profiles import get_registry
-    from src.quality.schema_drift import BASELINE_FILENAME
+    from src.quality.schema_drift import BASELINE_FILENAME, collect_field_paths
     from tests.test_build_silver import make_manifest, make_study, write_bronze_page
 
-    runs: dict[str, str] = {}
+    stale_paths = sorted(collect_field_paths(make_study("NCT1")))
+    drifted_study = {
+        "protocolSection": {
+            "identificationModule": {"nctId": "NCT1"},
+            "sponsorCollaboratorsModule": {"leadSponsor": {"name": "X"}},
+        }
+    }
+
+    runs: dict[str, tuple[str, str]] = {}
     profiles = get_registry().refreshable()
     assert len(profiles) >= 2, "a one-profile loop cannot test a per-profile flag"
     for index, indication_profile in enumerate(profiles):
         profile_cfg = indication_profile.config
-        run_id = f"20260904T120000Z_b000000{index}"
-        runs[indication_profile.profile_id] = run_id
+        stale_run = f"20260904T120000Z_o000000{index}"
+        new_run = f"20260905T120000Z_n000000{index}"
+        runs[indication_profile.profile_id] = (stale_run, new_run)
         write_bronze_page(
-            profile_cfg.paths.bronze_api_responses / f"run_id={run_id}", 1, [make_study("NCT1")]
+            profile_cfg.paths.bronze_api_responses / f"run_id={stale_run}", 1, [make_study("NCT1")]
+        )
+        write_bronze_page(
+            profile_cfg.paths.bronze_api_responses / f"run_id={new_run}", 1, [drifted_study]
         )
         profile_cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
-        write_manifest(profile_cfg.paths.bronze_manifests, make_manifest(run_id, record_count=1))
+        write_manifest(profile_cfg.paths.bronze_manifests, make_manifest(stale_run, record_count=1))
+        write_manifest(profile_cfg.paths.bronze_manifests, make_manifest(new_run, record_count=1))
+        (profile_cfg.paths.bronze_api_responses.parent / BASELINE_FILENAME).write_text(
+            json.dumps(
+                {
+                    "created_at_utc": "2026-09-04T12:00:00Z",
+                    "source_run_id": stale_run,
+                    "paths": stale_paths,
+                }
+            ),
+            encoding="utf-8",
+        )
 
     # main() reaches build_report() with its default output; keep that write
     # inside the temp root instead of the checkout's reports/ directory.
@@ -376,13 +404,16 @@ def test_cli_quality_report_updates_a_baseline_per_profile_tree(project_root_tmp
     )
     assert main(["quality-report", "--update-schema-baseline"]) == 0
 
-    for pid, run_id in runs.items():
+    for pid, (stale_run, new_run) in runs.items():
         baseline = (
             get_registry().get(pid).config.paths.bronze_api_responses.parent / BASELINE_FILENAME
         )
         assert baseline.exists(), f"no schema baseline in {pid}'s tree"
         payload = json.loads(baseline.read_text(encoding="utf-8"))
-        assert payload["source_run_id"] == run_id, f"{pid}'s baseline froze another profile's run"
+        assert payload["source_run_id"] == new_run, (
+            f"{pid}'s baseline still freezes the stale run {stale_run}: the "
+            "--update-schema-baseline loop never reached this profile's tree"
+        )
 
 
 def test_cli_parser_transform_profile_accepts_indication():
