@@ -2,15 +2,8 @@
 
 import argparse
 
-from src.profiles import IndicationProfile, get_registry
+from src.profiles import IndicationProfile, get_registry, normalize_profile_id
 from src.utils.logging import setup_logging
-
-# Legacy profile name aliases kept for backward compatibility.
-# `--profile default` maps to `adrd`; `--profile full-catalog` maps to `full_catalog`.
-_PROFILE_ALIASES: dict[str, str] = {
-    "default": "adrd",
-    "full-catalog": "full_catalog",
-}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -97,9 +90,9 @@ def build_parser() -> argparse.ArgumentParser:
     orchestrate = subparsers.add_parser(
         "orchestrate",
         help=(
-            "Discover all indication profiles in config/profiles/ and run ingest + "
-            "transform for each. ingest_only profiles (e.g. full_catalog) are ingested "
-            "but not transformed."
+            "Discover the refreshable indication profiles in config/profiles/ "
+            "(everything that is not ingest_only) and run ingest + transform for each. "
+            "Use 'ingest --profile full_catalog' for the opt-in registry-wide pull."
         ),
     )
     orchestrate.add_argument(
@@ -145,9 +138,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "ingest":
         from src.ingest.extract_studies import run_ingestion
 
-        # Resolve profile_id, honouring legacy aliases.
-        raw_profile = args.profile
-        profile_id = _PROFILE_ALIASES.get(raw_profile, raw_profile)
+        profile_id = normalize_profile_id(args.profile)
 
         try:
             registry = get_registry()
@@ -169,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
         from src.transform.build_silver_entities import run_transform
 
         raw_profile = args.profile
-        profile_id = _PROFILE_ALIASES.get(raw_profile, raw_profile)
+        profile_id = normalize_profile_id(raw_profile)
 
         try:
             if profile_id == "full_catalog":
@@ -227,11 +218,9 @@ def main(argv: list[str] | None = None) -> int:
 
         registry = get_registry()
         if args.profile:
-            raw_profile = args.profile
-            profile_id = _PROFILE_ALIASES.get(raw_profile, raw_profile)
-            profiles = [registry.get(profile_id)]
+            profiles = [registry.get(normalize_profile_id(args.profile))]
         else:
-            profiles = registry.active()
+            profiles = registry.refreshable()
         log.info("Orchestrating {} profile(s): {}", len(profiles), [p.profile_id for p in profiles])
 
         failed: list[str] = []
@@ -247,10 +236,6 @@ def main(argv: list[str] | None = None) -> int:
                 if manifest.status == "failed":
                     log.error("[{}] ingestion failed: {}", pid, manifest.error)
                     failed.append(pid)
-                    continue
-
-                if indication_profile.ingest_only:
-                    log.info("→ [{}] ingest_only — skipping transform.", pid)
                     continue
 
                 log.info("→ [{}] transforming…", pid)

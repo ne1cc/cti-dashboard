@@ -141,10 +141,11 @@ def test_cli_parser_orchestrate_full_refresh():
     assert args.max_pages == 2
 
 
-def test_cli_main_orchestrate_runs_all_profiles(monkeypatch):
-    """orchestrate command invokes ingest + transform for each active profile."""
-    ingested = []
-    transformed = []
+def test_cli_main_orchestrate_skips_ingest_only_profiles(monkeypatch):
+    """orchestrate runs the *refreshable* profiles only. full_catalog is a
+    ~600-page registry pull and must never be reachable from `make pipeline`."""
+    ingested: list[str] = []
+    transformed: list[str] = []
 
     class FakeManifest:
         status = "success"
@@ -155,19 +156,22 @@ def test_cli_main_orchestrate_runs_all_profiles(monkeypatch):
         ingest_only = False
 
     class FakeProfileB:
-        profile_id = "full_catalog"
-        ingest_only = True  # should be ingested but NOT transformed
+        profile_id = "oncology_nsclc"
+        ingest_only = False
 
     class FakeRegistry:
-        def active(self):
+        def refreshable(self):
             return [FakeProfileA(), FakeProfileB()]
+
+        def all(self):  # pragma: no cover - orchestrate must not call this
+            raise AssertionError("orchestrate must use refreshable(), not all()")
 
     def fake_ingest(**kwargs):
         ingested.append(kwargs["config"].profile_id)
         return FakeManifest()
 
     def fake_transform(**kwargs):
-        transformed.append(kwargs.get("profile").profile_id if kwargs.get("profile") else "none")
+        transformed.append(kwargs["profile"].profile_id)
         return []
 
     monkeypatch.setattr("src.cli.get_registry", lambda: FakeRegistry())
@@ -175,13 +179,16 @@ def test_cli_main_orchestrate_runs_all_profiles(monkeypatch):
     monkeypatch.setattr("src.transform.build_silver_entities.run_transform", fake_transform)
     monkeypatch.setattr("src.quality.profiling.profile_run", lambda run_id: None)
 
-    exit_code = main(["orchestrate"])
+    assert main(["orchestrate"]) == 0
+    assert ingested == ["adrd", "oncology_nsclc"]
+    assert transformed == ["adrd", "oncology_nsclc"]
 
-    assert exit_code == 0
-    assert set(ingested) == {"adrd", "full_catalog"}
-    # ingest_only profile must NOT be transformed
-    assert "full_catalog" not in transformed
-    assert "adrd" in transformed
+
+def test_cli_has_no_local_profile_alias_table() -> None:
+    """The alias map moved to src.profiles so ingest/transform/dashboard agree."""
+    import src.cli
+
+    assert not hasattr(src.cli, "_PROFILE_ALIASES")
 
 
 def test_cli_parser_transform():

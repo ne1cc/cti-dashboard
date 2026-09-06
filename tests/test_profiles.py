@@ -172,13 +172,40 @@ def test_registry_multiple_profiles(tmp_profiles_dir: Path, tmp_shared_paths: Pa
     assert ids == {"test_ind", "parkinsons"}
 
 
-def test_registry_active_includes_ingest_only(
+def test_registry_refreshable_excludes_ingest_only(
     tmp_profiles_dir: Path, tmp_shared_paths: Path
 ) -> None:
     registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths_file=tmp_shared_paths)
-    # ingest_only profiles appear in active() — orchestrator decides what to skip
-    active = registry.active()
-    assert any(p.ingest_only for p in active)
+    # MINIMAL_PROFILE_YAML is ingest_only, so nothing survives the filter.
+    assert registry.refreshable() == []
+    assert [p.profile_id for p in registry.all()] == ["test_ind"]
+
+
+def test_registry_active_is_gone() -> None:
+    """`active()` returned ingest_only profiles, which sent `orchestrate` after a
+    full-registry pull. One vocabulary: all() or refreshable()."""
+    assert not hasattr(ProfileRegistry, "active")
+
+
+def test_normalize_profile_id_covers_the_legacy_aliases() -> None:
+    from src.profiles import normalize_profile_id
+
+    assert normalize_profile_id("default") == "adrd"
+    assert normalize_profile_id("full-catalog") == "full_catalog"
+    assert normalize_profile_id("adrd") == "adrd"
+    assert normalize_profile_id("oncology_nsclc") == "oncology_nsclc"
+
+
+def test_real_registry_advertises_both_refreshable_profiles() -> None:
+    """config/profiles/oncology_nsclc.yml exists and is ingest_only: false; a
+    regression here means the deployed refresh silently stays single-profile."""
+    from src.profiles import get_registry
+
+    get_registry.cache_clear()
+    ids = {p.profile_id for p in get_registry().refreshable()}
+    assert {"adrd", "oncology_nsclc"} <= ids
+    assert "full_catalog" not in ids
+    get_registry.cache_clear()
 
 
 # ---------------------------------------------------------------------------
