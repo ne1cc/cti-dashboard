@@ -16,6 +16,7 @@ from loguru import logger
 
 from src.config import ProjectConfig, get_config
 from src.ingest.snapshot_manifest import load_manifests
+from src.profiles import get_registry
 from src.quality.reconciliation import run_reconciliation
 from src.quality.schema_drift import check_drift
 from src.utils.dates import utc_now_iso
@@ -40,7 +41,7 @@ def _reliability_rows(cfg: ProjectConfig) -> list[dict[str, Any]]:
     try:
         cursor = con.execute(
             """
-            select ingestion_run_id, snapshot_date, status, page_count,
+            select indication_profile_id, ingestion_run_id, snapshot_date, status, page_count,
                    manifest_record_count, trial_row_count,
                    manifest_reconciled_flag, unique_nct_flag,
                    quarantined_record_count, flagged_record_share,
@@ -76,6 +77,7 @@ def build_report(cfg: ProjectConfig | None = None, output_path: Path | None = No
     reliability = _reliability_rows(cfg)
     if reliability:
         headers = [
+            "profile",
             "run",
             "snapshot date",
             "status",
@@ -97,6 +99,7 @@ def build_report(cfg: ProjectConfig | None = None, output_path: Path | None = No
                 + " | ".join(
                     _fmt(row[key])
                     for key in (
+                        "indication_profile_id",
                         "ingestion_run_id",
                         "snapshot_date",
                         "status",
@@ -117,32 +120,38 @@ def build_report(cfg: ProjectConfig | None = None, output_path: Path | None = No
         lines.append("_Warehouse not built yet — run `make dbt-run` first._")
 
     lines += ["", "## Cross-layer reconciliation", ""]
-    checks = run_reconciliation(cfg)
-    lines.append("| check | run | expected | actual | passed | note |")
-    lines.append("| --- | --- | --- | --- | --- | --- |")
+    checks = run_reconciliation()
+    lines.append("| check | profile | run | expected | actual | passed | note |")
+    lines.append("| --- | --- | --- | --- | --- | --- | --- |")
     for check in checks:
         c = asdict(check)
         lines.append(
-            f"| {c['check']} | {_fmt(c['run_id'])} | {_fmt(c['expected'])}"
-            f" | {_fmt(c['actual'])} | {_fmt(c['passed'])} | {c['note']} |"
+            f"| {c['check']} | {c['profile_id']} | {_fmt(c['run_id'])}"
+            f" | {_fmt(c['expected'])} | {_fmt(c['actual'])} | {_fmt(c['passed'])} | {c['note']} |"
         )
     failed = sum(1 for c in checks if not c.passed)
     lines.append("")
     lines.append(f"**{len(checks) - failed}/{len(checks)} reconciliation checks passed.**")
 
     lines += ["", "## Schema drift", ""]
-    success_runs = [m for m in load_manifests(cfg.paths.bronze_manifests) if m.status == "success"]
-    if success_runs:
-        latest = max(success_runs, key=lambda m: m.ingestion_run_id)
-        drift = check_drift(latest.ingestion_run_id, cfg=cfg)
-        lines.append(f"- Run checked: `{drift['run_id']}`")
-        lines.append(f"- Status: **{drift['status']}**")
-        lines.append(f"- Observed field paths: {drift['observed_path_count']}")
-        if drift.get("added_paths") or drift.get("removed_paths"):
-            lines.append(f"- Added: {json.dumps(drift['added_paths'])}")
-            lines.append(f"- Removed: {json.dumps(drift['removed_paths'])}")
-    else:
-        lines.append("_No complete ingestion runs to check._")
+    for indication_profile in get_registry().refreshable():
+        profile_cfg = indication_profile.config
+        lines += [f"### {indication_profile.profile_id}", ""]
+        success_runs = [
+            m for m in load_manifests(profile_cfg.paths.bronze_manifests) if m.status == "success"
+        ]
+        if success_runs:
+            latest = max(success_runs, key=lambda m: m.ingestion_run_id)
+            drift = check_drift(latest.ingestion_run_id, cfg=profile_cfg)
+            lines.append(f"- Run checked: `{drift['run_id']}`")
+            lines.append(f"- Status: **{drift['status']}**")
+            lines.append(f"- Observed field paths: {drift['observed_path_count']}")
+            if drift.get("added_paths") or drift.get("removed_paths"):
+                lines.append(f"- Added: {json.dumps(drift['added_paths'])}")
+                lines.append(f"- Removed: {json.dumps(drift['removed_paths'])}")
+        else:
+            lines.append("_No complete ingestion runs to check._")
+        lines.append("")
 
     lines += [
         "",

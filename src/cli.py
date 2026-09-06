@@ -199,20 +199,25 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "quality-report":
-        from src.config import get_config
         from src.ingest.snapshot_manifest import load_manifests
         from src.quality.data_quality_report import build_report
         from src.quality.schema_drift import check_drift
 
         try:
             if args.update_schema_baseline:
-                cfg = get_config()
-                success = [
-                    m for m in load_manifests(cfg.paths.bronze_manifests) if m.status == "success"
-                ]
-                if success:
-                    latest = max(success, key=lambda m: m.ingestion_run_id)
-                    check_drift(latest.ingestion_run_id, update_baseline=True, cfg=cfg)
+                # One baseline per profile tree (src/quality/schema_drift.py:55);
+                # updating only the default tree would freeze every other
+                # profile's baseline against a run it never made.
+                for indication_profile in get_registry().refreshable():
+                    cfg = indication_profile.config
+                    success = [
+                        m
+                        for m in load_manifests(cfg.paths.bronze_manifests)
+                        if m.status == "success"
+                    ]
+                    if success:
+                        latest = max(success, key=lambda m: m.ingestion_run_id)
+                        check_drift(latest.ingestion_run_id, update_baseline=True, cfg=cfg)
             build_report()
         except Exception as exc:
             log.error("Quality report failed: {}", exc)

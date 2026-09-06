@@ -29,10 +29,7 @@ def test_bronze_asset_writes_manifest_and_materializes(project_root_tmp, monkeyp
     manifest = _success_manifest()
 
     def fake_run_ingestion(condition=None, full_refresh=False, max_pages=None):
-        from src.config import load_config
-
-        cfg = load_config()
-        write_manifest(cfg.paths.bronze_manifests, manifest)
+        _write_manifest_for_every_profile(manifest)
         return manifest
 
     monkeypatch.setattr("src.orchestration.assets.bronze.run_ingestion", fake_run_ingestion)
@@ -64,9 +61,7 @@ def test_manifest_integrity_passes_on_success_run(project_root_tmp, monkeypatch)
     manifest = _success_manifest()
 
     def fake_run_ingestion(condition=None, full_refresh=False, max_pages=None):
-        from src.config import load_config
-
-        write_manifest(load_config().paths.bronze_manifests, manifest)
+        _write_manifest_for_every_profile(manifest)
         return manifest
 
     monkeypatch.setattr("src.orchestration.assets.bronze.run_ingestion", fake_run_ingestion)
@@ -85,9 +80,7 @@ def test_manifest_integrity_fails_when_counts_disagree(project_root_tmp, monkeyp
     )
 
     def fake_run_ingestion(condition=None, full_refresh=False, max_pages=None):
-        from src.config import load_config
-
-        write_manifest(load_config().paths.bronze_manifests, manifest)
+        _write_manifest_for_every_profile(manifest)
         return manifest
 
     monkeypatch.setattr("src.orchestration.assets.bronze.run_ingestion", fake_run_ingestion)
@@ -128,39 +121,74 @@ def _patch_quiet_bronze(monkeypatch) -> None:
     monkeypatch.setattr("src.orchestration.assets.bronze.run_ingestion", fake_run_ingestion)
 
 
-def _seed_reconcilable_state() -> None:
-    """Fabricate one consistent bronze→silver→warehouse chain under the temp root."""
+def _write_manifest_for_every_profile(manifest: IngestionManifest) -> None:
+    """manifest_integrity loops every refreshable profile now, so a test that
+    wants the gate green must seed all of them, not just the default tree."""
+    from src.profiles import get_registry
+
+    for indication_profile in get_registry().refreshable():
+        write_manifest(indication_profile.config.paths.bronze_manifests, manifest)
+
+
+def _seed_reconcilable_state() -> list[str]:
+    """Fabricate one consistent bronze→silver→warehouse chain per refreshable
+    profile under the temp root, and return the profile ids seeded.
+
+    The checks loop the registry, so a chain for one profile is a chain that
+    fails — on `warehouse_covers_latest_silver` (no `success` manifest for that
+    profile) and on A25's `warehouse_profile_has_trials`, never on
+    `warehouse_exists`, which is a predicate on the shared warehouse file.
+    """
     from src.config import load_config
     from src.ingest.snapshot_manifest import write_manifest
+    from src.profiles import get_registry
 
-    cfg = load_config()
-    run_id = "20260904T120000Z_abc12345"
-    write_manifest(
-        cfg.paths.bronze_manifests,
-        IngestionManifest(
-            ingestion_run_id=run_id,
-            query_hash="hash123",
-            endpoint="https://clinicaltrials.gov/api/v2/studies",
-            params={"query.cond": "Alzheimer Disease"},
-            status="success",
-            started_at_utc=utc_now(),
-            ended_at_utc=utc_now(),
-            page_count=1,
-            record_count=1,
-            total_count_reported=1,
-        ),
-    )
-    silver_dir = cfg.paths.silver / "silver_trials"
-    silver_dir.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame([{"nct_id": "NCT00000001", "brief_title": "T"}]).to_parquet(
-        silver_dir / f"run_id={run_id}.parquet", index=False
-    )
-    cfg.paths.duckdb.parent.mkdir(parents=True, exist_ok=True)
-    con = duckdb.connect(str(cfg.paths.duckdb))
+    profiles = get_registry().refreshable()
+    profile_ids = [p.profile_id for p in profiles]
+    for index, indication_profile in enumerate(profiles):
+        cfg = indication_profile.config
+        run_id = f"20260904T120000Z_abc1234{index}"
+        write_manifest(
+            cfg.paths.bronze_manifests,
+            IngestionManifest(
+                ingestion_run_id=run_id,
+                query_hash="hash123",
+                endpoint="https://clinicaltrials.gov/api/v2/studies",
+                params={"query.cond": indication_profile.profile_id},
+                status="success",
+                started_at_utc=utc_now(),
+                ended_at_utc=utc_now(),
+                page_count=1,
+                record_count=1,
+                total_count_reported=1,
+            ),
+        )
+        silver_dir = cfg.paths.silver / "silver_trials"
+        silver_dir.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame([{"nct_id": f"NCT0000000{index}", "brief_title": "T"}]).to_parquet(
+            silver_dir / f"run_id={run_id}.parquet", index=False
+        )
+
+    shared_cfg = load_config()
+    shared_cfg.paths.duckdb.parent.mkdir(parents=True, exist_ok=True)
+    con = duckdb.connect(str(shared_cfg.paths.duckdb))
     con.execute("create schema main_marts")
-    con.execute("create table main_marts.dim_trial as select 'NCT00000001' as nct_id")
-    con.execute("create table main_marts.fct_trial_snapshot as select false as current_record_flag")
+    con.execute(
+        "create table main_marts.dim_trial as from values "
+        + ", ".join(f"('NCT0000000{i}', '{pid}')" for i, pid in enumerate(profile_ids))
+        + " as t(nct_id, indication_profile_id)"
+    )
+    con.execute(
+        "create table main_marts.fct_trial_snapshot as from values "
+        + ", ".join(f"(true, '{pid}')" for pid in profile_ids)
+        + " as t(current_record_flag, indication_profile_id)"
+    )
+    con.execute(
+        "create table main_marts.mart_trial_similarity "
+        "(indication_profile_id varchar, nct_id_a varchar, nct_id_b varchar)"
+    )
     con.close()
+    return profile_ids
 
 
 def test_silver_asset_materializes_processed_runs(project_root_tmp, monkeypatch) -> None:
@@ -214,39 +242,51 @@ def test_bronze_silver_check_fails_when_silver_missing(project_root_tmp, monkeyp
 
 
 def test_warehouse_checks_pass_on_consistent_state(project_root_tmp) -> None:
-    """warehouse_checks is the post-build gate on dim_trial: it validates the
-    dbt-built warehouse against the latest silver."""
-    _seed_reconcilable_state()
-
+    """The post-build gate runs once per refreshable profile, and every check
+    must say which profile it is about."""
+    from src.profiles import get_registry
     from src.quality.reconciliation import warehouse_checks
 
-    checks = warehouse_checks()
+    _seed_reconcilable_state()
+    checks = [
+        c
+        for indication_profile in get_registry().refreshable()
+        for c in warehouse_checks(indication_profile.config, indication_profile.profile_id)
+    ]
     assert checks
-    assert all(c.passed for c in checks), [c.check for c in checks if not c.passed]
+    assert all(c.passed for c in checks), [(c.profile_id, c.check) for c in checks if not c.passed]
+    assert {c.profile_id for c in checks} == {"adrd", "oncology_nsclc"}
+    per_profile_rows = {
+        c.profile_id: c.actual for c in checks if c.check == "warehouse_profile_has_trials"
+    }
+    assert per_profile_rows == {"adrd": 1, "oncology_nsclc": 1}, (
+        "each profile's legs must count only its own dim_trial rows: the seed holds "
+        "one row per profile, so an unscoped query reports 2 for both — and every "
+        "other leg here would still pass on the superset."
+    )
 
 
 def test_warehouse_checks_fail_when_warehouse_missing(project_root_tmp) -> None:
-    from src.config import load_config
     from src.ingest.snapshot_manifest import write_manifest
-
-    cfg = load_config()
-    write_manifest(
-        cfg.paths.bronze_manifests,
-        IngestionManifest(
-            ingestion_run_id="20260904T120000Z_abc12345",
-            query_hash="hash123",
-            endpoint="https://clinicaltrials.gov/api/v2/studies",
-            params={"query.cond": "Alzheimer Disease"},
-            status="success",
-            started_at_utc=utc_now(),
-            ended_at_utc=utc_now(),
-            page_count=1,
-            record_count=1,
-            total_count_reported=1,
-        ),
-    )
-
+    from src.profiles import get_registry
     from src.quality.reconciliation import warehouse_checks
 
-    checks = warehouse_checks()
-    assert [c.check for c in checks if not c.passed] == ["warehouse_exists"]
+    for indication_profile in get_registry().refreshable():
+        write_manifest(
+            indication_profile.config.paths.bronze_manifests,
+            IngestionManifest(
+                ingestion_run_id="20260904T120000Z_abc12345",
+                query_hash="hash123",
+                endpoint="https://clinicaltrials.gov/api/v2/studies",
+                params={"query.cond": indication_profile.profile_id},
+                status="success",
+                started_at_utc=utc_now(),
+                ended_at_utc=utc_now(),
+                page_count=1,
+                record_count=1,
+                total_count_reported=1,
+            ),
+        )
+        checks = warehouse_checks(indication_profile.config, indication_profile.profile_id)
+        assert [c.check for c in checks if not c.passed] == ["warehouse_exists"]
+        assert {c.profile_id for c in checks} == {indication_profile.profile_id}
