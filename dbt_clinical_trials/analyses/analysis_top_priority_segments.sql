@@ -15,5 +15,5 @@ select
     priority_explanation,
     interpretation_note
 from {{ ref('mart_feasibility_priority_queue') }}
-order by priority_rank
+order by indication_profile_id, priority_rank
 limit 25

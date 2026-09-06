@@ -750,7 +750,7 @@ def test_marts_contracts_enforced(fixture_project_root: Path) -> None:
         assert {c["name"] for c in node["columns"].values()}, name
 
 
-def test_every_trial_grain_mart_contracts_the_profile(fixture_project_root: Path) -> None:
+def test_every_trial_grain_mart_contracts_the_profile() -> None:
     """Composite grain is only real if the contract says so: an undeclared column
     fails the build, but a *declared nullable* column would let a future model
     drop the profile and still compile.
@@ -761,6 +761,16 @@ def test_every_trial_grain_mart_contracts_the_profile(fixture_project_root: Path
     trial-grain marts; ``dim_date`` is excluded because the calendar spine is
     global on purpose (Task 11). Read from ``_marts.yml`` rather than the built
     manifest so the not_null test is checked where it is authored.
+
+    Takes no fixture on purpose, like the other source-level guards in this file
+    (``test_shared_dimension_contracts_state_the_per_profile_grain``,
+    ``test_window_frames_partition_by_profile``): it reads ``_marts.yml``, so a
+    broken build must not be able to turn this check into an error. With
+    ``fixture_project_root`` in the signature it requested the session dbt build
+    it never used, and every fact this test asserts was already knowable without
+    it -- so ``conftest.py:245``'s build assert would report ERROR instead of
+    running a guard, exactly the blackout failure mode that hid this module for
+    six tasks.
     """
     import yaml
 
@@ -770,7 +780,27 @@ def test_every_trial_grain_mart_contracts_the_profile(fixture_project_root: Path
         (project_root() / "dbt_clinical_trials/models/marts/_marts.yml").read_text(encoding="utf-8")
     )
     trial_grain = {name for name in (m["name"] for m in doc["models"]) if name != "dim_date"}
-    assert len(trial_grain) == 15
+    # Membership, not just cardinality: a pin on len() alone stays green if a
+    # mart is renamed or dim_date's exclusion clause goes stale, because the set
+    # keeps its size while iterating something else. Names taken from
+    # _marts.yml's 16 model blocks minus dim_date, 2026-09-06.
+    assert trial_grain == {
+        "bridge_trial_condition",
+        "bridge_trial_sponsor",
+        "dim_condition",
+        "dim_geography",
+        "dim_sponsor",
+        "dim_trial",
+        "fct_trial_site",
+        "fct_trial_snapshot",
+        "mart_condition_geography_trends",
+        "mart_data_reliability",
+        "mart_feasibility_priority_queue",
+        "mart_recruiting_competition",
+        "mart_site_overlap",
+        "mart_trial_activity",
+        "mart_trial_similarity",
+    }
     for model in doc["models"]:
         if model["name"] not in trial_grain:
             continue

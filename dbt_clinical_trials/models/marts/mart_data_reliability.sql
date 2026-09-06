@@ -9,6 +9,10 @@ with runs as (
 trial_stats as (
     select
         ingestion_run_id,
+        -- Silver is authoritative, so this is the profile the final select
+        -- prefers; runs (r) supplies the fallback. It is carried here and only
+        -- here: the location/condition CTEs' copies were dropped because
+        -- nothing downstream reads them.
         any_value(indication_profile_id) as indication_profile_id,
         count(*) as trial_row_count,
         count(distinct nct_id) as distinct_trial_count,
@@ -24,7 +28,6 @@ trial_stats as (
 location_stats as (
     select
         ingestion_run_id,
-        any_value(indication_profile_id) as indication_profile_id,
         count(*) as location_row_count,
         count(*) filter (usable_geography_flag) as usable_location_count
     from {{ ref('stg_trial_locations') }}
@@ -34,7 +37,6 @@ location_stats as (
 condition_stats as (
     select
         ingestion_run_id,
-        any_value(indication_profile_id) as indication_profile_id,
         count(*) as condition_row_count,
         count(*) filter (mapping_confidence = 'low')
             as low_confidence_condition_count
