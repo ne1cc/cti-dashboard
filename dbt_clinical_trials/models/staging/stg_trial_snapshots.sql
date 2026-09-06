@@ -14,6 +14,10 @@ select
     try_cast(total_count_reported as integer) as total_count_reported,
     cast(quarantined_record_count as integer) as quarantined_record_count,
     profile,
+    -- The manifest field is `profile`; every other model in this project calls
+    -- the same concept indication_profile_id. Alias at the boundary so the
+    -- rename happens once.
+    profile as indication_profile_id,
     -- All-null summaries (fixture and first successes) read back as INTEGER;
     -- normalize to VARCHAR so the mart contract matches the manifest schema.
     cast(error as varchar) as error

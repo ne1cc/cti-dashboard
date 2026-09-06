@@ -323,8 +323,15 @@ def test_default_config_bronze_paths_match_the_adrd_profile() -> None:
 def test_dbt_bronze_source_reads_the_configured_manifests_dir() -> None:
     """dbt cannot import src.config, so _sources.yml repeats the manifests root
     as a literal string. This test is the seam that keeps the two from drifting
-    apart again."""
-    import yaml
+    apart again.
+
+    Since the two-profile fixture the literal is a glob whose one wildcard
+    segment stands for the profile id, so the guard checks every profile the
+    registry knows about, not just the default one. Comparison is segment-wise
+    because DuckDB's `*` does not cross a `/`.
+    """
+    import fnmatch
+    import re
 
     from src.config import load_config
     from src.utils.paths import project_root
@@ -337,9 +344,22 @@ def test_dbt_bronze_source_reads_the_configured_manifests_dir() -> None:
     bronze = next(s for s in sources["sources"] if s["name"] == "bronze")
     manifests = next(t for t in bronze["tables"] if t["name"] == "ingestion_manifests")
     location: str = manifests["meta"]["external_location"]
+    match = re.search(r"read_parquet\(\s*'([^']+)'", location)
+    assert match, location
+    pattern_parts = match.group(1).split("/")
 
-    configured = load_config().paths.bronze_manifests.relative_to(project_root()).as_posix()
-    assert f"'{configured}/summary_*.parquet'" in location
+    def matches(manifests_dir: Path) -> bool:
+        parts = manifests_dir.relative_to(project_root()).as_posix().split("/") + [
+            "summary_*.parquet"
+        ]
+        return len(parts) == len(pattern_parts) and all(
+            fnmatch.fnmatchcase(actual, expected) if "*" in expected else actual == expected
+            for actual, expected in zip(parts, pattern_parts, strict=True)
+        )
+
+    assert matches(load_config().paths.bronze_manifests)
+    for profile in ProfileRegistry().all():
+        assert matches(profile.config.paths.bronze_manifests), profile.profile_id
 
 
 def test_no_top_level_config_declares_a_private_silver_tree() -> None:

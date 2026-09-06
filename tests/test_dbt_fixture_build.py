@@ -28,11 +28,24 @@ def _rows(root: Path, sql: str) -> list[tuple]:
         con.close()
 
 
-def test_dim_trial_grain(fixture_project_root: Path) -> None:
+def test_dim_trial_grain_is_trial_x_profile(fixture_project_root: Path) -> None:
+    """20 rows for 10 NCT IDs: the same trial listed under two indication
+    profiles is two facts, and neither may silently win.
+
+    Before the composite-grain migration int_trial_status_history picks one row
+    per (nct_id, snapshot_date), so one profile's 10 trials disappear and this
+    returns (10, 10) with every existing uniqueness test still green.
+    """
     assert _rows(
         fixture_project_root,
         "select count(*), count(distinct nct_id) from main_marts.dim_trial",
-    ) == [(10, 10)]
+    ) == [(20, 10)]
+    assert _rows(
+        fixture_project_root,
+        "select indication_profile_id, count(*) from main_marts.dim_trial group by 1 order by 1",
+    ) == [("adrd", 10), ("oncology_nsclc", 10)]
+    # Carried over unchanged from the pre-two-profile fixture: both runs hold the
+    # same 10 trials, so all eight statuses must survive whatever the grain is.
     statuses = {
         r[0]
         for r in _rows(
@@ -50,6 +63,57 @@ def test_dim_trial_grain(fixture_project_root: Path) -> None:
         "TERMINATED",
         "WITHDRAWN",
     }
+
+
+def test_fct_trial_snapshot_grain_carries_the_profile(fixture_project_root: Path) -> None:
+    """One row per (profile, nct_id, snapshot_date): 20, and snapshot_key must
+    be unique at that grain — md5(nct_id, snapshot_date) collides across
+    profiles on the same date."""
+    assert _rows(
+        fixture_project_root,
+        "select count(*), count(distinct snapshot_key) from main_marts.fct_trial_snapshot",
+    ) == [(20, 20)]
+
+
+def test_bridge_trial_condition_is_profile_scoped(fixture_project_root: Path) -> None:
+    """The ADRD taxonomy and the NSCLC taxonomy disagree on dementia_relevance
+    by construction, so a cross-indication leak is visible as a nonzero count."""
+    per_profile = _rows(
+        fixture_project_root,
+        "select indication_profile_id, count(*) from main_marts.bridge_trial_condition"
+        " group by 1 order by 1",
+    )
+    assert dict(per_profile)["adrd"] == 12
+    assert dict(per_profile)["oncology_nsclc"] > 0
+    assert _rows(
+        fixture_project_root,
+        "select count(*) from main_marts.bridge_trial_condition"
+        " where indication_profile_id = 'oncology_nsclc' and dementia_relevance_flag",
+    ) == [(0,)]
+
+
+def test_mart_data_reliability_has_one_row_per_run_per_profile(
+    fixture_project_root: Path,
+) -> None:
+    assert _rows(
+        fixture_project_root,
+        "select indication_profile_id, count(*) from main_marts.mart_data_reliability"
+        " group by 1 order by 1",
+    ) == [("adrd", 1), ("oncology_nsclc", 1)]
+
+
+def test_mart_feasibility_priority_queue_is_profile_scoped(fixture_project_root: Path) -> None:
+    per_profile = _rows(
+        fixture_project_root,
+        "select indication_profile_id, count(*) from main_marts.mart_feasibility_priority_queue"
+        " group by 1 order by 1",
+    )
+    assert per_profile[0][0] == "adrd"
+    assert _rows(
+        fixture_project_root,
+        "select count(*) > 1 from main_marts.mart_feasibility_priority_queue"
+        " where indication_profile_id = 'oncology_nsclc'",
+    ) == [(True,)]
 
 
 def test_fct_trial_snapshot_one_current_record_per_trial(

@@ -1,6 +1,7 @@
 import shutil
 import subprocess
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -24,6 +25,14 @@ scope:
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_RUN_ID = "20260901T120000Z_fixture01"
+NSCLC_FIXTURE_RUN_ID = "20260901T120001Z_fixture02"
+# Pinned, not utc_now(): both runs must land on ONE snapshot_date for the
+# grain collapse to reproduce, and utc_now() crosses midnight. nsclc is one
+# hour later so the pre-migration `order by snapshot_timestamp_utc desc`
+# deterministically drops ADRD — silent loss, not a coin flip.
+FIXTURE_SNAPSHOT_DAY = datetime(2026, 9, 1, tzinfo=UTC)
+ADRD_STARTED_AT = FIXTURE_SNAPSHOT_DAY + timedelta(hours=10)
+NSCLC_STARTED_AT = FIXTURE_SNAPSHOT_DAY + timedelta(hours=11)
 
 
 @pytest.fixture
@@ -131,11 +140,14 @@ def fixture_project_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
         (root / "config" / "project_config.yml").write_text(CONFIG_YAML, encoding="utf-8")
         for name in (
             "condition_taxonomy.yml",
+            "condition_taxonomy_nsclc.yml",
             "geography_rules.yml",
             "score_weights.yml",
             "roi_assumptions.yml",
+            "shared_paths.yml",
         ):
             shutil.copy(REPO_ROOT / "config" / name, root / "config" / name)
+        shutil.copytree(REPO_ROOT / "config" / "profiles", root / "config" / "profiles")
 
         from src.config import load_config
         from src.ingest.snapshot_manifest import (
@@ -143,36 +155,62 @@ def fixture_project_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
             write_manifest,
             write_summary,
         )
-        from src.utils.dates import utc_now
-
-        cfg = load_config()
-        run_dir = cfg.paths.bronze_api_responses / f"run_id={FIXTURE_RUN_ID}"
-        run_dir.mkdir(parents=True)
-        shutil.copy(
-            Path(__file__).parent / "fixtures/bronze_snapshot/page=00001.json",
-            run_dir / "page=00001.json",
-        )
-
-        manifest = IngestionManifest(
-            ingestion_run_id=FIXTURE_RUN_ID,
-            query_hash="fixturequeryhash0001",
-            endpoint="https://clinicaltrials.gov/api/v2/studies",
-            condition="Alzheimer Disease",
-            params={"query.cond": "Alzheimer Disease"},
-            mode="incremental",
-            status="success",
-            started_at_utc=utc_now(),
-            ended_at_utc=utc_now(),
-            page_count=1,
-            record_count=10,
-            total_count_reported=10,
-        )
-        write_manifest(cfg.paths.bronze_manifests, manifest)
-        write_summary(cfg.paths.bronze_manifests, manifest)
-
+        from src.profiles import load_profile, load_shared_paths
         from src.transform.build_silver_entities import run_transform
 
-        assert run_transform(config=cfg) == [FIXTURE_RUN_ID]
+        cfg = load_config()
+        shared = load_shared_paths(root / "config" / "shared_paths.yml")
+        profiles = {
+            "adrd": load_profile(root / "config/profiles/adrd.yml", shared=shared),
+            "oncology_nsclc": load_profile(
+                root / "config/profiles/oncology_nsclc.yml", shared=shared
+            ),
+        }
+
+        runs = [
+            ("adrd", FIXTURE_RUN_ID, "page=00001.json", ADRD_STARTED_AT, "Alzheimer Disease"),
+            (
+                "oncology_nsclc",
+                NSCLC_FIXTURE_RUN_ID,
+                "page=00001.json",
+                NSCLC_STARTED_AT,
+                "Non-Small Cell Lung Cancer",
+            ),
+        ]
+        for pid, run_id, page_file, started_at, condition in runs:
+            profile_cfg = profiles[pid].config
+            fixture_dir = "bronze_snapshot_nsclc" if pid != "adrd" else "bronze_snapshot"
+            run_dir = profile_cfg.paths.bronze_api_responses / f"run_id={run_id}"
+            run_dir.mkdir(parents=True)
+            shutil.copy(
+                Path(__file__).parent / "fixtures" / fixture_dir / page_file,
+                run_dir / page_file,
+            )
+            manifest = IngestionManifest(
+                ingestion_run_id=run_id,
+                query_hash=f"fixturequeryhash{pid[-1:]}01",
+                endpoint="https://clinicaltrials.gov/api/v2/studies",
+                condition=condition,
+                params={"query.cond": condition},
+                mode="incremental",
+                # Mirrors src/ingest/extract_studies.py, which stamps the manifest
+                # with profile.profile_id. The bronze glob in _sources.yml and the
+                # `profile as indication_profile_id` alias in stg_trial_snapshots
+                # read exactly this field, so a fixture that left it at the
+                # "default" fallback would make the reliability mart's per-profile
+                # grain unprovable.
+                profile=pid,
+                status="success",
+                started_at_utc=started_at,
+                ended_at_utc=started_at + timedelta(minutes=30),
+                page_count=1,
+                record_count=10,
+                total_count_reported=10,
+            )
+            write_manifest(profile_cfg.paths.bronze_manifests, manifest)
+            write_summary(profile_cfg.paths.bronze_manifests, manifest)
+            assert run_transform(profile=profiles[pid]) == [run_id]
+        assert cfg.paths.silver == profiles["adrd"].config.paths.silver  # one silver tree
 
         (root / "profiles.yml").write_text(
             """clinical_trials:
