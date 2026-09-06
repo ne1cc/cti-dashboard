@@ -3,8 +3,8 @@
 -- this is a listing signal, not verified site capacity.
 with history as (
     select
-        nct_id, ingestion_run_id, snapshot_date, overall_status, phase_normalized,
-        lead_sponsor_normalized
+        nct_id, indication_profile_id, ingestion_run_id, snapshot_date,
+        overall_status, phase_normalized, lead_sponsor_normalized
     from {{ ref('int_trial_status_history') }}
 ),
 
@@ -14,6 +14,7 @@ locations as (
 
 select
     h.snapshot_date,
+    h.indication_profile_id,
     h.ingestion_run_id,
     h.nct_id,
     h.overall_status,
@@ -29,4 +30,5 @@ select
 from history h
 inner join locations l
     on h.ingestion_run_id = l.ingestion_run_id
+    and h.indication_profile_id = l.indication_profile_id
     and h.nct_id = l.nct_id
