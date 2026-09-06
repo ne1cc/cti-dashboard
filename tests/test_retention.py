@@ -72,13 +72,17 @@ def _temp_config_tree(root: Path) -> Path:
     ``project_config.yml`` is deliberately *not* copied: the
     ``project_root_tmp`` fixture writes its own, without a retention block, so
     the defaults stay under test.
+
+    ``dirs_exist_ok`` because ``project_root_tmp`` now copies the same tree
+    itself: without it the re-copy raises ``FileExistsError`` on the directory
+    that is already there, and the files it rewrites are identical anyway.
     """
     dst = root / "config"
     dst.mkdir(parents=True, exist_ok=True)
     for src in sorted((REPO_ROOT / "config").glob("*.yml")):
         if src.name != "project_config.yml":
             shutil.copy(src, dst / src.name)
-    shutil.copytree(REPO_ROOT / "config/profiles", dst / "profiles")
+    shutil.copytree(REPO_ROOT / "config/profiles", dst / "profiles", dirs_exist_ok=True)
     return dst
 
 

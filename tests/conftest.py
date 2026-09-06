@@ -163,7 +163,19 @@ def _variant_page(
 
 @pytest.fixture
 def project_root_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    (tmp_path / "config").mkdir()
+    """Temp project root carrying the real config/ tree.
+
+    ProfileRegistry resolves config/profiles/*.yml and config/shared_paths.yml
+    against the project root, so a temp root without them cannot build a
+    profile at all. Every path in those files is relative, which re-scopes
+    bronze/silver/warehouse inside tmp_path. project_config.yml is then
+    replaced by CONFIG_YAML so the single-config callers keep their fixture.
+
+    Do not assert `cfg.paths.X.is_relative_to(tmp_path)`: tmp_path and the
+    resolved root differ by macOS's /var -> /private/var symlink. Assert that
+    files exist where the config says they should.
+    """
+    shutil.copytree(REPO_ROOT / "config", tmp_path / "config")
     (tmp_path / "config" / "project_config.yml").write_text(CONFIG_YAML, encoding="utf-8")
     monkeypatch.setenv("CTI_PROJECT_ROOT", str(tmp_path))
     return tmp_path
@@ -171,24 +183,30 @@ def project_root_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.fixture(autouse=True)
 def _clear_config_cache():
-    """Clear the cached config *and* profile registry around every test.
+    """Clear every cached singleton that resolved a path at first call.
 
-    Both are ``lru_cache``d singletons resolved against ``CTI_PROJECT_ROOT``, so a
-    registry left warm by an earlier test module hands a later one profiles
-    pointing at the repo's real ``data/`` tree — fatal for any test that runs a
-    real (non-dry) prune. Repo-wide rather than per-module so no future prune test
-    has to remember it. Called unconditionally, not via ``getattr``: if an
-    accessor stops being a cached singleton this fails loudly instead of quietly
-    removing the pin.
+    All four are ``lru_cache``d singletons resolved against
+    ``CTI_PROJECT_ROOT``, so one left warm by an earlier test module hands a
+    later one profiles — or a taxonomy, or a geography rule set — pointing at
+    the repo's real ``data/`` tree, fatal for any test that runs a real
+    (non-dry) prune. Repo-wide rather than per-module so no future prune test
+    has to remember it. Called unconditionally, not via ``getattr``, and the
+    same holds for the tuple-and-loop form below: iterating four known
+    accessors without probing them means an accessor that stops being a cached
+    singleton fails loudly on every test instead of quietly dropping out of the
+    clearing.
     """
     from src.config import get_config
     from src.profiles import get_registry
+    from src.transform.normalize_conditions import get_taxonomy
+    from src.transform.normalize_locations import get_geography_rules
 
-    get_config.cache_clear()
-    get_registry.cache_clear()
+    singletons = (get_config, get_registry, get_taxonomy, get_geography_rules)
+    for cached in singletons:
+        cached.cache_clear()
     yield
-    get_config.cache_clear()
-    get_registry.cache_clear()
+    for cached in singletons:
+        cached.cache_clear()
 
 
 def materialize_with_checks(*, assets, asset_checks, run_config=None, raise_on_error=False):
