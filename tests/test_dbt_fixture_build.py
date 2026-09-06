@@ -50,8 +50,12 @@ SHARED_DIMS_WITH_PROFILE = ["dim_condition", "dim_sponsor", "dim_geography"]
 # list with Task 12's fix to its unprofiled row_number()
 # (mart_trial_similarity.sql:73-74), not before. The two with no windows today
 # are listed because the guard exists to catch the first window someone adds to
-# them. Task 11's three shared dims add no window frames (measured: zero `over`
-# keywords in dim_condition/dim_sponsor/dim_geography), so they join neither list.
+# them. Task 11's three shared dims join neither list: checked 2026-09-06, the
+# comment-stripped text of dim_condition.sql, dim_sponsor.sql and
+# dim_geography.sql holds no `over` token, which is a static reading of the
+# source rather than a build measurement. A window added to one of them later
+# would be unchecked until its name joined this list, which is the same
+# obligation mart_trial_similarity carries.
 MARTS_WITH_PROFILE_SCOPED_WINDOWS = [
     "mart_trial_activity",
     "mart_site_overlap",
@@ -63,6 +67,15 @@ MARTS_WITH_PROFILE_SCOPED_WINDOWS = [
 _SQL_COMMENT_RE = re.compile(r"--[^\n]*|\{#.*?#\}", re.DOTALL)
 _OVER_KEYWORD_RE = re.compile(r"\bover\b", re.IGNORECASE)
 _PARTITION_BY_RE = re.compile(r"\bpartition\s+by\b", re.IGNORECASE)
+# A surrogate key and the alias it is emitted as, so a guard can ask "what does
+# `sponsor_key` hash?" instead of "what does the first key-ish call in this file
+# hash?". The optional `}}` is the Jinja call closing, and DOTALL because
+# dim_sponsor.sql breaks the closing brace and its `as` across two lines.
+_SURROGATE_KEY_RE = re.compile(
+    r"generate_surrogate_key\(\s*\[(?P<args>[^\]]*)\]\s*\)\s*(?:\}\})?\s*"
+    r"as\s+(?P<alias>[a-z_][a-z0-9_]*)",
+    re.IGNORECASE | re.DOTALL,
+)
 # A frame is either inline, `over (partition by ...)`, or a reference to a named
 # window, `over trailing_3m`. Neither branch nests, so a frame this cannot read
 # fails the count check in _window_frames rather than going unchecked.
@@ -96,6 +109,42 @@ def _rows(root: Path, sql: str) -> list[tuple]:
         con.close()
 
 
+def _strip_sql_comments(sql: str) -> str:
+    """Model text with `--` line comments and Jinja `{# #}` markup blanked out.
+
+    The single mechanism both source-level guards in this module read through.
+    A guard that scans raw text can be satisfied by a comment, which makes it a
+    decoration rather than a check; comments are also where an honest note about
+    a column that a model deliberately lacks would live, so stripping cuts both
+    ways -- it stops a comment faking compliance and stops one causing a false
+    failure. Newlines survive the substitution, so line-oriented reading still
+    works on the result.
+    """
+    return _SQL_COMMENT_RE.sub(" ", sql)
+
+
+def _surrogate_key_inputs(sql: str, alias: str) -> set[str] | None:
+    """The columns a model's `generate_surrogate_key([...]) as <alias>` hashes.
+
+    Returns None when the file emits no such key, so the caller decides whether
+    that is a failure and names the file. Table qualification is stripped:
+    `macros/generate_surrogate_key.sql` concatenates its inputs with `||` over
+    `coalesce(cast(<field> as varchar), '__null__')`, so `sponsor_normalized`
+    and `s.sponsor_normalized` hash to the same value in a one-table model and a
+    joined one -- the inputs are what two sides of a join must agree on, not the
+    spelling.
+    """
+    for match in _SURROGATE_KEY_RE.finditer(sql):
+        if match.group("alias") != alias:
+            continue
+        return {
+            arg.strip().strip("'\"").split(".")[-1]
+            for arg in match.group("args").split(",")
+            if arg.strip()
+        }
+    return None
+
+
 def _window_frames(sql: str, model: str) -> list[str]:
     """The text of every window frame in a model's SQL, comment markup removed.
 
@@ -106,7 +155,7 @@ def _window_frames(sql: str, model: str) -> list[str]:
     the keyword count stays put, and that has to be a failure rather than a
     shorter list of things the guard silently stopped checking.
     """
-    code = _SQL_COMMENT_RE.sub(" ", sql)
+    code = _strip_sql_comments(sql)
     frames: list[str] = []
     for match in _FRAME_RE.finditer(code):
         inline = match.group("inline")
@@ -463,7 +512,16 @@ def test_shared_dimensions_are_per_profile_with_per_profile_stats(
       assertion can tell "counted within its profile" from "counted globally
       then copied" while membership is symmetric, so none is made. PREDICTED --
       the scoping leg belongs to Task 12, whose Amendment A16 fixture gives the
-      profiles divergent dates and asymmetric membership.
+      profiles divergent dates and asymmetric membership. Four fixture-shape
+      literals below are predictions in exactly that sense, and a Task 12 that
+      changes them is the expected outcome rather than a regression: the
+      ``(14, 7)`` / ``(18, 9)`` row shapes, the ``dupes == [(7,)]`` /
+      ``[(9,)]`` claim that *every* entity is shared by both profiles,
+      dim_condition's ``[("adrd", 10), ("oncology_nsclc", 11)]`` partition with
+      its ``(21, 21, 2)`` rows/keys/profiles triple, and the ``[(10,)]``
+      cross-profile dim_trial self-join at the bottom -- the last of which is
+      deliberately asserted because it is the tripwire that says when the
+      non-discrimination argument above has lapsed.
     * dim_condition is excluded from the multiplicity loop by measurement: 21
       rows, 21 distinct condition_normalized, 0 entities listed by both
       profiles. condition_normalized is taxonomy-free text (normalize_text of
@@ -542,7 +600,8 @@ def test_shared_dimensions_are_per_profile_with_per_profile_stats(
 def test_shared_dimension_contracts_state_the_per_profile_grain() -> None:
     """The three shared dims must declare indication_profile_id as a not-null
     VARCHAR in the position it holds in their select list, dim_geography must
-    stop claiming state_code is unique, and dim_date must stay global.
+    stop claiming state_code is unique, dim_sponsor and its bridge must hash the
+    same inputs, and dim_date must stay global.
 
     Read from the contract source, not ``dbt_target/manifest.json`` like
     test_segment_mart_contracts_declare_the_profile, because the fixture build is
@@ -552,6 +611,21 @@ def test_shared_dimension_contracts_state_the_per_profile_grain() -> None:
     compares the model's columns positionally: a declaration that drifts from
     select order fails the build, which today is invisible behind the queue's
     binder error.
+
+    Every SQL assertion reads the model through _strip_sql_comments. These are
+    string searches over source text, so an un-stripped ``group by
+    indication_profile_id`` or key argument list could be supplied by a comment
+    while the model did something else entirely; a guard a comment can satisfy is
+    decoration. Stripping also keeps the dim_date leg honest in the other
+    direction -- a comment there explaining that the calendar spine has no
+    profile column is documentation, not a widened grain.
+
+    The bridge leg compares *sets* of hashed inputs rather than the argument
+    strings, because ``dim_sponsor.sql`` references the bare column and
+    ``bridge_trial_sponsor.sql`` spells its inputs ``s.``-qualified, and
+    ``macros/generate_surrogate_key.sql`` concatenates whatever it is given with
+    ``'||'`` over ``coalesce(cast(<field> as varchar), '__null__')``. The inputs
+    must agree; the qualification is each model's own business.
     """
     import yaml
 
@@ -559,35 +633,62 @@ def test_shared_dimension_contracts_state_the_per_profile_grain() -> None:
 
     marts = project_root() / "dbt_clinical_trials/models/marts"
     doc = yaml.safe_load((marts / "_marts.yml").read_text(encoding="utf-8"))
-    declared = {model["name"]: [c["name"] for c in model["columns"]] for model in doc["models"]}
-    columns = {model["name"]: {c["name"]: c for c in model["columns"]} for model in doc["models"]}
+    # Looked up by name, never iterated: _marts.yml describes 16 models and this
+    # guard covers three of them, so a future description-only block anywhere
+    # else in the file cannot make this test fail for an unrelated reason.
+    blocks = {model["name"]: model for model in doc["models"]}
 
     for name in SHARED_DIMS_WITH_PROFILE:
-        profile = columns[name]["indication_profile_id"]
+        declared = [c["name"] for c in blocks[name]["columns"]]
+        columns = {c["name"]: c for c in blocks[name]["columns"]}
+        profile = columns["indication_profile_id"]
         assert profile["data_type"] == "VARCHAR", name
         assert profile["tests"] == ["not_null"], name
-        key = declared[name][0]
+        key = declared[0]
         assert key.endswith("_key"), name
-        assert columns[name][key]["tests"] == ["not_null", "unique"], name
+        assert columns[key]["tests"] == ["not_null", "unique"], name
         # The key hashes entity x profile, so it is the only thing that can
         # enforce the grain now that the entity alone does not.
-        assert declared[name].index("indication_profile_id") == 1, name
-        sql = (marts / f"{name}.sql").read_text(encoding="utf-8")
-        assert "group by indication_profile_id" in sql, name
-        key_args = re.search(r"generate_surrogate_key\(\[([^\]]*)\]\)", sql, re.DOTALL)
-        assert key_args is not None, name
-        assert "indication_profile_id" in key_args.group(1), (
-            f"{name}: key must hash the profile it is grained by: {key_args.group(1).strip()!r}"
+        assert declared.index("indication_profile_id") == 1, name
+        code = _strip_sql_comments((marts / f"{name}.sql").read_text(encoding="utf-8"))
+        assert "group by indication_profile_id" in code, name
+        key_inputs = _surrogate_key_inputs(code, key)
+        assert key_inputs is not None, f"{name}.sql: {key} is not emitted as a surrogate key"
+        assert "indication_profile_id" in key_inputs, (
+            f"{name}: key must hash the profile it is grained by: {sorted(key_inputs)}"
         )
 
     # state_code loses unique (TX exists once per profile) and keeps not_null.
-    assert columns["dim_geography"]["state_code"]["tests"] == ["not_null"]
+    geo_columns = {c["name"]: c for c in blocks["dim_geography"]["columns"]}
+    assert geo_columns["state_code"]["tests"] == ["not_null"]
 
     # dim_date is a calendar spine: no profile column in its contract, and none
-    # anywhere in its SQL, so the grain cannot be widened by accident later.
-    assert "indication_profile_id" not in columns["dim_date"]
-    date_sql = (marts / "dim_date.sql").read_text(encoding="utf-8")
-    assert "indication_profile_id" not in date_sql
+    # in its code, so the grain cannot be widened by accident later.
+    date_columns = {c["name"] for c in blocks["dim_date"]["columns"]}
+    assert "indication_profile_id" not in date_columns
+    date_code = _strip_sql_comments((marts / "dim_date.sql").read_text(encoding="utf-8"))
+    assert "indication_profile_id" not in date_code
+
+    # A19's defect, in the only form CI can reach while the fixture build is in
+    # blackout: this task re-hashed dim_sponsor.sponsor_key to
+    # (sponsor_normalized, indication_profile_id) and bridge_trial_sponsor had to
+    # follow, or the bridge's rows point at keys no dim_sponsor row has. The
+    # dbt `relationships` test that normally catches that never runs here, and
+    # neither does the python orphan check in this module.
+    sponsor_code = _strip_sql_comments((marts / "dim_sponsor.sql").read_text(encoding="utf-8"))
+    bridge_code = _strip_sql_comments(
+        (marts / "bridge_trial_sponsor.sql").read_text(encoding="utf-8")
+    )
+    dim_inputs = _surrogate_key_inputs(sponsor_code, "sponsor_key")
+    bridge_inputs = _surrogate_key_inputs(bridge_code, "sponsor_key")
+    assert dim_inputs is not None, "dim_sponsor.sql: sponsor_key is not a surrogate key"
+    assert bridge_inputs is not None, "bridge_trial_sponsor.sql: sponsor_key is not a surrogate key"
+    assert dim_inputs == bridge_inputs, (
+        "dim_sponsor.sql and bridge_trial_sponsor.sql hash different inputs for "
+        f"sponsor_key -- dim_sponsor.sql: {sorted(dim_inputs)}, "
+        f"bridge_trial_sponsor.sql: {sorted(bridge_inputs)}. Re-hashing one side "
+        "without the other orphans every bridge row."
+    )
 
 
 def test_window_frames_partition_by_profile() -> None:
