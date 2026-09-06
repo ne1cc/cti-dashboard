@@ -137,7 +137,11 @@ inputs as (
     inner join segment_trials s
         using (indication_profile_id, condition_group, state_normalized, phase_normalized)
     inner join history_depth h using (indication_profile_id)
-    inner join run_reliability r using (indication_profile_id)
+    -- Left, not inner: run_reliability holds only profiles with a *successful*
+    -- run, so an inner join would silently delete the whole queue of a profile
+    -- that has snapshots but none. One row per profile, so nothing duplicates;
+    -- the coalesce above already prices a missing share as 0.
+    left join run_reliability r using (indication_profile_id)
 ),
 
 normalized as (
