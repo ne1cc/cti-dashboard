@@ -21,7 +21,7 @@ COPY Makefile README.md ./
 RUN uv sync --all-groups --frozen
 RUN uv run dbt deps --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials
 RUN test -f dbt_clinical_trials/profiles.yml || cp dbt_clinical_trials/profiles.yml.example dbt_clinical_trials/profiles.yml
-RUN mkdir -p data/bronze/adrd/api_responses data/bronze/adrd/manifests data/silver data/gold data/warehouse
+RUN uv run python -m src.cli init-data-dirs > /dev/null
 
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh

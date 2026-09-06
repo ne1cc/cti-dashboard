@@ -9,7 +9,7 @@ CONDITION   ?= Alzheimer Disease
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup env ingest full-refresh ingest-full-catalog full-catalog-full-refresh \
+.PHONY: help setup init-dirs env ingest full-refresh ingest-full-catalog full-catalog-full-refresh \
         orchestrate orchestrate-full-refresh \
         transform dbt-deps dbt-seed dbt-run dbt-test \
         dbt-docs quality-report dashboard test lint format clean pipeline
@@ -21,11 +21,11 @@ setup: ## Install dependencies and prepare local environment
 	uv sync --all-groups
 	@test -f .env || cp .env.example .env
 	@test -f $(DBT_DIR)/profiles.yml || { test -f $(DBT_DIR)/profiles.yml.example && cp $(DBT_DIR)/profiles.yml.example $(DBT_DIR)/profiles.yml || true; }
-	@mkdir -p data/bronze/adrd/api_responses data/bronze/adrd/manifests \
-	           data/bronze/oncology_nsclc/api_responses data/bronze/oncology_nsclc/manifests \
-	           data/bronze/full_catalog/api_responses data/bronze/full_catalog/manifests \
-	           data/silver data/gold data/warehouse
+	@$(PYTHON) -m src.cli init-data-dirs >/dev/null
 	@echo "Setup complete. Edit .env if needed, then run: make ingest"
+
+init-dirs: ## Create every profile's data directories from config/profiles/
+	$(PYTHON) -m src.cli init-data-dirs
 
 ingest: ## Run an incremental ingestion snapshot from ClinicalTrials.gov (Phase 2)
 	$(PYTHON) -m src.cli ingest --condition "$(CONDITION)"

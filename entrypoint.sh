@@ -16,16 +16,17 @@ SINCE_CHECK=0
 
 log() { echo "[entrypoint] $(date -u +%FT%TZ) $*" >> "$LOG_DIR/pipeline.log"; }
 
-mkdir -p "$LOG_DIR"
-
 # DuckDB does not create parent directories for a new database file (verified:
 # duckdb.connect() raises IOException on a missing directory), and a Fly Volume
 # mounts as EMPTY on its very first boot, shadowing whatever the Dockerfile
-# baked into the image at this path. Recreate the full tree on every boot
-# (idempotent, cheap) so `make pipeline` never fails here. Bronze is
-# profile-scoped to adrd, matching config/project_config.yml.
-mkdir -p "$DATA_DIR/bronze/adrd/api_responses" "$DATA_DIR/bronze/adrd/manifests" \
-    "$DATA_DIR/silver" "$DATA_DIR/gold" "$DATA_DIR/warehouse"
+# baked into this path. Recreate the full tree on every boot from the profile
+# registry — a hardcoded list here is how a newly added profile fails on its
+# first write in production.
+mkdir -p "$LOG_DIR"
+/app/.venv/bin/python -m src.cli init-data-dirs >> "$LOG_DIR/pipeline.log" 2>&1 || {
+    log "init-data-dirs FAILED; aborting boot rather than half-creating the tree"
+    exit 1
+}
 
 start_dashboard() {
     "$STREAMLIT_BIN" run dashboard/app.py \

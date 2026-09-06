@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from src.cli import build_parser, main
 
 
@@ -395,6 +397,7 @@ def test_cli_main_transform_custom_profile_passes_profile(monkeypatch):
 
     class FakeProfile:
         profile_id = "oncology_nsclc"
+        ingest_only = False
         config = object()
 
     class FakeRegistry:
@@ -418,3 +421,48 @@ def test_cli_main_transform_custom_profile_passes_profile(monkeypatch):
     assert len(transform_calls) == 1
     assert transform_calls[0]["profile"].profile_id == "oncology_nsclc"
     assert profile_calls[0]["config"] is FakeProfile.config
+
+
+def test_cli_main_init_data_dirs_creates_every_profile_tree(tmp_path, monkeypatch):
+    """A fresh volume must end up with every profile's dirs, not just adrd's.
+
+    CTI_PROJECT_ROOT is redirected so resolve_path() puts the created tree under
+    tmp_path; without that the test would write into the real repo's data/.
+    """
+    from src.config import load_config
+    from src.utils.paths import project_root, resolve_path
+
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(tmp_path))
+    load_config.cache_clear() if hasattr(load_config, "cache_clear") else None
+
+    class FakePaths:
+        def __init__(self, pid: str) -> None:
+            root = project_root() / "data" / "bronze" / pid
+            self.bronze_api_responses = root / "api_responses"
+            self.bronze_manifests = root / "manifests"
+            self.quarantine = root / "quarantine"
+            self.silver = resolve_path("data/silver")
+            self.gold = resolve_path("data/gold")
+            self.duckdb = resolve_path("data/warehouse/clinical_trials.duckdb")
+
+    class FakeProfile:
+        def __init__(self, pid: str) -> None:
+            self.profile_id = pid
+            self.config = SimpleNamespace(paths=FakePaths(pid))
+
+    class FakeRegistry:
+        def all(self):
+            return [FakeProfile("adrd"), FakeProfile("oncology_nsclc")]
+
+    monkeypatch.setattr("src.cli.get_registry", lambda: FakeRegistry())
+
+    assert main(["init-data-dirs"]) == 0
+
+    for pid in ("adrd", "oncology_nsclc"):
+        assert (tmp_path / f"data/bronze/{pid}/api_responses").is_dir()
+        assert (tmp_path / f"data/bronze/{pid}/manifests").is_dir()
+        assert (tmp_path / f"data/bronze/{pid}/quarantine").is_dir()
+    assert (tmp_path / "data/silver").is_dir()
+    assert (tmp_path / "data/gold").is_dir()
+    # DuckDB does not create parent directories for a new database file.
+    assert (tmp_path / "data/warehouse").is_dir()

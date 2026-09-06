@@ -111,6 +111,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional page cap per profile (smoke test mode).",
     )
 
+    subparsers.add_parser(
+        "init-data-dirs",
+        help=(
+            "Create every bronze/silver/gold/warehouse/quarantine directory the "
+            "discovered profiles need. Idempotent; prints one path per line."
+        ),
+    )
+
     return parser
 
 
@@ -244,6 +252,27 @@ def main(argv: list[str] | None = None) -> int:
         if failed:
             log.error("Orchestrate finished with errors on: {}", failed)
             return 1
+        return 0
+
+    if args.command == "init-data-dirs":
+        from src.utils.paths import ensure_dir
+
+        dirs: set = set()
+        for indication_profile in get_registry().all():
+            p = indication_profile.config.paths
+            dirs.update(
+                {
+                    p.bronze_api_responses,
+                    p.bronze_manifests,
+                    p.quarantine,
+                    p.silver,
+                    p.gold,
+                    p.duckdb.parent,
+                }
+            )
+        for path in sorted(dirs):
+            ensure_dir(path)
+            print(path)
         return 0
 
     return 2

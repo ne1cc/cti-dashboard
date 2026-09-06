@@ -376,4 +376,3 @@ def test_every_bronze_tree_is_profile_scoped() -> None:
         assert f"/{profile.profile_id}/" in p.bronze_api_responses.as_posix(), p
         assert f"/{profile.profile_id}/" in p.bronze_manifests.as_posix(), p
     get_registry.cache_clear()
->>>>>>> 2fd97f0 (fix(cli): resolve transform --profile through the registry, retire the shadow silver tree)
