@@ -48,11 +48,21 @@ def ctg_raw_pages(context: AssetExecutionContext, config: IngestParams) -> Mater
     failures: list[str] = []
     for indication_profile in get_registry().refreshable():
         pid = indication_profile.profile_id
-        manifest = run_ingestion(
-            full_refresh=config.full_refresh,
-            max_pages=config.max_pages,
-            config=indication_profile,
-        )
+        try:
+            manifest = run_ingestion(
+                full_refresh=config.full_refresh,
+                max_pages=config.max_pages,
+                config=indication_profile,
+            )
+        except Exception as exc:
+            # Containment, not silence. `src/cli.py`'s `orchestrate` wraps each
+            # profile's body the same way; without this a raise on profile 1
+            # skipped profile 2's refresh and the retry policy then re-pulled
+            # profile 1 — a duplicate ~600-page fetch for a different outcome on
+            # the two paths. The aggregate raise below still fails the
+            # materialization, so only the survival of the fan-out changes.
+            failures.append(f"{pid}: {exc}")
+            continue
         if manifest.status == "failed":
             # Collect, do not raise: a profile that fails must not stop the
             # others' runs from being recorded in this materialization's log.

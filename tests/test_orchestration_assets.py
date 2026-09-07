@@ -114,6 +114,109 @@ def test_bronze_asset_raises_on_failed_run(project_root_tmp, monkeypatch) -> Non
     assert seen[:2] == [p.profile_id for p in get_registry().refreshable()]
 
 
+def test_bronze_asset_contains_a_raised_ingestion_error_and_attempts_the_rest(
+    project_root_tmp, monkeypatch
+) -> None:
+    """Manifest-status failures are collected; a *raised* error used to escape the
+    loop and abort the materialization, so a 500 on profile 1 cost profile 2 its
+    refresh — while `make orchestrate`, which wraps each profile in `try/except`,
+    refreshed it. Same graph, two different semantics for the same event, and the
+    Dagster path then retried profile 1 (a duplicate ~600-page pull).
+
+    Both halves are required: profile 2 must still be attempted, and the run must
+    still go red naming profile 1. Containment without the aggregate raise is a
+    green refresh that silently skipped a profile."""
+    manifest = _success_manifest()
+    seen: list[str] = []
+
+    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
+        pid = config.profile_id
+        seen.append(pid)
+        if pid == "adrd":
+            raise RuntimeError("connection reset by peer after 3 retries")
+        return manifest
+
+    monkeypatch.setattr("src.orchestration.assets.bronze.run_ingestion", fake_run_ingestion)
+    result = materialize(
+        assets=[ctg_raw_pages],
+        run_config={"ops": {"ctg_raw_pages": {"config": IngestParams().model_dump()}}},
+        raise_on_error=False,
+    )
+    assert set(seen) == {"adrd", "oncology_nsclc"}, (
+        "a raise on the first profile must not skip the second: that is the whole "
+        "difference between this asset and src/cli.py's orchestrate loop"
+    )
+    assert not result.success
+    step_failures = result.get_step_failure_events()
+    assert len(step_failures) == 1
+    error = step_failures[0].step_failure_data.error
+    while error.cause is not None:
+        error = error.cause
+    assert error.cls_name == "RuntimeError"
+    assert "Ingestion failed for: adrd: connection reset by peer after 3 retries" in error.message
+    assert "oncology_nsclc" not in error.message, "the profile that succeeded is not blamed"
+
+
+def test_silver_asset_contains_a_raised_transform_error_and_attempts_the_rest(
+    project_root_tmp, monkeypatch
+) -> None:
+    """`silver_entities` had no containment at all: one profile raising took the
+    other's transform with it, and reported nothing about which one."""
+    _patch_quiet_bronze(monkeypatch)
+    seen: list[str] = []
+
+    def fake_run_transform(run_id=None, force=False, profile=None):
+        pid = profile.profile_id if profile else "<default>"
+        seen.append(pid)
+        if pid == "adrd":
+            raise RuntimeError("Bronze pages missing for run 20260904T120000Z_abc12345")
+        return ["20260904T120000Z_abc12346"]
+
+    monkeypatch.setattr("src.orchestration.assets.silver.run_transform", fake_run_transform)
+    result = materialize(
+        assets=[ctg_raw_pages, silver_entities],
+        run_config={"ops": {"ctg_raw_pages": {"config": IngestParams().model_dump()}}},
+        raise_on_error=False,
+    )
+    assert seen == ["adrd", "oncology_nsclc"]
+    assert not result.success
+    silver_failures = [
+        f
+        for f in result.get_step_failure_events()
+        if f.node_name == "silver_entities" or f.step_failure_data.name == "silver_entities"
+    ]
+    assert silver_failures, "the raise must still fail the asset"
+    error = silver_failures[0].step_failure_data.error
+    while error.cause is not None:
+        error = error.cause
+    assert "Transform failed for: adrd: Bronze pages missing" in error.message
+
+
+def test_silver_asset_refuses_an_empty_registry(project_root_tmp, monkeypatch) -> None:
+    """Its sibling `ctg_raw_pages` refuses to report success with nothing to do,
+    and `_refreshable_or_fail()` exists because "every check would pass vacuously".
+    A transform asset that loops zero profiles and publishes `processed_count: 0`
+    is the same green-over-nothing on the write side."""
+
+    class EmptyRegistry:
+        def refreshable(self):
+            return []
+
+    monkeypatch.setattr("src.orchestration.assets.silver.get_registry", lambda: EmptyRegistry())
+    monkeypatch.setattr(
+        "src.orchestration.assets.silver.run_transform",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("must not run")),
+    )
+    result = materialize(assets=[silver_entities], raise_on_error=False)
+    assert not result.success
+    step_failures = result.get_step_failure_events()
+    assert step_failures, "an empty registry is a failure, not an empty success"
+    error = step_failures[0].step_failure_data.error
+    while error.cause is not None:
+        error = error.cause
+    assert "No refreshable profiles" in error.message
+
+
 def test_manifest_integrity_passes_on_success_run(project_root_tmp, monkeypatch) -> None:
     manifest = _success_manifest()
 
