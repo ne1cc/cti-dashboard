@@ -186,6 +186,93 @@ def test_cli_main_orchestrate_skips_ingest_only_profiles(monkeypatch):
     assert transformed == ["adrd", "oncology_nsclc"]
 
 
+def test_cli_main_orchestrate_refuses_ingest_only_profile(monkeypatch):
+    """`orchestrate --profile full_catalog` is exit 2 before anything runs.
+
+    The test above pins the default branch — `orchestrate` without --profile
+    takes `refreshable()`, so full_catalog is not in it. The single-profile
+    branch went straight to `registry.get()`, and the alias normalises
+    `full-catalog` straight in, so the ~600-page registry pull was reachable
+    from the command that also transforms: the branch review measured exit 0
+    with `('transform', 'full_catalog', True)` recorded, i.e. ADRD-classified
+    rows stamped `indication_profile_id = 'full_catalog'` written into the
+    *shared* silver tree that dbt globs. `transform` already refuses this
+    profile with exit 2; `orchestrate` has to hold the same line *before* the
+    loop so no ingestion is attempted either.
+    """
+    calls: list[str] = []
+
+    class FakeManifest:
+        status = "success"
+        error = None
+
+    class FullCatalogProfile:
+        profile_id = "full_catalog"
+        ingest_only = True
+
+    class RefreshableProfile:
+        profile_id = "adrd"
+        ingest_only = False
+
+    class FakeRegistry:
+        def refreshable(self):
+            calls.append("refreshable")
+            return [RefreshableProfile()]
+
+        def get(self, profile_id):
+            calls.append(f"get:{profile_id}")
+            return FullCatalogProfile()
+
+    def fake_ingest(**kwargs):
+        calls.append("ingest")
+        return FakeManifest()
+
+    monkeypatch.setattr("src.cli.get_registry", lambda: FakeRegistry())
+    monkeypatch.setattr("src.ingest.extract_studies.run_ingestion", fake_ingest)
+    monkeypatch.setattr(
+        "src.transform.build_silver_entities.run_transform",
+        lambda **kw: (_ for _ in ()).throw(AssertionError("must not run")),
+    )
+    monkeypatch.setattr(
+        "src.quality.profiling.profile_run",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not run")),
+    )
+
+    assert main(["orchestrate", "--profile", "full_catalog"]) == 2
+    # the legacy hyphen alias is what the reviewer's probe used
+    assert main(["orchestrate", "--profile", "full-catalog"]) == 2
+    assert "ingest" not in calls
+    assert calls == ["get:full_catalog", "get:full_catalog"]
+
+
+def test_cli_main_orchestrate_unknown_profile_is_usage_error(monkeypatch):
+    """A typo'd `orchestrate --profile` id exits 2 (usage), never a traceback.
+
+    Same convention `transform` keeps at 1449a5c: 2 = usage, 1 = data failure.
+    `orchestrate` built its one-profile list outside any try, so the registry's
+    KeyError escaped as an uncaught exception.
+    """
+    calls: list[str] = []
+
+    class FakeRegistry:
+        def get(self, profile_id):
+            raise KeyError(f"No profile '{profile_id}' found in config/profiles/")
+
+        def refreshable(self):  # pragma: no cover - --profile must not widen
+            calls.append("refreshable")
+            return []
+
+    monkeypatch.setattr("src.cli.get_registry", lambda: FakeRegistry())
+    monkeypatch.setattr(
+        "src.ingest.extract_studies.run_ingestion",
+        lambda **kw: calls.append("ingest"),
+    )
+    monkeypatch.setattr("src.transform.build_silver_entities.run_transform", lambda **kw: [])
+
+    assert main(["orchestrate", "--profile", "no-such-profile"]) == 2
+    assert calls == []
+
+
 def test_cli_main_orchestrate_fails_when_registry_has_no_refreshable_profiles(monkeypatch):
     """An empty refreshable() set is a mis-mounted config/profiles/ or every
     profile marked ingest_only — not a refresh that landed data. `make pipeline`

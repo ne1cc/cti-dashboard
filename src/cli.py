@@ -231,7 +231,24 @@ def main(argv: list[str] | None = None) -> int:
 
         registry = get_registry()
         if args.profile:
-            profiles = [registry.get(normalize_profile_id(args.profile))]
+            # Same contract as `transform` above: 2 = usage, 1 = data failure.
+            # An ingest_only profile is refused *here*, before the loop, because
+            # the branch that follows would otherwise pull ~600 pages of bronze
+            # and then hand the profile to run_transform — which has no taxonomy
+            # to classify with. See src/transform/build_silver_entities.py.
+            try:
+                profiles = [registry.get(normalize_profile_id(args.profile))]
+            except KeyError as exc:
+                log.error("Unknown profile: {}", exc)
+                return 2
+            if profiles[0].ingest_only:
+                log.error(
+                    "Profile '{}' is ingest_only: it has no taxonomy, so it can never be "
+                    "transformed. Use 'orchestrate' without --profile for the refreshable "
+                    "profiles.",
+                    profiles[0].profile_id,
+                )
+                return 2
         else:
             profiles = registry.refreshable()
             if not profiles:
