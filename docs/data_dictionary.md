@@ -13,22 +13,24 @@ may lose information; all timestamps are UTC.
 
 ## Bronze
 
-### `data/bronze/api_responses/run_id=<id>/page=NNNNN.json`
+### `data/bronze/<profile_id>/api_responses/run_id=<id>/page=NNNNN.json`
 Verbatim API v2 page payloads. Never edited after write.
 
-### `data/bronze/manifests/manifest_<run_id>.json`
+### `data/bronze/<profile_id>/manifests/manifest_<run_id>.json`
 | Field | Type | Description |
 |---|---|---|
 | ingestion_run_id | text | `<UTC compact timestamp>_<uuid8>` |
 | query_hash | text | SHA-256 of the canonical query params |
 | condition / mode / status | text | status ∈ running, success, partial, failed |
+| profile | text | the profile directory the run wrote into; `indication_profile_id` in silver and every mart |
 | started_at_utc / ended_at_utc | timestamp | run window |
 | page_count / record_count | int | pages fetched, studies written |
 | total_count_reported | int | API `totalCount` for reconciliation |
 | quarantined_record_count | int | invalid records set aside, never dropped silently |
 
-Also: `_schema_baseline.json` and `_schema_drift_<run_id>.json` (see data
-quality framework).
+Also: `_schema_baseline.json` and `_schema_drift_<run_id>.json`, both written
+beside a profile's `api_responses/` directory — one baseline per profile, not one
+per repository (see data quality framework).
 
 ---
 
@@ -79,6 +81,12 @@ text only — never interpreted clinically.
 Typed 1:1 reads of silver plus `stg_trial_snapshots` (manifest rows) and
 `stg_trial_contacts` — **deliberately empty** (`where 1=0`) privacy
 guardrail.
+
+Every grain in the three Gold sections below is additionally scoped by
+`indication_profile_id`: the multi-indication migration made the trial grain
+`(nct_id, indication_profile_id)`, and the column is carried from the bronze
+manifest's `profile` field through staging into every intermediate, dimension,
+fact, bridge and analytical mart.
 
 ## Gold: intermediate (`main_intermediate`, views)
 | Model | Grain | Purpose |

@@ -92,7 +92,7 @@ nothing to pass via `fly secrets set`.
 ## What to expect
 
 - **First boot** takes longer than a normal deploy: the container runs the
-  full pipeline (ingest → transform → dbt-run → dbt-test → quality-report)
+  full pipeline (orchestrate → prune-data → dbt-run → dbt-test → quality-report)
   before Streamlit starts serving. Watch progress with `fly logs`.
   Measured on the live app: 59 seconds from `starting make pipeline` to
   `pipeline succeeded` (2026-09-05T02:35:56Z → 02:36:55Z), which includes a

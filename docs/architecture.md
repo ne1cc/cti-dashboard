@@ -22,8 +22,8 @@ flowchart TB
     end
 
     subgraph BRONZE["Bronze — immutable raw"]
-        RAWJSON["data/bronze/api_responses/<br/>run_id=&lt;id&gt;/page=&lt;n&gt;.json<br/>(unmodified page bytes)"]
-        MANIFEST["data/bronze/manifests/<br/>manifest_&lt;run_id&gt;.json + summary parquet<br/>run times, params, page/response counts, status"]
+        RAWJSON["data/bronze/&lt;profile_id&gt;/api_responses/<br/>run_id=&lt;id&gt;/page=&lt;n&gt;.json<br/>(unmodified page bytes)"]
+        MANIFEST["data/bronze/&lt;profile_id&gt;/manifests/<br/>manifest_&lt;run_id&gt;.json + summary parquet<br/>run times, params, page/response counts, status,<br/>profile (indication_profile_id from silver down)"]
     end
 
     subgraph SILVER["Silver — normalized (src/transform)"]
@@ -123,8 +123,7 @@ collection. This is documented, not hidden.
 
 ## 5. Reproducibility and operations
 
-- `Makefile` is the single entry point (`make pipeline` = ingest → transform →
-  dbt-run → dbt-test → quality-report).
+- `Makefile` is the single entry point (`make pipeline` = orchestrate → prune-data → dbt-run → dbt-test → quality-report).
 - All query parameters, taxonomy, geography rules, score weights, and scenario
   assumptions live in `config/*.yml` under version control.
 - `.env` carries only local paths/log levels — no secrets exist in this project.
@@ -132,7 +131,7 @@ collection. This is documented, not hidden.
   (the source is public, but site contacts/investigators are still excluded from
   all delivery surfaces).
 
-## 6. Scaling path (roadmap, not MVP)
+## 6. Scaling path (implemented extensions, and the roadmap beyond them)
 
 - **Full-catalog bronze ingestion (implemented, opt-in).** `config/profiles/full_catalog.yml`
   drops the `query.cond`/`filter.*` params entirely and runs against a parallel
@@ -144,6 +143,21 @@ collection. This is documented, not hidden.
   `ingest_only`, so `transform --profile full_catalog` is refused with exit code 2
   rather than writing a taxonomy-less silver tree, and the default transform reads
   only `data/bronze/adrd/manifests/`.
+- **Multi-indication (implemented).** An indication profile is one YAML file in
+  `config/profiles/`, the registry loads all of them, and `make orchestrate`
+  refreshes every profile that is not `ingest_only` into the *same* warehouse. The
+  trial grain is `(nct_id, indication_profile_id)`, carried through staging,
+  intermediate and mart models, while silver, gold and the DuckDB file stay shared
+  (`config/shared_paths.yml`) — the profile column is what keeps two indications
+  from cross-joining on a shared date. Reconciliation is per profile
+  (`src/quality/reconciliation.py` binds `indication_profile_id` into every check),
+  the dashboard serves one profile at a time (`dashboard/components/profile.py`
+  renders the selector, `dashboard/components/data.py` binds it into every query),
+  and `make prune-data` keeps `bronze_runs_to_keep` *success* runs per profile —
+  the horizon is declared in that profile's `retention:` block, not in code
+  (`src/utils/retention.py` refuses a bronze horizon deeper than the snapshot
+  horizon). Adding an indication means adding a config file and a taxonomy, not
+  forking the pipeline: `config/profiles/oncology_nsclc.yml` is the worked example.
 - **Chunked silver transform (implemented).** `SilverRunWriter`
   (`src/transform/export_parquet.py`) streams flattened rows into one Parquet
   file per entity per run, flushing a row group every 50k rows against fixed

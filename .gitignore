@@ -1,16 +1,13 @@
-# Data (bronze/silver/gold artifacts and local warehouse are never committed)
-data/bronze/api_responses/*
-data/bronze/manifests/*
+# Data (bronze/silver/gold artifacts and the local warehouse are never
+# committed). Bronze is profile-scoped: data/bronze/<profile_id>/{api_responses,
+# manifests,_schema_baseline.json}, which is also why the one-level glob below
+# covers baselines and drift reports without naming them.
 data/bronze/*/*
 data/silver/*
 data/gold/*
 data/warehouse/*.duckdb
 data/warehouse/*.duckdb.wal
-# Opt-in full-catalog ingestion profile (config/full_catalog_config.yml)
-data/bronze_full_catalog/api_responses/*
-data/bronze_full_catalog/manifests/*
-data/silver_full_catalog/*
-data/gold_full_catalog/*
+data/quarantine/*
 !data/**/.gitkeep
 
 # Environment / secrets
@@ -46,7 +43,6 @@ logs/
 .DS_Store
 .idea/
 .vscode/
-data/bronze/_schema_drift_*.json
 
 # Linked worktrees
 .worktrees/

@@ -58,8 +58,8 @@ Pick any NCT ID from the Trial Explorer page (e.g. the newest one). Then follow 
 NCT=NCT07721467   # substitute your pick
 
 # 1. Bronze: the raw JSON as the registry served it
-grep -l "$NCT" data/bronze/api_responses/run_id=*/page=*.json
-# open that file and find the study record
+grep -rl "$NCT" data/bronze/*/api_responses/
+# open that file and find the study record (the directory level is the profile)
 
 # 2. Silver: the flattened rows
 uv run python -c "
