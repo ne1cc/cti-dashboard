@@ -248,9 +248,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.profile:
             # Same contract as `transform` above: 2 = usage, 1 = data failure.
             # An ingest_only profile is refused *here*, before the loop, because
-            # the branch that follows would otherwise pull ~600 pages of bronze
-            # and then hand the profile to run_transform — which has no taxonomy
-            # to classify with. See src/transform/build_silver_entities.py.
+            # the branch that follows would otherwise pull 602 pages / 9.7 GB of
+            # bronze — measured 2026-09-05, run 20260905T071910Z_774560b2,
+            # docs/development_log.md — and 9.7 GB is roughly ten times the 1 GB
+            # `cti_data` volume (docs/DEPLOY_FLY.md), so the pull would take the
+            # two healthy profiles down with it. It would then hand the profile to
+            # run_transform, which has no taxonomy to classify with.
+            # See src/transform/build_silver_entities.py.
             try:
                 profiles = [registry.get(normalize_profile_id(args.profile))]
             except KeyError as exc:
