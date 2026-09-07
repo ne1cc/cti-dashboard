@@ -640,6 +640,12 @@ def test_shipped_horizon_discloses_its_trend_consequence() -> None:
     null on part of the year, and docs/DEPLOY_FLY.md must carry the dated
     measurement for it. Raise the horizon to 6 (a 35-day span, always two months)
     and the sentence stops being required.
+
+    The required wording is derived from the computed span, not a fixed literal:
+    the doc has to name ``f"{span_days}-day span"``. A hard-coded ``"197 of 365"``
+    let a longer cadence (which still keeps the span inside a month, e.g. a 20-day
+    span) satisfy the guard with a stale sentence, and let a cadence change slip
+    the disclosure — tying it to ``span_days`` closes both.
     """
     from src.config import load_config
 
@@ -652,11 +658,13 @@ def test_shipped_horizon_discloses_its_trend_consequence() -> None:
     if span_days > 31:
         return  # a span longer than any calendar month always shows two months
     doc = (REPO_ROOT / "docs/DEPLOY_FLY.md").read_text(encoding="utf-8")
-    assert "197 of 365" in doc, (
-        f"docs/DEPLOY_FLY.md must disclose that a {span_days}-day retained span "
+    required_wording = f"{span_days}-day span"
+    assert required_wording in doc, (
+        f"docs/DEPLOY_FLY.md must disclose that the {span_days}-day span "
         f"(shipped horizon {horizon} x {cadence_days}-day cadence) can sit inside one "
         "calendar month, which nulls recruiting_growth_3m on the Geography Trends page; "
-        "'197 of 365' is the dated (2026-09-07) measurement for that fraction"
+        f"the required wording is the computed {required_wording!r}, so a cadence change "
+        "can neither delete the disclosure nor leave the previous span's sentence behind"
     )
 
 

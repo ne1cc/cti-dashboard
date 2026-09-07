@@ -193,8 +193,8 @@ nothing to pass via `fly secrets set`.
   `prune-data` before `dbt-run` (Makefile), so the transient second bronze run is
   reclaimed before the warehouse is written. Decompose the same model at `k = 6`
   and the shape is clear: the DuckDB file predicts ~91 MB (63.2 + 3·9.3) and the
-  retained silver ~209 MB (6·34.9), a ~632 MB steady state, while the transient
-  second bronze run is ~332 MB — two thirds of the ~999 MB peak. This is
+  retained silver ~209 MB (6·34.9) — a ~632 MB steady state, two thirds of the
+  ~999 MB peak — while the transient second bronze run is ~332 MB. This is
   arithmetic that rules 6 out; the term the rule was written to bound — retained
   silver — is the *smaller* one (34.9 MB/week against the 331.9 MB single bronze
   run), so lowering the horizon buys volume, not an order of magnitude.

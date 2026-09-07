@@ -1,12 +1,14 @@
 """Hermetic end-to-end test: fixture bronze snapshot through the full dbt graph.
 
-tests/conftest.py builds four warehouses for this module and a test names the one
-it reads: `fixture_project_root` is the base two-profile build (17 of the 26 test
+tests/conftest.py builds five warehouses for this module and a test names the one
+it reads: `fixture_project_root` is the base two-profile build (17 of the 27 test
 functions), `divergent_fixture_root` adds a second ADRD run on a different date
-plus an un-stamped NSCLC run (6), and `solo_fixture_roots` holds one warehouse per
-profile for the invariance comparison (1). Those three numbers count requests, not
-functions: 22 of the 26 take a warehouse, and two ask for two roots each, which is
-why they sum past 26. The remaining 4 take no fixture — they read model source,
+plus an un-stamped NSCLC run (6), `solo_fixture_roots` holds one warehouse per
+profile for the invariance comparison (1), and `two_month_fixture_root` re-dates
+ADRD's second run into October so one profile spans two `activity_month`s (1).
+Those numbers count root *requests*, not functions: 23 of the 27 take a warehouse
+and two of those ask for two roots each, which is why the 25 requests outnumber the
+23 functions. The remaining 4 take no fixture — they read model source,
 `_marts.yml` or `models/staging/_sources.yml`, so they still guard when a build
 breaks. No network, no real API, everything under tmp_path_factory.
 """
@@ -521,6 +523,64 @@ def test_segment_marts_are_grained_per_profile(fixture_project_root: Path) -> No
         " max(density_percentile), count(distinct competition_signal_band)"
         " from main_marts.mart_recruiting_competition group by 1 order by 1",
     ) == [("adrd", 0.0, 0.0, 1), ("oncology_nsclc", 0.0, 0.0, 1)]
+
+
+def test_trends_growth_guard_emits_non_null_only_on_a_two_month_segment(
+    two_month_fixture_root: Path,
+) -> None:
+    """The positive arm of mart_condition_geography_trends' nulling guard.
+
+    `assert_trends_growth_needs_two_months.sql` proves the negative arm -- no
+    non-null `recruiting_growth_3m` survives a one-month window -- but no other
+    committed warehouse ever reaches `months_in_window >= 2` (the base and
+    divergent roots put every snapshot inside September, so `case when
+    months_in_window >= 2` never fires and a regression that nulled growth on
+    *every* row would pass CI forever). `two_month_fixture_root` re-dates ADRD's
+    second run to 2026-10-06, giving one profile two `activity_month`s and the
+    other one, so the arm finally has data that can satisfy it.
+
+    `months_in_window` is deliberately re-derived from the mart's own columns
+    with the same trailing-3m window the model and the dbt test use, rather than
+    read from the output -- it is not one of the mart's eleven contract columns,
+    and widening the contract to make the test easier would change the model.
+
+    Values measured on a `dbt build` of this root: adrd 30 rows across 2 months
+    with 6 non-null growth (the October segments that also have a September row);
+    oncology_nsclc 16 rows / 1 month / 0 non-null. The last leg is the per-
+    *segment* proof: inside ADRD -- a profile with two months -- there are October
+    segments with no September partner, so their `months_in_window` is 1 and their
+    growth stays null. A guard keyed on the profile's month count instead of the
+    segment's would emit a value there and go red.
+    """
+    per_profile = _rows(
+        two_month_fixture_root,
+        "select indication_profile_id, count(*), count(distinct activity_month),"
+        " count(recruiting_growth_3m) from main_marts.mart_condition_geography_trends"
+        " group by 1 order by 1",
+    )
+    assert per_profile == [("adrd", 30, 2, 6), ("oncology_nsclc", 16, 1, 0)]
+    october_single_month = _rows(
+        two_month_fixture_root,
+        "with m as ("
+        " select indication_profile_id, condition_group, state_normalized, activity_month,"
+        " recruiting_growth_3m,"
+        " count(distinct activity_month) over ("
+        "  partition by indication_profile_id, condition_group, state_normalized"
+        "  order by activity_month"
+        "  range between interval 3 months preceding and current row"
+        " ) as months_in_window"
+        " from main_marts.mart_condition_geography_trends"
+        " where indication_profile_id = 'adrd')"
+        " select count(*), count(recruiting_growth_3m) from m"
+        " where extract(month from activity_month) = 10 and months_in_window = 1",
+    )
+    assert october_single_month[0][0] >= 1, (
+        "no October-only segment to prove the guard is per-segment"
+    )
+    assert october_single_month[0][1] == 0, (
+        f"an October segment whose own window holds one month emitted "
+        f"{october_single_month[0][1]} non-null growth -- the guard is not per-segment"
+    )
 
 
 def test_mart_feasibility_priority_queue_shape(fixture_project_root: Path) -> None:

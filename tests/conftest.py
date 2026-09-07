@@ -2,7 +2,7 @@ import json
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -54,6 +54,16 @@ NSCLC_STARTED_AT = FIXTURE_SNAPSHOT_DAY + timedelta(hours=11)
 # catch on the single-date warehouse.
 DIVERGENT_ADRD_RUN2_ID = "20260908T100000Z_fixture03"
 DIVERGENT_ADRD_RUN2_AT = datetime(2026, 9, 8, 10, tzinfo=UTC)
+# The same second ADRD run, re-dated a full month later (see
+# `two_month_fixture_root` below). Only the started_at moves: the run id and
+# every bronze page stay the divergent seed's, so the *content* of ADRD's second
+# snapshot is unchanged -- what changes is which `activity_month` it lands in.
+# Two distinct months is the one thing no other committed warehouse has: on
+# `divergent_fixture_root` ADRD's two runs (2026-09-01, 2026-09-08) both truncate
+# to 2026-09, so `months_in_window` is 1 on every row there and the mart's
+# `when months_in_window >= 2` positive arm is never taken -- the residual the
+# positive-arm assertion in tests/test_dbt_fixture_build.py closes.
+TWO_MONTH_ADRD_RUN2_AT = datetime(2026, 10, 6, 10, tzinfo=UTC)
 # A run whose manifest predates profile stamping: `profile` stays at the
 # IngestionManifest default "default" while its silver rows carry
 # oncology_nsclc. Dated *before* NSCLC's stamped run so it can only ever be the
@@ -505,6 +515,13 @@ DIVERGENT_ADRD_RUN2 = FixtureRun(
     ),
 )
 
+# The divergent second ADRD run, re-dated into October by moving *only* its
+# started_at. `dataclasses.replace` rather than a re-literalised FixtureRun so a
+# future edit to the divergent seed's status overrides or added studies flows
+# through here automatically: this root's job is to give that same content a
+# second calendar month, not to fork a second copy of it that can drift.
+TWO_MONTH_ADRD_RUN2 = replace(DIVERGENT_ADRD_RUN2, started_at=TWO_MONTH_ADRD_RUN2_AT)
+
 # Same bronze, manifest left at the pre-stamping default. Silver still says
 # oncology_nsclc, because src/transform stamps from the resolved profile.
 UNSTAMPED_NSCLC_RUN = FixtureRun(
@@ -540,6 +557,29 @@ def divergent_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
         tmp_path_factory,
         "fixture_divergent",
         [_base_adrd_run(), DIVERGENT_ADRD_RUN2, _base_nsclc_run(), UNSTAMPED_NSCLC_RUN],
+    )
+
+
+@pytest.fixture(scope="session")
+def two_month_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """The divergent seed set with ADRD's second run moved into October, so ADRD
+    spans two `activity_month`s (2026-09, 2026-10) and NSCLC still one.
+
+    Built lazily and session-scoped like the other roots: only the positive-arm
+    assertion in tests/test_dbt_fixture_build.py requests it, so the rest of the
+    suite does not pay the extra `dbt build`. Nothing here changes an existing
+    seeded date -- it is a fourth, separate warehouse derived from
+    `DIVERGENT_ADRD_RUN2` by moving one run's `started_at` forward a month. That
+    single month of separation is the whole point: `assert_trends_growth_needs_two_months.sql`
+    proves the negative arm (no non-null growth on a one-month window) but no
+    other committed fixture ever reaches `months_in_window >= 2`, so nulling
+    `recruiting_growth_3m` on *every* row would pass CI forever. This root is the
+    first data the guard's positive arm can be checked against.
+    """
+    return _build_fixture_root(
+        tmp_path_factory,
+        "fixture_two_month",
+        [_base_adrd_run(), TWO_MONTH_ADRD_RUN2, _base_nsclc_run(), UNSTAMPED_NSCLC_RUN],
     )
 
 
