@@ -9,11 +9,16 @@
 -- cannot fire at all. That is the collapse this migration had to make
 -- catchable.
 --
--- Catchable is not yet caught. Exercising the zero branch also needs a fixture
--- whose two profiles land on different snapshot dates (Amendment A15 item 2);
--- while both fixture profiles share one date, every pair has exactly one
--- current record and this assertion passes on the zero branch by absence of
--- counterexample, not by measurement.
+-- The asymmetric state it exists to catch is in the corpus. `divergent_fixture_root`
+-- (`tests/conftest.py`) builds ADRD twice a week apart with NSCLC's only run a
+-- week behind ADRD's second, and
+-- `tests/test_dbt_fixture_build.py::test_fct_trial_snapshot_currency_is_per_profile`
+-- measures that shape (2026-09-06): NSCLC is current at its own 2026-09-01 while
+-- the warehouse max is 2026-09-08. The fixture harness ends on a `dbt build`, so
+-- this assertion runs there. The red direction was checked directly on 2026-09-07
+-- against that same run/date shape with the flag computed globally: this SQL
+-- returns 10 rows -- every `oncology_nsclc` pair, zero current -- and the
+-- `having count(*) > 1` form this file replaced returns none.
 with pairs as (
     select distinct indication_profile_id, nct_id
     from {{ ref('fct_trial_snapshot') }}
