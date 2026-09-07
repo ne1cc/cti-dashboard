@@ -46,27 +46,38 @@ fly launch --no-deploy
 #
 # Measured footprint of /app/data in this image on 2026-09-07 (commit 78c2050,
 # linux/arm64, fresh named volume, both refreshable profiles — 78.8 MB of ADRD
-# bronze and 253.1 MB of NSCLC bronze per ingestion run, 34.9 MB of silver per
-# retained weekly snapshot, 44.6 MB of DuckDB for the first snapshot):
+# bronze and 253.1 MB of NSCLC bronze per ingestion run, so one retained bronze
+# run per profile is 331.9 MB (the whole bronze directory walks 332.0 MB; the
+# 0.1 MB is per-directory rounding), 34.9 MB of silver per retained weekly
+# snapshot, DuckDB 44.6 MB at one snapshot and 63.2 MB at three):
 #
 #   steady state, 3 retained snapshots  499.7 MB  -> 2.0x headroom
-#     (332.0 MB of one bronze run per profile + 104.6 MB of silver + 63.2 MB
-#      of DuckDB; walked twice and reproduced to 14 bytes)
-#   worst instant of a refresh, same horizon  866.5 MB  -> 1.2x headroom
-#     (663.9 MB of two unpruned bronze runs + 139.4 MB of four silver
-#      snapshots + 63.2 MB of DuckDB, walked after the new fetch and before
-#      `prune-data` trims it; the same construction walked one and two
-#      snapshots earlier in the history measured 778.1 MB and 824.2 MB)
+#     (walked 332.0 bronze + 104.6 silver + 63.2 DuckDB; per-directory 1-dp MB
+#      sum to 499.8, so the byte total 499,714,216 is authoritative — reproduced
+#      to 14 bytes across two independent rounds)
+#   worst instant of a refresh, same horizon  866.5 MB  -> 1.15x headroom
+#     (walked 663.9 bronze + 139.4 silver + 63.2 DuckDB, taken after the new
+#      fetch and before `prune-data` trims it; the same fetch-time construction
+#      walked at one and two retained snapshots measured 778.1 MB (411,344,692
+#      steady / 778,098,816 peak) and 824.2 MB)
 #   `make prune-data` at the shipped horizon then took the volume from 866.5 MB
 #   back to 499.7 MB (4 runs removed across both profiles, 2026-09-07).
 #
-# That is why `retention.snapshot_runs_to_keep` is 3 and not the 6 it shipped
-# with: at a 6-snapshot horizon the arithmetic of those same measured terms puts
-# a refresh's worst instant at 993-1009 MB, i.e. at or over the ceiling, which is
-# a full volume mid-write. Extend this volume to 2 GB before raising the
-# horizon back to 6 (steady state then ~627-642 MB, 3.1x headroom); the depth
-# is the dashboard's trend history, so it is worth paying for. See
-# "What to expect" for the headroom rule.
+# Why the horizon is 3 and not the 6 it shipped with. The plan's rule of record
+# is "headroom >= 2.5 keeps 6", but at 1 GB that is unsatisfiable for any horizon
+# (2.5x needs a steady state <= 400 MB, and a single retained snapshot already
+# walks 411.3 MB). The criterion actually applied is the deepest horizon whose
+# worst refresh instant leaves more than a chosen 100 MB free of the 1,000 MB
+# ceiling — 3, at 866.5 MB walked (133.5 free). Beyond the walked points the peak
+# is a prediction of one two-point fit through the walked peaks peak(1)=778.1 and
+# peak(3)=866.5 (44.2 MB per extra snapshot): peak(6) ~= 999 MB (ESTIMATE), at or
+# over the ceiling. The hazard there is the fetch/transform writes, not the DuckDB
+# build — `make pipeline` runs `prune-data` before `dbt-run`, so the transient
+# second bronze run is reclaimed before the warehouse is written. `fly volumes
+# extend cti_data --size 2` restores the rule's premise; at 2 GB the same fit puts
+# steady(6) ~= 632 MB, ~= 3.2x headroom (ESTIMATE — no 2 GB volume has been
+# walked, re-measure after extending). Horizon 3 also gives up the guaranteed
+# monthly trend series; see "What to expect" for that mechanism and number.
 fly volumes create cti_data --region iad --size 1
 
 # Deploy.
@@ -132,43 +143,72 @@ nothing to pass via `fly secrets set`.
   continuously — unlike a typical Fly demo app that scales to zero when
   idle. Expect a small recurring cost (roughly $2-5/month on Fly's
   smallest shared-CPU tier as of this writing), not a free deployment.
-- **The volume is the constraint, and there is a rule about it.** `pipeline`
+- **The volume is the constraint, and the horizon is set from it.** `pipeline`
   prunes before it builds, so between refreshes `/app/data` holds exactly one
   raw bronze run per profile plus `retention.snapshot_runs_to_keep` weekly
   silver snapshots — and for the minutes during a refresh, one more of each.
   Walked off the live container volume on 2026-09-07 (commit `78c2050`):
   78.8 MB of ADRD bronze and 253.1 MB of NSCLC bronze per run (the plan's
-  "~2x ADRD" for NSCLC was an unmeasured estimate; the ratio is 3.2x, and
-  ADRD's 78.8 MB lands on the same figure the 2026-09-05 desktop walk reported
-  for that profile, to the 0.1 MB both walks round to), 34.9 MB of silver per
-  additional retained snapshot across both profiles, DuckDB at
-  44.6 → 55.8 → 63.2 MB for 1 → 2 → 3 snapshots, and
-  `data/gold` at 0.0 MB at every walk with no `data/quarantine` directory
-  present at all — the mart bytes live in the warehouse file, which is the
-  term that grew. Against the ceiling the deployed volume reports
-  (`size_gb: 1` = 1e9 bytes): steady state 499.7 MB, so
-  **headroom = 1e9 ÷ 499.7e6 = 2.0**; the worst instant of a refresh, walked
-  after a new fetch and before `prune-data` trims it, is 866.5 MB
-  (663.9 + 139.4 + 63.2), i.e. 1.2. That same prune took the volume from
-  866.5 back to 499.7 MB (4 runs removed across both profiles).
-  The rule: **headroom ≥ 2.5 keeps `snapshot_runs_to_keep` at 6; anything
-  less brings it down before the next deploy.** 2.0 < 2.5, so the shipped
-  horizon is 3 (`config/project_config.yml` and all three
-  `config/profiles/*.yml`). Two things that rule does *not* hide:
-  1. at 1 GB no horizon reaches 2.5x, because one bronze run per profile is
-     already 332.0 MB and a 2.5x steady state must fit 400 MB — which even a
-     single retained snapshot (411.3 MB, measured) exceeds, and a horizon of
-     0 is what the arithmetic asks for while `prune_profile` refuses a
-     snapshot horizon shallower than bronze's. So 3 is not "2.5x achieved",
-     it is the deepest horizon whose refresh peak still leaves >100 MB free
-     (866.5 of 1000, walked); at 6 the same terms land at 993-1009 MB, i.e. a
-     full volume mid-write.
-  2. the term the rule was written to bound — retained silver — is the
-     *smaller* one: 34.9 MB per week against 331.9 MB for the one bronze run
-     per profile that `bronze_runs_to_keep: 1` retains. Lowering the horizon
-     buys volume, not an order of magnitude. `fly volumes extend cti_data
-     --size 2` is the lever that restores the rule's premise; the 6-snapshot
-     steady state there is 627-642 MB, 3.1x headroom.
+  "~2x ADRD" for NSCLC was an unmeasured estimate; the measured ratio is 3.2x,
+  and ADRD's 78.8 MB lands on the figure the 2026-09-05 desktop walk reported for
+  that profile), so **one retained bronze run per profile = 331.9 MB** (the whole
+  bronze directory walks 332.0 MB — the 0.1 MB is per-directory rounding);
+  34.9 MB of silver per additional retained snapshot across both profiles; DuckDB
+  walked at 44.6 MB for one snapshot and 63.2 MB for three — no steady walk
+  isolated the 2-snapshot value, so between them it follows the fit's ~9.3
+  MB/snapshot; and `data/gold` at 0.0 MB at every walk with no `data/quarantine`
+  directory present at all — the mart bytes live in the warehouse file, the term
+  that grew. The *walked* instants against the ceiling the deployed volume reports
+  (`size_gb: 1` = 1e9 bytes) are: steady 411.3 MB (1 snapshot) and 499.7 MB
+  (3 snapshots; byte totals 411,344,692 and 499,714,216 — per-directory figures
+  are 1-dp MB, so the terms may sum 0.1 MB off the authoritative byte total), and
+  worst refresh instant 778.1 MB (1 snapshot) and 866.5 MB (3, fetched before
+  `prune-data` trims it). Headroom at the shipped steady state is 1e9 ÷ 499.7e6 =
+  **2.0**; at its worst instant, 1000 ÷ 866.5 = **1.15**. That prune took the
+  volume back from 866.5 to 499.7 MB (4 runs removed across both profiles).
+
+  **The rule of record, and why it did not decide the number.** (a) The plan's
+  rule is `headroom ≥ 2.5` on the steady state keeps `snapshot_runs_to_keep` at 6.
+  (b) At 1 GB that is unsatisfiable for *every* horizon: 2.5× demands a steady
+  state ≤ 400 MB, but the single retained bronze run is already 331.9 MB and the
+  shallowest legal state — one retained snapshot — walks 411.3 MB, so even `k = 1`
+  falls short, and `k = 0` is refused by `prune_profile`'s coherence guard. (c)
+  The criterion actually applied is the deepest horizon whose worst refresh
+  instant leaves more than a **chosen** 100 MB free of the 1,000 MB ceiling: that
+  floor and the 2.0× acceptability are judgment on measured terms, not
+  measurements. 3 (peak 866.5, walked, 133.5 free) is where they land. (d)
+  `fly volumes extend cti_data --size 2` is the user's action that restores (a)'s
+  premise; until then the shipped horizon is 3 (`config/project_config.yml` and
+  all three `config/profiles/*.yml`).
+
+  Beyond the walked points the peak is a *prediction* of one two-point model: each
+  extra retained snapshot adds 34.9 MB of silver plus the ~9.3 MB of DuckDB growth
+  between the two walked steady states — ≈44.2 MB/step, fit through the walked
+  peaks `peak(1) = 778.1` and `peak(3) = 866.5`, so `peak(k) ≈ 866.5 + 44.2·(k−3)`:
+  `peak(4) ≈ 910.7` (only ~89 MB free, past the 100 MB floor) and `peak(6) ≈ 999.1`
+  (ESTIMATE) — at or over the ceiling. Where the model can be checked against a
+  walked point between its anchors it is: `peak(2)` predicts 822.3 against the
+  824.2 MB walked, 1.9 MB low. The exposure at that peak is the
+  **fetch/transform** writes, not the DuckDB build: `make pipeline` runs
+  `prune-data` before `dbt-run` (Makefile), so the transient second bronze run is
+  reclaimed before the warehouse is written. Decompose the same model at `k = 6`
+  and the shape is clear: the DuckDB file predicts ~91 MB (63.2 + 3·9.3) and the
+  retained silver ~209 MB (6·34.9), a ~632 MB steady state, while the transient
+  second bronze run is ~332 MB — two thirds of the ~999 MB peak. This is
+  arithmetic that rules 6 out; the term the rule was written to bound — retained
+  silver — is the *smaller* one (34.9 MB/week against the 331.9 MB single bronze
+  run), so lowering the horizon buys volume, not an order of magnitude.
+
+  What depth 3 gives up is trend history, and it is a counted cost: `entrypoint.sh`
+  refreshes weekly, so 3 snapshots span 14 days, and a 14-day span sits inside a
+  single calendar month on **197 of 365 weekly start dates** (measured 2026-09-07)
+  — on those weeks the Geography Trends page's `recruiting_growth_3m` is null,
+  because the model reports no 3-month delta without a second month (see
+  `docs/metric_definitions.md`); that null is the honest reading of "not enough
+  history" the 0.0 used to disguise. At 2 GB, restoring horizon 6 makes the series
+  always present; the 6-snapshot steady state there is ≈632 MB (ESTIMATE, the same
+  fit: `499.7 + 44.2·3`), ≈3.2x headroom — re-measure after extending, no 2 GB
+  volume has been walked.
 
   Whether Fly's own volume snapshots (`snapshot_retention: 5`,
   `auto_backup_enabled: true`, reported 2026-09-06) consume the 1 GB is not

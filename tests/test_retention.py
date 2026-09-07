@@ -618,12 +618,45 @@ def test_shipped_configs_agree_on_the_horizon() -> None:
     from src.profiles import load_profile
 
     expected = RetentionConfig(bronze_runs_to_keep=1, snapshot_runs_to_keep=3)
-    assert load_config().retention == expected
+    assert load_config().retention == expected, "config/project_config.yml"
     for yml in sorted((REPO_ROOT / "config/profiles").glob("*.yml")):
         assert load_profile(yml).config.retention == expected, yml.name
     assert expected.bronze_runs_to_keep <= expected.snapshot_runs_to_keep, (
         "bronze deeper than the snapshot depth is the ordering prune's coherence "
         "guard refuses, so the shipped horizon must not be inside it"
+    )
+
+
+def test_shipped_horizon_discloses_its_trend_consequence() -> None:
+    """The retention horizon is also the length of the Geography Trends series, so
+    lowering it must not be allowed to silently drop the disclosure of what it
+    costs. `kill_timeout` got a two-sided guard; this is the same guard for the
+    knob with the harder consequence.
+
+    The shipped cadence is 7 days (`entrypoint.sh`'s
+    ``CTI_REFRESH_INTERVAL_SECONDS:-604800`` default), so ``N`` weekly snapshots
+    retain a span of ``(N - 1) * 7`` days. When that span can fall inside a single
+    calendar month (<= 31 days — the longest month) the 3-month growth KPI goes
+    null on part of the year, and docs/DEPLOY_FLY.md must carry the dated
+    measurement for it. Raise the horizon to 6 (a 35-day span, always two months)
+    and the sentence stops being required.
+    """
+    from src.config import load_config
+
+    entrypoint = (REPO_ROOT / "entrypoint.sh").read_text(encoding="utf-8")
+    cadence_seconds = re.search(r"CTI_REFRESH_INTERVAL_SECONDS:-(\d+)", entrypoint)
+    assert cadence_seconds is not None, "entrypoint.sh: no refresh-interval default to read"
+    cadence_days = int(cadence_seconds.group(1)) // 86400
+    horizon = load_config().retention.snapshot_runs_to_keep
+    span_days = (horizon - 1) * cadence_days
+    if span_days > 31:
+        return  # a span longer than any calendar month always shows two months
+    doc = (REPO_ROOT / "docs/DEPLOY_FLY.md").read_text(encoding="utf-8")
+    assert "197 of 365" in doc, (
+        f"docs/DEPLOY_FLY.md must disclose that a {span_days}-day retained span "
+        f"(shipped horizon {horizon} x {cadence_days}-day cadence) can sit inside one "
+        "calendar month, which nulls recruiting_growth_3m on the Geography Trends page; "
+        "'197 of 365' is the dated (2026-09-07) measurement for that fraction"
     )
 
 
