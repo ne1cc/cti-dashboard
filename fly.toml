@@ -6,12 +6,18 @@
 app = 'cti-dashboard'
 primary_region = 'iad'
 
-# The entrypoint traps SIGTERM but defers it until the current pipeline step
-# returns, so Fly's default 3s grace would kill a refresh caught by a deploy
-# mid-write. 90s covers the longest measured run (59s on a cold volume); an
-# idle supervisor still exits within its next 5s tick.
+# The entrypoint traps SIGTERM but defers it until the in-flight `make pipeline`
+# returns (entrypoint.sh), so this has to cover a whole two-profile run, not its
+# tail. Measured in this image on 2026-09-07 (linux/arm64, shared-cpu-1x, commit
+# 78c2050, fresh named volume): 130s cold, 67s warm on a same-day re-run; two
+# forced second real pulls measured 120s and 118s end to end. Rule: 2x the larger
+# measurement, rounded up to 30s -> 270s, which is inside Fly's stated 300s
+# maximum for kill_timeout (fly.io/docs/reference/configuration, 2026-09-07).
+# The old 90s covered a 59s one-profile cold run and would have killed a
+# two-profile refresh mid-write. An idle supervisor still exits within its next
+# 5s tick.
 kill_signal = 'SIGTERM'
-kill_timeout = '90s'
+kill_timeout = '270s'
 
 [build]
 [[mounts]]

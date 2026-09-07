@@ -72,12 +72,18 @@ class RetentionConfig(BaseModel):
     because the runs in between keep raw pages no later prune can discover. An
     ingest_only profile never has silver, so for it bronze_runs_to_keep is the
     only horizon that bounds its raw pages at all.
+
+    This default is the shipped horizon (3), not a looser one: the depth was
+    brought down from 6 by a dated volume measurement (1 GB deployed, 499.7 MB
+    steady state and 866.5 MB worst-instant at 3 snapshots for two profiles,
+    2026-09-07, commit 78c2050 — docs/DEPLOY_FLY.md). A config with no
+    `retention:` block must not reintroduce the setting that overflows it.
     """
 
     model_config = ConfigDict(extra="ignore")
 
     bronze_runs_to_keep: int = 1
-    snapshot_runs_to_keep: int = 6
+    snapshot_runs_to_keep: int = 3
 
     @classmethod
     def from_raw(cls, raw: dict[str, Any] | None) -> "RetentionConfig":

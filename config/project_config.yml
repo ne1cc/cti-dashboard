@@ -93,9 +93,18 @@ ingestion:
 # i.e. the warehouse's longitudinal depth. bronze_runs_to_keep may not exceed
 # snapshot_runs_to_keep — the prune refuses it, because raw pages left behind by
 # a deleted manifest can never be discovered by a later prune.
+#
+# The snapshot horizon is 3, not 6, because of a volume measurement: on
+# 2026-09-07 (commit 78c2050) the deployed Fly volume reported size_gb 1, and a
+# two-profile /app/data walked 499.7 MB steady state at 3 snapshots against
+# 332.0 MB for the single retained bronze run. At 6 the same measured terms put
+# a refresh's worst instant at 993-1009 MB of that 1000 MB — a full volume
+# mid-write. docs/DEPLOY_FLY.md ("What to expect") carries the arithmetic and
+# the rule (headroom >= 2.5 keeps 6); extend the volume to 2 GB before raising
+# this back.
 retention:
   bronze_runs_to_keep: 1
-  snapshot_runs_to_keep: 6
+  snapshot_runs_to_keep: 3
 
 guardrails:
   disclaimer: >-

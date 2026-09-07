@@ -511,8 +511,14 @@ def test_prune_all_reaches_every_profile_including_ingest_only(tmp_path, monkeyp
     assert {r.profile_id for r in removed} == {"adrd", "full_catalog"}
     pages = sorted(p.name for p in catalog.config.paths.bronze_api_responses.iterdir())
     assert pages == ["run_id=20260917T000000Z_run00000007"], "bronze_runs_to_keep must bite"
-    # The snapshot horizon is untouched by that: six runs still have an index.
-    assert len(list(catalog.config.paths.bronze_manifests.glob("manifest_*.json"))) == 6
+    # The snapshot horizon is untouched by that: a full horizon of runs still
+    # has an index. Read from the shipped config rather than hardcoded, because
+    # the horizon is a volume measurement and moves with it (3 since
+    # 2026-09-07 — docs/DEPLOY_FLY.md); what may not move is that it runs
+    # deeper than bronze, which is the independence this test exists for.
+    horizon = catalog.config.retention.snapshot_runs_to_keep
+    assert horizon > catalog.config.retention.bronze_runs_to_keep
+    assert len(list(catalog.config.paths.bronze_manifests.glob("manifest_*.json"))) == horizon
 
 
 def test_prune_all_refuses_an_empty_registry(tmp_path, monkeypatch):
@@ -595,7 +601,13 @@ def test_retention_config_defaults_when_absent(project_root_tmp: Path) -> None:
 
     cfg = load_config()
     assert cfg.retention.bronze_runs_to_keep == 1
-    assert cfg.retention.snapshot_runs_to_keep == 6
+    assert cfg.retention.snapshot_runs_to_keep == 3
+    # A config with no `retention:` block falls back to the same horizon. It has
+    # to: 3 is the value the 1 GB volume measurement allowed (docs/DEPLOY_FLY.md,
+    # 2026-09-07, commit 78c2050), so a looser fallback would restore a horizon
+    # whose refresh peak fills the volume.
+    assert RetentionConfig().snapshot_runs_to_keep == 3
+    assert RetentionConfig.from_raw(None) == RetentionConfig()
 
 
 def test_shipped_configs_agree_on_the_horizon() -> None:
@@ -605,7 +617,7 @@ def test_shipped_configs_agree_on_the_horizon() -> None:
     from src.config import load_config
     from src.profiles import load_profile
 
-    expected = RetentionConfig(bronze_runs_to_keep=1, snapshot_runs_to_keep=6)
+    expected = RetentionConfig(bronze_runs_to_keep=1, snapshot_runs_to_keep=3)
     assert load_config().retention == expected
     for yml in sorted((REPO_ROOT / "config/profiles").glob("*.yml")):
         assert load_profile(yml).config.retention == expected, yml.name

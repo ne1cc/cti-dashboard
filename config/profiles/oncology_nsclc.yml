@@ -88,10 +88,13 @@ ingestion:
   manifest_file_pattern: "manifest_{run_id}.json"
 
 # Run retention for this profile (make prune-data, src/utils/retention.py).
-# Same horizon as every other profile — one knob, no special cases.
+# Same horizon as every other profile — one knob, no special cases. The depth
+# is 3 and not 6 because of the 1 GB volume measurement recorded in
+# config/project_config.yml and docs/DEPLOY_FLY.md: this profile's bronze run
+# alone is 253.1 MB of that volume (measured 2026-09-07, commit 78c2050).
 retention:
   bronze_runs_to_keep: 1
-  snapshot_runs_to_keep: 6
+  snapshot_runs_to_keep: 3
 
 guardrails:
   disclaimer: >-

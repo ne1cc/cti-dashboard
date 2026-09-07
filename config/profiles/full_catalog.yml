@@ -76,10 +76,12 @@ ingestion:
 # will remember to re-tune.
 # bronze_runs_to_keep is decisive for this profile and this profile only: it is
 # ingest_only, so it has no silver and no transform, and the bronze horizon is
-# the sole thing bounding its raw pages.
+# the sole thing bounding its raw pages. The snapshot horizon is therefore
+# unused here; it moves with the others (3, from the 2026-09-07 1 GB volume
+# measurement in config/project_config.yml) rather than special-casing.
 retention:
   bronze_runs_to_keep: 1
-  snapshot_runs_to_keep: 6
+  snapshot_runs_to_keep: 3
 
 guardrails:
   disclaimer: >-
