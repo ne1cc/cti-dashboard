@@ -118,6 +118,25 @@ def prune_profile(
     dry_run: bool = False,
 ) -> list[PrunedRun]:
     cfg = retention or profile.config.retention
+    # Refused ahead of the coherence comparison below, because that comparison
+    # would otherwise answer (bronze=1, snapshot=0) with "lower bronze to at or
+    # below the snapshot depth" — i.e. send the operator to 0, the deeper hole.
+    zero: list[str] = []
+    if cfg.bronze_runs_to_keep == 0:
+        zero.append("retention.bronze_runs_to_keep")
+    if cfg.snapshot_runs_to_keep == 0:
+        zero.append("retention.snapshot_runs_to_keep")
+    if zero:
+        raise RetentionError(
+            f"{' and '.join(zero)} = 0: a horizon of 0 does not mean 'keep "
+            "nothing extra this week'. runs_to_prune only refuses a negative "
+            "keep, so 0 names every retained run of the profile as a victim and "
+            "deletes them, including the newest one the warehouse was built "
+            "from and the dashboard is serving — the history the snapshot depth "
+            "exists to hold, and the raw pages that are the only copy of the "
+            "ingestion on the volume. That is a manual teardown, not a "
+            "retention policy; set 1 to keep only the latest run."
+        )
     if cfg.bronze_runs_to_keep > cfg.snapshot_runs_to_keep:
         raise RetentionError(
             f"retention.bronze_runs_to_keep ({cfg.bronze_runs_to_keep}) exceeds "

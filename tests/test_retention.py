@@ -267,6 +267,60 @@ def test_bronze_deeper_than_snapshots_is_refused(profile_with_runs):
     )
 
 
+def test_a_zero_horizon_is_refused_by_either_name(profile_with_runs):
+    """A horizon of 0 is not "keep nothing", it is "delete everything":
+    `runs_to_prune` only refuses a *negative* keep, so 0 hands back every success
+    run the profile has — including the newest one the warehouse is reading. Both
+    sentences in `config/project_config.yml` and `docs/DEPLOY_FLY.md` advertise
+    this refusal, so it must exist for each horizon independently.
+    """
+    # Each arm matches the zero guard's own wording. On (1, 0) the coherence
+    # guard also refuses, but for the wrong reason — stranding, not wiping the
+    # current run — so a loose match would pass with the zero guard absent.
+    with pytest.raises(RetentionError, match="bronze_runs_to_keep = 0"):
+        prune_profile(
+            profile_with_runs, RetentionConfig(bronze_runs_to_keep=0, snapshot_runs_to_keep=3)
+        )
+
+    with pytest.raises(RetentionError, match="snapshot_runs_to_keep = 0"):
+        prune_profile(
+            profile_with_runs, RetentionConfig(bronze_runs_to_keep=1, snapshot_runs_to_keep=0)
+        )
+
+    # Both at once is still one refusal, and it names both halves.
+    with pytest.raises(RetentionError) as both:
+        prune_profile(
+            profile_with_runs, RetentionConfig(bronze_runs_to_keep=0, snapshot_runs_to_keep=0)
+        )
+    message = str(both.value)
+    assert "bronze_runs_to_keep" in message and "snapshot_runs_to_keep" in message
+
+    # The widening half: a depth-1 bronze horizon is legitimate (it is what every
+    # shipped profile sets) and must not be caught by the zero check.
+    prune_profile(
+        profile_with_runs, RetentionConfig(bronze_runs_to_keep=1, snapshot_runs_to_keep=3)
+    )
+
+
+def test_the_zero_refusal_happens_before_anything_is_deleted(profile_with_runs):
+    """The point of refusing is that the tree is still there afterwards, so an
+    operator who set 0 by mistake can fix the config and re-run. If the check ever
+    moves below the deletion loop, this fails while the suite stays green."""
+    cfg = profile_with_runs.config
+    for horizon in (
+        RetentionConfig(bronze_runs_to_keep=0, snapshot_runs_to_keep=3),
+        RetentionConfig(bronze_runs_to_keep=1, snapshot_runs_to_keep=0),
+    ):
+        with pytest.raises(RetentionError):
+            prune_profile(profile_with_runs, horizon)
+
+    assert sorted(p.name for p in cfg.paths.bronze_api_responses.iterdir()) == [
+        f"run_id=2026090{i}T000000Z_run{i - 1:08d}" for i in (1, 2, 3, 4)
+    ]
+    assert len(list((cfg.paths.silver / "silver_trials").iterdir())) == 4
+    assert len(list(cfg.paths.bronze_manifests.glob("manifest_*.json"))) == 4
+
+
 def test_an_ingest_only_profile_honors_its_bronze_horizon(tmp_path, monkeypatch):
     """An `ingest_only` profile has no silver — never had, never will — so the
     missing-silver guard is skipped for it and `bronze_runs_to_keep` is what
