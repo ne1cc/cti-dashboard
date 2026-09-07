@@ -663,9 +663,6 @@ def test_cli_main_orchestrate_with_profile_runs_only_named_profile(monkeypatch):
                 return FakeProfileB()
             return FakeProfileA()
 
-        def active(self):
-            return [FakeProfileA(), FakeProfileB()]
-
     monkeypatch.setattr("src.cli.get_registry", lambda: FakeRegistry())
     monkeypatch.setattr(
         "src.ingest.extract_studies.run_ingestion",
