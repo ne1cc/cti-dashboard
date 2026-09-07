@@ -78,7 +78,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     quality = subparsers.add_parser(
         "quality-report",
-        help="Build the Markdown data-quality report (reliability, reconciliation, drift).",
+        help=(
+            "Build the Markdown data-quality report (reliability, reconciliation, "
+            "drift). Exits 1 when a reconciliation check fails."
+        ),
     )
     quality.add_argument(
         "--update-schema-baseline",
@@ -218,9 +221,21 @@ def main(argv: list[str] | None = None) -> int:
                     if success:
                         latest = max(success, key=lambda m: m.ingestion_run_id)
                         check_drift(latest.ingestion_run_id, update_baseline=True, cfg=cfg)
-            build_report()
+            report = build_report()
         except Exception as exc:
             log.error("Quality report failed: {}", exc)
+            return 1
+        # The file is the artifact, this code is the gate. `make pipeline` ends
+        # here and nothing else on that path arms the reconciliation checks, so
+        # exiting 0 after counting failures is how a refresh that lost a whole
+        # profile looked like a green container.
+        if report.checks_failed:
+            log.error(
+                "Quality report: {}/{} reconciliation checks FAILED; see {}",
+                report.checks_failed,
+                report.checks_total,
+                report.path,
+            )
             return 1
         return 0
 

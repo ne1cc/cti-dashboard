@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from src.cli import build_parser, main
+from src.quality.reconciliation import ReconciliationCheck
 
 
 def test_cli_parser_ingest():
@@ -554,6 +555,11 @@ def test_cli_quality_report_updates_a_baseline_per_profile_tree(project_root_tmp
         "src.quality.data_quality_report.REPORT_PATH",
         project_root_tmp / "reports" / "data_quality_report.md",
     )
+    # This tree has bronze runs and no silver or warehouse, so the real
+    # reconciliation fails 6 checks — and `quality-report` is now a gate that
+    # exits 1 on exactly that. The subject here is the baseline loop; the gate
+    # is covered by test_quality_report_exits_non_zero_when_a_check_fails.
+    monkeypatch.setattr("src.quality.data_quality_report.run_reconciliation", lambda: [])
     assert main(["quality-report", "--update-schema-baseline"]) == 0
 
     for pid, (stale_run, new_run) in runs.items():
@@ -566,6 +572,59 @@ def test_cli_quality_report_updates_a_baseline_per_profile_tree(project_root_tmp
             f"{pid}'s baseline still freezes the stale run {stale_run}: the "
             "--update-schema-baseline loop never reached this profile's tree"
         )
+
+
+def _quality_report_exit(project_root_tmp, monkeypatch, checks) -> tuple[int, str]:
+    """Run `quality-report` against the given reconciliation results."""
+    monkeypatch.setattr("src.quality.data_quality_report.run_reconciliation", lambda: checks)
+    report_path = project_root_tmp / "reports" / "data_quality_report.md"
+    # main() calls build_report() with its default output path.
+    monkeypatch.setattr("src.quality.data_quality_report.REPORT_PATH", report_path)
+    code = main(["quality-report"])
+    return code, report_path.read_text(encoding="utf-8")
+
+
+def _check(passed: bool) -> ReconciliationCheck:
+    """One `warehouse_profile_has_trials` result — the check whose whole job is
+    noticing that a profile produced nothing."""
+    return ReconciliationCheck(
+        profile_id="oncology_nsclc",
+        check="warehouse_profile_has_trials",
+        run_id="r1",
+        expected=10,
+        actual=10 if passed else 0,
+        passed=passed,
+        note="ok" if passed else "profile vanished from the warehouse",
+    )
+
+
+def test_quality_report_exits_non_zero_when_a_check_fails(project_root_tmp, monkeypatch):
+    """`make pipeline`'s last step must be a gate, not a print.
+
+    The pipeline is `orchestrate prune-data dbt-run dbt-test quality-report` and
+    nothing arms the Dagster asset checks, so this report is the only thing on
+    the deployed path that looks at cross-layer reconciliation at all. It already
+    counted the failures — `build_report` computed `failed` to write one Markdown
+    line — and then threw the number away: a whole profile vanishing from the
+    warehouse printed "0/1 checks passed" inside a green container, and the
+    weekly marker advanced as if the refresh had landed.
+    """
+    code, text = _quality_report_exit(project_root_tmp, monkeypatch, [_check(passed=False)])
+
+    assert code != 0, "a failed reconciliation check cannot be exit 0"
+    assert "0/1 reconciliation checks passed" in text, (
+        "the exit code and the artifact have to come from the same count"
+    )
+
+
+def test_quality_report_exits_zero_when_every_check_passes(project_root_tmp, monkeypatch):
+    """The other direction: a clean report must stay green, or the gate is a wall."""
+    code, text = _quality_report_exit(
+        project_root_tmp, monkeypatch, [_check(passed=True), _check(passed=True)]
+    )
+
+    assert code == 0
+    assert "2/2 reconciliation checks passed" in text
 
 
 def test_cli_parser_transform_profile_accepts_indication():

@@ -399,10 +399,14 @@ def test_report_reconciliation_table_names_the_profile(project_root_tmp, monkeyp
         ],
     )
 
-    text = build_report(cfg, output_path=project_root_tmp / "report.md").read_text(encoding="utf-8")
+    report = build_report(cfg, output_path=project_root_tmp / "report.md")
+    text = report.path.read_text(encoding="utf-8")
     assert "| check | profile | run | expected | actual | passed | note |" in text
     assert "| warehouse_covers_latest_silver | oncology_nsclc | r1 | 2 | 1 | no |" in text
     assert "### " in text, "schema drift is reported per profile"
+    # The exit code `make pipeline` gates on comes from these counts, so they
+    # have to be the same numbers the table above printed.
+    assert (report.checks_total, report.checks_failed) == (1, 1)
 
 
 def test_report_drift_section_names_its_profile(project_root_tmp, monkeypatch):
@@ -450,9 +454,8 @@ def test_report_drift_section_names_its_profile(project_root_tmp, monkeypatch):
             encoding="utf-8",
         )
 
-    text = build_report(
-        make_config(project_root_tmp), output_path=project_root_tmp / "drift.md"
-    ).read_text(encoding="utf-8")
+    report = build_report(make_config(project_root_tmp), output_path=project_root_tmp / "drift.md")
+    text = report.path.read_text(encoding="utf-8")
 
     sections: dict[str, str] = {}
     for chunk in text.split("### ")[1:]:

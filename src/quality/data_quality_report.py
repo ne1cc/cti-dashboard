@@ -7,7 +7,7 @@ the latest schema-drift result into `reports/data_quality_report.md`.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +22,22 @@ from src.quality.schema_drift import check_drift
 from src.utils.dates import utc_now_iso
 
 REPORT_PATH = Path("reports/data_quality_report.md")
+
+
+@dataclass(frozen=True)
+class Report:
+    """What `build_report` produced: the artifact, and the counts behind it.
+
+    A bare `Path` cannot carry the one number `make pipeline` needs. This report
+    is the last step of the deployed refresh and nothing arms the Dagster asset
+    checks, so if the reconciliation failures stay inside the Markdown the
+    refresh that lost a whole profile exits 0 and the weekly marker advances.
+    The file is the artifact; the code is the gate, and both read this number.
+    """
+
+    path: Path
+    checks_total: int
+    checks_failed: int
 
 
 def _fmt(value: object) -> str:
@@ -56,7 +72,7 @@ def _reliability_rows(cfg: ProjectConfig) -> list[dict[str, Any]]:
         con.close()
 
 
-def build_report(cfg: ProjectConfig | None = None, output_path: Path | None = None) -> Path:
+def build_report(cfg: ProjectConfig | None = None, output_path: Path | None = None) -> Report:
     cfg = cfg or get_config()
     output = output_path or REPORT_PATH
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -167,4 +183,4 @@ def build_report(cfg: ProjectConfig | None = None, output_path: Path | None = No
 
     output.write_text("\n".join(lines), encoding="utf-8")
     logger.info("Data quality report written to {}", output)
-    return output
+    return Report(path=output, checks_total=len(checks), checks_failed=failed)
