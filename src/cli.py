@@ -274,7 +274,10 @@ def main(argv: list[str] | None = None) -> int:
                 log.info("→ [{}] transforming…", pid)
                 processed = run_transform(profile=indication_profile)
                 for run_id in processed:
-                    profile_run(run_id)
+                    # The profile's own config, as `transform` does above: with
+                    # the default, profiling looks this run's manifest up in the
+                    # adrd bronze tree and finds nothing for every other profile.
+                    profile_run(run_id, config=indication_profile.config)
                 log.info("→ [{}] done ({} run(s) transformed).", pid, len(processed))
 
             except Exception as exc:

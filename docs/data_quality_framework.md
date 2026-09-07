@@ -63,7 +63,7 @@ with added/removed paths; the baseline changes only via explicit
 ## Reporting
 `make quality-report` → `reports/data_quality_report.md`: run reliability
 table (from `mart_data_reliability`), reconciliation results, drift
-status, and the interpretation guardrails. Unit/integration suite: 296 pytest
+status, and the interpretation guardrails. Unit/integration suite: 297 pytest
 tests (measured 2026-09-07 UTC by `uv run pytest --collect-only`; regenerate
 with `make test`), including config-sync tests that fail if score weights or band
 thresholds diverge between YAML, the dbt seed, and dbt vars.

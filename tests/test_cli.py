@@ -179,7 +179,7 @@ def test_cli_main_orchestrate_skips_ingest_only_profiles(monkeypatch):
     monkeypatch.setattr("src.cli.get_registry", lambda: FakeRegistry())
     monkeypatch.setattr("src.ingest.extract_studies.run_ingestion", fake_ingest)
     monkeypatch.setattr("src.transform.build_silver_entities.run_transform", fake_transform)
-    monkeypatch.setattr("src.quality.profiling.profile_run", lambda run_id: None)
+    monkeypatch.setattr("src.quality.profiling.profile_run", lambda *a, **k: None)
 
     assert main(["orchestrate"]) == 0
     assert ingested == ["adrd", "oncology_nsclc"]
@@ -294,10 +294,75 @@ def test_cli_main_orchestrate_fails_when_registry_has_no_refreshable_profiles(mo
     monkeypatch.setattr("src.cli.get_registry", lambda: EmptyRegistry())
     monkeypatch.setattr("src.ingest.extract_studies.run_ingestion", fake_ingest)
     monkeypatch.setattr("src.transform.build_silver_entities.run_transform", lambda **kw: [])
-    monkeypatch.setattr("src.quality.profiling.profile_run", lambda run_id: None)
+    monkeypatch.setattr("src.quality.profiling.profile_run", lambda *a, **k: None)
 
     assert main(["orchestrate"]) != 0
     assert ingested == []
+
+
+def test_cli_main_orchestrate_profiles_each_run_with_that_profiles_config(monkeypatch):
+    """Each run is profiled against the config of the profile that made it.
+
+    `transform` calls `profile_run(run_id, config=indication_profile.config)`;
+    `orchestrate` called it with the bare run id, so profiling used the
+    *default* profile's paths and looked the run up in
+    `data/bronze/adrd/manifests/`. For `oncology_nsclc` the manifest is not
+    there, so `silver/_profiles/profile_<run>.json` recorded a reconciliation
+    block it had no business calling clean. The assertion is on identity, not
+    equality: a profile that happened to carry an equal-but-default config
+    would pass the weaker test while profiling the wrong tree.
+    """
+    profiled: list[dict] = []
+
+    class FakeManifest:
+        status = "success"
+        error = None
+
+    class AdrdProfile:
+        profile_id = "adrd"
+        ingest_only = False
+        config = SimpleNamespace(profile_id="adrd")
+
+    class NsclcProfile:
+        profile_id = "oncology_nsclc"
+        ingest_only = False
+        config = SimpleNamespace(profile_id="oncology_nsclc")
+
+    class FakeRegistry:
+        def refreshable(self):
+            return [AdrdProfile(), NsclcProfile()]
+
+    def fake_ingest(**kwargs):
+        return FakeManifest()
+
+    def fake_transform(**kwargs):
+        pid = kwargs["profile"].profile_id
+        return [f"run_{pid}_a", f"run_{pid}_b"]
+
+    def fake_profile_run(*args, **kwargs):
+        profiled.append({"run_id": args[0], **kwargs})
+        return {}
+
+    monkeypatch.setattr("src.cli.get_registry", lambda: FakeRegistry())
+    monkeypatch.setattr("src.ingest.extract_studies.run_ingestion", fake_ingest)
+    monkeypatch.setattr("src.transform.build_silver_entities.run_transform", fake_transform)
+    monkeypatch.setattr("src.quality.profiling.profile_run", fake_profile_run)
+
+    assert main(["orchestrate"]) == 0
+    assert [p["run_id"] for p in profiled] == [
+        "run_adrd_a",
+        "run_adrd_b",
+        "run_oncology_nsclc_a",
+        "run_oncology_nsclc_b",
+    ]
+    assert [p["config"].profile_id for p in profiled] == [
+        "adrd",
+        "adrd",
+        "oncology_nsclc",
+        "oncology_nsclc",
+    ]
+    assert profiled[0]["config"] is AdrdProfile.config
+    assert profiled[-1]["config"] is NsclcProfile.config
 
 
 def test_cli_has_no_local_profile_alias_table() -> None:
@@ -526,10 +591,12 @@ def test_cli_main_orchestrate_with_profile_runs_only_named_profile(monkeypatch):
     class FakeProfileA:
         profile_id = "adrd"
         ingest_only = False
+        config = SimpleNamespace(profile_id="adrd")
 
     class FakeProfileB:
         profile_id = "oncology_nsclc"
         ingest_only = False
+        config = SimpleNamespace(profile_id="oncology_nsclc")
 
     class FakeRegistry:
         def get(self, profile_id):
