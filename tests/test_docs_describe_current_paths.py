@@ -82,9 +82,11 @@ BLOCK_START_RE = re.compile(r"^\s*(?:#{1,6}\s|[-*+]\s|\|)")
 # A count of the dbt or pytest layer written into prose, in the word orders these
 # docs actually use: "115 dbt tests", "dbt — 73 data tests", "dbt, 73 tests",
 # "| dbt data tests | **73** |", "| pytest | **N** |", "a 162-test pytest suite".
-# §14's `| pytest | **N** |` row is this repository's single home for that count,
-# and it only entered the guard's reach when the cell shape stopped demanding the
-# literal word "tests" after "pytest".
+# Four live documents carry the pytest count (`PROJECT_DOCUMENTATION.md` §14,
+# `README.md` §19, `docs/competitive_positioning.md`, `docs/data_quality_framework.md`);
+# §14 is where it is dated and explained, not where it is unique. That cell shape
+# only entered this guard's reach when it stopped demanding the literal word
+# "tests" after "pytest" — until then `| pytest | **290** |` was invisible to it.
 #
 # This list *is* the guard's reach: a count phrased any other way ("the dbt suite
 # has 999 tests", "| dbt | 999 |") is invisible to it, and every document that

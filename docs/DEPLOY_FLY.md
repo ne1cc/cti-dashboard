@@ -111,7 +111,8 @@ nothing to pass via `fly secrets set`.
   this image itself (Docker, linux/arm64, shared CPU) over a reused ingestion
   run — 3,037 trials, 32 dbt models, 115 dbt tests, counts that drift with the
   catalogue and with `dbt_clinical_trials/models/`; the same two counters read
-  **32 models and 137 tests** on 2026-09-07 (`dbt parse` plus a counter over
+  **32 models and 137 tests** on 2026-09-07 (`uv run dbt parse --project-dir
+  dbt_clinical_trials --profiles-dir dbt_clinical_trials` plus a counter over
   `target/manifest.json`, corroborated by the container's own `dbt test`,
   which reported `PASS=137`). Measured for two profiles on 2026-09-07 in the
   same image: **130 s** from an empty volume, **120 s and 118 s** for two

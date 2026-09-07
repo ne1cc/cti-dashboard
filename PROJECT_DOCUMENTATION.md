@@ -239,7 +239,7 @@ cti-dashboard/
 │   └── pages/                    # 8 numbered pages (queue → trial similarity)
 │
 ├── tests/                        # pytest suite (count and its date: §14)
-├── docs/                         # 16 documents, 10 of them indexed in §19 (its 11th row is README.md)
+├── docs/                         # 16 (`git ls-files "docs/*.md"`); §19 indexes 10 + README.md
 ├── data/                         # git-ignored: bronze/<profile_id>/ silver/ gold/ warehouse/
 └── reports/                      # generated data-quality report
 ```
