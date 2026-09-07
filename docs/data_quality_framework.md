@@ -65,7 +65,7 @@ with added/removed paths; the baseline changes only via explicit
 table (from `mart_data_reliability`), reconciliation results, drift
 status, and the interpretation guardrails. The step is a gate as well as a
 print: it exits non-zero when a reconciliation check fails, which is what
-`make pipeline` ends on. Unit/integration suite: 307 pytest
+`make pipeline` ends on. Unit/integration suite: 308 pytest
 tests (measured 2026-09-07 UTC by `uv run pytest --collect-only`; regenerate
 with `make test`), including config-sync tests that fail if score weights or band
 thresholds diverge between YAML, the dbt seed, and dbt vars.

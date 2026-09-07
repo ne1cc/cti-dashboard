@@ -301,6 +301,59 @@ def test_cli_main_orchestrate_fails_when_registry_has_no_refreshable_profiles(mo
     assert ingested == []
 
 
+def test_cli_main_orchestrate_contains_a_raise_and_attempts_the_rest(monkeypatch):
+    """One profile's exception is recorded; it does not end the refresh.
+
+    The loop's `except Exception` arm is the CLI twin of the containment the
+    assets got in `ae8bf89`, and no test reached it: every other orchestrate test
+    either returns before the loop (usage errors, empty registry) or has both
+    fakes succeed — measured 2026-09-07, narrowing the arm to
+    `except ZeroDivisionError` reddened this test and no other. Widening a
+    two-profile refresh to fail-fast would still leave the *exit code* right by
+    accident, because the traceback is non-zero too, while silently costing the
+    healthy profile its ingest. So the arm needs both halves pinned: the
+    survivor ran, and the run is red.
+    """
+    ingested: list[str] = []
+    transformed: list[str] = []
+
+    class FakeManifest:
+        status = "success"
+        error = None
+
+    class FakeProfileA:
+        profile_id = "adrd"
+        ingest_only = False
+
+    class FakeProfileB:
+        profile_id = "oncology_nsclc"
+        ingest_only = False
+
+    class FakeRegistry:
+        def refreshable(self):
+            return [FakeProfileA(), FakeProfileB()]
+
+    def fake_ingest(**kwargs):
+        pid = kwargs["config"].profile_id
+        ingested.append(pid)
+        if pid == "adrd":
+            raise RuntimeError("Connection reset by peer on page 4")
+        return FakeManifest()
+
+    def fake_transform(**kwargs):
+        transformed.append(kwargs["profile"].profile_id)
+        return []
+
+    monkeypatch.setattr("src.cli.get_registry", lambda: FakeRegistry())
+    monkeypatch.setattr("src.ingest.extract_studies.run_ingestion", fake_ingest)
+    monkeypatch.setattr("src.transform.build_silver_entities.run_transform", fake_transform)
+    monkeypatch.setattr("src.quality.profiling.profile_run", lambda *a, **k: None)
+
+    assert main(["orchestrate"]) == 1
+    assert ingested == ["adrd", "oncology_nsclc"], "the raise ended the loop"
+    assert transformed == ["oncology_nsclc"]
+
+
 def test_cli_main_orchestrate_profiles_each_run_with_that_profiles_config(monkeypatch):
     """Each run is profiled against the config of the profile that made it.
 
