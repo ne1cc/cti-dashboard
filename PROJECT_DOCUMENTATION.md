@@ -713,7 +713,7 @@ banner; every document (including this one) opens with the planning-signal rule.
 | Suite | Count | Scope |
 |---|---|---|
 | dbt data tests | **138** (measured 2026-09-07 UTC: `uv run dbt parse --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials`, then count `resource_type == "test"` in `dbt_clinical_trials/target/manifest.json`) | grains, keys, referential integrity, accepted values, score bounds, current-record uniqueness, state validity, date sanity |
-| pytest | **302** (measured 2026-09-07 UTC: `uv run pytest --collect-only`) | HTTP client/retry, pagination, manifests, normalization, metric math (weights sync, min-max edge cases, HHI fixtures), ROI arithmetic + disclaimer, dashboard smoke (all 8 pages via Streamlit `AppTest`) |
+| pytest | **305** (measured 2026-09-07 UTC: `uv run pytest --collect-only`) | HTTP client/retry, pagination, manifests, normalization, metric math (weights sync, min-max edge cases, HHI fixtures), ROI arithmetic + disclaimer, dashboard smoke (all 8 pages via Streamlit `AppTest`) |
 | ruff | clean | lint + format, line length 100 |
 
 These are the only places in this file that state those two counts *as measurements*,
