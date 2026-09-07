@@ -230,7 +230,7 @@ cti-dashboard/
 │   ├── models/marts/             # 5 dims, 2 facts, 2 bridges, 7 marts (+ tests)
 │   ├── tests/                    # 13 singular SQL assertion files (measured
 │   │                             # 2026-09-07: `ls dbt_clinical_trials/tests/*.sql`;
-│   │                             # §14 carries the dbt total of 138, which is not this)
+│   │                             # §14 carries the dbt total of 139, which is not this)
 │   └── analyses/                 # 4 compiled-but-not-materialized analyses
 │
 ├── dashboard/
@@ -712,13 +712,13 @@ banner; every document (including this one) opens with the planning-signal rule.
 
 | Suite | Count | Scope |
 |---|---|---|
-| dbt data tests | **138** (measured 2026-09-07 UTC: `uv run dbt parse --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials`, then count `resource_type == "test"` in `dbt_clinical_trials/target/manifest.json`) | grains, keys, referential integrity, accepted values, score bounds, current-record uniqueness, state validity, date sanity |
+| dbt data tests | **139** (measured 2026-09-07 UTC: `uv run dbt parse --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials`, then count `resource_type == "test"` in `dbt_clinical_trials/target/manifest.json`) | grains, keys, referential integrity, accepted values, score bounds, current-record uniqueness, state validity, date sanity |
 | pytest | **305** (measured 2026-09-07 UTC: `uv run pytest --collect-only`) | HTTP client/retry, pagination, manifests, normalization, metric math (weights sync, min-max edge cases, HHI fixtures), ROI arithmetic + disclaimer, dashboard smoke (all 8 pages via Streamlit `AppTest`) |
 | ruff | clean | lint + format, line length 100 |
 
 These are the only places in this file that state those two counts *as measurements*,
 which is the convention the rest of the repository follows (the §4 tree comment names
-`138` once, purely to point here, in a phrasing the guard does not read as a count
+`139` once, purely to point here, in a phrasing the guard does not read as a count
 claim): `docs/competitive_positioning.md`
 carries its own dated copy, and
 [`tests/test_docs_describe_current_paths.py`](tests/test_docs_describe_current_paths.py)

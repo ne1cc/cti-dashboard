@@ -344,6 +344,7 @@ models:
           indication_profile_id); re-hashing one side without the other orphans
           this join.
         tests:
+          - not_null
           - relationships:
               to: ref('dim_sponsor')
               field: sponsor_key

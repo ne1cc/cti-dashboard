@@ -22,7 +22,7 @@ Five layers of automated checks; nothing is silently dropped or fixed.
   per run (`data/silver/_profiles/`).
 
 ## 3. Warehouse tests (dbt)
-The suite is 138 dbt tests (measured 2026-09-07 UTC with `uv run dbt parse
+The suite is 139 dbt tests (measured 2026-09-07 UTC with `uv run dbt parse
 --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials` plus
 a `resource_type` counter over `dbt_clinical_trials/target/manifest.json` — the same
 manifest `tests/test_docs_describe_current_paths.py` reads; that guard fails the build
