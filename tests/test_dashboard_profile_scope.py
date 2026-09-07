@@ -114,8 +114,17 @@ _PROFILE_ID_IN_TEXT = re.compile(
     r"(?<![A-Za-z0-9_])(?:" + "|".join(PROFILE_IDS) + r")(?![A-Za-z0-9_])"
 )
 # Trial identity is `trial_key` (Task 9: md5(nct_id, indication_profile_id));
-# `nct_id` alone is shared across profiles.
-_NCT_ID_TO_NCT_ID = re.compile(r"\b(?:\w+\.)?nct_id\b\s*=\s*(?:\w+\.)?nct_id\b", re.I)
+# `nct_id` alone is shared across profiles. Three syntaxes express the same wrong
+# join and all three are caught: `join … using (nct_id)`, `on a.nct_id = b.nct_id`,
+# and `on cast(a.nct_id as …) = …`. The middle form is the one this guard had from
+# the start; the first is what the branch review's probe used to show that a real
+# blend could be written into `data.py` without the guard noticing.
+_NCT_ID_JOIN = re.compile(
+    r"\busing\s*\(\s*(?:\w+\.)?nct_id\s*\)"  # join … using (nct_id)
+    r"|\b(?:\w+\.)?nct_id\b\s*=\s*(?:\w+\.)?nct_id\b"  # on a.nct_id = b.nct_id
+    r"|\bcast\s*\(\s*(?:\w+\.)?nct_id\b[^)]*\)\s*=",  # on cast(a.nct_id as …) =
+    re.I,
+)
 
 # Measured 2026-09-06: nine `query(...)` calls plus the one `_connection().execute`
 # in `profile_trial_count`. A reader whose SQL stops being a literal at a call site
@@ -200,13 +209,64 @@ def test_no_reader_joins_trials_on_nct_id() -> None:
     either fixture. The comment at `data.py` ("an nct_id-only join would attach
     the other profile's sites") is therefore guarded in source, and the residual
     is disclosed in the task report rather than claimed as covered.
+
+    `test_the_join_guard_can_fail` is this guard's twin: it feeds the pattern the
+    joins it must catch in all three syntaxes and the SQL it must ignore, so a
+    pattern that stopped matching anything cannot leave this test green.
     """
     offenders = [
-        f"dashboard/components/data.py:{line}: join compares an nct_id to an nct_id"
+        f"dashboard/components/data.py:{line}: trial join keys on nct_id "
+        "(using (nct_id), a.nct_id = b.nct_id, or cast(nct_id as …) =)"
         for line, text in _data_sql()
-        if _NCT_ID_TO_NCT_ID.search(text)
+        if _NCT_ID_JOIN.search(text)
     ]
     assert not offenders, "trial identity joins must use trial_key:\n" + "\n".join(offenders)
+
+
+# The shapes that would blend the two profiles back together, each in a different
+# SQL syntax. The branch review's probe rewrote `data.py:298`'s
+# `on d.trial_key = s.trial_key` into `left join main_marts.fct_trial_site s
+# using (nct_id)` — a real blend, and the guard stayed green because its pattern
+# only matched the predicate form.
+_BROKEN_TRIAL_JOINS = (
+    "select d.nct_id from main_marts.dim_trial d "
+    "left join main_marts.fct_trial_site s using (nct_id)",
+    "select d.nct_id from main_marts.dim_trial d "
+    "left join main_marts.fct_trial_site s on s.nct_id = d.nct_id",
+    "select d.nct_id from main_marts.dim_trial d "
+    "left join main_marts.fct_trial_site s "
+    "on cast(d.nct_id as varchar) = cast(s.nct_id as varchar)",
+)
+
+# The forms `data.py` actually contains, plus the ones a widening could turn into
+# a false positive. A guard that matches everything fails as loudly as one that
+# matches nothing, and the loud failure is the one that gets loosened.
+_SAFE_TRIAL_SQL = (
+    "left join main_marts.fct_trial_site s on d.trial_key = s.trial_key",
+    "left join main_marts.fct_trial_site s using (trial_key)",
+    "where d.indication_profile_id = ? and nct_id = ?",
+    "select d.nct_id, d.indication_profile_id from main_marts.dim_trial d",
+    "order by d.study_first_post_date desc, d.nct_id",
+)
+
+
+def test_the_join_guard_can_fail() -> None:
+    """Prove the nct_id-join guard has teeth in both directions.
+
+    `test_no_reader_joins_trials_on_nct_id` can only ever report the corpus it is
+    given; if the pattern stopped matching anything it would pass forever. This
+    feeds the compiled pattern the SQL that guard exists to catch, and the SQL it
+    must leave alone.
+    """
+    for sql in _BROKEN_TRIAL_JOINS:
+        assert _NCT_ID_JOIN.search(sql), f"the guard misses a real blend: {sql}"
+    for sql in _SAFE_TRIAL_SQL:
+        assert not _NCT_ID_JOIN.search(sql), f"the guard false-positives on: {sql}"
+    # The corpus the guard scans has to exist, or "no offenders" is vacuous.
+    assert len(_data_sql()) >= _SQL_LITERAL_FLOOR, (
+        f"only {len(_data_sql())} literal SQL strings reach DuckDB in data.py; "
+        "the join guard is reading nothing"
+    )
 
 
 PROFILES = ("adrd", "oncology_nsclc")
