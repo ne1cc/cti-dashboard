@@ -274,6 +274,45 @@ loop-driven runs with manually driven ones, so it cannot settle the 10:19Z
 trigger. The per-tick `refresh check:` line added here is what makes the next
 occurrence answerable.
 
+## The pre-cutover flat bronze tree is stranded on the live volume, and only you can delete it
+
+Item 2 names what the old layout left behind: `data/bronze/manifests/` and
+`data/bronze/api_responses/`, flat under `data/bronze/` instead of nested under a
+profile id. Those directories are still on the deployed volume, and nothing in this
+repo will ever remove them. `dbt_clinical_trials/models/staging/_sources.yml` globs
+the per-profile paths, so a flat directory is not a source; `src/utils/retention.py`
+prunes only inside roots a profile's config names — its anti-stranding rule, because
+a page directory no manifest names is invisible to every later prune — and a flat
+tree is exactly that; `init-data-dirs` creates the profile tree and deletes nothing.
+
+**The 499.7 MB steady and 866.5 MB peak figures above therefore exclude them**, and
+the margin those figures bought is 133.5 MB. This document has no measurement of the
+flat tree's size; what is measured is one ADRD bronze run at 78.8 MB (2026-09-07,
+commit `78c2050`), and the flat tree holds the pre-cutover equivalent of one, so
+treat that as the order of magnitude and confirm it rather than trusting it:
+
+```bash
+fly ssh console -a cti-dashboard
+du -sh /app/data/bronze/manifests /app/data/bronze/api_responses   # if either exists
+du -sh /app/data                                                   # the current total
+ls /app/data/bronze/    # the live tree is per-profile: adrd/, oncology_nsclc/
+```
+
+The same walk may find `data/bronze/_schema_baseline.json` — the single global
+baseline the per-profile drift check replaced. It is gone from the repository and
+inert on the volume.
+
+Remove them only **after** a refresh that landed both profiles, i.e. after
+`pipeline succeeded` appears in `/app/data/logs/pipeline.log` and each of
+`/app/data/bronze/adrd/manifests/` and `/app/data/bronze/oncology_nsclc/manifests/`
+holds that run's manifest. Before that point they are the only copy of the last
+pre-cutover ingestion:
+
+```bash
+rm -rf /app/data/bronze/manifests /app/data/bronze/api_responses
+du -sh /app/data   # the drop from the figure recorded above is what you recovered
+```
+
 ## Egress from Fly is verified
 
 ClinicalTrials.gov's bot protection blocks `httpx`'s TLS/HTTP handshake
