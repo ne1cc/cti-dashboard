@@ -228,9 +228,9 @@ cti-dashboard/
 │   ├── models/staging/           # 8 views over silver Parquet (+ sources, tests)
 │   ├── models/intermediate/      # 8 views (status history, concentration, ...)
 │   ├── models/marts/             # 5 dims, 2 facts, 2 bridges, 7 marts (+ tests)
-│   ├── tests/                    # 13 singular SQL assertion files (measured
+│   ├── tests/                    # 12 singular SQL assertion files (measured
 │   │                             # 2026-09-07: `ls dbt_clinical_trials/tests/*.sql`;
-│   │                             # §14 carries the dbt total of 139, which is not this)
+│   │                             # §14 carries the dbt total of 138, which is not this)
 │   └── analyses/                 # 4 compiled-but-not-materialized analyses
 │
 ├── dashboard/
@@ -688,8 +688,12 @@ meaningless comparison dressed up as an invariant (see
 `src/quality/reconciliation.py`). The last generated run of the report in this
 repository is `reports/data_quality_report.md`, stamped
 `Generated: 2026-09-05T01:32:21+00:00 (UTC)` with **4/4 reconciliation checks
-passed** on a single ADRD snapshot of 2,618 records; regenerate it with
-`make quality-report`.
+passed** on a single ADRD snapshot of 2,618 records. Those four rows are the
+*pre-widening* set, not today's: since `949242a` the reconciliation leg has
+renamed `warehouse_dim_trial_vs_latest_silver` to `warehouse_covers_latest_silver`
+and runs it once per profile, and added `warehouse_profile_has_trials` and
+`warehouse_profile_has_similar_trials`, so a two-profile run reports more rows
+than that tally. Regenerate it with `make quality-report`.
 
 ---
 
@@ -712,13 +716,13 @@ banner; every document (including this one) opens with the planning-signal rule.
 
 | Suite | Count | Scope |
 |---|---|---|
-| dbt data tests | **139** (measured 2026-09-07 UTC: `uv run dbt parse --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials`, then count `resource_type == "test"` in `dbt_clinical_trials/target/manifest.json`) | grains, keys, referential integrity, accepted values, score bounds, current-record uniqueness, state validity, date sanity |
+| dbt data tests | **138** (measured 2026-09-07 UTC: `uv run dbt parse --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials`, then count `resource_type == "test"` in `dbt_clinical_trials/target/manifest.json`) | grains, keys, referential integrity, accepted values, score bounds, current-record uniqueness, state validity, date sanity |
 | pytest | **306** (measured 2026-09-07 UTC: `uv run pytest --collect-only`) | HTTP client/retry, pagination, manifests, normalization, metric math (weights sync, min-max edge cases, HHI fixtures), ROI arithmetic + disclaimer, dashboard smoke (all 8 pages via Streamlit `AppTest`) |
 | ruff | clean | lint + format, line length 100 |
 
 These are the only places in this file that state those two counts *as measurements*,
 which is the convention the rest of the repository follows (the §4 tree comment names
-`139` once, purely to point here, in a phrasing the guard does not read as a count
+`138` once, purely to point here, in a phrasing the guard does not read as a count
 claim): `docs/competitive_positioning.md`
 carries its own dated copy, and
 [`tests/test_docs_describe_current_paths.py`](tests/test_docs_describe_current_paths.py)
