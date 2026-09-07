@@ -228,7 +228,9 @@ cti-dashboard/
 │   ├── models/staging/           # 8 views over silver Parquet (+ sources, tests)
 │   ├── models/intermediate/      # 8 views (status history, concentration, ...)
 │   ├── models/marts/             # 5 dims, 2 facts, 2 bridges, 7 marts (+ tests)
-│   ├── tests/                    # singular SQL assertions (count: §14)
+│   ├── tests/                    # 13 singular SQL assertion files (measured
+│   │                             # 2026-09-07: `ls dbt_clinical_trials/tests/*.sql`;
+│   │                             # §14 carries the dbt total of 138, which is not this)
 │   └── analyses/                 # 4 compiled-but-not-materialized analyses
 │
 ├── dashboard/
@@ -237,7 +239,7 @@ cti-dashboard/
 │   └── pages/                    # 8 numbered pages (queue → trial similarity)
 │
 ├── tests/                        # pytest suite (count and its date: §14)
-├── docs/                         # 10 focused documents (see §19)
+├── docs/                         # 16 documents, 10 of them indexed in §19 (its 11th row is README.md)
 ├── data/                         # git-ignored: bronze/<profile_id>/ silver/ gold/ warehouse/
 └── reports/                      # generated data-quality report
 ```
@@ -333,8 +335,9 @@ Properties worth noting:
 
 ## 7. Normalization design (silver)
 
-`make transform --profile <id>` flattens each bronze run of one profile into the
-typed Parquet entity sets listed in `ENTITY_NAMES`
+`python -m src.cli transform --profile <id>` (or `make transform-nsclc` for the
+one profile with a dedicated target) flattens each bronze run of one profile into
+the typed Parquet entity sets listed in `ENTITY_NAMES`
 (`src/transform/build_silver_entities.py`); the same tuple is the source of
 truth for `dbt_clinical_trials/models/staging/_sources.yml`.
 
@@ -343,12 +346,14 @@ truth for `dbt_clinical_trials/models/staging/_sources.yml`.
 | `silver_trials` | One row per study: status, phase, dates, enrollment, sponsor | partial-date parsing (`2026`, `2026-07`), phase mapping, text cleanup |
 | `silver_trial_locations` | Listed facilities with city/state/zip/status | state → USPS 2-letter code, facility/city casefold+trim (best-effort) |
 | `silver_trial_sponsors` | Lead sponsor + collaborators with class | role normalized to `lead_sponsor` / `collaborator` |
-| `silver_trial_conditions` | Registry condition terms | mapped to the profile's condition groups via its `condition_taxonomy` config, with confidence flag |
+| `silver_trial_conditions` | Registry condition terms | mapped to the profile's condition groups via its `taxonomy:` profile key (`config/profiles/<id>.yml` → e.g. `config/condition_taxonomy.yml`), with confidence flag |
 | `silver_trial_interventions` | Intervention name + type | text normalization |
 | `silver_trial_outcomes` | Primary/secondary outcome measures | text normalization |
 
 Records that fail structural validation (missing NCT ID, unparseable payload) go to
-`data/quarantine/` with machine-readable **reason codes** — never silently dropped.
+that profile's own quarantine directory — `paths.quarantine` in
+`config/profiles/<id>.yml`, e.g. `data/bronze/adrd/manifests/quarantine/` — with
+machine-readable **reason codes**: never silently dropped.
 Every silver row carries `ingestion_run_id`, `indication_profile_id` and
 `source_json_hash` lineage columns.
 
@@ -708,18 +713,25 @@ banner; every document (including this one) opens with the planning-signal rule.
 | Suite | Count | Scope |
 |---|---|---|
 | dbt data tests | **138** (measured 2026-09-07 UTC: `uv run dbt parse --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials`, then count `resource_type == "test"` in `dbt_clinical_trials/target/manifest.json`) | grains, keys, referential integrity, accepted values, score bounds, current-record uniqueness, state validity, date sanity |
-| pytest | **289** (measured 2026-09-07 UTC: `uv run pytest --collect-only`) | HTTP client/retry, pagination, manifests, normalization, metric math (weights sync, min-max edge cases, HHI fixtures), ROI arithmetic + disclaimer, dashboard smoke (all 8 pages via Streamlit `AppTest`) |
+| pytest | **290** (measured 2026-09-07 UTC: `uv run pytest --collect-only`) | HTTP client/retry, pagination, manifests, normalization, metric math (weights sync, min-max edge cases, HHI fixtures), ROI arithmetic + disclaimer, dashboard smoke (all 8 pages via Streamlit `AppTest`) |
 | ruff | clean | lint + format, line length 100 |
 
-This is the only place in this file that states those two counts, which is the
-convention the rest of the repository follows: `docs/competitive_positioning.md`
+These are the only places in this file that state those two counts *as measurements*,
+which is the convention the rest of the repository follows (the §4 tree comment names
+`138` once, purely to point here, in a phrasing the guard does not read as a count
+claim): `docs/competitive_positioning.md`
 carries its own dated copy, and
 [`tests/test_docs_describe_current_paths.py`](tests/test_docs_describe_current_paths.py)
-fails the build when *that* row falls behind the commands above, or when any live
-document asserts a dbt or pytest count that is neither dated nor equal to what the
-tools report. Dated figures — including the 2026-07-24 run below — are deliberately
-left alone: rewriting a dated measurement is worse than the staleness the guard
-removes.
+fails the build when *that* row falls behind the commands above, or when a live
+document asserts a dbt or pytest count — phrased the way that guard recognises, and
+the recognised shapes are listed in the file — that is neither dated nor equal to
+what the tools report. Two exemptions, both stated in the guard: `docs/DEPLOY_FLY.md`
+and `docs/development_log.md` are dated records, and so is **any tracked markdown
+file whose own name contains a `YYYY-MM-DD` date** (`docs/platform_updates_2026-09-04.md`
+today) — naming a *live* document after a date therefore removes it from the guard,
+which its own test pins by asserting the exempt set. Dated figures — including the
+2026-07-24 run below — are deliberately left alone: rewriting a dated measurement is
+worse than the staleness the guard removes.
 
 Last full verification (2026-07-24): `dbt build` **105/105 PASS** (3 seeds,
 15 tables, 15 views, 72 tests at that run; now 73 after the `registry_url` test),

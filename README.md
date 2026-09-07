@@ -93,10 +93,11 @@ the profile's scope is all conditions by definition.
 there is no condition taxonomy to group trials by, and a taxonomy-less silver
 tree would be misleading rather than useful. Its former
 `make transform-full-catalog` target and the private silver tree it wrote are
-retired; `make transform` reads the refreshable profiles' manifests under
-`data/bronze/<profile_id>/manifests/`, and `make orchestrate` runs every
-refreshable profile end to end (the migration record is in
-[`docs/development_log.md`](docs/development_log.md)). The chunked streaming
+retired; `python -m src.cli transform --profile <id>` flattens one named profile
+from its own manifests under `data/bronze/<profile_id>/manifests/` (a bare
+`make transform` is the legacy `default` alias, i.e. `adrd`), and
+`make orchestrate` runs every refreshable profile end to end (the migration
+record is in [`docs/development_log.md`](docs/development_log.md)). The chunked streaming
 writer that target used
 (`src/transform/export_parquet.py`: bounded-memory Parquet row groups, no
 full-run materialization) is the same one every transformable profile writes
@@ -207,12 +208,14 @@ components, denominators, and deterministic explanations are displayed.
 ## 19. Data-quality and clinical interpretation guardrails
 
 Automated checks cover ingestion integrity, trial validation, relationship integrity,
-geographic validity, and metric rules — 138 dbt data tests plus a 289-test pytest suite
-(measured 2026-09-07 UTC; regenerate with `uv run dbt parse` and
+geographic validity, and metric rules — 138 dbt data tests plus a 290-test pytest suite
+(measured 2026-09-07 UTC; regenerate with `uv run dbt parse --project-dir
+dbt_clinical_trials --profiles-dir dbt_clinical_trials` and
 `uv run pytest --collect-only`. `tests/test_docs_describe_current_paths.py` fails the
-build when any live document states a dbt or pytest count that is neither dated nor
-equal to what those commands report), cross-layer reconciliation, and schema-drift detection
-([`docs/data_quality_framework.md`](docs/data_quality_framework.md)). Interpretation
+build when a live document states a dbt or pytest count — phrased the way that guard
+recognises, and the recognised shapes are listed in it — that is neither dated nor
+equal to what those commands report), cross-layer reconciliation, and schema-drift
+detection ([`docs/data_quality_framework.md`](docs/data_quality_framework.md)). Interpretation
 guardrails prohibit claims about recruitment failure, patient eligibility, healthcare
 quality, or sponsor performance
 ([`docs/clinical_interpretation_guardrails.md`](docs/clinical_interpretation_guardrails.md)).

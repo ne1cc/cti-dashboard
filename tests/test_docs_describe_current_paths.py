@@ -7,11 +7,16 @@ keeps the next migration from re-creating the same class of defect.
 Two kinds of claim are checked. A *path* claim is compared against the tree the
 profile migration left behind. A *count* claim is compared against the commands
 that produce it, because a number nobody can regenerate is a lie with a shelf
-life. Both are read against the live documentation only: a small allowlist
-(`_is_archive`) names dated incident records and date-named update files, which
-name dead paths and past counts on purpose — deleting that evidence is worse than
-the stale path. The retired pipeline chain is checked everywhere, because every
-sentence that states it describes what a command does right now.
+life. Both are read against the live documentation only: `_is_archive` exempts
+dated incident records — `docs/DEPLOY_FLY.md` and `docs/development_log.md`, named
+in `NARRATIVE_FILES` — plus **any tracked markdown whose own filename contains a
+`YYYY-MM-DD` date** (so `docs/platform_updates_2026-09-04.md` is dated wholesale),
+which name dead paths and past counts on purpose: deleting that evidence is worse
+than the stale path. That filename rule is a real exemption, so a new live document
+named after a date opts itself out of both guards silently —
+`test_the_archive_exemption_is_exactly_the_dated_narratives` pins the resulting set
+and fails if it ever changes. The retired pipeline chain is checked everywhere,
+because every sentence that states it describes what a command does right now.
 """
 
 import collections
@@ -27,22 +32,35 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # Dated narratives of trees that no longer exist. Rewriting them destroys the
 # evidence, so they are exempt from the path list and from the count list (see
-# `_is_archive`); the pipeline-chain guard still reads every one of them.
+# `_is_archive`); the pipeline-chain guard still reads every one of them. Only
+# files `git ls-files "*.md"` can return belong here — `docs/superpowers/` is
+# gitignored and holds no tracked markdown, so it used to sit in this list
+# exempting nothing. `test_the_archive_exemption_is_exactly_the_dated_narratives`
+# pins what the exemption resolves to in practice.
 NARRATIVE_FILES = frozenset(
     {
         Path("docs/DEPLOY_FLY.md"),
         Path("docs/development_log.md"),
-        Path("docs/superpowers"),  # plans record the state of knowledge when written
     }
 )
 
+# Needles are matched as plain substrings of live documents, so each is written in
+# the shortest form that no live path shares. The two bronze directory needles have
+# no trailing slash — the pre-migration tree held those directories directly under
+# `data/bronze/`, while every live path nests them under a profile id
+# (`data/bronze/adrd/manifests/`), so the shorter form cannot fire on it. Checked
+# against the tracked markdown on 2026-09-07: the only hits for either shorter
+# needle are inside exempt archives, and `data/quarantine` now appears in no live
+# document at all — every profile's `paths.quarantine` points inside its own bronze
+# tree (`config/profiles/adrd.yml:81` → `data/bronze/adrd/manifests/quarantine`).
 RETIRED_PATHS = [
-    "data/bronze/manifests/",
-    "data/bronze/api_responses/",
+    "data/bronze/manifests",
+    "data/bronze/api_responses",
     "data/bronze/_schema_baseline.json",
     "data/bronze_full_catalog",
     "data/silver_full_catalog",
     "data/gold_full_catalog",
+    "data/quarantine",
     "config/full_catalog_config.yml",
 ]
 
@@ -63,7 +81,14 @@ BLOCK_START_RE = re.compile(r"^\s*(?:#{1,6}\s|[-*+]\s|\|)")
 
 # A count of the dbt or pytest layer written into prose, in the word orders these
 # docs actually use: "115 dbt tests", "dbt — 73 data tests", "dbt, 73 tests",
-# "| dbt data tests | **73** |", "a 162-test pytest suite".
+# "| dbt data tests | **73** |", "| pytest | **N** |", "a 162-test pytest suite".
+# §14's `| pytest | **N** |` row is this repository's single home for that count,
+# and it only entered the guard's reach when the cell shape stopped demanding the
+# literal word "tests" after "pytest".
+#
+# This list *is* the guard's reach: a count phrased any other way ("the dbt suite
+# has 999 tests", "| dbt | 999 |") is invisible to it, and every document that
+# describes what the guard catches points here rather than claiming universality.
 #
 # The windows are deliberately narrow. `[^\d.]{0,4}` admits a punctuation mark and
 # a space ("dbt, 73") but not a word, so `make dbt-test`: 114/114 tests PASS — a
@@ -79,7 +104,7 @@ COUNT_SHAPES: list[tuple[re.Pattern[str], int, int | None]] = [
     (re.compile(r"\bdbt\s+(?:data\s+)?(tests?|models?)\b[ |:]{1,4}\*{2}(\d+)", re.I), 2, 1),
     (re.compile(r"(\d+)\s+pytest\s+tests?\b", re.I), 1, None),
     (re.compile(r"\bpytest\b[^\d.]{0,4}(\d+)\s+tests?\b", re.I), 1, None),
-    (re.compile(r"\bpytest\s+tests?\b[ |:]{1,4}\*{2}(\d+)", re.I), 2, None),
+    (re.compile(r"\bpytest\b(?:\s+tests?)?[ |:]{1,4}\*{2}(\d+)", re.I), 1, None),
     (re.compile(r"\b(\d+)[\s-]+test\s+pytest\s+suite\b", re.I), 1, None),
 ]
 
@@ -155,23 +180,32 @@ def _prose(path: Path) -> str:
     return " ".join(_read(path).split())
 
 
-def _claim_units(path: Path) -> list[str]:
-    """Claim-sized units: one sentence inside one markdown block.
+def _units_from_text(text: str) -> list[str]:
+    """Claim-sized units of markdown text: one sentence inside one block.
 
-    The count guard cannot use `_prose`, for two reasons measured on 2026-09-07.
-    Fenced blocks fuse into the stream, so a number 200 lines from the word `dbt`
-    reads as a test count — PROJECT_DOCUMENTATION.md's repository layout was
-    reported as "a 162-test pytest suite". And a date qualifies only the claim it
-    sits with: splitting on `". "` alone let PROJECT_DOCUMENTATION.md's
-    "Automated tests | **115 dbt data tests**" table row borrow "(single
-    snapshot, 2026-07-24)" from the table 197 characters below it, and pass. So
-    units reset at blank lines, headings, bullets and table rows — which keeps a
-    docs/DEPLOY_FLY.md bullet's own date attached to its own counts, and stops a
-    neighbouring row's date from laundering a stale one.
+    This is the *only* segmentation the count guard performs, and the guard calls
+    it on `_read(path)` directly — no wrapper, because a wrapper is a bypass: the
+    naive whole-file blob below was measured on 2026-09-07 to leave the live tree
+    at zero violations while missing the exact shape this function exists for.
+
+    Two failures drove the design. Fenced blocks fuse into the stream, so a number
+    200 lines from the word `dbt` reads as a test count —
+    PROJECT_DOCUMENTATION.md's repository layout was reported as "a 162-test pytest
+    suite". And a date qualifies only the claim it sits with: splitting on `". "`
+    alone let PROJECT_DOCUMENTATION.md's "Automated tests | **115 dbt data tests**"
+    table row borrow "(single snapshot, 2026-07-24)" from the table 197 characters
+    below it, and pass. So units reset at blank lines, headings, bullets and table
+    rows — which keeps a docs/DEPLOY_FLY.md bullet's own date attached to its own
+    counts, and stops a neighbouring row's date from laundering a stale one.
+
+    Taking text rather than a `Path` is what lets `test_the_count_guard_can_fail`
+    feed this function the real markdown of that laundering failure and assert both
+    directions; a guard that only ever reads live files cannot show the segmentation
+    working, because on today's tree blob and segmented forms agree.
     """
-    text = FENCE_RE.sub("\n", _read(path))
+    stripped = FENCE_RE.sub("\n", text)
     units: list[str] = []
-    for line in text.splitlines():
+    for line in stripped.splitlines():
         if not line.strip():
             units.append("")  # a blank line closes the current unit
             continue
@@ -306,7 +340,7 @@ def test_every_documented_count_is_dated_or_live(live_counts: LiveCounts) -> Non
     undated count the tools no longer agree with.
     """
     units_by_path = {
-        path: _claim_units(path) for path in _tracked_markdown() if not _is_archive(path)
+        path: _units_from_text(_read(path)) for path in _tracked_markdown() if not _is_archive(path)
     }
     violations = _stale_count_claims(live_counts, units_by_path)
     assert not violations, "counts with no date:\n" + "\n".join(violations)
@@ -316,8 +350,13 @@ def test_the_count_guard_can_fail(live_counts: LiveCounts) -> None:
     """A guard that cannot fail is how the docs went stale in the first place.
 
     Synthetic paths, so no doc has to be edited to prove the matcher has teeth.
-    The last three cases are the ones that matter most: they are the shapes that
-    passed the naive version of this guard while stating 115, 162 and 73.
+    Every entry in `COUNT_SHAPES` now has a case here: measured 2026-09-07 against
+    the shipped list, four of the seven — `dbt — N data tests`, `N pytest tests`,
+    `pytest — N tests` and the `| pytest | **N** |` cell — matched none of its
+    cases, so deleting them left this test green. A regex that guards no document
+    and no test is dead code. The last two cases matter most: they are the shapes
+    that passed the naive version of this guard while stating 115, 162 and 73, and
+    the block segmentation that stops a stale count borrowing a neighbour's date.
     """
     live = live_counts
     stale = live.dbt_tests + 7
@@ -334,6 +373,28 @@ def test_the_count_guard_can_fail(live_counts: LiveCounts) -> None:
     suite = {Path("scratch.md"): [f"Quality: a {live.pytest_tests + 3}-test pytest suite"]}
     assert _stale_count_claims(live, suite), "the guard misses a pytest suite count"
 
+    # Lives in README.md and docs/data_quality_framework.md, so it has real work to
+    # do — but until now nothing proved it was wired up.
+    pytest_prose = {Path("scratch.md"): [f"Coverage: {live.pytest_tests + 5} pytest tests"]}
+    assert _stale_count_claims(live, pytest_prose), "the guard misses an `N pytest tests` claim"
+
+    # The two prose orders no live document matches today: `dbt — N data tests`,
+    # which the header comment names, and its pytest mirror, which it does not.
+    # Kept because a document may use them tomorrow; these cases are their only
+    # witness, so removing either regex now fails loudly instead of silently.
+    noun_first = {Path("scratch.md"): [f"Quality: dbt — {stale} data tests, all green"]}
+    assert _stale_count_claims(live, noun_first), "the guard misses a `dbt — N data tests` claim"
+
+    colon_first = {Path("scratch.md"): [f"pytest — {live.pytest_tests + 5} tests cover the CLI"]}
+    assert _stale_count_claims(live, colon_first), "the guard misses a `pytest — N tests` claim"
+
+    # The `| pytest | **N** |` cell, in the label-column form PROJECT_DOCUMENTATION.md
+    # §14 uses. Before this case existed the shape had no witness in either direction:
+    # the matcher needed the literal word "tests" after "pytest", so a stale (and
+    # undated) row of that table passed while its `dbt data tests` neighbour fired.
+    row = {Path("scratch.md"): [f"| pytest | **{live.pytest_tests + 11}** | CLI, transform |"]}
+    assert _stale_count_claims(live, row), "the guard misses a `| pytest | **N** |` table cell"
+
     # A date in a *neighbouring* block does not qualify the claim above it.
     borrowed = {
         Path("scratch.md"): [
@@ -342,3 +403,45 @@ def test_the_count_guard_can_fail(live_counts: LiveCounts) -> None:
         ]
     }
     assert _stale_count_claims(live, borrowed), "a neighbouring row's date launders a stale count"
+
+    # ...and the block segmentation that makes the case above fail is load-bearing, so
+    # it gets its own witness. Real markdown, fed through the same code the guard runs:
+    # segmented, the stale row is its own unit and is reported; flattened into one
+    # blob — what this degenerates to if the segmentation is dropped — the
+    # next block's `(single snapshot, 2026-07-24)` qualifies it and the guard is
+    # silently vacuous. Measured 2026-09-07: the blob form found zero violations on
+    # the whole live tree, which is exactly how this went unnoticed.
+    laundered = (
+        "| Property | Value |\n"
+        f"| Automated tests | **{stale} dbt data tests** | 2,618 records |\n"
+        "\n"
+        "**Live warehouse figures (single snapshot, 2026-07-24):**\n"
+    )
+    segmented = _units_from_text(laundered)
+    assert any(DATE_RE.search(u) for u in segmented), "the dated block vanished from the units"
+    assert _stale_count_claims(live, {Path("scratch.md"): segmented}), (
+        "`_units_from_text` no longer segments by block: a stale count borrowed the next "
+        "block's date and passed"
+    )
+    assert not _stale_count_claims(live, {Path("scratch.md"): [" ".join(laundered.split())]}), (
+        "the naive whole-file blob now reports the stale count too, so this case no "
+        "longer proves the segmentation earns its existence"
+    )
+
+
+def test_the_archive_exemption_is_exactly_the_dated_narratives() -> None:
+    """The exemption is a hole in two guards, so its size is pinned.
+
+    `_is_archive` skips the two `NARRATIVE_FILES` incident records *and* any tracked
+    markdown whose own filename contains a `YYYY-MM-DD` date. That second half is a
+    convention, not a declaration: naming a live document
+    `docs/runbook_2026-09-08.md` would remove it, and every claim inside it, from
+    both guards. This asserts what the rule resolves to today, so a new exempt file
+    is a decision someone had to write down here rather than a silent omission.
+    """
+    exempt = {str(path) for path in _tracked_markdown() if _is_archive(path)}
+    assert exempt == {
+        "docs/DEPLOY_FLY.md",  # dated incident record
+        "docs/development_log.md",  # the archive the live docs point at
+        "docs/platform_updates_2026-09-04.md",  # exempt by its filename date
+    }

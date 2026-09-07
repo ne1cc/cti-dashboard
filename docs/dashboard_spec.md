@@ -11,6 +11,7 @@ Every page renders the shared disclaimer banner via
 | data.py | cached read-only warehouse access; `require_warehouse()` stops with build instructions if missing |
 | guardrails.py | disclaimer banner, snapshot-proxy note, footer |
 | filters.py | condition/state/phase sidebar multiselects with row-count caption |
+| profile.py | sidebar indication-profile selector; options come from `get_registry().refreshable()`, not a warehouse query, so it renders before the first build |
 
 ## Pages
 
@@ -61,6 +62,24 @@ public record via `registry_url`
 (`https://clinicaltrials.gov/study/<NCT_ID>`, a `dim_trial` column).
 Caption states rows reflect this project's latest snapshot and that
 listed enrollment is the sponsor-reported plan, not actual accrual.
+
+### 8 · Trial Similarity
+Deterministic protocol comparability for one index trial. A banner sets the
+scope first: shared phase, geography, intervention type, study design and
+eligibility — **not** clinical equivalence, and (unlike the Competition
+Landscape and Priority Queue pages) not itself a competition or recruitment
+signal. Free-text search over brief title / NCT ID narrows the profile's trial
+set, and a selectbox offers the first 50 matches labelled
+`NCT — title [indication_profile_id]`.
+
+`data.trial_similarity(profile_id, nct_id)` reads `mart_trial_similarity` for
+the selected profile and renders rank, matched NCT ID, indication, brief title,
+registry link, `similarity_score` (4 dp) and `similarity_explanation`. Selecting
+a row re-renders with the seven-factor breakdown — match, weight and weighted
+contribution per factor — plus a "Weighted total" metric whose help notes that
+contributions are rounded before display, so their sum can differ in the last
+decimal. A search that matches nothing, and an index trial with no comparable
+trial in the warehouse, each say so instead of rendering an empty table.
 
 ## Non-functional rules
 - Warehouse opened `read_only=True`; the dashboard can never mutate data.
