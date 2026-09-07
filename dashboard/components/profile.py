@@ -41,6 +41,17 @@ def render_profile_selector() -> str:
         str: The selected indication profile id, e.g. `"adrd"`.
     """
     profiles = refreshable_profiles()
+    if not profiles:
+        # The same refusal `orchestrate`, `_refreshable_or_fail()` and both assets
+        # make, in the one place a reader can reach it. A zero-option selectbox
+        # does not raise — it renders empty and `str(None)` becomes the chosen id,
+        # so the silent form of this failure is nine pages of zeros under a caption
+        # claiming they belong to one profile.
+        st.error(
+            "No refreshable profiles in config/profiles/*.yml — check the registry "
+            "and the `ingest_only` flags before trusting any figure on this page."
+        )
+        st.stop()
     display_names = dict(profiles)
     st.sidebar.header("Scope")
     chosen = st.sidebar.selectbox(

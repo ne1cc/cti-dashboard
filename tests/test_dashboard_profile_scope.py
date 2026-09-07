@@ -41,6 +41,14 @@ def _load_data_module():
     return data
 
 
+def _load_profile_module():
+    if str(DASHBOARD) not in sys.path:
+        sys.path.insert(0, str(DASHBOARD))
+    from components import profile
+
+    return profile
+
+
 def test_every_warehouse_reader_is_profile_first() -> None:
     """A reader without `profile_id` is a cross-indication blend, and it will
     not raise — it will just look like a bigger ADRD.
@@ -584,3 +592,41 @@ def test_require_warehouse_warns_rather_than_stops_on_an_empty_scope(
     assert "full_catalog" in message, (
         f"the warning does not name the scope it is about: {message!r}"
     )
+
+
+def test_the_selector_refuses_an_empty_registry() -> None:
+    """An empty registry stops the page; it does not hand it a phantom scope.
+
+    Measured on 2026-09-07 by calling `render_profile_selector()` under
+    `AppTest.from_string` with `refreshable()` patched to `[]`: `st.selectbox`
+    does *not* raise on zero options. The widget renders empty, `str(None)`
+    becomes the chosen id — `CHOSEN='None'` — and the sidebar still prints the
+    "All figures cover this indication profile only" caption. So the failure is
+    silent, and it is silent on all nine pages at once, because each binds a
+    profile id the registry cannot name.
+
+    Every other registry-driven entry point refuses this state out loud:
+    `src/cli.py:270`, `src/orchestration/checks.py:26`, and both assets
+    (`src/orchestration/assets/silver.py:25`). The selector is the one place a
+    reader can reach it, because `config/profiles/` is on the volume a fresh
+    container mounts before the first refresh has written a registry.
+    """
+    profile = _load_profile_module()
+
+    class EmptyRegistry:
+        def refreshable(self):
+            return []
+
+    with (
+        mock.patch("components.profile.get_registry", lambda: EmptyRegistry()),
+        mock.patch("streamlit.selectbox") as selectbox,
+        mock.patch("streamlit.error") as error,
+        mock.patch("streamlit.stop") as stop,
+    ):
+        profile.render_profile_selector()
+
+    assert stop.call_count == 1, "an empty registry reached the widget layer"
+    assert error.call_count == 1, "the refusal stopped the page without saying why"
+    assert selectbox.call_count == 0, "the selector rendered a scope with nothing behind it"
+    refusal = str(error.call_args[0][0])
+    assert "No refreshable profiles" in refusal and "config/profiles" in refusal, refusal
