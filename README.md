@@ -208,7 +208,7 @@ components, denominators, and deterministic explanations are displayed.
 ## 19. Data-quality and clinical interpretation guardrails
 
 Automated checks cover ingestion integrity, trial validation, relationship integrity,
-geographic validity, and metric rules — 139 dbt data tests plus a 305-test pytest suite
+geographic validity, and metric rules — 139 dbt data tests plus a 306-test pytest suite
 (measured 2026-09-07 UTC; regenerate with `uv run dbt parse --project-dir
 dbt_clinical_trials --profiles-dir dbt_clinical_trials` and
 `uv run pytest --collect-only`. `tests/test_docs_describe_current_paths.py` fails the

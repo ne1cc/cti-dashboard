@@ -102,8 +102,10 @@ ingestion:
 #
 # (a) The plan's rule of record is "headroom >= 2.5 keeps 6". (b) It is
 # unsatisfiable at 1 GB for *any* horizon: 2.5x demands a steady state <= 400 MB,
-# but a single retained snapshot already walks 411.3 MB and a horizon of 0 is
-# refused by prune_profile's coherence guard. (c) The criterion actually applied
+# but a single retained snapshot already walks 411.3 MB and a horizon below 1 is
+# refused by prune_profile's horizon guard (0 deletes every run it retains, and a
+# negative is refused there rather than by runs_to_prune's helper check). (c) The
+# criterion actually applied
 # is therefore the deepest horizon whose worst refresh instant leaves >100 MB of
 # the 1,000 MB ceiling free: 3 (peak 866.5 MB, walked) — that 100 MB floor is a
 # chosen threshold (judgment), not a measurement. A two-point fit through the

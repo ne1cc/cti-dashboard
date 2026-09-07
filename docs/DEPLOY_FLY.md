@@ -173,7 +173,9 @@ nothing to pass via `fly secrets set`.
   (b) At 1 GB that is unsatisfiable for *every* horizon: 2.5× demands a steady
   state ≤ 400 MB, but the single retained bronze run is already 331.9 MB and the
   shallowest legal state — one retained snapshot — walks 411.3 MB, so even `k = 1`
-  falls short, and `k = 0` is refused by `prune_profile`'s coherence guard. (c)
+  falls short, and `k < 1` is refused by `prune_profile`'s horizon guard (0 deletes
+  every run the profile retains; a negative is refused there too, rather than by
+  `runs_to_prune`'s helper check). (c)
   The criterion actually applied is the deepest horizon whose worst refresh
   instant leaves more than a **chosen** 100 MB free of the 1,000 MB ceiling: that
   floor and the 2.0× acceptability are judgment on measured terms, not

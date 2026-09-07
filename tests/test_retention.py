@@ -302,6 +302,38 @@ def test_a_zero_horizon_is_refused_by_either_name(profile_with_runs):
     )
 
 
+def test_a_negative_horizon_is_refused_naming_its_key(profile_with_runs):
+    """`-1` is one keystroke from the `0` the guard above refuses.
+
+    It cannot delete anything today: `runs_to_prune` rejects a negative keep, and
+    both victim lists are computed before the first unlink. But that is an
+    accident of call order, and the message it produces — "keep must be >= 0,
+    got -1" — names neither the profile nor the config key, so an operator with
+    two profiles and a typo in one yml cannot tell which file to fix. Refusing it
+    at the same front door as 0 makes the protection a property of the guard
+    rather than of the line numbers.
+    """
+    cfg = profile_with_runs.config
+
+    with pytest.raises(RetentionError, match="retention.bronze_runs_to_keep = -1"):
+        prune_profile(
+            profile_with_runs, RetentionConfig(bronze_runs_to_keep=-1, snapshot_runs_to_keep=3)
+        )
+
+    # bronze=1 over snapshot=-1 would otherwise be answered by the coherence
+    # guard's "lower bronze to at or below the snapshot depth" — advice that sends
+    # the operator deeper into the hole.
+    with pytest.raises(RetentionError, match="retention.snapshot_runs_to_keep = -1"):
+        prune_profile(
+            profile_with_runs, RetentionConfig(bronze_runs_to_keep=1, snapshot_runs_to_keep=-1)
+        )
+
+    assert sorted(p.name for p in cfg.paths.bronze_api_responses.iterdir()) == [
+        f"run_id=2026090{i}T000000Z_run{i - 1:08d}" for i in (1, 2, 3, 4)
+    ]
+    assert len(list(cfg.paths.bronze_manifests.glob("manifest_*.json"))) == 4
+
+
 def test_the_zero_refusal_happens_before_anything_is_deleted(profile_with_runs):
     """The point of refusing is that the tree is still there afterwards, so an
     operator who set 0 by mistake can fix the config and re-run. If the check ever
