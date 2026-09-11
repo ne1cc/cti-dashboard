@@ -4,9 +4,12 @@ import plotly.express as px
 import streamlit as st
 from components import data
 from components.guardrails import guarded_footer, page_setup
+from components.guidance import render_page_guide
 
 page_setup("Site Overlap")
 data.require_warehouse()
+
+render_page_guide("site_overlap")
 
 overlap = data.site_overlap()
 
@@ -22,10 +25,18 @@ if only_repeated:
     filtered = filtered[filtered["repeated_site_participation_flag"]]
 
 col1, col2 = st.columns(2)
-col1.metric("Facilities shown", f"{len(filtered):,}")
+col1.metric(
+    "Facilities shown",
+    f"{len(filtered):,}",
+    help="Number of clinical facilities matching current state and overlap filters.",
+)
 col2.metric(
     "Multi-trial facilities (all states)",
     f"{int(overlap['repeated_site_participation_flag'].sum()):,}",
+    help=(
+        "Total facilities across the U.S. listed as active study sites "
+        "for 2 or more recruiting trials."
+    ),
 )
 
 st.subheader("Facilities by recruiting-trial listings")
@@ -43,6 +54,25 @@ st.dataframe(
     ].head(200),
     hide_index=True,
     width="stretch",
+    column_config={
+        "facility_name": st.column_config.TextColumn("Facility Name"),
+        "city": st.column_config.TextColumn("City"),
+        "state_normalized": st.column_config.TextColumn("State"),
+        "recruiting_trial_count": st.column_config.NumberColumn(
+            "Recruiting Trials",
+            format="%d",
+            help="Count of currently recruiting trials at this facility",
+        ),
+        "listed_trial_count": st.column_config.NumberColumn(
+            "Total Trials Listed",
+            format="%d",
+            help="All historical or active trials listing this site",
+        ),
+        "sponsor_count": st.column_config.NumberColumn("Sponsors", format="%d"),
+        "phase_mix": st.column_config.TextColumn(
+            "Phase Mix", help="Distribution of trial phases active at this location"
+        ),
+    },
 )
 
 st.subheader("States with the most multi-trial facilities")

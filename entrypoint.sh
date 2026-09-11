@@ -83,12 +83,6 @@ refresh_if_due() {
 if [ ! -f "$WAREHOUSE" ]; then
     log "no warehouse found, running first-boot pipeline"
     run_pipeline || log "first-boot pipeline failed; dashboard will show 'warehouse not found' until the next successful refresh"
-else
-    # Existing warehouse on persistent volume: ensure transforms and dbt models
-    # are synced with any newly deployed pipeline code before dashboard serves.
-    log "existing warehouse found; ensuring transform and dbt models are current"
-    make transform >> "$LOG_DIR/pipeline.log" 2>&1 || log "startup transform had warnings"
-    make dbt-run >> "$LOG_DIR/pipeline.log" 2>&1 || log "startup dbt-run had warnings"
 fi
 
 start_dashboard

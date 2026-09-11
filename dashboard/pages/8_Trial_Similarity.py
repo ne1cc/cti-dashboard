@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 from components import data
 from components.guardrails import guarded_footer, page_setup
+from components.guidance import render_indication_banner, render_page_guide
 
 FACTOR_LABELS = {
     "same_condition": "Same condition",
@@ -19,6 +20,9 @@ FACTOR_LABELS = {
 
 page_setup("Trial Similarity Explorer")
 data.require_warehouse()
+
+render_indication_banner()
+render_page_guide("trial_similarity")
 
 st.info(
     "This page scores **structural trial-design comparability** — "

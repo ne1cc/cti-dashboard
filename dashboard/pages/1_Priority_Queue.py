@@ -6,9 +6,12 @@ import streamlit as st
 from components import data
 from components.filters import segment_filters
 from components.guardrails import guarded_footer, page_setup
+from components.guidance import format_condition_group, render_page_guide
 
 page_setup("Feasibility Review Priority Queue")
 data.require_warehouse()
+
+render_page_guide("priority_queue")
 
 queue = data.priority_queue()
 filtered = segment_filters(queue)
@@ -24,9 +27,30 @@ if selected_bands:
 
 band_counts = filtered["priority_band"].value_counts()
 col1, col2, col3 = st.columns(3)
-col1.metric("Priority review", int(band_counts.get("priority_review", 0)))
-col2.metric("Review", int(band_counts.get("review", 0)))
-col3.metric("Watch", int(band_counts.get("watch", 0)))
+col1.metric(
+    "Priority review",
+    int(band_counts.get("priority_review", 0)),
+    help=(
+        "Top 20th percentile segments characterized by elevated "
+        "recruiting trial density or rapid recent growth."
+    ),
+)
+col2.metric(
+    "Review",
+    int(band_counts.get("review", 0)),
+    help=(
+        "50th to 80th percentile segments representing balanced "
+        "trial density and viable site capacity."
+    ),
+)
+col3.metric(
+    "Watch",
+    int(band_counts.get("watch", 0)),
+    help=(
+        "Bottom 50th percentile segments with low trial density—"
+        "promising targets for community-based recruitment."
+    ),
+)
 
 if bool(filtered["growth_uses_registry_proxy_flag"].any()):
     st.warning(
@@ -49,12 +73,36 @@ queue_columns = [
     "data_confidence_share",
     "priority_explanation",
 ]
+display_df = filtered[queue_columns].copy()
+display_df["condition_group"] = display_df["condition_group"].apply(format_condition_group)
+
 queue_event = st.dataframe(
-    filtered[queue_columns],
+    display_df,
     hide_index=True,
     width="stretch",
     on_select="rerun",
     selection_mode="single-row",
+    column_config={
+        "priority_rank": st.column_config.NumberColumn("Rank", format="%d"),
+        "condition_group": st.column_config.TextColumn("Condition Group"),
+        "state_normalized": st.column_config.TextColumn("State"),
+        "phase_normalized": st.column_config.TextColumn("Phase"),
+        "feasibility_review_priority_score": st.column_config.NumberColumn(
+            "Priority Score", format="%.4f", help="Weighted composite score (0.0 - 1.0)"
+        ),
+        "priority_band": st.column_config.TextColumn("Band"),
+        "recruiting_trial_count": st.column_config.NumberColumn("Recruiting Trials", format="%d"),
+        "sponsor_hhi": st.column_config.NumberColumn(
+            "Sponsor HHI", format="%.3f", help="Herfindahl-Hirschman Index of sponsor concentration"
+        ),
+        "site_overlap_share": st.column_config.NumberColumn(
+            "Site Overlap", format="%.1%", help="Share of listed facilities hosting multiple trials"
+        ),
+        "data_confidence_share": st.column_config.NumberColumn(
+            "Data Confidence", format="%.1%", help="Completeness and quality adjustment share"
+        ),
+        "priority_explanation": st.column_config.TextColumn("Deterministic Explanation"),
+    },
 )
 
 export_columns = [
