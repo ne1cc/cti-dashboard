@@ -5,6 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from components.guidance import format_condition_group
+
 
 def segment_filters(
     frame: pd.DataFrame,
@@ -36,7 +38,12 @@ def segment_filters(
 
     if condition_col in frame.columns:
         options = sorted(frame[condition_col].dropna().unique())
-        selected = st.sidebar.multiselect("Condition group", options)
+        selected = st.sidebar.multiselect(
+            "Condition group",
+            options,
+            format_func=format_condition_group,
+            help="Filter by deterministically mapped ADRD diagnostic categories.",
+        )
         if selected:
             filtered = filtered[filtered[condition_col].isin(selected)]
 

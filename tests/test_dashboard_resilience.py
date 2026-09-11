@@ -334,3 +334,38 @@ def test_trial_similarity_page_smoke_modern_schema(temp_duckdb_modern_schema: Pa
     assert not at.exception, at.exception[0].value if at.exception else ""
     # Should render the top comparable trials section
     assert any("Top comparable trials" in str(header.value) for header in at.subheader)
+
+
+def test_guidance_format_condition_group():
+    from components.guidance import format_condition_group
+
+    assert format_condition_group("alzheimers_disease") == "Alzheimer's Disease"
+    assert format_condition_group("mild_cognitive_impairment") == "Mild Cognitive Impairment (MCI)"
+    assert format_condition_group("frontotemporal_dementia") == "Frontotemporal Dementia (FTD)"
+    assert format_condition_group("lewy_body_dementia") == "Lewy Body Dementia (LBD)"
+    assert format_condition_group("vascular_dementia") == "Vascular Dementia (VaD)"
+    assert format_condition_group("custom_neuro_group") == "Custom Neuro Group"
+
+
+def test_guidance_all_pages_have_playbooks():
+    from components.guidance import PAGE_PLAYBOOKS
+
+    expected_keys = {
+        "overview",
+        "priority_queue",
+        "competition_landscape",
+        "geography_trends",
+        "site_overlap",
+        "sponsor_landscape",
+        "data_reliability",
+        "trial_explorer",
+        "trial_similarity",
+    }
+    assert set(PAGE_PLAYBOOKS.keys()) == expected_keys
+    for _key, playbook in PAGE_PLAYBOOKS.items():
+        assert "title" in playbook
+        assert "what_it_shows" in playbook
+        assert "how_to_analyze" in playbook
+        assert "playbook" in playbook
+        assert len(playbook["playbook"]) >= 3
+        assert "adrd_context" in playbook

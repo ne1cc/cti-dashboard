@@ -3,17 +3,26 @@
 import streamlit as st
 from components import data
 from components.guardrails import guarded_footer, page_setup
+from components.guidance import render_indication_banner, render_page_guide
 
 page_setup("Trial Explorer")
 data.require_warehouse()
 
+render_indication_banner()
+render_page_guide("trial_explorer")
+
 trials = data.trial_explorer()
 
 col1, col2 = st.columns(3)[:2]
-col1.metric("Trials in warehouse", f"{len(trials):,}")
+col1.metric(
+    "Trials in warehouse",
+    f"{len(trials):,}",
+    help="Total individual clinical study records stored in the analytics warehouse.",
+)
 col2.metric(
     "Currently recruiting",
     f"{int((trials['overall_status'] == 'RECRUITING').sum()):,}",
+    help="Studies marked with overall status RECRUITING in the latest snapshot.",
 )
 
 statuses = sorted(trials["overall_status"].dropna().unique())

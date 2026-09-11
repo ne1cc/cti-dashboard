@@ -3,11 +3,14 @@
 import streamlit as st
 from components import data
 from components.guardrails import guarded_footer, page_setup
+from components.guidance import render_page_guide
 
 from src.analysis.roi_scenarios import compute_scenarios, load_roi_config
 
 page_setup("Data Reliability & Assumptions")
 data.require_warehouse()
+
+render_page_guide("data_reliability")
 
 reliability = data.data_reliability()
 
@@ -31,6 +34,24 @@ st.dataframe(
     ],
     hide_index=True,
     width="stretch",
+    column_config={
+        "ingestion_run_id": st.column_config.TextColumn("Run ID"),
+        "snapshot_date": st.column_config.DateColumn("Snapshot Date"),
+        "status": st.column_config.TextColumn("Status"),
+        "page_count": st.column_config.NumberColumn("Pages", format="%d"),
+        "manifest_record_count": st.column_config.NumberColumn("Manifest Records", format="%d"),
+        "trial_row_count": st.column_config.NumberColumn("Trial Rows", format="%d"),
+        "manifest_reconciled_flag": st.column_config.CheckboxColumn("Reconciled"),
+        "unique_nct_flag": st.column_config.CheckboxColumn("Unique NCTs"),
+        "quarantined_record_count": st.column_config.NumberColumn("Quarantined", format="%d"),
+        "flagged_record_share": st.column_config.NumberColumn("Flagged Share", format="%.1%"),
+        "usable_location_share": st.column_config.NumberColumn(
+            "Usable US Locations", format="%.1%"
+        ),
+        "low_confidence_condition_share": st.column_config.NumberColumn(
+            "Low Confidence Condition", format="%.1%"
+        ),
+    },
 )
 st.caption(
     "Only status = success runs feed analytics. Partial runs (page-capped "
@@ -44,11 +65,20 @@ if not success.empty:
     col1.metric(
         "Latest run reconciled",
         "yes" if latest["manifest_reconciled_flag"] else "NO",
+        help="Verifies that bronze raw manifests perfectly match normalized silver trial counts.",
     )
-    col2.metric("Usable U.S. location share", f"{latest['usable_location_share']:.1%}")
+    col2.metric(
+        "Usable U.S. location share",
+        f"{latest['usable_location_share']:.1%}",
+        help="Proportion of trial sites that resolve to valid 2-letter U.S. postal state codes.",
+    )
     col3.metric(
         "Low-confidence condition share",
         f"{latest['low_confidence_condition_share']:.1%}",
+        help=(
+            "Percentage of studies mapped via fallback or substring rules "
+            "rather than exact taxonomy matches."
+        ),
     )
 
 st.subheader("Known limitations")
