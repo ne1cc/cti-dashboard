@@ -36,7 +36,7 @@ if len(indications) > 1:
     ind_names = ["All indications"] + [i["display_name"] for i in indications]
     ind_id_by_name = {i["display_name"]: i["id"] for i in indications}
     sel_ind_name = st.selectbox("Filter by indication", ind_names)
-    if sel_ind_name != "All indications":
+    if sel_ind_name != "All indications" and "indication_profile_id" in trials.columns:
         sel_pid = ind_id_by_name[sel_ind_name]
         trials = trials[trials["indication_profile_id"] == sel_pid]
 
@@ -79,20 +79,22 @@ options = {_format_option(row): row.nct_id for row in candidates.head(50).itertu
 selected_label = st.selectbox("Select the index trial", list(options))
 selected_nct_id = options[selected_label]
 
+sim_df = data.trial_similarity(selected_nct_id)
+if sim_df.empty or "nct_id_b" not in sim_df.columns:
+    st.info("No comparable trials found in the current warehouse for this trial.")
+    guarded_footer()
+    st.stop()
+
 merge_cols = ["nct_id", "brief_title", "registry_url"]
 if "indication_profile_id" in trials.columns:
     merge_cols.append("indication_profile_id")
 
-matches = (
-    data.trial_similarity(selected_nct_id)
-    .merge(
-        trials[merge_cols],
-        left_on="nct_id_b",
-        right_on="nct_id",
-        how="left",
-    )
-    .drop(columns="nct_id")
-)
+matches = sim_df.merge(
+    trials[merge_cols],
+    left_on="nct_id_b",
+    right_on="nct_id",
+    how="left",
+).drop(columns="nct_id")
 
 if matches.empty:
     st.info("No comparable trials found in the current warehouse for this trial.")
@@ -146,23 +148,31 @@ if selected_rows:
         [
             {
                 "Factor": label,
-                "Match (1=yes)": m[factor],
-                "Weight": m[f"weight_{factor}"],
-                "Weighted contribution": m[f"weighted_{factor}"],
+                "Match (1=yes)": m[factor] if factor in m else 0,
+                "Weight": m[f"weight_{factor}"] if f"weight_{factor}" in m else 0.0,
+                "Weighted contribution": (
+                    m[f"weighted_{factor}"] if f"weighted_{factor}" in m else 0.0
+                ),
             }
             for factor, label in FACTOR_LABELS.items()
         ]
     )
     st.dataframe(breakdown, hide_index=True, width="stretch")
+    sim_score = (
+        m["similarity_score"]
+        if "similarity_score" in m and pd.notna(m["similarity_score"])
+        else 0.0
+    )
     st.metric(
         "Weighted total",
-        f"{m['similarity_score']:.4f}",
+        f"{float(sim_score):.4f}",
         help=(
             "similarity_score for this pair — the weighted sum of all seven "
             "factors, rounded to 4 decimals. Individual contributions are "
             "rounded first, so their displayed sum can differ in the last decimal."
         ),
     )
-    st.caption(m["similarity_explanation"])
+    if "similarity_explanation" in m and pd.notna(m["similarity_explanation"]):
+        st.caption(m["similarity_explanation"])
 
 guarded_footer()

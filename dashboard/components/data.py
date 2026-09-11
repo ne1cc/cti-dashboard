@@ -94,6 +94,58 @@ def priority_queue() -> pd.DataFrame:
 
 
 @st.cache_data(ttl=600)
+def _table_exists(table_name: str, schema: str = "main_marts") -> bool:
+    """Check whether a table or view exists in the warehouse schema.
+
+    Args:
+        table_name: Name of the relation to check.
+        schema: Database schema containing the table (default: ``main_marts``).
+
+    Returns:
+        bool: True if the table exists, False otherwise.
+    """
+    try:
+        df = (
+            _connection()
+            .execute(
+                "select 1 from information_schema.tables where table_schema = ? and table_name = ?",
+                [schema, table_name],
+            )
+            .df()
+        )
+        return not df.empty
+    except Exception:
+        return False
+
+
+@st.cache_data(ttl=600)
+def _has_column(table_name: str, column_name: str, schema: str = "main_marts") -> bool:
+    """Check whether a column exists on a table or view in the warehouse schema.
+
+    Args:
+        table_name: Name of the relation to inspect.
+        column_name: Name of the column to check for.
+        schema: Database schema containing the table (default: ``main_marts``).
+
+    Returns:
+        bool: True if the column exists on the relation, False otherwise.
+    """
+    try:
+        df = (
+            _connection()
+            .execute(
+                "select 1 from information_schema.columns "
+                "where table_schema = ? and table_name = ? and column_name = ?",
+                [schema, table_name, column_name],
+            )
+            .df()
+        )
+        return not df.empty
+    except Exception:
+        return False
+
+
+@st.cache_data(ttl=600)
 def trial_similarity(nct_id: str) -> pd.DataFrame:
     """Fetch pairwise trial similarity scores for a given index trial NCT ID.
 
@@ -105,8 +157,11 @@ def trial_similarity(nct_id: str) -> pd.DataFrame:
 
     Returns:
         pd.DataFrame: Similarity records with similarity rank, composite score,
-            and component factor scores.
+            and component factor scores. Empty DataFrame if the similarity mart
+            has not been built yet.
     """
+    if not _table_exists("mart_trial_similarity"):
+        return pd.DataFrame()
     return _materialize(
         _connection()
         .execute(
@@ -195,16 +250,17 @@ def trial_explorer() -> pd.DataFrame:
     for the latest snapshot date.
 
     Returns:
-        pd.DataFrame: Trial records containing NCT ID, indication profile ID,
+        pd.DataFrame: Trial records containing NCT ID, indication profile ID (if available),
             brief title, overall status, phase, lead sponsor, post date, enrollment,
             and comma-delimited US state locations.
     """
+    has_profile = _has_column("dim_trial", "indication_profile_id")
+    profile_col = "d.indication_profile_id,\n" if has_profile else ""
     return query(
-        """
+        f"""
         select
             d.nct_id,
-            d.indication_profile_id,
-            d.registry_url,
+            {profile_col}            d.registry_url,
             d.current_brief_title as brief_title,
             d.current_overall_status as overall_status,
             d.current_phase as phase,
@@ -233,8 +289,11 @@ def get_indication_profiles() -> list[dict[str, str]]:
 
     Returns:
         list[dict[str, str]]: List of dictionaries with keys ``id`` (e.g. "adrd")
-            and ``display_name`` (e.g. "Alzheimer's Disease & ADRD").
+            and ``display_name`` (e.g. "Alzheimer's Disease & ADRD"). Empty list
+            if indication_profile_id is not present in dim_trial.
     """
+    if not _has_column("dim_trial", "indication_profile_id"):
+        return []
     df = query(
         "select distinct indication_profile_id from main_marts.dim_trial "
         "where indication_profile_id is not null order by 1"
