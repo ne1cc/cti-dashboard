@@ -215,6 +215,8 @@ def test_overview_reads_as_labels_not_codes(fixture_warehouse):
     at = AppTest.from_file(str(ROOT / "dashboard/overview.py"), default_timeout=60).run()
     assert not at.exception, at.exception
     preview = at.dataframe[0].value
+    assert "listed_site_count" in preview.columns
+    assert preview["registry_search_url"].str.startswith("https://clinicaltrials.gov/search?").all()
     assert not preview["phase_normalized"].str.fullmatch(r"[A-Z0-9_/]+").any()
     assert set(preview["priority_band"]) <= {"Priority review", "Review", "Watch"}
     assert not any("00:00:00" in c.value for c in at.caption)
