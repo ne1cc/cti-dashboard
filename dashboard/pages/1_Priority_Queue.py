@@ -6,7 +6,11 @@ import streamlit as st
 from components import data
 from components.filters import segment_filters
 from components.guardrails import guarded_footer, page_setup
-from components.guidance import format_condition_group, render_page_guide
+from components.guidance import (
+    clinicaltrials_gov_search_url,
+    format_condition_group,
+    render_page_guide,
+)
 
 page_setup("Feasibility Review Priority Queue")
 data.require_warehouse()
@@ -58,8 +62,14 @@ if bool(filtered["growth_uses_registry_proxy_flag"].any()):
         "because multi-snapshot history has not accrued yet."
     )
 
+filtered = filtered.copy()
+filtered["registry_search_url"] = [
+    clinicaltrials_gov_search_url(cg, st_val)
+    for cg, st_val in zip(filtered["condition_group"], filtered["state_normalized"], strict=False)
+]
+
 st.subheader("Ranked queue")
-st.caption("Click a row to see its full score breakdown below.")
+st.caption("Click a row to see its full score breakdown and constituent trials below.")
 queue_columns = [
     "priority_rank",
     "condition_group",
@@ -67,10 +77,16 @@ queue_columns = [
     "phase_normalized",
     "feasibility_review_priority_score",
     "priority_band",
+    "competition_signal_band",
     "recruiting_trial_count",
+    "listed_site_count",
+    "sponsor_count",
+    "top_sponsor_share",
     "sponsor_hhi",
     "site_overlap_share",
+    "new_recruiting_90d",
     "data_confidence_share",
+    "registry_search_url",
     "priority_explanation",
 ]
 display_df = filtered[queue_columns].copy()
@@ -91,15 +107,47 @@ queue_event = st.dataframe(
             "Priority Score", format="%.4f", help="Weighted composite score (0.0 - 1.0)"
         ),
         "priority_band": st.column_config.TextColumn("Band"),
+        "competition_signal_band": st.column_config.TextColumn(
+            "Signal Band", help="Market competition signal tier (low, moderate, elevated)"
+        ),
         "recruiting_trial_count": st.column_config.NumberColumn("Recruiting Trials", format="%d"),
+        "listed_site_count": st.column_config.NumberColumn(
+            "Listed Sites",
+            format="%d",
+            help="Physical trial facilities active in this state segment",
+        ),
+        "sponsor_count": st.column_config.NumberColumn(
+            "Sponsors", format="%d", help="Distinct sponsor organizations in this segment"
+        ),
+        "top_sponsor_share": st.column_config.NumberColumn(
+            "Top Sponsor Share",
+            format="%.1%",
+            help="Share of segment trials held by the largest sponsor",
+        ),
         "sponsor_hhi": st.column_config.NumberColumn(
-            "Sponsor HHI", format="%.3f", help="Herfindahl-Hirschman Index of sponsor concentration"
+            "Sponsor HHI",
+            format="%.3f",
+            help="Herfindahl-Hirschman Index of sponsor concentration",
         ),
         "site_overlap_share": st.column_config.NumberColumn(
-            "Site Overlap", format="%.1%", help="Share of listed facilities hosting multiple trials"
+            "Site Overlap",
+            format="%.1%",
+            help="Share of listed facilities hosting multiple trials",
+        ),
+        "new_recruiting_90d": st.column_config.NumberColumn(
+            "New (90d)",
+            format="%d",
+            help="Trials entering recruiting status in the past 90 days",
         ),
         "data_confidence_share": st.column_config.NumberColumn(
-            "Data Confidence", format="%.1%", help="Completeness and quality adjustment share"
+            "Data Confidence",
+            format="%.1%",
+            help="Completeness and quality adjustment share",
+        ),
+        "registry_search_url": st.column_config.LinkColumn(
+            "Registry Search",
+            display_text="Search ClinicalTrials.gov",
+            help="Pre-filtered search for active recruiting studies in this market",
         ),
         "priority_explanation": st.column_config.TextColumn("Deterministic Explanation"),
     },
@@ -112,17 +160,24 @@ export_columns = [
     "phase_normalized",
     "feasibility_review_priority_score",
     "priority_band",
+    "competition_signal_band",
     "recruiting_trial_count",
+    "listed_site_count",
+    "sponsor_count",
+    "top_sponsor_share",
     "sponsor_hhi",
     "site_overlap_share",
+    "new_recruiting_90d",
     "data_confidence_share",
     "normalized_recruiting_trial_count",
     "normalized_recent_recruiting_growth",
     "normalized_sponsor_concentration",
     "normalized_site_overlap",
     "normalized_data_confidence_adjustment",
+    "registry_search_url",
     "priority_explanation",
     "interpretation_note",
+    "snapshot_date",
 ]
 st.download_button(
     "Download filtered queue as CSV",
@@ -191,6 +246,45 @@ if selected_rows:
         "(verified by the assert_weighted_components_sum_to_score dbt test).",
     )
     st.caption(segment["priority_explanation"])
+
+    st.subheader(
+        f"Constituent Clinical Trials — {format_condition_group(segment['condition_group'])} · "
+        f"{segment['state_normalized']} · {segment['phase_normalized']}"
+    )
+    st.caption(
+        "Individual recruiting protocols registered on ClinicalTrials.gov contributing to this "
+        "market segment. Click 'View on ClinicalTrials.gov' to inspect official protocol "
+        "eligibility, inclusion criteria, and trial sites."
+    )
+    trials_df = data.trials_for_segment(
+        condition_group=str(segment["condition_group"]),
+        state_normalized=str(segment["state_normalized"]),
+        phase_normalized=str(segment["phase_normalized"]),
+    )
+    if trials_df.empty:
+        st.info("No individual active recruiting trial records identified for this segment.")
+    else:
+        st.dataframe(
+            trials_df,
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "nct_id": st.column_config.TextColumn("NCT ID"),
+                "brief_title": st.column_config.TextColumn("Brief Title", width="large"),
+                "lead_sponsor": st.column_config.TextColumn("Lead Sponsor"),
+                "phase": st.column_config.TextColumn("Phase"),
+                "overall_status": st.column_config.TextColumn("Status"),
+                "enrollment_count": st.column_config.NumberColumn(
+                    "Planned Enrollment", format="%d"
+                ),
+                "study_first_post_date": st.column_config.DateColumn("First Posted"),
+                "registry_url": st.column_config.LinkColumn(
+                    "Registry Record",
+                    display_text="View on ClinicalTrials.gov",
+                    help="Direct link to official trial record on ClinicalTrials.gov",
+                ),
+            },
+        )
 
 st.subheader("Score composition (top 15 shown)")
 top = filtered.head(15).copy()
