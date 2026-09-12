@@ -4,6 +4,7 @@ import streamlit as st
 from components import data
 from components.guardrails import guarded_footer, page_setup, proxy_caption
 from components.guidance import (
+    clinicaltrials_gov_search_url,
     format_condition_group,
     render_indication_banner,
     render_page_guide,
@@ -59,9 +60,16 @@ preview_df = queue.head(10)[
         "feasibility_review_priority_score",
         "priority_band",
         "recruiting_trial_count",
+        "listed_site_count",
         "priority_explanation",
     ]
 ].copy()
+preview_df["registry_search_url"] = [
+    clinicaltrials_gov_search_url(cg, st_val)
+    for cg, st_val in zip(
+        preview_df["condition_group"], preview_df["state_normalized"], strict=False
+    )
+]
 preview_df["condition_group"] = preview_df["condition_group"].apply(format_condition_group)
 
 st.dataframe(
@@ -78,6 +86,16 @@ st.dataframe(
         ),
         "priority_band": st.column_config.TextColumn("Band"),
         "recruiting_trial_count": st.column_config.NumberColumn("Recruiting Trials", format="%d"),
+        "listed_site_count": st.column_config.NumberColumn(
+            "Listed Sites",
+            format="%d",
+            help="Physical trial facilities active in this state segment",
+        ),
+        "registry_search_url": st.column_config.LinkColumn(
+            "Registry Search",
+            display_text="Search ClinicalTrials.gov",
+            help="Pre-filtered search for active recruiting studies in this market",
+        ),
         "priority_explanation": st.column_config.TextColumn("Explanation"),
     },
 )

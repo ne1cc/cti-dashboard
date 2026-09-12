@@ -39,6 +39,32 @@ def format_condition_group(group: str | Any) -> str:
     return ADRD_CONDITION_LABELS.get(group, group.replace("_", " ").title())
 
 
+def clinicaltrials_gov_search_url(condition_group: str, state_normalized: str) -> str:
+    """Generate a ClinicalTrials.gov web search URL for a condition and state.
+
+    Args:
+        condition_group: Internal condition group key.
+        state_normalized: 2-letter U.S. state postal abbreviation.
+
+    Returns:
+        str: Clickable ClinicalTrials.gov search URL.
+    """
+    term_map = {
+        "alzheimers_disease": "Alzheimer Disease",
+        "mild_cognitive_impairment": "Mild Cognitive Impairment",
+        "frontotemporal_dementia": "Frontotemporal Dementia",
+        "lewy_body_dementia": "Lewy Body Dementia",
+        "vascular_dementia": "Vascular Dementia",
+        "parkinsons_disease_dementia": "Parkinson Disease Dementia",
+        "dementia_unspecified": "Dementia",
+    }
+    cond_term = term_map.get(condition_group, "Alzheimer Disease").replace(" ", "+")
+    return (
+        f"https://clinicaltrials.gov/search?cond={cond_term}"
+        f"&locStr={state_normalized}&country=United%20States"
+    )
+
+
 def render_indication_banner() -> None:
     """Render the active indication scope banner.
 

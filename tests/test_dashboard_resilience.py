@@ -82,6 +82,7 @@ def temp_duckdb_legacy_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     data._has_column.clear()
     data.trial_similarity.clear()
     data.get_indication_profiles.clear()
+    data.trials_for_segment.clear()
 
     return db_path
 
@@ -179,17 +180,39 @@ def temp_duckdb_modern_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
         """
         insert into main_marts.dim_trial (
             nct_id, indication_profile_id, registry_url, current_brief_title,
-            current_overall_status, current_phase, study_first_post_date, enrollment_count
+            current_overall_status, current_phase, current_lead_sponsor,
+            study_first_post_date, enrollment_count
         ) values (
             'NCT00000001', 'adrd', 'https://clinicaltrials.gov/study/NCT00000001',
-            'ADRD Trial 1', 'RECRUITING', 'PHASE2', '2024-01-01', 100
+            'ADRD Trial 1', 'RECRUITING', 'PHASE2', 'Test Lead Sponsor', '2024-01-01', 100
         ), (
             'NCT00000002', 'adrd', 'https://clinicaltrials.gov/study/NCT00000002',
-            'ADRD Trial 2', 'RECRUITING', 'PHASE2', '2024-01-02', 120
+            'ADRD Trial 2', 'RECRUITING', 'PHASE2', 'Test Lead Sponsor 2', '2024-01-02', 120
         ), (
             'NCT00000003', 'oncology_nsclc', 'https://clinicaltrials.gov/study/NCT00000003',
-            'NSCLC Trial 1', 'RECRUITING', 'PHASE3', '2024-01-03', 200
+            'NSCLC Trial 1', 'RECRUITING', 'PHASE3', 'Oncology Sponsor', '2024-01-03', 200
         )
+        """
+    )
+    con.execute(
+        """
+        create table main_marts.bridge_trial_condition (
+            trial_condition_key varchar,
+            trial_key varchar,
+            nct_id varchar,
+            condition_group varchar,
+            dementia_relevance_flag boolean,
+            mapping_confidence varchar,
+            source_condition_count integer
+        )
+        """
+    )
+    con.execute(
+        """
+        insert into main_marts.bridge_trial_condition (nct_id, condition_group) values
+            ('NCT00000001', 'alzheimers_disease'),
+            ('NCT00000002', 'alzheimers_disease'),
+            ('NCT00000003', 'oncology_nsclc')
         """
     )
     con.execute(
@@ -207,6 +230,94 @@ def temp_duckdb_modern_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
             ('NCT00000001', '2024-01-01', 'CA'),
             ('NCT00000002', '2024-01-01', 'NY'),
             ('NCT00000003', '2024-01-01', 'TX')
+        """
+    )
+    con.execute(
+        """
+        create table main_marts.dim_geography (
+            state_normalized varchar
+        )
+        """
+    )
+    con.execute("insert into main_marts.dim_geography values ('CA'), ('NY'), ('TX')")
+    con.execute(
+        """
+        create table main_marts.mart_site_overlap (
+            facility_normalized varchar,
+            snapshot_date date,
+            recruiting_trial_count integer,
+            listed_trial_count integer
+        )
+        """
+    )
+    con.execute(
+        "insert into main_marts.mart_site_overlap values ('Facility A', '2024-01-01', 2, 2)"
+    )
+    con.execute(
+        """
+        create table main_marts.fct_trial_snapshot (
+            snapshot_date date
+        )
+        """
+    )
+    con.execute("insert into main_marts.fct_trial_snapshot values ('2024-01-01')")
+    con.execute(
+        """
+        create table main_marts.mart_feasibility_priority_queue (
+            snapshot_date date,
+            condition_group varchar,
+            state_normalized varchar,
+            phase_normalized varchar,
+            feasibility_review_priority_score double,
+            priority_band varchar,
+            priority_rank integer,
+            recruiting_trial_count integer,
+            listed_site_count integer,
+            new_recruiting_90d integer,
+            newly_posted_90d_proxy integer,
+            has_multi_snapshot_history boolean,
+            recent_growth_input integer,
+            growth_uses_registry_proxy_flag boolean,
+            sponsor_count integer,
+            top_sponsor_share double,
+            sponsor_hhi double,
+            competition_signal_band varchar,
+            site_overlap_share double,
+            record_quality_ok_share double,
+            data_confidence_share double,
+            normalized_recruiting_trial_count double,
+            normalized_recent_recruiting_growth double,
+            normalized_sponsor_concentration double,
+            normalized_site_overlap double,
+            normalized_data_confidence_adjustment double,
+            weight_recruiting_trial_count double,
+            weight_recent_recruiting_growth double,
+            weight_sponsor_concentration double,
+            weight_site_overlap double,
+            weight_data_confidence_adjustment double,
+            weighted_recruiting_trial_count double,
+            weighted_recent_recruiting_growth double,
+            weighted_sponsor_concentration double,
+            weighted_site_overlap double,
+            weighted_data_confidence_adjustment double,
+            priority_explanation varchar,
+            interpretation_note varchar
+        )
+        """
+    )
+    con.execute(
+        """
+        insert into main_marts.mart_feasibility_priority_queue values (
+            '2024-01-01', 'alzheimers_disease', 'CA', 'PHASE2',
+            0.8500, 'priority_review', 1,
+            2, 5, 1, 1, false, 1, true,
+            2, 0.5, 0.5, 'elevated', 0.5, 1.0, 0.9,
+            0.8, 0.5, 0.5, 0.5, 0.9,
+            0.35, 0.20, 0.15, 0.15, 0.15,
+            0.28, 0.10, 0.075, 0.075, 0.135,
+            '2 recruiting listing(s) in segment',
+            'Potential competition signal from public registry listings.'
+        )
         """
     )
     con.execute(
@@ -293,6 +404,7 @@ def temp_duckdb_modern_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     data._has_column.clear()
     data.trial_similarity.clear()
     data.get_indication_profiles.clear()
+    data.trials_for_segment.clear()
 
     return db_path
 
@@ -369,3 +481,59 @@ def test_guidance_all_pages_have_playbooks():
         assert "playbook" in playbook
         assert len(playbook["playbook"]) >= 3
         assert "adrd_context" in playbook
+
+
+def test_clinicaltrials_gov_search_url():
+    from components.guidance import clinicaltrials_gov_search_url
+
+    url_ad = clinicaltrials_gov_search_url("alzheimers_disease", "CA")
+    assert "cond=Alzheimer+Disease" in url_ad
+    assert "locStr=CA" in url_ad
+    assert "country=United%20States" in url_ad
+
+    url_mci = clinicaltrials_gov_search_url("mild_cognitive_impairment", "NY")
+    assert "cond=Mild+Cognitive+Impairment" in url_mci
+    assert "locStr=NY" in url_mci
+
+    url_fallback = clinicaltrials_gov_search_url("custom_unmapped", "TX")
+    assert "cond=Alzheimer+Disease" in url_fallback
+    assert "locStr=TX" in url_fallback
+
+
+def test_trials_for_segment_modern_schema(temp_duckdb_modern_schema: Path):
+    from components import data
+
+    df = data.trials_for_segment("alzheimers_disease", "CA", "PHASE2")
+    assert isinstance(df, pd.DataFrame)
+    assert len(df) == 1
+    assert df.iloc[0]["nct_id"] == "NCT00000001"
+    assert df.iloc[0]["lead_sponsor"] == "Test Lead Sponsor"
+    assert df.iloc[0]["phase"] == "PHASE2"
+    assert df.iloc[0]["overall_status"] == "RECRUITING"
+    assert "registry_url" in df.columns
+
+    # Non-existent segment returns empty DataFrame
+    df_empty = data.trials_for_segment("alzheimers_disease", "FL", "PHASE2")
+    assert isinstance(df_empty, pd.DataFrame)
+    assert df_empty.empty
+
+
+def test_priority_queue_page_smoke_modern_schema(temp_duckdb_modern_schema: Path):
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file(str(ROOT / "dashboard/pages/1_Priority_Queue.py"), default_timeout=30)
+    at.run()
+    assert not at.exception, at.exception[0].value if at.exception else ""
+    assert any("Ranked queue" in str(header.value) for header in at.subheader)
+
+
+def test_overview_page_smoke_modern_schema(temp_duckdb_modern_schema: Path):
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file(str(ROOT / "dashboard/app.py"), default_timeout=30)
+    at.run()
+    assert not at.exception, at.exception[0].value if at.exception else ""
+    assert any(
+        "Top of the Feasibility Review Priority Queue" in str(header.value)
+        for header in at.subheader
+    )
