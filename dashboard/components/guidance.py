@@ -123,8 +123,10 @@ def render_indication_banner(profile_id: str | None = None) -> None:
                     "**Unique Operational Realities of ADRD Clinical Trials:**\n"
                     "- **Biomarker Gating & Screen Failures:** Modern ADRD protocols require "
                     "confirmed amyloid-beta and tau pathology via amyloid PET imaging, CSF "
-                    "p-tau/Aβ42, or plasma p-tau217 biomarkers, yielding 50% to 70%+ screen failure.\n"
-                    "- **Caregiver / Study Partner Burden:** Inclusion criteria universally require "
+                    "p-tau/Aβ42, or plasma p-tau217 biomarkers, yielding "
+                    "50% to 70%+ screen failure.\n"
+                    "- **Caregiver / Study Partner Burden:** Inclusion criteria universally "
+                    "require "
                     "a designated study partner spending ≥10 hours/week with the participant "
                     "to attend all clinic visits and complete functional rating scales (CDR-SB).\n"
                     "- **Memory Clinic Saturation:** Specialized medical centers possessing PET "
@@ -141,7 +143,10 @@ def render_indication_banner(profile_id: str | None = None) -> None:
 
                         reg = get_registry()
                         prof = reg.get(profile_id)
-                        desc = prof.description or f"Clinical trials investigating {prof.display_name}."
+                        desc = (
+                            prof.description
+                            or f"Clinical trials investigating {prof.display_name}."
+                        )
                     except Exception:
                         pass
                 st.markdown(

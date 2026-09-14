@@ -53,7 +53,11 @@ def require_warehouse(profile_id: str | None = None) -> None:
     if not warehouse_path().exists():
         st.error("Warehouse not found. Build it first:\n\n```\nmake pipeline\n```")
         st.stop()
-    if profile_id is not None and _has_column("dim_trial", "indication_profile_id") and profile_trial_count(profile_id) == 0:
+    if (
+        profile_id is not None
+        and _has_column("dim_trial", "indication_profile_id")
+        and profile_trial_count(profile_id) == 0
+    ):
         st.warning(
             f"No trials recorded for `{profile_id}` yet. The refresh has not "
             "produced a successful run for this profile, so every figure below "

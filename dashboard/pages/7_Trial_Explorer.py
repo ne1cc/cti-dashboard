@@ -19,7 +19,10 @@ col1, col2 = st.columns(3)[:2]
 col1.metric(
     "Trials in this profile",
     f"{len(trials):,}",
-    help="Total individual clinical study records stored in the analytics warehouse for this profile.",
+    help=(
+        "Total individual clinical study records stored in the analytics "
+        "warehouse for this profile."
+    ),
 )
 col2.metric(
     "Currently recruiting",
