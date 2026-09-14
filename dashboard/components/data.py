@@ -53,7 +53,7 @@ def require_warehouse(profile_id: str | None = None) -> None:
     if not warehouse_path().exists():
         st.error("Warehouse not found. Build it first:\n\n```\nmake pipeline\n```")
         st.stop()
-    if profile_id is not None and profile_trial_count(profile_id) == 0:
+    if profile_id is not None and _has_column("dim_trial", "indication_profile_id") and profile_trial_count(profile_id) == 0:
         st.warning(
             f"No trials recorded for `{profile_id}` yet. The refresh has not "
             "produced a successful run for this profile, so every figure below "
@@ -71,6 +71,8 @@ def profile_trial_count(profile_id: str) -> int:
     Returns:
         int: Number of ``dim_trial`` rows carrying that profile id.
     """
+    if not _has_column("dim_trial", "indication_profile_id"):
+        return 0
     row = (
         _connection()
         .execute(
@@ -79,8 +81,7 @@ def profile_trial_count(profile_id: str) -> int:
         )
         .fetchone()
     )
-    assert row is not None
-    return int(row[0])
+    return int(row[0]) if row else 0
 
 
 def _materialize(df: pd.DataFrame) -> pd.DataFrame:
@@ -142,7 +143,60 @@ def priority_queue(profile_id: str) -> pd.DataFrame:
     )
 
 
-def trial_similarity(profile_id: str, nct_id: str) -> pd.DataFrame:
+@st.cache_data(ttl=600)
+def _table_exists(table_name: str, schema: str = "main_marts") -> bool:
+    """Check whether a table or view exists in the warehouse schema.
+
+    Args:
+        table_name: Name of the relation to check.
+        schema: Database schema containing the table (default: ``main_marts``).
+
+    Returns:
+        bool: True if the table exists, False otherwise.
+    """
+    try:
+        df = (
+            _connection()
+            .execute(
+                "select 1 from information_schema.tables where table_schema = ? and table_name = ?",
+                [schema, table_name],
+            )
+            .df()
+        )
+        return not df.empty
+    except Exception:
+        return False
+
+
+@st.cache_data(ttl=600)
+def _has_column(table_name: str, column_name: str, schema: str = "main_marts") -> bool:
+    """Check whether a column exists on a table or view in the warehouse schema.
+
+    Args:
+        table_name: Name of the relation to inspect.
+        column_name: Name of the column to check for.
+        schema: Database schema containing the table (default: ``main_marts``).
+
+    Returns:
+        bool: True if the column exists on the relation, False otherwise.
+    """
+    try:
+        df = (
+            _connection()
+            .execute(
+                "select 1 from information_schema.columns "
+                "where table_schema = ? and table_name = ? and column_name = ?",
+                [schema, table_name, column_name],
+            )
+            .df()
+        )
+        return not df.empty
+    except Exception:
+        return False
+
+
+@st.cache_data(ttl=600)
+def trial_similarity(profile_id: str, nct_id: str | None = None) -> pd.DataFrame:
     """Fetch pairwise trial similarity scores for one profile and index trial.
 
     Queries ``main_marts.mart_trial_similarity`` for candidate trials compared
@@ -154,8 +208,14 @@ def trial_similarity(profile_id: str, nct_id: str) -> pd.DataFrame:
 
     Returns:
         pd.DataFrame: Similarity records with similarity rank, composite score,
-            and component factor scores.
+            and component factor scores. Empty DataFrame if the similarity mart
+            has not been built yet.
     """
+    if nct_id is None:
+        nct_id = profile_id
+        profile_id = "adrd"
+    if not _table_exists("mart_trial_similarity"):
+        return pd.DataFrame()
     return query(
         "select * from main_marts.mart_trial_similarity"
         " where indication_profile_id = ? and nct_id_a = ? order by similarity_rank",
@@ -263,7 +323,7 @@ def sponsor_landscape(profile_id: str) -> pd.DataFrame:
     )
 
 
-def trial_explorer(profile_id: str) -> pd.DataFrame:
+def trial_explorer(profile_id: str = "adrd") -> pd.DataFrame:
     """Fetch denormalized trial registry records and active site states for browsing.
 
     Combines ``dim_trial`` with active US site states from ``fct_trial_site``
@@ -273,12 +333,29 @@ def trial_explorer(profile_id: str) -> pd.DataFrame:
         profile_id: Indication profile id to scope the browser to.
 
     Returns:
-        pd.DataFrame: Trial records containing NCT ID, indication profile ID,
+        pd.DataFrame: Trial records containing NCT ID, indication profile ID (if available),
             brief title, overall status, phase, lead sponsor, post date, enrollment,
             and comma-delimited US state locations.
     """
     # Joins on trial_key, not nct_id: an nct_id-only join would attach the
     # other profile's sites to a shared trial and show them as its own.
+    if not _has_column("dim_trial", "indication_profile_id"):
+        return query(
+            """
+            select
+                d.nct_id,
+                d.registry_url,
+                d.current_brief_title as brief_title,
+                d.current_overall_status as overall_status,
+                d.current_phase as phase,
+                d.current_lead_sponsor as lead_sponsor,
+                d.study_first_post_date,
+                d.enrollment_count,
+                cast('' as varchar) as us_states
+            from main_marts.dim_trial d
+            order by d.study_first_post_date desc nulls last, d.nct_id
+            """
+        )
     return query(
         """
         select
@@ -306,6 +383,47 @@ def trial_explorer(profile_id: str) -> pd.DataFrame:
         """,
         [profile_id, profile_id],
     )
+
+
+@st.cache_data(ttl=600)
+def get_indication_profiles(profile_id: str | None = None) -> list[dict[str, str]]:
+    """Return available indication profiles present in dim_trial.
+
+    Discovers distinct indication profile IDs populated in ``main_marts.dim_trial``
+    and resolves their human-readable display names from the profile registry.
+
+    Args:
+        profile_id: Optional indication profile id filter.
+
+    Returns:
+        list[dict[str, str]]: List of dictionaries with keys ``id`` (e.g. "adrd")
+            and ``display_name`` (e.g. "Alzheimer's Disease & Related Dementias"). Empty list
+            if indication_profile_id is not present in dim_trial.
+    """
+    if not _has_column("dim_trial", "indication_profile_id"):
+        return []
+    df = query(
+        "select distinct indication_profile_id from main_marts.dim_trial "
+        "where indication_profile_id is not null order by 1"
+    )
+    from src.profiles import get_registry
+
+    try:
+        reg = get_registry()
+    except Exception:
+        reg = None
+
+    results = []
+    for pid in df["indication_profile_id"].dropna():
+        pid_str = str(pid)
+        display = pid_str
+        if reg:
+            try:
+                display = reg.get(pid_str).display_name
+            except KeyError:
+                pass
+        results.append({"id": pid_str, "display_name": display})
+    return results
 
 
 def data_reliability(profile_id: str) -> pd.DataFrame:
@@ -361,4 +479,6 @@ def overview_metrics(profile_id: str) -> dict[str, Any]:
         """,
         [profile_id] * 6,
     ).iloc[0]
-    return {str(k): v for k, v in row.to_dict().items()}
+    res = {str(k): v for k, v in row.to_dict().items()}
+    res["warehouse_runs"] = res.get("snapshot_count")
+    return res

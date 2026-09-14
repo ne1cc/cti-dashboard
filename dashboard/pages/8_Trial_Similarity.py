@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 from components import data
 from components.guardrails import guarded_footer, page_setup
+from components.guidance import render_indication_banner, render_page_guide
 from components.profile import render_profile_selector
 
 FACTOR_LABELS = {
@@ -21,6 +22,9 @@ FACTOR_LABELS = {
 page_setup("Trial Similarity Explorer")
 profile_id = render_profile_selector()
 data.require_warehouse(profile_id)
+
+render_indication_banner(profile_id)
+render_page_guide("trial_similarity")
 
 st.info(
     "This page scores **structural trial-design comparability** — "
@@ -69,22 +73,24 @@ options = {_format_option(row): row.nct_id for row in candidates.head(50).itertu
 selected_label = st.selectbox("Select the index trial", list(options))
 selected_nct_id = options[selected_label]
 
+sim_df = data.trial_similarity(profile_id, selected_nct_id)
+if sim_df.empty or "nct_id_b" not in sim_df.columns:
+    st.info("No comparable trials found in the current warehouse for this trial.")
+    guarded_footer()
+    st.stop()
+
 # `indication_profile_id` is deliberately not merged in: mart_trial_similarity
 # already carries it, scoped by the query below. Merging a same-named column from
 # `trials` would make pandas suffix both to _x/_y and the display column would
 # silently vanish from the table.
 merge_cols = ["nct_id", "brief_title", "registry_url"]
 
-matches = (
-    data.trial_similarity(profile_id, selected_nct_id)
-    .merge(
-        trials[merge_cols],
-        left_on="nct_id_b",
-        right_on="nct_id",
-        how="left",
-    )
-    .drop(columns="nct_id")
-)
+matches = sim_df.merge(
+    trials[merge_cols],
+    left_on="nct_id_b",
+    right_on="nct_id",
+    how="left",
+).drop(columns="nct_id")
 
 if matches.empty:
     st.info("No comparable trials found in the current warehouse for this trial.")
@@ -138,23 +144,31 @@ if selected_rows:
         [
             {
                 "Factor": label,
-                "Match (1=yes)": m[factor],
-                "Weight": m[f"weight_{factor}"],
-                "Weighted contribution": m[f"weighted_{factor}"],
+                "Match (1=yes)": m[factor] if factor in m else 0,
+                "Weight": m[f"weight_{factor}"] if f"weight_{factor}" in m else 0.0,
+                "Weighted contribution": (
+                    m[f"weighted_{factor}"] if f"weighted_{factor}" in m else 0.0
+                ),
             }
             for factor, label in FACTOR_LABELS.items()
         ]
     )
     st.dataframe(breakdown, hide_index=True, width="stretch")
+    sim_score = (
+        m["similarity_score"]
+        if "similarity_score" in m and pd.notna(m["similarity_score"])
+        else 0.0
+    )
     st.metric(
         "Weighted total",
-        f"{m['similarity_score']:.4f}",
+        f"{float(sim_score):.4f}",
         help=(
             "similarity_score for this pair — the weighted sum of all seven "
             "factors, rounded to 4 decimals. Individual contributions are "
             "rounded first, so their displayed sum can differ in the last decimal."
         ),
     )
-    st.caption(m["similarity_explanation"])
+    if "similarity_explanation" in m and pd.notna(m["similarity_explanation"]):
+        st.caption(m["similarity_explanation"])
 
 guarded_footer()

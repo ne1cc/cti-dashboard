@@ -5,24 +5,36 @@ import streamlit as st
 from components import data
 from components.filters import segment_filters
 from components.guardrails import guarded_footer, page_setup, proxy_caption
+from components.guidance import format_condition_group, render_page_guide
 from components.profile import render_profile_selector
 
 page_setup("Competition Landscape")
 profile_id = render_profile_selector()
 data.require_warehouse(profile_id)
 
+render_page_guide("competition_landscape")
+
 competition = data.recruiting_competition(profile_id)
 filtered = segment_filters(competition)
 
 col1, col2, col3 = st.columns(3)
-col1.metric("Segments", len(filtered))
+col1.metric(
+    "Segments",
+    len(filtered),
+    help="Number of distinct condition × state × phase segments matching current sidebar filters.",
+)
 col2.metric(
     "Elevated-signal segments",
     int((filtered["competition_signal_band"] == "elevated").sum()),
+    help=(
+        "Segments falling in the top percentile band for trial "
+        "listing density or sponsor concentration."
+    ),
 )
 col3.metric(
     "Recruiting listings",
     int(filtered["recruiting_trial_count"].sum()),
+    help="Total sum of actively recruiting trial facility listings across matching segments.",
 )
 proxy_caption()
 
@@ -43,32 +55,50 @@ fig = px.scatter(
 )
 st.plotly_chart(fig, width="stretch")
 st.caption(
-    "Each point is a condition x state x phase segment at the latest "
+    "Each point is a condition × state × phase segment at the latest "
     "snapshot. Bubble size = listed sites. Bands are relative percentile "
     "cuts, not absolute judgments."
 )
 
 st.subheader("Segments by signal band")
+table_df = filtered.sort_values(
+    ["competition_signal_band", "recruiting_trial_count"], ascending=[True, False]
+)[
+    [
+        "condition_group",
+        "state_normalized",
+        "phase_normalized",
+        "recruiting_trial_count",
+        "listed_site_count",
+        "new_recruiting_90d",
+        "newly_posted_90d_proxy",
+        "sponsor_count",
+        "top_sponsor_share",
+        "sponsor_hhi",
+        "competition_signal_band",
+    ]
+].copy()
+table_df["condition_group"] = table_df["condition_group"].apply(format_condition_group)
+
 st.dataframe(
-    filtered.sort_values(
-        ["competition_signal_band", "recruiting_trial_count"], ascending=[True, False]
-    )[
-        [
-            "condition_group",
-            "state_normalized",
-            "phase_normalized",
-            "recruiting_trial_count",
-            "listed_site_count",
-            "new_recruiting_90d",
-            "newly_posted_90d_proxy",
-            "sponsor_count",
-            "top_sponsor_share",
-            "sponsor_hhi",
-            "competition_signal_band",
-        ]
-    ],
+    table_df,
     hide_index=True,
     width="stretch",
+    column_config={
+        "condition_group": st.column_config.TextColumn("Condition Group"),
+        "state_normalized": st.column_config.TextColumn("State"),
+        "phase_normalized": st.column_config.TextColumn("Phase"),
+        "recruiting_trial_count": st.column_config.NumberColumn("Recruiting Listings", format="%d"),
+        "listed_site_count": st.column_config.NumberColumn("Listed Sites", format="%d"),
+        "new_recruiting_90d": st.column_config.NumberColumn("New Recruiting (90d)", format="%d"),
+        "newly_posted_90d_proxy": st.column_config.NumberColumn(
+            "Newly Posted (90d Proxy)", format="%d"
+        ),
+        "sponsor_count": st.column_config.NumberColumn("Sponsors", format="%d"),
+        "top_sponsor_share": st.column_config.NumberColumn("Top Sponsor Share", format="%.1%"),
+        "sponsor_hhi": st.column_config.NumberColumn("Sponsor HHI", format="%.3f"),
+        "competition_signal_band": st.column_config.TextColumn("Signal Band"),
+    },
 )
 
 guarded_footer()

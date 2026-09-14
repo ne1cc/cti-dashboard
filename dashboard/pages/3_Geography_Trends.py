@@ -4,11 +4,14 @@ import plotly.express as px
 import streamlit as st
 from components import data
 from components.guardrails import guarded_footer, page_setup
+from components.guidance import format_condition_group, render_page_guide
 from components.profile import render_profile_selector
 
 page_setup("Geography Trends")
 profile_id = render_profile_selector()
 data.require_warehouse(profile_id)
+
+render_page_guide("geography_trends")
 
 trends = data.condition_geography_trends(profile_id)
 
@@ -18,13 +21,19 @@ default_index = (
     if "alzheimers_disease" in condition_options
     else 0
 )
-condition = st.sidebar.selectbox("Condition group", condition_options, index=default_index)
+condition = st.sidebar.selectbox(
+    "Condition group",
+    condition_options,
+    index=default_index,
+    format_func=format_condition_group,
+    help="Select diagnostic category to view state-level distribution and monthly trends.",
+)
 scoped = trends[trends["condition_group"] == condition]
 
 latest_month = scoped["activity_month"].max()
 latest = scoped[scoped["activity_month"] == latest_month]
 
-st.subheader(f"Recruiting listings by state — {condition}")
+st.subheader(f"Recruiting listings by state — {format_condition_group(condition)}")
 fig = px.choropleth(
     latest,
     locations="state_normalized",
@@ -54,6 +63,18 @@ st.dataframe(
     ].head(20),
     hide_index=True,
     width="stretch",
+    column_config={
+        "state_normalized": st.column_config.TextColumn("State"),
+        "trial_count": st.column_config.NumberColumn("Total Trials", format="%d"),
+        "recruiting_trial_count": st.column_config.NumberColumn("Recruiting Trials", format="%d"),
+        "sponsor_count": st.column_config.NumberColumn("Sponsors", format="%d"),
+        "newly_posted_in_month_proxy": st.column_config.NumberColumn(
+            "Newly Posted (Month Proxy)", format="%d"
+        ),
+        "recruiting_growth_3m": st.column_config.NumberColumn(
+            "3-Month Growth", format="%+d", help="Change in recruiting trials over 3 months"
+        ),
+    },
 )
 
 months = scoped["activity_month"].nunique()

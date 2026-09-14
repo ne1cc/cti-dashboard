@@ -27,7 +27,7 @@ kill_timeout = '270s'
 [http_service]
   internal_port = 8501
   force_https = true
-  auto_stop_machines = 'off'
+  auto_stop_machines = false
   auto_start_machines = false
   min_machines_running = 1
 
@@ -40,4 +40,4 @@ kill_timeout = '270s'
 
 [[vm]]
   size = 'shared-cpu-1x'
-  memory = '512mb'
+  memory = '1024mb'
