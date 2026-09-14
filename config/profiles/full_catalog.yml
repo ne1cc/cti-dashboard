@@ -28,7 +28,7 @@ api:
   openapi_spec_url: https://clinicaltrials.gov/api/oas/v2
   docs_url: https://clinicaltrials.gov/data-api/api
   format: json
-  page_size: 1000           # API max — keeps page count near ~600 for ~600k+ studies
+  page_size: 1000           # API max — 602 pages, measured 2026-09-05 (9.7 GB bronze)
   count_total: true
   # Intentionally empty: no query.cond / filter.* — CTG default is "all studies"
   query_params: {}

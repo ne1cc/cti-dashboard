@@ -121,7 +121,7 @@ def test_bronze_asset_contains_a_raised_ingestion_error_and_attempts_the_rest(
     loop and abort the materialization, so a 500 on profile 1 cost profile 2 its
     refresh — while `make orchestrate`, which wraps each profile in `try/except`,
     refreshed it. Same graph, two different semantics for the same event, and the
-    Dagster path then retried profile 1 (a duplicate ~600-page pull).
+    Dagster path then retried profile 1 (a duplicate 602-page pull).
 
     Both halves are required: profile 2 must still be attempted, and the run must
     still go red naming profile 1. Containment without the aggregate raise is a

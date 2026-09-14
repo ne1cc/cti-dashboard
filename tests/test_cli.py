@@ -146,7 +146,8 @@ def test_cli_parser_orchestrate_full_refresh():
 
 def test_cli_main_orchestrate_skips_ingest_only_profiles(monkeypatch):
     """orchestrate runs the *refreshable* profiles only. full_catalog is a
-    ~600-page registry pull and must never be reachable from `make pipeline`."""
+    602-page / 9.7 GB registry pull (measured 2026-09-05) and must never be
+    reachable from `make pipeline`."""
     ingested: list[str] = []
     transformed: list[str] = []
 
@@ -193,7 +194,7 @@ def test_cli_main_orchestrate_refuses_ingest_only_profile(monkeypatch):
     The test above pins the default branch — `orchestrate` without --profile
     takes `refreshable()`, so full_catalog is not in it. The single-profile
     branch went straight to `registry.get()`, and the alias normalises
-    `full-catalog` straight in, so the ~600-page registry pull was reachable
+    `full-catalog` straight in, so the 602-page registry pull was reachable
     from the command that also transforms: the branch review measured exit 0
     with `('transform', 'full_catalog', True)` recorded, i.e. ADRD-classified
     rows stamped `indication_profile_id = 'full_catalog'` written into the
