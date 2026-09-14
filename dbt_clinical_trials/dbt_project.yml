@@ -13,9 +13,13 @@ clean-targets:
 
 # Priority-band thresholds over the 0..1 feasibility score.
 # Must stay in sync with config/score_weights.yml (tests/test_metrics.py).
+# ingest_only_profiles must stay in sync with config/profiles/*.yml
+# (tests/test_profiles.py::test_dbt_ingest_only_var_matches_registry) — dbt
+# cannot import src.profiles, so the list is duplicated and guarded.
 vars:
   feasibility_band_review_threshold: 0.45
   feasibility_band_priority_threshold: 0.70
+  ingest_only_profiles: ['full_catalog']
 
 
 models:

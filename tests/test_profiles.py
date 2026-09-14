@@ -172,13 +172,40 @@ def test_registry_multiple_profiles(tmp_profiles_dir: Path, tmp_shared_paths: Pa
     assert ids == {"test_ind", "parkinsons"}
 
 
-def test_registry_active_includes_ingest_only(
+def test_registry_refreshable_excludes_ingest_only(
     tmp_profiles_dir: Path, tmp_shared_paths: Path
 ) -> None:
     registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths_file=tmp_shared_paths)
-    # ingest_only profiles appear in active() — orchestrator decides what to skip
-    active = registry.active()
-    assert any(p.ingest_only for p in active)
+    # MINIMAL_PROFILE_YAML is ingest_only, so nothing survives the filter.
+    assert registry.refreshable() == []
+    assert [p.profile_id for p in registry.all()] == ["test_ind"]
+
+
+def test_registry_active_is_gone() -> None:
+    """`active()` returned ingest_only profiles, which sent `orchestrate` after a
+    full-registry pull. One vocabulary: all() or refreshable()."""
+    assert not hasattr(ProfileRegistry, "active")
+
+
+def test_normalize_profile_id_covers_the_legacy_aliases() -> None:
+    from src.profiles import normalize_profile_id
+
+    assert normalize_profile_id("default") == "adrd"
+    assert normalize_profile_id("full-catalog") == "full_catalog"
+    assert normalize_profile_id("adrd") == "adrd"
+    assert normalize_profile_id("oncology_nsclc") == "oncology_nsclc"
+
+
+def test_real_registry_advertises_both_refreshable_profiles() -> None:
+    """config/profiles/oncology_nsclc.yml exists and is ingest_only: false; a
+    regression here means the deployed refresh silently stays single-profile."""
+    from src.profiles import get_registry
+
+    get_registry.cache_clear()
+    ids = {p.profile_id for p in get_registry().refreshable()}
+    assert {"adrd", "oncology_nsclc"} <= ids
+    assert "full_catalog" not in ids
+    get_registry.cache_clear()
 
 
 # ---------------------------------------------------------------------------
@@ -296,8 +323,15 @@ def test_default_config_bronze_paths_match_the_adrd_profile() -> None:
 def test_dbt_bronze_source_reads_the_configured_manifests_dir() -> None:
     """dbt cannot import src.config, so _sources.yml repeats the manifests root
     as a literal string. This test is the seam that keeps the two from drifting
-    apart again."""
-    import yaml
+    apart again.
+
+    Since the two-profile fixture the literal is a glob whose one wildcard
+    segment stands for the profile id, so the guard checks every profile the
+    registry knows about, not just the default one. Comparison is segment-wise
+    because DuckDB's `*` does not cross a `/`.
+    """
+    import fnmatch
+    import re
 
     from src.config import load_config
     from src.utils.paths import project_root
@@ -310,9 +344,291 @@ def test_dbt_bronze_source_reads_the_configured_manifests_dir() -> None:
     bronze = next(s for s in sources["sources"] if s["name"] == "bronze")
     manifests = next(t for t in bronze["tables"] if t["name"] == "ingestion_manifests")
     location: str = manifests["meta"]["external_location"]
+    match = re.search(r"read_parquet\(\s*'([^']+)'", location)
+    assert match, location
+    pattern_parts = match.group(1).split("/")
 
-    configured = load_config().paths.bronze_manifests.relative_to(project_root()).as_posix()
-    assert (
-        f"'{configured}/summary_*.parquet'" in location
-        or "'data/bronze/*/manifests/summary_*.parquet'" in location
+    def matches(manifests_dir: Path) -> bool:
+        parts = manifests_dir.relative_to(project_root()).as_posix().split("/") + [
+            "summary_*.parquet"
+        ]
+        return len(parts) == len(pattern_parts) and all(
+            fnmatch.fnmatchcase(actual, expected) if "*" in expected else actual == expected
+            for actual, expected in zip(parts, pattern_parts, strict=True)
+        )
+
+    assert matches(load_config().paths.bronze_manifests)
+    for profile in ProfileRegistry().all():
+        assert matches(profile.config.paths.bronze_manifests), profile.profile_id
+
+
+def test_dbt_ingest_only_var_matches_registry() -> None:
+    """dbt duplicates the ingest_only list as a var; this test is the seam.
+
+    Drift here is asymmetric and nasty: a profile missing from the var fails
+    assert_snapshot_completeness forever (bronze-only, no silver), while a stale
+    entry stops real reconciliation failures from ever being reported.
+    """
+    from src.profiles import get_registry
+    from src.utils.paths import project_root
+
+    get_registry.cache_clear()
+    expected = sorted(p.profile_id for p in get_registry().all() if p.ingest_only)
+    get_registry.cache_clear()
+
+    project = yaml.safe_load(
+        (project_root() / "dbt_clinical_trials/dbt_project.yml").read_text(encoding="utf-8")
     )
+    assert sorted(project["vars"]["ingest_only_profiles"]) == expected
+
+
+def test_no_top_level_config_declares_a_private_silver_tree() -> None:
+    """One silver root, from config/shared_paths.yml.
+
+    `config/full_catalog_config.yml` used to point `silver:` at
+    data/silver_full_catalog: a tree dbt never globbed and nothing pruned.
+    Profile YAMLs have silver injected, so this is now structural.
+    """
+    import yaml
+
+    from src.profiles import load_shared_paths
+    from src.utils.paths import project_root, resolve_path
+
+    shared = load_shared_paths()
+    config_dir = project_root() / "config"
+    offenders: list[str] = []
+    for yml in sorted(config_dir.glob("*.yml")):
+        raw = yaml.safe_load(yml.read_text(encoding="utf-8")) or {}
+        silver = (raw.get("paths") or {}).get("silver")
+        if silver is not None and resolve_path(silver) != shared.silver:
+            offenders.append(f"{yml.name}: {silver}")
+    assert offenders == []
+
+
+def test_every_bronze_tree_is_profile_scoped() -> None:
+    """Stray `data/bronze/api_responses` (no profile segment) is the skew that
+    made `make pipeline` ingest into one tree and transform from another."""
+    from src.profiles import get_registry
+
+    get_registry.cache_clear()
+    for profile in get_registry().all():
+        p = profile.config.paths
+        assert f"/{profile.profile_id}/" in p.bronze_api_responses.as_posix(), p
+        assert f"/{profile.profile_id}/" in p.bronze_manifests.as_posix(), p
+    get_registry.cache_clear()
+
+
+# ---------------------------------------------------------------------------
+# The deployed entry command must be multi-profile by construction
+# ---------------------------------------------------------------------------
+
+# The exact, ordered prerequisite list `make pipeline` is allowed to have. The
+# plan mandates it verbatim: nothing dropped, nothing inserted.
+PIPELINE_PREREQS = ["orchestrate", "prune-data", "dbt-run", "dbt-test", "quality-report"]
+
+# The commands `make -n pipeline` must print, in the order make walks them
+# (`dbt-run` pulls in `dbt-seed`). Matched on the subcommand rather than the
+# whole line so `DBT_FLAGS` can change without this guard needing an edit.
+PIPELINE_RECIPES = [
+    "src.cli orchestrate",
+    "src.cli prune-data",
+    "dbt seed",
+    "dbt run",
+    "dbt test",
+    "src.cli quality-report",
+]
+
+
+def _makefile_text() -> str:
+    from src.utils.paths import project_root
+
+    return (project_root() / "Makefile").read_text(encoding="utf-8")
+
+
+def _pipeline_prereq_lists() -> list[list[str]]:
+    """Prerequisites of every top-level ``pipeline:`` line, one list per line.
+
+    Two details matter here:
+
+    * ``[ \\t]*`` rather than ``\\s*`` — a ``pipeline:`` with no prerequisites and
+      a recipe on the next line must not capture its own recipe as a prerequisite.
+    * the ``## …`` help text lives on the same line and is a comment to make, so
+      it is dropped before splitting. Left in, rewording the description to
+      contain the word ``ingest`` would fail a *correct* Makefile (and ``make
+      help`` needs that comment, so it is not going away).
+    """
+    import re
+
+    return [
+        m.group(1).split("##")[0].split()
+        for m in re.finditer(r"^pipeline:[ \t]*(.*)$", _makefile_text(), re.MULTILINE)
+    ]
+
+
+def _target_recipe(lines: list[str], target: str) -> list[str] | None:
+    """The recipe lines of a ``target:`` rule.
+
+    ``None`` when the rule is absent, ``[]`` when it is declared but owns no
+    recipe — which is exactly how ``make pipeline`` can refresh nothing while
+    every prerequisite name is still spelled correctly.
+    """
+    head = target + ":"
+    start = None
+    for i, ln in enumerate(lines):
+        declared = ln.split("##")[0].rstrip()
+        if declared == head or declared.startswith(head + " "):
+            start = i
+            break
+    if start is None:
+        return None
+    recipe: list[str] = []
+    for ln in lines[start + 1 :]:
+        if not ln.startswith("\t"):
+            break
+        recipe.append(ln[1:].strip())
+    return recipe
+
+
+def _lines_make_runs_anyway(makefile: str) -> list[str]:
+    """Recipe lines make executes *even under* ``-n``, so a dry run is not inert.
+
+    GNU make runs ``+``-prefixed lines and any line containing ``$(MAKE)``
+    whatever ``-n`` says (verified on 3.81). An empty result means the
+    ``make -n`` below cannot touch the working tree — hard requirement, since
+    ``pipeline``'s real recipes include a non-dry ``prune-data``.
+    """
+    forced = [
+        ln.strip()
+        for ln in makefile.splitlines()
+        if ln.startswith("\t") and ln[1:].lstrip().startswith("+")
+    ]
+    if "$(MAKE)" in makefile:
+        forced.append("a line containing $(MAKE)")
+    return forced
+
+
+def test_make_pipeline_orchestrates_and_prunes() -> None:
+    """`make pipeline` is what the container runs (entrypoint.sh:51). If it still
+    names `ingest transform` directly it is single-profile by construction, and
+    the second profile never refreshes — silently, with exit 0.
+
+    Asserted on the target's prerequisites so a rename cannot dodge the guard —
+    and on the *whole* ordered list, not on a couple of names plus a relative
+    order. Checking only that `orchestrate` and `prune-data` are present and that
+    `orchestrate < prune-data < dbt-run` let `pipeline: orchestrate prune-data
+    dbt-run` pass green while quietly dropping `dbt-test` and `quality-report`
+    off the deployed refresh.
+    """
+    defs = _pipeline_prereq_lists()
+    # make *accumulates* prerequisites across repeated definitions, so a second
+    # `pipeline: ingest transform` anywhere below would re-add the single-profile
+    # step — and a first-match regex (`re.search`) cannot see it. Verified: with
+    # such a line appended, `make -n pipeline` prints
+    # `src.cli ingest --condition "Alzheimer Disease"` after the good chain.
+    assert len(defs) == 1, f"`pipeline:` must be defined exactly once, found {len(defs)}: {defs}"
+    prereqs = defs[0]
+    assert prereqs == PIPELINE_PREREQS, prereqs
+    # Kept as explicit diagnostics: the shape this task exists to remove.
+    assert "ingest" not in prereqs, prereqs
+    assert "transform" not in prereqs, prereqs
+
+
+def test_makefile_serializes_pipeline_prerequisites() -> None:
+    """The chain is only correct if its prerequisites run *in that order*.
+
+    `pipeline`'s prerequisites include a destructive step: `prune-data`, whose
+    recipe is a real prune with no `--dry-run`. make builds the prerequisites of
+    a single target **concurrently** under `-j`, and `MAKEFLAGS` can carry `-j` in
+    from a developer shell or the container image without anyone typing it — so
+    `make -j8 pipeline` can prune bronze/silver that `orchestrate` is still
+    writing. `.NOTPARALLEL:` forces prerequisites to be built one at a time, in
+    the listed order.
+
+    Honest scope: what this guards is make's job *scheduling*, which is not
+    observable in a dry run. `make -n -j8 pipeline` prints prerequisites in
+    listed order every time whether or not `.NOTPARALLEL:` is present (verified
+    on this host's GNU Make 3.81: 5/5 in order with `-j8` once `.NOTPARALLEL:`
+    was added, 1 of 5 runs inverted without it). So this is an assertion about
+    the declaration; `test_make_pipeline_recipes_are_reachable_and_ordered`
+    covers the recipe layer serially.
+    """
+    import re
+
+    assert re.search(r"^\.NOTPARALLEL[ \t]*:", _makefile_text(), re.MULTILINE), (
+        "Makefile has no `.NOTPARALLEL:` declaration, so `make -j pipeline` builds "
+        "`pipeline`'s prerequisites concurrently and `prune-data` can delete a tree "
+        "`orchestrate` is still writing"
+    )
+
+
+def test_make_pipeline_recipes_are_reachable_and_ordered() -> None:
+    """Text-only assertions cannot see the recipe layer, and recipes are what runs.
+
+    Stub or empty `orchestrate`'s recipe and every prerequisite-name assertion
+    above still stays green while `make pipeline` refreshes nothing. `make -n`
+    prints the *recipes*, so it can see this: the six steps must all be reachable
+    from `pipeline`, in order, and the single-profile `ingest` chain must not be.
+    A `-` prefix is the one exception — make strips `@`, `-` and `+` before
+    echoing, so `test_pipeline_step_recipes_are_not_error_ignored` covers it.
+
+    Strictly `-n`: nothing here executes. That is only true while the Makefile is
+    free of `+`-prefixed recipe lines and `$(MAKE)` lines — GNU make executes those
+    even under `-n` (verified on 3.81) — so the pre-flight below is load-bearing,
+    not tidiness. The real `pipeline` target is never invoked.
+    """
+    import os
+    import shutil
+    import subprocess
+
+    from src.utils.paths import project_root
+
+    if shutil.which("make") is None:
+        pytest.skip("`make` is not installed on this host")
+
+    makefile = _makefile_text()
+    # Pre-flight: prove the dry-run below really is inert.
+    not_inert = _lines_make_runs_anyway(makefile)
+    assert not not_inert, f"make runs these even under -n, so this guard is not dry: {not_inert}"
+
+    # A MAKEFLAGS inherited from the caller could carry -j; serial is what the
+    # dry-run ordering claim rests on.
+    env = {k: v for k, v in os.environ.items() if k != "MAKEFLAGS"}
+    proc = subprocess.run(
+        ["make", "-n", "pipeline"],
+        cwd=project_root(),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert proc.returncode == 0, proc.stderr
+    lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+    steps = (next((s for s in PIPELINE_RECIPES if s in ln), None) for ln in lines)
+    found = [s for s in steps if s]
+    assert found == PIPELINE_RECIPES, proc.stdout
+    assert "src.cli ingest" not in proc.stdout, proc.stdout
+    # The deployed prune must stay a real prune: `--dry-run` here means retention
+    # silently switched off with exit 0.
+    assert "dry-run" not in proc.stdout, proc.stdout
+
+
+def test_pipeline_step_recipes_are_not_error_ignored() -> None:
+    """The one recipe edit `make -n` cannot reveal: a leading `-`.
+
+    make strips `@`, `-` and `+` before echoing a command, so a dry run prints
+    `uv run python -m src.cli orchestrate` identically whether or not the recipe
+    says `-$(PYTHON) -m src.cli orchestrate`. The `-` matters: it tells make to
+    swallow that step's exit status, so `pipeline` reaches the prune/dbt stages
+    (and, on the deployed path, exits 0) even when the refresh failed.
+
+    So this one is asserted on the text: every target `pipeline` reaches must own
+    at least one recipe line, and none of those lines may carry an error-ignore
+    prefix.
+    """
+    lines = _makefile_text().splitlines()
+    # `dbt-run` pulls in `dbt-seed`; both are on the deployed path.
+    for step in [*PIPELINE_PREREQS, "dbt-seed"]:
+        recipe = _target_recipe(lines, step)
+        assert recipe is not None, f"no `{step}:` target in the Makefile"
+        assert recipe, f"`{step}` is declared with an empty recipe"
+        ignored = [ln for ln in recipe if ln.startswith("-")]
+        assert not ignored, f"`{step}` ignores its own failures (make's `-` prefix): {ignored}"

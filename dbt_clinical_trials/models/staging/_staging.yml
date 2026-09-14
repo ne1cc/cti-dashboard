@@ -11,7 +11,13 @@ models:
           - accepted_values:
               values: [running, success, partial, failed]
       - name: profile
-        description: Indication profile that produced the run (e.g. default, full-catalog); profile IDs are dynamic, so no accepted_values test.
+        description: >
+          Manifest field naming the profile that produced the run. Aliased to
+          indication_profile_id in stg_trial_snapshots.sql so the rest of the
+          project uses one vocabulary.
+      - name: indication_profile_id
+        description: Indication profile that produced this run; staging is where the column becomes mandatory.
+        tests: [not_null]
 
   - name: stg_trials
     description: One row per NCT ID per ingestion run.
@@ -44,6 +50,15 @@ models:
         tests:
           - accepted_values:
               values: [high, medium, low]
+      - name: indication_profile_id
+        description: Indication profile that produced this run; staging is where the column becomes mandatory.
+        tests: [not_null]
+
+  - name: stg_trial_interventions
+    columns:
+      - name: indication_profile_id
+        description: Indication profile that produced this run; staging is where the column becomes mandatory.
+        tests: [not_null]
 
   - name: stg_trial_sponsors
     columns:
@@ -53,10 +68,16 @@ models:
         tests:
           - accepted_values:
               values: [lead_sponsor, collaborator]
+      - name: indication_profile_id
+        description: Indication profile that produced this run; staging is where the column becomes mandatory.
+        tests: [not_null]
 
   - name: stg_trial_locations
     columns:
       - name: nct_id
+        tests: [not_null]
+      - name: indication_profile_id
+        description: Indication profile that produced this run; staging is where the column becomes mandatory.
         tests: [not_null]
 
   - name: stg_trial_outcomes
@@ -67,6 +88,9 @@ models:
         tests:
           - accepted_values:
               values: [primary, secondary, other]
+      - name: indication_profile_id
+        description: Indication profile that produced this run; staging is where the column becomes mandatory.
+        tests: [not_null]
 
   - name: stg_trial_contacts
     description: Deliberately empty (privacy guardrail) — contacts are never extracted.

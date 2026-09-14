@@ -69,7 +69,12 @@ def profile_run(run_id: str, config: ProjectConfig | None = None) -> dict[str, A
         "ingestion_run_id": run_id,
         "profiled_at_utc": utc_now_iso(),
         "entities": {},
-        "reconciliation": {},
+        # Not `{}`: an empty block is indistinguishable from "reconciled, and
+        # there was nothing to reconcile". When the run's manifest is not in
+        # this directory — the usual symptom of profiling with the wrong
+        # profile's config — the reader has to be able to see that the check
+        # never ran.
+        "reconciliation": {"manifest_found": False},
     }
     for entity in ENTITY_NAMES:
         path = cfg.paths.silver / entity / f"run_id={run_id}.parquet"
@@ -83,6 +88,11 @@ def profile_run(run_id: str, config: ProjectConfig | None = None) -> dict[str, A
         None,
     )
     trials = report["entities"].get("silver_trials", {})
+    if manifest is not None:
+        # Manifest present, silver absent is its own state: the reconciliation
+        # numbers below need both, but the marker must not keep claiming the
+        # manifest is missing.
+        report["reconciliation"]["manifest_found"] = True
     if manifest and "row_count" in trials:
         rows = trials["row_count"]
         # build_silver_for_run keeps the first occurrence of a repeated NCT ID
@@ -93,6 +103,7 @@ def profile_run(run_id: str, config: ProjectConfig | None = None) -> dict[str, A
         expected = expected_trial_rows(load_transform_stats(cfg, run_id), manifest.record_count)
         expectation = expected if expected is not None else manifest.record_count
         report["reconciliation"] = {
+            "manifest_found": True,
             "manifest_record_count": manifest.record_count,
             "silver_trials_row_count": rows,
             "distinct_nct_ids": trials.get("distinct_nct_ids"),

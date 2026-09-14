@@ -178,16 +178,16 @@ def temp_duckdb_modern_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     con.execute(
         """
         insert into main_marts.dim_trial (
-            nct_id, indication_profile_id, registry_url, current_brief_title,
+            trial_key, nct_id, indication_profile_id, registry_url, current_brief_title,
             current_overall_status, current_phase, study_first_post_date, enrollment_count
         ) values (
-            'NCT00000001', 'adrd', 'https://clinicaltrials.gov/study/NCT00000001',
+            'adrd:NCT00000001', 'NCT00000001', 'adrd', 'https://clinicaltrials.gov/study/NCT00000001',
             'ADRD Trial 1', 'RECRUITING', 'PHASE2', '2024-01-01', 100
         ), (
-            'NCT00000002', 'adrd', 'https://clinicaltrials.gov/study/NCT00000002',
+            'adrd:NCT00000002', 'NCT00000002', 'adrd', 'https://clinicaltrials.gov/study/NCT00000002',
             'ADRD Trial 2', 'RECRUITING', 'PHASE2', '2024-01-02', 120
         ), (
-            'NCT00000003', 'oncology_nsclc', 'https://clinicaltrials.gov/study/NCT00000003',
+            'oncology_nsclc:NCT00000003', 'NCT00000003', 'oncology_nsclc', 'https://clinicaltrials.gov/study/NCT00000003',
             'NSCLC Trial 1', 'RECRUITING', 'PHASE3', '2024-01-03', 200
         )
         """
@@ -195,7 +195,9 @@ def temp_duckdb_modern_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     con.execute(
         """
         create table main_marts.fct_trial_site (
+            trial_key varchar,
             nct_id varchar,
+            indication_profile_id varchar,
             snapshot_date date,
             state_normalized varchar
         )
@@ -204,9 +206,9 @@ def temp_duckdb_modern_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     con.execute(
         """
         insert into main_marts.fct_trial_site values
-            ('NCT00000001', '2024-01-01', 'CA'),
-            ('NCT00000002', '2024-01-01', 'NY'),
-            ('NCT00000003', '2024-01-01', 'TX')
+            ('adrd:NCT00000001', 'NCT00000001', 'adrd', '2024-01-01', 'CA'),
+            ('adrd:NCT00000002', 'NCT00000002', 'adrd', '2024-01-01', 'NY'),
+            ('oncology_nsclc:NCT00000003', 'NCT00000003', 'oncology_nsclc', '2024-01-01', 'TX')
         """
     )
     con.execute(
@@ -279,6 +281,17 @@ def temp_duckdb_modern_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
             1, 0.1, 0.1,
             1, 0.1, 0.1,
             'shared condition mapping'
+        ), (
+            'sim_key_1b', 'NCT00000002', 'NCT00000001', 'adrd',
+            0.8500, 1,
+            1, 0.2, 0.2,
+            1, 0.2, 0.2,
+            0, 0.1, 0.0,
+            1, 0.15, 0.15,
+            1, 0.15, 0.15,
+            1, 0.1, 0.1,
+            1, 0.1, 0.1,
+            'shared condition mapping; same phase'
         )
         """
     )
@@ -300,9 +313,11 @@ def temp_duckdb_modern_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
 def test_trial_explorer_modern_schema_includes_indication_column(temp_duckdb_modern_schema: Path):
     from components import data
 
-    df = data.trial_explorer()
+    df = data.trial_explorer("adrd")
     assert "indication_profile_id" in df.columns
-    assert set(df["indication_profile_id"]) == {"adrd", "oncology_nsclc"}
+    assert set(df["indication_profile_id"]) == {"adrd"}
+    df_onc = data.trial_explorer("oncology_nsclc")
+    assert set(df_onc["indication_profile_id"]) == {"oncology_nsclc"}
 
 
 def test_get_indication_profiles_modern_schema_resolves_display_names(

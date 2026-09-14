@@ -81,21 +81,30 @@ erDiagram
 
 An opt-in, additive ingestion profile snapshots the **entire** ClinicalTrials.gov
 registry — all conditions, worldwide, no status/type filter (~600k+ studies as of
-this writing). Run it with `make ingest-full-catalog`. It writes to a completely
-separate bronze tree (`data/bronze_full_catalog/`, `config/full_catalog_config.yml`)
-and cannot interfere with the default ADRD/US pipeline above. Combining
-`--condition` with this profile is rejected: the profile's scope is all
-conditions by definition.
+this writing). Run it with `make ingest-full-catalog` (equivalently
+`python -m src.cli ingest --profile full_catalog`). It writes to a completely
+separate bronze tree (`data/bronze/full_catalog/`, declared in
+`config/profiles/full_catalog.yml`) and cannot interfere with the default
+ADRD/US pipeline above. Combining `--condition` with this profile is rejected:
+the profile's scope is all conditions by definition.
 
-**Bronze + silver.** The opt-in streaming transform mirrors the ingest flag:
-`make transform-full-catalog` (or `python -m src.cli transform --profile
-full-catalog`) flattens the full-catalog bronze tree into
-`data/silver_full_catalog/` with bounded memory (chunked Parquet row groups, no
-full-run materialization) and writes per-run profile/reconciliation JSON. The
-default `make transform` still only reads `data/bronze/`. Gold, dbt marts, and
-the dashboard remain scoped to the default ADRD/US profile; see
-[`docs/architecture.md`](docs/architecture.md) for the remaining scaling work
-(extending the condition/geography rules beyond ADRD/US).
+**Bronze only.** That profile is marked `ingest_only`, so
+`python -m src.cli transform --profile full_catalog` refuses with exit code 2:
+there is no condition taxonomy to group trials by, and a taxonomy-less silver
+tree would be misleading rather than useful. Its former
+`make transform-full-catalog` target and the private silver tree it wrote are
+retired; `python -m src.cli transform --profile <id>` flattens one named profile
+from its own manifests under `data/bronze/<profile_id>/manifests/` (a bare
+`make transform` is the legacy `default` alias, i.e. `adrd`), and
+`make orchestrate` runs every refreshable profile end to end (the migration
+record is in [`docs/development_log.md`](docs/development_log.md)). The chunked streaming
+writer that target used
+(`src/transform/export_parquet.py`: bounded-memory Parquet row groups, no
+full-run materialization) is the same one every transformable profile writes
+through. Gold, dbt marts, and the dashboard read the single shared silver root,
+so full-catalog bronze reaches the warehouse only when a taxonomy exists for
+it; see [`docs/architecture.md`](docs/architecture.md) for the remaining
+scaling work (extending the condition/geography rules beyond ADRD/US).
 
 ## 8. Setup instructions
 
@@ -199,9 +208,14 @@ components, denominators, and deterministic explanations are displayed.
 ## 19. Data-quality and clinical interpretation guardrails
 
 Automated checks cover ingestion integrity, trial validation, relationship integrity,
-geographic validity, and metric rules — 115 dbt data tests plus a 162-test pytest suite,
-cross-layer reconciliation, and schema-drift detection
-([`docs/data_quality_framework.md`](docs/data_quality_framework.md)). Interpretation
+geographic validity, and metric rules — 138 dbt data tests plus a 308-test pytest suite
+(measured 2026-09-07 UTC; regenerate with `uv run dbt parse --project-dir
+dbt_clinical_trials --profiles-dir dbt_clinical_trials` and
+`uv run pytest --collect-only`. `tests/test_docs_describe_current_paths.py` fails the
+build when a live document states a dbt or pytest count — phrased the way that guard
+recognises, and the recognised shapes are listed in it — that is neither dated nor
+equal to what those commands report), cross-layer reconciliation, and schema-drift
+detection ([`docs/data_quality_framework.md`](docs/data_quality_framework.md)). Interpretation
 guardrails prohibit claims about recruitment failure, patient eligibility, healthcare
 quality, or sponsor performance
 ([`docs/clinical_interpretation_guardrails.md`](docs/clinical_interpretation_guardrails.md)).
@@ -247,41 +261,6 @@ organization test whether a feasibility-review process could justify its cost us
 3. CDC/ATSDR SVI county-level access-barrier context.
 4. Optional oncology module via NCI CTS API.
 5. Warehouse portability (BigQuery/Snowflake) and orchestration (Dagster/Airflow).
-
-## 24. Resume bullet points *(measured on the 2026-07-24 build)*
-
-- Built a Python, DuckDB, dbt, and Streamlit clinical-operations intelligence platform
-  that ingests and versions 2,592 public ClinicalTrials.gov trial records into
-  29 tested analytics models with full bronze→silver→gold reconciliation.
-- Designed snapshot-based status-history models and a 5-layer automated data-quality
-  framework (115 dbt tests, 162 pytest tests, quarantine, schema-drift detection)
-  tracking 419 recruiting Alzheimer's studies across 50 U.S. states and 6,241 listed
-  facilities.
-- Developed an interpretable feasibility-review prioritization framework scoring 449
-  condition–geography–phase segments with deterministic explanations, explicitly
-  distinguishing public-record signals from enrollment predictions.
-
-## 25. Interview talking points
-
-1. **Why immutable bronze?** The registry API serves current records only —
-   re-downloading cannot recover history, so raw snapshots are the historical asset.
-2. **Reproducibility:** every run has a manifest (query hash, counts, status);
-   partial runs can never contaminate metrics; silver reconciles to manifests and
-   the warehouse reconciles to silver.
-3. **Why history metrics start at zero:** honest snapshot-transition design with a
-   labeled registry-date proxy until history accrues — and a flag column exposing
-   which source fed the score.
-4. **Identity design:** NCT IDs are stable keys; facility names are not — so site
-   overlap is presented as a best-effort listing signal, never capacity.
-5. **Grain protection:** one shared intermediate model feeds all segment marts, and
-   dbt uniqueness/relationship tests pin every declared grain.
-6. **Density ≠ competition:** the score ranks segments for *human review*; language
-   guardrails are enforced mechanically (banner function, embedded interpretation
-   notes, empty contacts model).
-7. **Scenario models vs fake ROI:** value framing is arithmetic over editable
-   assumptions with an embedded disclaimer — nothing is presented as observed.
-8. **Scaling path:** config-driven queries, dbt portability to cloud warehouses,
-   orchestration via Dagster/Airflow, ACS/SVI enrichment on the roadmap.
 
 ---
 

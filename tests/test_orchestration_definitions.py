@@ -102,7 +102,7 @@ def test_failed_bronze_check_blocks_silver(project_root_tmp, monkeypatch) -> Non
         total_count_reported=999,
     )
 
-    def fake_run_ingestion(condition=None, full_refresh=False, max_pages=None):
+    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
         from src.config import load_config
         from src.ingest.snapshot_manifest import write_manifest
 
@@ -111,7 +111,7 @@ def test_failed_bronze_check_blocks_silver(project_root_tmp, monkeypatch) -> Non
 
     transform_calls: list[str | None] = []
 
-    def fake_run_transform(run_id=None, force=False):
+    def fake_run_transform(run_id=None, force=False, profile=None):
         # Record the invocation and return normally: if blocking were absent,
         # the run would succeed with silver materialized and this list non-empty.
         transform_calls.append(run_id)

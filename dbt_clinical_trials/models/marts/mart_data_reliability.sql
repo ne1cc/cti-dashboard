@@ -1,4 +1,5 @@
--- Run-level data reliability summary. One row per ingestion run.
+-- Run-level data reliability summary. One row per ingestion run; each run
+-- belongs to exactly one indication profile.
 -- Surfaces reconciliation and usability shares so every downstream chart
 -- can disclose the confidence of its inputs.
 with runs as (
@@ -8,6 +9,11 @@ with runs as (
 trial_stats as (
     select
         ingestion_run_id,
+        -- Silver is authoritative, so this is the profile the final select
+        -- prefers; runs (r) supplies the fallback. It is carried here and only
+        -- here: the location/condition CTEs' copies were dropped because
+        -- nothing downstream reads them.
+        any_value(indication_profile_id) as indication_profile_id,
         count(*) as trial_row_count,
         count(distinct nct_id) as distinct_trial_count,
         count(*) filter (record_quality_flag != 'ok') as flagged_record_count,
@@ -40,6 +46,16 @@ condition_stats as (
 
 select
     r.ingestion_run_id,
+    -- Silver is authoritative when it exists (a manifest written before profile
+    -- stamping says 'default'; its silver rows say which profile actually
+    -- produced them). The manifest is the fallback, and it is the only side
+    -- that exists for an ingest_only profile's bronze-only run: full_catalog
+    -- has manifests and no silver, so a t-only profile is NULL there, Step 6
+    -- declares this column not_null, and Task 14's first full_catalog refresh
+    -- would fail the build. One of the two is non-null for every run that has
+    -- a manifest at all, which is exactly this table's grain.
+    coalesce(t.indication_profile_id, r.indication_profile_id)
+        as indication_profile_id,
     r.snapshot_date,
     r.started_at_utc,
     r.condition,

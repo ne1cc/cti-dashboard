@@ -5,13 +5,15 @@ import streamlit as st
 from components import data
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import render_page_guide
+from components.profile import render_profile_selector
 
 page_setup("Site Overlap")
-data.require_warehouse()
+profile_id = render_profile_selector()
+data.require_warehouse(profile_id)
 
 render_page_guide("site_overlap")
 
-overlap = data.site_overlap()
+overlap = data.site_overlap(profile_id)
 
 st.sidebar.header("Filters")
 states = sorted(overlap["state_normalized"].dropna().unique())

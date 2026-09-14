@@ -2,7 +2,7 @@ version: 2
 
 models:
   - name: dim_trial
-    description: One row per NCT ID (current record from latest snapshot).
+    description: One row per profile per NCT ID (current record from that profile's latest snapshot).
     contract:
       enforced: true
     columns:
@@ -11,9 +11,15 @@ models:
         tests: [not_null, unique]
       - name: nct_id
         data_type: VARCHAR
-        tests: [not_null, unique]
+        # Not unique: the same registry record appears once per indication
+        # profile that lists it. The grain is (indication_profile_id, nct_id),
+        # guarded by unique_dim_trial_trial_key declared above and by
+        # tests/test_dbt_fixture_build.py::test_dim_trial_grain_is_trial_x_profile.
+        tests: [not_null]
       - name: indication_profile_id
         data_type: VARCHAR
+        description: Indication profile whose query scope produced this row. Part of the model's grain.
+        tests: [not_null]
       - name: registry_url
         data_type: VARCHAR
         description: Public ClinicalTrials.gov record URL derived from the NCT ID.
@@ -55,12 +61,21 @@ models:
         data_type: BOOLEAN
 
   - name: dim_condition
+    description: >
+      Normalized condition per indication profile. Grain: profile x
+      condition_normalized. Counts cover one profile's listings; the key hashes
+      both columns because a per-profile row cannot be addressed by the entity
+      alone.
     contract:
       enforced: true
     columns:
       - name: condition_key
         data_type: VARCHAR
         tests: [not_null, unique]
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this row. Part of the model's grain.
+        tests: [not_null]
       - name: condition_normalized
         data_type: VARCHAR
       - name: condition_display_name
@@ -75,12 +90,21 @@ models:
         data_type: BIGINT
 
   - name: dim_sponsor
+    description: >
+      Normalized sponsor per indication profile. Grain: profile x
+      sponsor_normalized. A sponsor listed by two indications is one
+      organization with one row per query scope, each carrying that scope's
+      counts; sponsor_key hashes both columns and matches bridge_trial_sponsor.
     contract:
       enforced: true
     columns:
       - name: sponsor_key
         data_type: VARCHAR
         tests: [not_null, unique]
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this row. Part of the model's grain.
+        tests: [not_null]
       - name: sponsor_normalized
         data_type: VARCHAR
       - name: sponsor_display_name
@@ -93,15 +117,26 @@ models:
         data_type: BIGINT
 
   - name: dim_geography
+    description: >
+      U.S. state per indication profile. Grain: profile x state_code, so a
+      state with trials under both query scopes is two rows with two
+      trial_count / listed_site_count figures.
     contract:
       enforced: true
     columns:
       - name: geography_key
         data_type: VARCHAR
         tests: [not_null, unique]
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this row. Part of the model's grain.
+        tests: [not_null]
       - name: state_code
         data_type: VARCHAR
-        tests: [not_null, unique]
+        # Not unique: the grain is (indication_profile_id, state_code), so e.g.
+        # TX appears once per profile that lists Texas sites. geography_key's
+        # unique test above hashes both columns and so enforces the grain.
+        tests: [not_null]
       - name: geo_level
         data_type: VARCHAR
       - name: country
@@ -140,7 +175,7 @@ models:
         data_type: BOOLEAN
 
   - name: fct_trial_snapshot
-    description: One row per NCT ID per complete snapshot date.
+    description: One row per profile per NCT ID per complete snapshot date.
     contract:
       enforced: true
     columns:
@@ -156,6 +191,10 @@ models:
               field: trial_key
       - name: nct_id
         data_type: VARCHAR
+        tests: [not_null]
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this row. Part of the model's grain.
         tests: [not_null]
       - name: snapshot_date
         data_type: DATE
@@ -204,7 +243,7 @@ models:
         data_type: BOOLEAN
 
   - name: fct_trial_site
-    description: One row per trial x U.S. facility x snapshot date.
+    description: One row per profile per trial per U.S. facility per snapshot date.
     contract:
       enforced: true
     columns:
@@ -225,6 +264,10 @@ models:
         data_type: VARCHAR
       - name: nct_id
         data_type: VARCHAR
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this row. Part of the model's grain.
+        tests: [not_null]
       - name: ingestion_run_id
         data_type: VARCHAR
       - name: snapshot_date
@@ -249,6 +292,7 @@ models:
         data_type: VARCHAR
 
   - name: bridge_trial_condition
+    description: One row per profile per trial per condition group.
     contract:
       enforced: true
     columns:
@@ -267,6 +311,10 @@ models:
         tests: [not_null]
       - name: nct_id
         data_type: VARCHAR
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this row. Part of the model's grain.
+        tests: [not_null]
       - name: dementia_relevance_flag
         data_type: BOOLEAN
       - name: mapping_confidence
@@ -275,6 +323,7 @@ models:
         data_type: BIGINT
 
   - name: bridge_trial_sponsor
+    description: One row per profile per trial per sponsor/collaborator role.
     contract:
       enforced: true
     columns:
@@ -290,8 +339,21 @@ models:
               field: trial_key
       - name: sponsor_key
         data_type: VARCHAR
+        description: >
+          Same two inputs as dim_sponsor.sponsor_key (sponsor_normalized x
+          indication_profile_id); re-hashing one side without the other orphans
+          this join.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_sponsor')
+              field: sponsor_key
       - name: nct_id
         data_type: VARCHAR
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this row. Part of the model's grain.
+        tests: [not_null]
       - name: sponsor_name
         data_type: VARCHAR
       - name: sponsor_normalized
@@ -305,11 +367,16 @@ models:
 
   - name: mart_trial_activity
     description: >
-      Segment activity per snapshot. Counts are registry listings,
-      not patient availability.
+      Segment activity per snapshot, per indication profile. Grain: profile x
+      snapshot_date x condition_group x state x phase x overall_status. Counts
+      are registry listings, not patient availability.
     contract:
       enforced: true
     columns:
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this segment. Part of the model's grain.
+        tests: [not_null]
       - name: trial_count
         data_type: BIGINT
         tests: [not_null]
@@ -338,11 +405,18 @@ models:
 
   - name: mart_recruiting_competition
     description: >
-      Potential competition signal per recruiting segment. Not a
+      Potential competition signal per recruiting segment, per indication
+      profile. Grain: profile x snapshot_date x condition_group x state x
+      phase; density_percentile and competition_signal_band rank a segment
+      against the other segments of the same profile only. Not a
       recruitment forecast.
     contract:
       enforced: true
     columns:
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this segment. Part of the model's grain.
+        tests: [not_null]
       - name: recruiting_trial_count
         data_type: BIGINT
         tests: [not_null]
@@ -384,9 +458,19 @@ models:
         data_type: DOUBLE
 
   - name: mart_site_overlap
+    description: >
+      Facility-level trial overlap per snapshot, per indication profile.
+      Grain: profile x snapshot_date x facility (normalized name + city +
+      state). repeated_site_participation_flag means more than one recruiting
+      trial within that profile's listings; a facility shared between two
+      profiles' trial sets is not overlap within either query scope.
     contract:
       enforced: true
     columns:
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this facility listing. Part of the model's grain.
+        tests: [not_null]
       - name: facility_normalized
         data_type: VARCHAR
         tests: [not_null]
@@ -413,9 +497,17 @@ models:
         data_type: BOOLEAN
 
   - name: mart_condition_geography_trends
+    description: >
+      Monthly condition x geography trend, per indication profile. Grain:
+      profile x month x condition_group x state. The 3-month rolling average
+      and baseline are computed within one profile's series only.
     contract:
       enforced: true
     columns:
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this segment. Part of the model's grain.
+        tests: [not_null]
       - name: activity_month
         data_type: TIMESTAMP
         tests: [not_null]
@@ -440,13 +532,24 @@ models:
         data_type: DOUBLE
 
   - name: mart_data_reliability
-    description: One row per ingestion run with reconciliation shares.
+    description: >
+      One row per ingestion run with reconciliation shares; each run belongs to
+      exactly one indication profile. Grain: ingestion_run_id x
+      indication_profile_id — the run alone is already unique, because a run
+      never spans profiles, so ingestion_run_id keeps its unique test. The
+      profile is taken from silver when silver exists and from the manifest
+      otherwise, since a manifest written before profile stamping defaults its
+      profile field.
     contract:
       enforced: true
     columns:
       - name: ingestion_run_id
         data_type: VARCHAR
         tests: [not_null, unique]
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile this run refreshed. Part of the model's grain.
+        tests: [not_null]
       - name: snapshot_date
         data_type: DATE
       - name: started_at_utc
@@ -500,13 +603,24 @@ models:
 
   - name: mart_feasibility_priority_queue
     description: >
-      Ranked segments for human feasibility review. Triage signal from
+      Ranked segments for human feasibility review, one ranking per
+      indication profile. Grain: profile x condition_group x state x phase at
+      that profile's latest complete snapshot; every normalized component and
+      priority_rank is computed within one profile. Triage signal from
       public registry listings; not a recruitment forecast.
     contract:
       enforced: true
     columns:
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this segment. Part of the model's grain.
+        tests: [not_null]
       - name: priority_queue_key
         data_type: VARCHAR
+        description: >
+          Surrogate key over indication_profile_id x condition_group x
+          state_normalized x phase_normalized x snapshot_date, so the same
+          segment label under two profiles is two queue entries.
         tests: [not_null, unique]
       - name: feasibility_review_priority_score
         data_type: DOUBLE
@@ -615,21 +729,28 @@ models:
     description: >
       Deterministic trial-pair comparability -- a structural/design
       signal, not clinical equivalence and not itself a competition
-      signal. One row per (nct_id_a, nct_id_b) pair, nct_id_a's top 25
-      matches only.
+      signal. Grain: indication_profile_id x nct_id_a x nct_id_b; one
+      row per pair within one profile's query scope, nct_id_a's top 25
+      matches per profile only. A pair listed under two profiles is two
+      rows, and a trial's top-25 can no longer be occupied by another
+      indication's trials.
     contract:
       enforced: true
     columns:
       - name: trial_similarity_key
         data_type: VARCHAR
+        description: >
+          Surrogate key over indication_profile_id x nct_id_a x nct_id_b, so
+          the same trial pair under two profiles is two rows with two keys.
         tests: [not_null, unique]
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this pair. Part of the model's grain, and the partition the top-25 cap is applied within.
+        tests: [not_null]
       - name: nct_id_a
         data_type: VARCHAR
         tests: [not_null]
       - name: nct_id_b
-        data_type: VARCHAR
-        tests: [not_null]
-      - name: indication_profile_id
         data_type: VARCHAR
         tests: [not_null]
       - name: similarity_score

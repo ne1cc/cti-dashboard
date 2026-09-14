@@ -8,6 +8,7 @@ import pytest
 
 from src.config import ApiConfig, IngestionConfig, PathsConfig, ProjectConfig
 from src.ingest.snapshot_manifest import IngestionManifest, write_manifest
+from src.profiles import get_registry
 from src.quality.profiling import profile_run
 from src.transform import build_silver_entities
 from src.transform.build_silver_entities import _already_transformed, build_silver_for_run
@@ -136,6 +137,66 @@ def test_build_silver_publishes_nothing_when_a_study_raises(tmp_path: Path, monk
     assert _already_transformed(cfg, run_id)
 
 
+def test_build_silver_refuses_a_named_profile_with_no_taxonomy(tmp_path: Path):
+    """A named profile with no taxonomy is a caller bug, not a licence to borrow.
+
+    `build_silver_for_run` fell back to the global ADRD singleton whenever the
+    profile's taxonomy was falsy, so an ingest_only profile that reached it
+    wrote ADRD-shaped claims stamped with *that* profile's
+    `indication_profile_id` into the shared silver tree dbt globs — invisible
+    to the completeness assertion, which excludes ingest_only profiles. The CLI
+    now refuses them upstream, so this raise is the last line rather than the
+    first; the real shipped profile is used because it is the one that has no
+    taxonomy.
+    """
+    cfg = make_config(tmp_path)
+    run_id = "r_no_taxonomy"
+    write_bronze_page(
+        cfg.paths.bronze_api_responses / f"run_id={run_id}", 1, [make_study("NCT00000001")]
+    )
+
+    full_catalog = get_registry().get("full_catalog")
+    assert full_catalog.ingest_only, "the guard is pointless if no shipped profile lacks a taxonomy"
+    assert full_catalog.taxonomy is None
+
+    with pytest.raises(ValueError, match="has no condition_taxonomy"):
+        build_silver_for_run(make_manifest(run_id, record_count=1), cfg, profile=full_catalog)
+
+    assert list(cfg.paths.silver.glob("**/*.parquet")) == []
+    assert list(cfg.paths.silver.glob("**/*.parquet.tmp")) == []
+
+
+def test_build_silver_still_transforms_a_named_profile_with_a_taxonomy(tmp_path: Path):
+    """Positive arm of the guard: a refreshable profile is unaffected."""
+    cfg = make_config(tmp_path)
+    run_id = "r_named"
+    write_bronze_page(cfg.paths.bronze_api_responses / f"run_id={run_id}", 1, [make_study("NCT1")])
+
+    indication_profile = get_registry().get("oncology_nsclc")
+    assert indication_profile.taxonomy is not None
+
+    counts = build_silver_for_run(
+        make_manifest(run_id, record_count=1), cfg, profile=indication_profile
+    )
+
+    assert counts["silver_trials"] == 1
+    frame = pd.read_parquet(cfg.paths.silver / "silver_trials" / f"run_id={run_id}.parquet")
+    assert frame["indication_profile_id"].unique().tolist() == ["oncology_nsclc"]
+
+
+def test_build_silver_legacy_call_without_a_profile_keeps_the_global_taxonomy(tmp_path: Path):
+    """Pin against over-tightening: `profile=None` callers predate the registry."""
+    cfg = make_config(tmp_path)
+    run_id = "r_legacy"
+    write_bronze_page(cfg.paths.bronze_api_responses / f"run_id={run_id}", 1, [make_study("NCT1")])
+
+    counts = build_silver_for_run(make_manifest(run_id, record_count=1), cfg)
+
+    assert counts["silver_trials"] == 1
+    frame = pd.read_parquet(cfg.paths.silver / "silver_trials" / f"run_id={run_id}.parquet")
+    assert frame["indication_profile_id"].unique().tolist() == ["adrd"]
+
+
 def test_profile_run_treats_dedup_shortfall_as_expected(tmp_path: Path, monkeypatch):
     cfg = make_config(tmp_path)
     run_id = "r_recon"
@@ -150,6 +211,7 @@ def test_profile_run_treats_dedup_shortfall_as_expected(tmp_path: Path, monkeypa
     report = profile_run(run_id, config=cfg)
 
     recon = report["reconciliation"]
+    assert recon["manifest_found"] is True
     assert recon["manifest_record_count"] == 3
     assert recon["silver_trials_row_count"] == 2
     assert recon["excluded_records"] == 1
@@ -161,6 +223,30 @@ def test_profile_run_treats_dedup_shortfall_as_expected(tmp_path: Path, monkeypa
     assert stats["duplicate_nct_ids_dropped"] == 1
     assert stats["records_without_nct_id"] == 0
     assert stats["row_counts"]["silver_trials"] == 2
+
+
+def test_profile_run_records_an_absent_manifest_instead_of_nothing_to_do(tmp_path: Path):
+    """A run missing from the manifest directory must not read as reconcilable-clean.
+
+    `report` was seeded with an empty `reconciliation` dict, so a profile whose
+    manifest lives in another profile's tree — exactly what `orchestrate`
+    produced before it passed the profile's config — wrote a block indistinguishable
+    from "nothing to reconcile". The marker is the difference between "checked and
+    empty" and "could not check".
+    """
+    cfg = make_config(tmp_path)
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+    write_manifest(cfg.paths.bronze_manifests, make_manifest("r_other_run", record_count=9))
+
+    report = profile_run("r_not_in_manifest", config=cfg)
+
+    assert report["reconciliation"] == {"manifest_found": False}
+    written = json.loads(
+        (cfg.paths.silver / "_profiles" / "profile_r_not_in_manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert written["reconciliation"]["manifest_found"] is False
 
 
 def pq_num_row_groups(path: Path) -> int:

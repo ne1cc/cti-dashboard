@@ -2,8 +2,9 @@
 
 The registry can add, rename, or drop fields without notice. We record the
 set of observed field paths (to a fixed depth) per run and compare against
-`data/bronze/_schema_baseline.json`. Drift is reported, never auto-"fixed":
-a human decides whether to update the baseline (--update-baseline).
+`data/bronze/<profile_id>/_schema_baseline.json`, one baseline per profile.
+Drift is reported, never auto-"fixed": a human decides whether to update the
+baseline (--update-schema-baseline).
 """
 
 from __future__ import annotations

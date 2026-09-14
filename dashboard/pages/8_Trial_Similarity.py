@@ -7,6 +7,7 @@ import streamlit as st
 from components import data
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import render_indication_banner, render_page_guide
+from components.profile import render_profile_selector
 
 FACTOR_LABELS = {
     "same_condition": "Same condition",
@@ -19,9 +20,10 @@ FACTOR_LABELS = {
 }
 
 page_setup("Trial Similarity Explorer")
-data.require_warehouse()
+profile_id = render_profile_selector()
+data.require_warehouse(profile_id)
 
-render_indication_banner()
+render_indication_banner(profile_id)
 render_page_guide("trial_similarity")
 
 st.info(
@@ -32,17 +34,7 @@ st.info(
     "is not itself a competition or recruitment signal."
 )
 
-trials = data.trial_explorer()
-
-# Indication filter when multiple profiles exist in warehouse
-indications = data.get_indication_profiles()
-if len(indications) > 1:
-    ind_names = ["All indications"] + [i["display_name"] for i in indications]
-    ind_id_by_name = {i["display_name"]: i["id"] for i in indications}
-    sel_ind_name = st.selectbox("Filter by indication", ind_names)
-    if sel_ind_name != "All indications" and "indication_profile_id" in trials.columns:
-        sel_pid = ind_id_by_name[sel_ind_name]
-        trials = trials[trials["indication_profile_id"] == sel_pid]
+trials = data.trial_explorer(profile_id)
 
 search = st.text_input("Search for an index trial by NCT ID or title")
 
@@ -71,9 +63,7 @@ def _format_option(row: Any) -> str:
     """
     ind_tag = (
         f" [{row.indication_profile_id}]"
-        if len(indications) > 1
-        and hasattr(row, "indication_profile_id")
-        and row.indication_profile_id
+        if hasattr(row, "indication_profile_id") and row.indication_profile_id
         else ""
     )
     return f"{row.nct_id} — {row.brief_title}{ind_tag}"
@@ -83,15 +73,17 @@ options = {_format_option(row): row.nct_id for row in candidates.head(50).itertu
 selected_label = st.selectbox("Select the index trial", list(options))
 selected_nct_id = options[selected_label]
 
-sim_df = data.trial_similarity(selected_nct_id)
+sim_df = data.trial_similarity(profile_id, selected_nct_id)
 if sim_df.empty or "nct_id_b" not in sim_df.columns:
     st.info("No comparable trials found in the current warehouse for this trial.")
     guarded_footer()
     st.stop()
 
+# `indication_profile_id` is deliberately not merged in: mart_trial_similarity
+# already carries it, scoped by the query below. Merging a same-named column from
+# `trials` would make pandas suffix both to _x/_y and the display column would
+# silently vanish from the table.
 merge_cols = ["nct_id", "brief_title", "registry_url"]
-if "indication_profile_id" in trials.columns:
-    merge_cols.append("indication_profile_id")
 
 matches = sim_df.merge(
     trials[merge_cols],
@@ -111,7 +103,7 @@ match_columns = [
     "similarity_rank",
     "nct_id_b",
 ]
-if len(indications) > 1 and "indication_profile_id" in matches.columns:
+if "indication_profile_id" in matches.columns:
     match_columns.append("indication_profile_id")
 match_columns.extend(
     [

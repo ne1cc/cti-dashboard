@@ -1,0 +1,874 @@
+{
+ "studies": [
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT00000001",
+     "briefTitle": "Donepezil Add-On in Mild Lung Cancer Disease",
+     "officialTitle": "A Phase 3 Study of Donepezil Add-On Therapy in Mild Alzheimer Disease"
+    },
+    "statusModule": {
+     "overallStatus": "RECRUITING",
+     "lastKnownStatus": "RECRUITING",
+     "statusVerifiedDate": "2026-07-01",
+     "startDateStruct": {
+      "date": "2025-02-01"
+     },
+     "primaryCompletionDateStruct": {
+      "date": "2027-06-30"
+     },
+     "completionDateStruct": {
+      "date": "2027-12-31"
+     },
+     "studyFirstPostDateStruct": {
+      "date": "2025-03-15"
+     },
+     "lastUpdatePostDateStruct": {
+      "date": "2026-07-15"
+     }
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {
+      "name": "NeuroPharm Inc",
+      "class": "INDUSTRY"
+     },
+     "collaborators": [
+      {
+       "name": "Alzheimer Research Network",
+       "class": "NETWORK"
+      }
+     ]
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": [
+      "PHASE3"
+     ],
+     "enrollmentInfo": {
+      "count": 500,
+      "type": "Anticipated"
+     }
+    },
+    "conditionsModule": {
+     "conditions": [
+      "Non-Small Cell Lung Cancer",
+      "Stage III Non-Small Cell Lung Cancer"
+     ]
+    },
+    "armsInterventionsModule": {
+     "interventions": [
+      {
+       "name": "Donepezil 10mg",
+       "type": "Drug",
+       "description": "Once daily oral dose."
+      },
+      {
+       "name": "Placebo oral tablet",
+       "type": "Drug"
+      }
+     ]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [
+      {
+       "measure": "ADAS-Cog13 change from baseline",
+       "timeFrame": "78 weeks"
+      }
+     ],
+     "secondaryOutcomes": [
+      {
+       "measure": "ADCS-ADL change",
+       "timeFrame": "78 weeks"
+      }
+     ]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "55 Years",
+     "maximumAge": "85 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: diagnosis of mild Alzheimer disease. Exclusion: severe renal impairment."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {
+       "facility": "Duke Memory Center",
+       "city": "Durham",
+       "state": "North Carolina",
+       "zip": "27710",
+       "country": "United States",
+       "status": "RECRUITING"
+      },
+      {
+       "facility": "UCSF Memory Clinic",
+       "city": "San Francisco",
+       "state": "CA",
+       "zip": "94143",
+       "country": "United States",
+       "status": "RECRUITING"
+      }
+     ]
+    }
+   },
+   "hasResults": false
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT00000002",
+     "briefTitle": "Biomarkers in Amnestic Mild Cognitive Impairment"
+    },
+    "statusModule": {
+     "overallStatus": "ACTIVE_NOT_RECRUITING",
+     "statusVerifiedDate": "2026-06-15",
+     "startDateStruct": {
+      "date": "2024-05-01"
+     },
+     "primaryCompletionDateStruct": {
+      "date": "2026-01-31"
+     },
+     "completionDateStruct": {
+      "date": "2026-01-31"
+     },
+     "studyFirstPostDateStruct": {
+      "date": "2024-06-01"
+     },
+     "lastUpdatePostDateStruct": {
+      "date": "2026-06-20"
+     }
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {
+      "name": "National Institute on Aging",
+      "class": "NIH"
+     }
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": [
+      "PHASE2"
+     ],
+     "enrollmentInfo": {
+      "count": 120,
+      "type": "Actual"
+     }
+    },
+    "conditionsModule": {
+     "conditions": [
+      "Non Small Cell Lung Cancer"
+     ]
+    },
+    "armsInterventionsModule": {
+     "interventions": [
+      {
+       "name": "CSF biomarker panel",
+       "type": "Procedure"
+      }
+     ]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [
+      {
+       "measure": "CSF tau concentration",
+       "timeFrame": "12 months"
+      }
+     ]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "50 Years",
+     "maximumAge": "80 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: amnestic MCI diagnosis."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {
+       "facility": "Mass General Hospital",
+       "city": "Boston",
+       "state": "Massachusetts",
+       "zip": "02114",
+       "country": "United States",
+       "status": "COMPLETED"
+      }
+     ]
+    }
+   },
+   "hasResults": false
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT00000003",
+     "briefTitle": "Glucose Control in Type 2 Diabetes"
+    },
+    "statusModule": {
+     "overallStatus": "COMPLETED",
+     "statusVerifiedDate": "2026-05-01",
+     "startDateStruct": {
+      "date": "2023-01-15"
+     },
+     "primaryCompletionDateStruct": {
+      "date": "2025-08-01"
+     },
+     "completionDateStruct": {
+      "date": "2025-10-31"
+     },
+     "studyFirstPostDateStruct": {
+      "date": "2023-02-01"
+     },
+     "resultsFirstPostDateStruct": {
+      "date": "2026-02-15"
+     },
+     "lastUpdatePostDateStruct": {
+      "date": "2026-02-15"
+     }
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {
+      "name": "MetaDiab Labs",
+      "class": "INDUSTRY"
+     }
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": [
+      "PHASE3"
+     ],
+     "enrollmentInfo": {
+      "count": 2000,
+      "type": "Actual"
+     }
+    },
+    "conditionsModule": {
+     "conditions": [
+      "Squamous Cell Lung Cancer"
+     ]
+    },
+    "armsInterventionsModule": {
+     "interventions": [
+      {
+       "name": "Metformin extended release",
+       "type": "Drug"
+      }
+     ]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [
+      {
+       "measure": "HbA1c change",
+       "timeFrame": "52 weeks"
+      }
+     ],
+     "otherOutcomes": [
+      {
+       "measure": "Body weight change",
+       "timeFrame": "52 weeks"
+      }
+     ]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "18 Years",
+     "maximumAge": "75 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: HbA1c 7.5-10.5%."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {
+       "facility": "Stanford Diabetes Center",
+       "city": "Palo Alto",
+       "state": "California",
+       "zip": "94305",
+       "country": "United States",
+       "status": "COMPLETED"
+      },
+      {
+       "facility": "Baylor Endocrine Clinic",
+       "city": "Houston",
+       "state": "Texas",
+       "zip": "77030",
+       "country": "United States",
+       "status": "COMPLETED"
+      },
+      {
+       "facility": "Mount Sinai Diabetes Center",
+       "city": "New York",
+       "state": "NY",
+       "zip": "10029",
+       "country": "United States",
+       "status": "COMPLETED"
+      }
+     ]
+    }
+   },
+   "hasResults": true
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT00000004",
+     "briefTitle": "Neoadjuvant Therapy in HER2+ Breast Cancer"
+    },
+    "statusModule": {
+     "overallStatus": "ENROLLING_BY_INVITATION",
+     "statusVerifiedDate": "2026-08-01",
+     "startDateStruct": {
+      "date": "2025-09-01"
+     },
+     "primaryCompletionDateStruct": {
+      "date": "2028-03-01"
+     },
+     "completionDateStruct": {
+      "date": "2028-09-01"
+     },
+     "studyFirstPostDateStruct": {
+      "date": "2025-09-20"
+     },
+     "lastUpdatePostDateStruct": {
+      "date": "2026-08-10"
+     }
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {
+      "name": "Pacific Oncology Institute",
+      "class": "ACADEMIC"
+     },
+     "collaborators": [
+      {
+       "name": "Oncology Trials Group",
+       "class": "NETWORK"
+      }
+     ]
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": [
+      "PHASE4"
+     ],
+     "enrollmentInfo": {
+      "count": 300,
+      "type": "Anticipated"
+     }
+    },
+    "conditionsModule": {
+     "conditions": [
+      "Non-Small Cell Lung Cancer",
+      "Epidermal Growth Factor Receptor Mutation"
+     ]
+    },
+    "armsInterventionsModule": {
+     "interventions": [
+      {
+       "name": "Trastuzumab",
+       "type": "Drug"
+      }
+     ]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [
+      {
+       "measure": "Pathologic complete response rate",
+       "timeFrame": "6 months"
+      }
+     ]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "18 Years",
+     "maximumAge": "70 Years",
+     "sex": "FEMALE",
+     "eligibilityCriteria": "Inclusion: HER2-positive breast cancer."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {
+       "facility": "Seattle Cancer Center",
+       "city": "Seattle",
+       "state": "Washington",
+       "zip": "98109",
+       "country": "United States",
+       "status": "ENROLLING_BY_INVITATION"
+      },
+      {
+       "facility": "Northwestern Oncology",
+       "city": "Chicago",
+       "state": "IL",
+       "zip": "60611",
+       "country": "United States",
+       "status": "ENROLLING_BY_INVITATION"
+      }
+     ]
+    }
+   },
+   "hasResults": false
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT00000005",
+     "briefTitle": "Cognitive Health Screening in Older Adults"
+    },
+    "statusModule": {
+     "overallStatus": "NOT_YET_RECRUITING",
+     "statusVerifiedDate": "2026-08-20",
+     "startDateStruct": {
+      "date": "2026-10-01"
+     },
+     "primaryCompletionDateStruct": {
+      "date": "2027-09-30"
+     },
+     "completionDateStruct": {
+      "date": "2027-09-30"
+     },
+     "studyFirstPostDateStruct": {
+      "date": "2026-08-25"
+     },
+     "lastUpdatePostDateStruct": {
+      "date": "2026-08-25"
+     }
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {
+      "name": "Cedar Cognitive Institute",
+      "class": "ACADEMIC"
+     }
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": [
+      "PHASE1"
+     ],
+     "enrollmentInfo": {
+      "count": 60,
+      "type": "Anticipated"
+     }
+    },
+    "conditionsModule": {
+     "conditions": [
+      "Small Cell Lung Cancer"
+     ]
+    },
+    "armsInterventionsModule": {
+     "interventions": [
+      {
+       "name": "Computerized cognitive training",
+       "type": "Behavioral"
+      }
+     ]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [
+      {
+       "measure": "Memory composite score",
+       "timeFrame": "24 weeks"
+      }
+     ]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": true,
+     "minimumAge": "60 Years",
+     "maximumAge": "80 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: community-dwelling older adults."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {
+       "facility": "Cedar Clinic Los Angeles",
+       "city": "Los Angeles",
+       "state": "California",
+       "zip": "90095",
+       "country": "United States",
+       "status": "NOT_YET_RECRUITING"
+      }
+     ]
+    }
+   },
+   "hasResults": false
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT00000006",
+     "briefTitle": "Rivastigmine in Lewy Body Dementia"
+    },
+    "statusModule": {
+     "overallStatus": "SUSPENDED",
+     "statusVerifiedDate": "2026-04-10",
+     "startDateStruct": {
+      "date": "2024-11-01"
+     },
+     "primaryCompletionDateStruct": {
+      "date": "2027-05-01"
+     },
+     "completionDateStruct": {
+      "date": "2027-11-01"
+     },
+     "studyFirstPostDateStruct": {
+      "date": "2024-12-01"
+     },
+     "lastUpdatePostDateStruct": {
+      "date": "2026-04-15"
+     }
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {
+      "name": "NeuroPharm Inc",
+      "class": "INDUSTRY"
+     }
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": [
+      "PHASE2",
+      "PHASE3"
+     ],
+     "enrollmentInfo": {
+      "count": 240,
+      "type": "Anticipated"
+     }
+    },
+    "conditionsModule": {
+     "conditions": [
+      "NSCLC",
+      "Brain Metastases"
+     ]
+    },
+    "armsInterventionsModule": {
+     "interventions": [
+      {
+       "name": "Rivastigmine patch",
+       "type": "Drug"
+      }
+     ]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [
+      {
+       "measure": "CIBIC-plus score",
+       "timeFrame": "48 weeks"
+      }
+     ]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "50 Years",
+     "maximumAge": "85 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: probable DLB."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {
+       "facility": "Charite Memory Clinic",
+       "city": "Berlin",
+       "country": "Germany",
+       "status": "SUSPENDED"
+      },
+      {
+       "facility": "Johns Hopkins Memory Center",
+       "city": "Baltimore",
+       "state": "Maryland",
+       "zip": "21287",
+       "country": "United States",
+       "status": "SUSPENDED"
+      }
+     ]
+    }
+   },
+   "hasResults": false
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT00000007",
+     "briefTitle": "Anti-Amyloid Antibody in Early Lung Cancer's Disease"
+    },
+    "statusModule": {
+     "overallStatus": "TERMINATED",
+     "statusVerifiedDate": "2026-03-01",
+     "startDateStruct": {
+      "date": "2023-06-01"
+     },
+     "primaryCompletionDateStruct": {
+      "date": "2025-12-01"
+     },
+     "completionDateStruct": {
+      "date": "2025-12-01"
+     },
+     "studyFirstPostDateStruct": {
+      "date": "2023-07-01"
+     },
+     "lastUpdatePostDateStruct": {
+      "date": "2026-03-10"
+     }
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {
+      "name": "National Institute on Aging",
+      "class": "NIH"
+     }
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": [
+      "PHASE3"
+     ],
+     "enrollmentInfo": {
+      "count": 800,
+      "type": "Actual"
+     }
+    },
+    "conditionsModule": {
+     "conditions": [
+      "Lung Neoplasm"
+     ]
+    },
+    "armsInterventionsModule": {
+     "interventions": [
+      {
+       "name": "Anti-amyloid antibody infusion",
+       "type": "Biological"
+      }
+     ]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [
+      {
+       "measure": "CDR-SB change",
+       "timeFrame": "18 months"
+      }
+     ]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "50 Years",
+     "maximumAge": "90 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: early Alzheimer disease with amyloid confirmation."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {
+       "facility": "Mayo Clinic Florida",
+       "city": "Jacksonville",
+       "state": "Florida",
+       "zip": "32224",
+       "country": "United States",
+       "status": "TERMINATED"
+      }
+     ]
+    }
+   },
+   "hasResults": false
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT00000008",
+     "briefTitle": "Memory Loss Caregiver Support Withdrawn Study"
+    },
+    "statusModule": {
+     "overallStatus": "WITHDRAWN",
+     "statusVerifiedDate": "2026-01-05",
+     "startDateStruct": {
+      "date": "2026-03-01"
+     },
+     "studyFirstPostDateStruct": {
+      "date": "2026-01-10"
+     },
+     "lastUpdatePostDateStruct": {
+      "date": "2026-01-15"
+     }
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {
+      "name": "Cedar Cognitive Institute",
+      "class": "ACADEMIC"
+     }
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "enrollmentInfo": {
+      "count": 40,
+      "type": "Anticipated"
+     }
+    },
+    "conditionsModule": {
+     "conditions": [
+      "Non-Small Cell Lung Cancer",
+      "Immunotherapy"
+     ]
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {
+       "facility": "Cedar Clinic Durham",
+       "city": "Durham",
+       "state": "NC",
+       "zip": "27705",
+       "country": "United States",
+       "status": "WITHDRAWN"
+      }
+     ]
+    }
+   },
+   "hasResults": false
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT00000009",
+     "briefTitle": "Natural History of Mild Cognitive Impairment"
+    },
+    "statusModule": {
+     "overallStatus": "RECRUITING",
+     "statusVerifiedDate": "2026-07-20",
+     "startDateStruct": {
+      "date": "2025-01-01"
+     },
+     "primaryCompletionDateStruct": {
+      "date": "2028-01-01"
+     },
+     "completionDateStruct": {
+      "date": "2028-01-01"
+     },
+     "studyFirstPostDateStruct": {
+      "date": "2025-01-20"
+     },
+     "lastUpdatePostDateStruct": {
+      "date": "2026-07-25"
+     }
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {
+      "name": "Pacific Oncology Institute",
+      "class": "ACADEMIC"
+     }
+    },
+    "designModule": {
+     "studyType": "OBSERVATIONAL",
+     "phases": [
+      "NA"
+     ],
+     "enrollmentInfo": {
+      "count": 400,
+      "type": "Anticipated"
+     }
+    },
+    "conditionsModule": {
+     "conditions": [
+      "Anaplastic Lymphoma Kinase Positive Lung Cancer"
+     ]
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {
+       "facility": "Toronto Memory Program",
+       "city": "Toronto",
+       "country": "Canada",
+       "status": "RECRUITING"
+      },
+      {
+       "facility": "UC San Diego Shiley Center",
+       "city": "San Diego",
+       "state": "California",
+       "zip": "92093",
+       "country": "United States",
+       "status": "RECRUITING"
+      }
+     ]
+    }
+   },
+   "hasResults": false
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT00000010",
+     "briefTitle": "Early Phase 1 Study in Frontotemporal Dementia Spectrum"
+    },
+    "statusModule": {
+     "overallStatus": "RECRUITING",
+     "statusVerifiedDate": "2026-08-05",
+     "startDateStruct": {
+      "date": "2026-02-01"
+     },
+     "primaryCompletionDateStruct": {
+      "date": "2027-08-01"
+     },
+     "completionDateStruct": {
+      "date": "2027-08-01"
+     },
+     "studyFirstPostDateStruct": {
+      "date": "2026-02-15"
+     },
+     "lastUpdatePostDateStruct": {
+      "date": "2026-08-10"
+     }
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {
+      "name": "NeuroPharm Inc",
+      "class": "INDUSTRY"
+     }
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": [
+      "EARLY_PHASE1"
+     ],
+     "enrollmentInfo": {
+      "count": 30,
+      "type": "Anticipated"
+     }
+    },
+    "conditionsModule": {
+     "conditions": [
+      "Stage IV Non-Small Cell Lung Cancer"
+     ]
+    },
+    "armsInterventionsModule": {
+     "interventions": [
+      {
+       "name": "TAU aggregation inhibitor",
+       "type": "Drug"
+      }
+     ]
+    },
+    "outcomesModule": {
+     "otherOutcomes": [
+      {
+       "measure": "Safety and tolerability",
+       "timeFrame": "6 months"
+      }
+     ]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "45 Years",
+     "maximumAge": "80 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: ftld spectrum diagnosis."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {
+       "facility": "Columbia University Medical Center",
+       "city": "New York",
+       "state": "New York",
+       "zip": "10032",
+       "country": "United States",
+       "status": "RECRUITING"
+      }
+     ]
+    }
+   },
+   "hasResults": false
+  }
+ ],
+ "totalCount": 10,
+ "nextPageToken": null
+}

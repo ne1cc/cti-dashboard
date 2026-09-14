@@ -28,7 +28,7 @@ api:
   openapi_spec_url: https://clinicaltrials.gov/api/oas/v2
   docs_url: https://clinicaltrials.gov/data-api/api
   format: json
-  page_size: 1000           # API max — keeps page count near ~600 for ~600k+ studies
+  page_size: 1000           # API max — 602 pages, measured 2026-09-05 (9.7 GB bronze)
   count_total: true
   # Intentionally empty: no query.cond / filter.* — CTG default is "all studies"
   query_params: {}
@@ -68,6 +68,20 @@ ingestion:
   reuse_window_hours: 720
   page_file_pattern: "run_id={run_id}/page={page:05d}.json"
   manifest_file_pattern: "manifest_{run_id}.json"
+
+# Run retention for this profile (make prune-data, src/utils/retention.py).
+# Deliberately the same horizon as the condition profiles: this profile's
+# pages are the whole registry, so a single retained bronze run matters here
+# more than anywhere else on the volume — and a special case is a knob nobody
+# will remember to re-tune.
+# bronze_runs_to_keep is decisive for this profile and this profile only: it is
+# ingest_only, so it has no silver and no transform, and the bronze horizon is
+# the sole thing bounding its raw pages. The snapshot horizon is therefore
+# unused here; it moves with the others (3, from the 2026-09-07 1 GB volume
+# measurement in config/project_config.yml) rather than special-casing.
+retention:
+  bronze_runs_to_keep: 1
+  snapshot_runs_to_keep: 3
 
 guardrails:
   disclaimer: >-

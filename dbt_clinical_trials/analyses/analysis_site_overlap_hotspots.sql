@@ -1,6 +1,7 @@
 -- Facilities listed by the most recruiting trials (best-effort facility
 -- identity; a listing signal, not a site-capacity claim).
 select
+    indication_profile_id,
     facility_name,
     city,
     state_normalized,

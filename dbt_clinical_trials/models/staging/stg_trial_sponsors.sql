@@ -1,6 +1,7 @@
 -- One row per NCT ID + sponsor/collaborator + ingestion run.
 select
     ingestion_run_id,
+    indication_profile_id,
     nct_id,
     sponsor_name,
     sponsor_role,

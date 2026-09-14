@@ -40,5 +40,5 @@ streamlit run dashboard/app.py
 
 - The warehouse path comes from `.env` / `config/project_config.yml` (see `.env.example`).
 - If the app shows "Warehouse not found", the DuckDB file is missing from the deploy
-  environment — rebuild locally and ensure `data/warehouse/` is populated before demoing.
+  environment â€” rebuild locally and ensure `data/warehouse/` is populated before demoing.
 - This app is a **portfolio demonstration**, not clinical decision support.

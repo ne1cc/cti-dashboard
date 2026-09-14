@@ -13,7 +13,7 @@
 # OpenAPI spec: https://clinicaltrials.gov/api/oas/v2
 #
 # A separate opt-in profile exists for full-registry (all conditions,
-# worldwide) bronze ingestion: config/full_catalog_config.yml, run via
+# worldwide) bronze ingestion: config/profiles/full_catalog.yml, run via
 # `make ingest-full-catalog`. It does not affect this file's scope or
 # any silver/gold/dashboard output.
 # ============================================================
@@ -87,6 +87,43 @@ ingestion:
   reuse_window_hours: 24
   page_file_pattern: "run_id={run_id}/page={page:05d}.json"
   manifest_file_pattern: "manifest_{run_id}.json"
+
+# How many past runs survive `make prune-data` (src/utils/retention.py).
+# bronze = raw API pages, the expensive bytes; snapshot = silver + manifest,
+# i.e. the warehouse's longitudinal depth. bronze_runs_to_keep may not exceed
+# snapshot_runs_to_keep — the prune refuses it, because raw pages left behind by
+# a deleted manifest can never be discovered by a later prune.
+#
+# The snapshot horizon is 3, not 6. A 2026-09-07 volume measurement (commit
+# 78c2050) on the deployed 1 GB Fly volume found a two-profile /app/data at
+# 499.7 MB steady state with 3 retained snapshots — 331.9 MB of that is the
+# single retained bronze run per profile (78.8 + 253.1), 34.9 MB of silver per
+# snapshot, DuckDB 44.6 MB at one snapshot and 63.2 MB at three.
+#
+# (a) The plan's rule of record is "headroom >= 2.5 keeps 6". (b) It is
+# unsatisfiable at 1 GB for *any* horizon: 2.5x demands a steady state <= 400 MB,
+# but a single retained snapshot already walks 411.3 MB and a horizon below 1 is
+# refused by prune_profile's horizon guard (0 deletes every run it retains, and a
+# negative is refused there rather than by runs_to_prune's helper check). (c) The
+# criterion actually applied
+# is therefore the deepest horizon whose worst refresh instant leaves >100 MB of
+# the 1,000 MB ceiling free: 3 (peak 866.5 MB, walked) — that 100 MB floor is a
+# chosen threshold (judgment), not a measurement. A two-point fit through the
+# walked peaks peak(1)=778.1 and peak(3)=866.5 (44.2 MB/snapshot) puts 6 at
+# ~999 MB (ESTIMATE), at or over the ceiling, and the pressure at that instant is
+# the fetch/transform writes, not the DuckDB build — make pipeline runs
+# prune-data *before* dbt-run, so the transient second bronze run is reclaimed
+# before the warehouse is written.
+#
+# Depth 3 also drops the guaranteed monthly trend series: at the 7-day cadence
+# three snapshots span 14 days, which sits inside one calendar month on 197 of
+# 365 weekly start dates (measured 2026-09-07), so recruiting_growth_3m goes null
+# rather than 0.0 on those weeks. (d) fly volumes extend cti_data --size 2 is the
+# user's action that restores (a)'s premise; raise this back to 6 only after
+# extending. docs/DEPLOY_FLY.md ("What to expect") carries the full arithmetic.
+retention:
+  bronze_runs_to_keep: 1
+  snapshot_runs_to_keep: 3
 
 guardrails:
   disclaimer: >-

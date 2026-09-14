@@ -40,12 +40,27 @@ from src.config import (
     IngestionConfig,
     PathsConfig,
     ProjectConfig,
+    RetentionConfig,
 )
 from src.transform.normalize_conditions import ConditionTaxonomy, load_taxonomy
 from src.utils.paths import project_root, resolve_path
 
 PROFILES_DIR = "config/profiles"
 SHARED_PATHS_FILE = "config/shared_paths.yml"
+
+# User-facing profile names, normalized before any registry lookup. CLI users
+# historically typed `default`/`full-catalog`; config/profiles/*.yml are keyed by
+# profile.id. One function owns the mapping so ingest, transform and the
+# dashboard selector cannot each invent their own accepted-spellings list.
+PROFILE_ALIASES: dict[str, str] = {
+    "default": "adrd",
+    "full-catalog": "full_catalog",
+}
+
+
+def normalize_profile_id(raw: str) -> str:
+    """Return the canonical profile_id for a user-supplied profile name."""
+    return PROFILE_ALIASES.get(raw, raw)
 
 
 # ---------------------------------------------------------------------------
@@ -131,7 +146,8 @@ def _build_project_config(raw: dict[str, Any], shared: SharedPaths) -> ProjectCo
             http=HttpConfig(**http_raw),
         ),
         paths=PathsConfig(**paths_raw),
-        ingestion=IngestionConfig(**raw.get("ingestion", {})),
+        ingestion=IngestionConfig(**(raw.get("ingestion") or {})),
+        retention=RetentionConfig.from_raw(raw.get("retention")),
         scope=raw.get("scope", {}),
         guardrails=raw.get("guardrails", {}),
     )
@@ -194,10 +210,9 @@ class ProfileRegistry:
     Usage::
 
         registry = ProfileRegistry()
-        for profile in registry.active():
+        for profile in registry.refreshable():
             run_ingestion(config=profile)
-            if not profile.ingest_only:
-                run_transform(profile=profile)
+            run_transform(profile=profile)
     """
 
     def __init__(
@@ -223,9 +238,14 @@ class ProfileRegistry:
         self._ensure_loaded()
         return list(self._profiles.values())
 
-    def active(self) -> list[IndicationProfile]:
-        """All profiles eligible for an orchestrated run (ingest_only or not)."""
-        return self.all()
+    def refreshable(self) -> list[IndicationProfile]:
+        """Profiles eligible for the full pipeline: ingest + transform + dbt.
+
+        `ingest_only` profiles (full_catalog) keep their bronze but never reach
+        silver or the warehouse, so they are excluded here — `orchestrate` and
+        the dashboard must not be able to pick one up.
+        """
+        return [p for p in self.all() if not p.ingest_only]
 
     def get(self, profile_id: str) -> IndicationProfile:
         """Return the named profile, raising KeyError if not found."""

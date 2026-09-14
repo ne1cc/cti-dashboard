@@ -2,6 +2,7 @@
 -- config-driven ADRD taxonomy mapping applied upstream in silver.
 select
     ingestion_run_id,
+    indication_profile_id,
     nct_id,
     condition_raw,
     condition_normalized,

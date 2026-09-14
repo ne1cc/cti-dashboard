@@ -9,10 +9,15 @@ CONDITION   ?= Alzheimer Disease
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup env ingest full-refresh ingest-full-catalog full-catalog-full-refresh \
-        orchestrate orchestrate-full-refresh \
-        transform transform-full-catalog dbt-deps dbt-seed dbt-run dbt-test \
+.PHONY: help setup init-dirs env ingest full-refresh ingest-full-catalog full-catalog-full-refresh \
+        orchestrate orchestrate-full-refresh prune-data prune-data-dry \
+        transform dbt-deps dbt-seed dbt-run dbt-test \
         dbt-docs quality-report dashboard test lint format clean pipeline
+
+# make builds one target's prerequisites *concurrently* under -j, and `pipeline`'s
+# include a destructive `prune-data`, which must never run against a tree
+# `orchestrate` is still writing. -j can arrive via MAKEFLAGS with no one typing it.
+.NOTPARALLEL:
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -21,11 +26,11 @@ setup: ## Install dependencies and prepare local environment
 	uv sync --all-groups
 	@test -f .env || cp .env.example .env
 	@test -f $(DBT_DIR)/profiles.yml || { test -f $(DBT_DIR)/profiles.yml.example && cp $(DBT_DIR)/profiles.yml.example $(DBT_DIR)/profiles.yml || true; }
-	@mkdir -p data/bronze/adrd/api_responses data/bronze/adrd/manifests \
-	           data/bronze/oncology_nsclc/api_responses data/bronze/oncology_nsclc/manifests \
-	           data/bronze/full_catalog/api_responses data/bronze/full_catalog/manifests \
-	           data/silver data/gold data/warehouse
+	@$(PYTHON) -m src.cli init-data-dirs >/dev/null
 	@echo "Setup complete. Edit .env if needed, then run: make ingest"
+
+init-dirs: ## Create every profile's data directories from config/profiles/
+	$(PYTHON) -m src.cli init-data-dirs
 
 ingest: ## Run an incremental ingestion snapshot from ClinicalTrials.gov (Phase 2)
 	$(PYTHON) -m src.cli ingest --condition "$(CONDITION)"
@@ -51,11 +56,14 @@ orchestrate: ## Run ingest + transform for all indication profiles in config/pro
 orchestrate-full-refresh: ## Force full re-ingest + transform for all indication profiles
 	$(PYTHON) -m src.cli orchestrate --full-refresh
 
+prune-data: ## Delete run artifacts past the per-profile retention horizon
+	$(PYTHON) -m src.cli prune-data
+
+prune-data-dry: ## Report what prune-data would delete
+	$(PYTHON) -m src.cli prune-data --dry-run
+
 transform: ## Flatten bronze JSON into silver Parquet entities (Phase 3)
 	$(PYTHON) -m src.cli transform
-
-transform-full-catalog: ## Opt-in: transform the full-catalog bronze tree into full-catalog silver
-	$(PYTHON) -m src.cli transform --profile full-catalog
 
 dbt-deps: ## Install dbt packages (Phase 4)
 	$(DBT) deps $(DBT_FLAGS)
@@ -78,7 +86,7 @@ quality-report: ## Build the data-quality report (Phase 5)
 dashboard: ## Launch the Streamlit dashboard (Phase 6)
 	uv run streamlit run dashboard/app.py
 
-pipeline: ingest transform dbt-run dbt-test quality-report ## Full end-to-end refresh
+pipeline: orchestrate prune-data dbt-run dbt-test quality-report ## Full refresh of every refreshable profile
 
 test: ## Run Python unit tests
 	uv run pytest

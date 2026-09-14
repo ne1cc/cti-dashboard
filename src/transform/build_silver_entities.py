@@ -58,9 +58,17 @@ def build_silver_for_run(
     if not run_dir.exists():
         raise FileNotFoundError(f"Bronze pages missing for run {run_id}: {run_dir}")
 
-    # Use profile taxonomy when available; fall back to the global ADRD singleton
-    # so callers that predate the profile system continue to work unchanged.
-    taxonomy = (profile.taxonomy if profile and profile.taxonomy else None) or get_taxonomy()
+    # A named profile with no taxonomy is a caller bug, not a licence to borrow
+    # another profile's: the rows would carry this profile's
+    # `indication_profile_id` while classifying conditions by someone else's
+    # aliases. Only a caller that predates the registry (profile is None) gets the
+    # global ADRD singleton.
+    if profile is not None and profile.taxonomy is None:
+        raise ValueError(
+            f"Profile '{profile.profile_id}' has no condition_taxonomy and cannot be "
+            "transformed; it is ingest_only (see its config/profiles/*.yml)."
+        )
+    taxonomy = profile.taxonomy if profile is not None else get_taxonomy()
     geography = get_geography_rules()
     profile_id = profile.profile_id if profile else "adrd"
     snapshot_ts = manifest.started_at_utc.isoformat()

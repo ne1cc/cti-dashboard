@@ -24,7 +24,9 @@ sources:
         description: One row per NCT ID + outcome type + outcome index + run.
 
   - name: bronze
-    description: Ingestion-run manifests written by src/ingest.
+    description: >
+      Ingestion-run manifests written by src/ingest, one directory per
+      indication profile under data/bronze/<profile_id>/manifests.
     tables:
       - name: ingestion_manifests
         description: One row per ingestion run (Parquet summaries).

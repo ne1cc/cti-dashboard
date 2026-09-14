@@ -1,6 +1,7 @@
 -- One row per NCT ID + outcome type + outcome index + ingestion run.
 select
     ingestion_run_id,
+    indication_profile_id,
     nct_id,
     outcome_type,
     cast(outcome_index as integer) as outcome_index,

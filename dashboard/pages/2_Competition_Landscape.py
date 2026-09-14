@@ -6,13 +6,15 @@ from components import data
 from components.filters import segment_filters
 from components.guardrails import guarded_footer, page_setup, proxy_caption
 from components.guidance import format_condition_group, render_page_guide
+from components.profile import render_profile_selector
 
 page_setup("Competition Landscape")
-data.require_warehouse()
+profile_id = render_profile_selector()
+data.require_warehouse(profile_id)
 
 render_page_guide("competition_landscape")
 
-competition = data.recruiting_competition()
+competition = data.recruiting_competition(profile_id)
 filtered = segment_filters(competition)
 
 col1, col2, col3 = st.columns(3)

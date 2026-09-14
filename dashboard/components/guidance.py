@@ -39,16 +39,28 @@ def format_condition_group(group: str | Any) -> str:
     return ADRD_CONDITION_LABELS.get(group, group.replace("_", " ").title())
 
 
-def render_indication_banner() -> None:
+def render_indication_banner(profile_id: str | None = None) -> None:
     """Render the active indication scope banner.
 
     Provides transparent visibility into the therapeutic area scope, included
-    diagnostic sub-groups, and unique operational realities of Alzheimer's
-    Disease & Related Dementias (ADRD) trials.
+    diagnostic sub-groups, and unique operational realities of clinical trials.
     """
+    display_title = "🧠 Alzheimer's Disease & Related Dementias (ADRD)"
+    is_adrd = profile_id is None or profile_id == "adrd"
+
+    if not is_adrd and profile_id:
+        try:
+            from src.profiles import get_registry
+
+            reg = get_registry()
+            prof = reg.get(profile_id)
+            display_title = f"🔬 {prof.display_name}"
+        except Exception:
+            display_title = f"🔬 {profile_id.replace('_', ' ').title()}"
+
     with st.container():
         st.markdown(
-            """
+            f"""
             <div style="
                 border: 1px solid rgba(59, 130, 246, 0.25);
                 border-radius: 8px;
@@ -66,7 +78,7 @@ def render_indication_banner() -> None:
                             color: #3b82f6;
                         ">Active Indication Profile</span>
                         <h4 style="margin: 2px 0 0 0; font-size: 1.05rem;">
-                            🧠 Alzheimer's Disease & Related Dementias (ADRD)
+                            {display_title}
                         </h4>
                     </div>
                     <div style="text-align: right;">
@@ -88,38 +100,60 @@ def render_indication_banner() -> None:
         with st.expander(
             "🔍 Indication Scope, Taxonomy & Clinical Validity Details", expanded=False
         ):
-            st.markdown(
-                "**Scope & Diagnostic Boundaries:**\n"
-                "- **Primary Coverage:** Interventional clinical trials registered on "
-                "ClinicalTrials.gov with U.S. study sites investigating treatments for "
-                "Alzheimer's Disease and related neurodegenerative dementias.\n"
-                "- **Mapped Conditions:** Categorized deterministically via version-controlled "
-                "rule matching (`config/condition_taxonomy.yml`) into:\n"
-                "  - *Alzheimer's Disease (AD):* Early, mild, moderate, severe AD and "
-                "AD dementia.\n"
-                "  - *Mild Cognitive Impairment (MCI):* Prodromal AD and amnestic MCI.\n"
-                "  - *Frontotemporal Dementia (FTD):* Behavioral variant FTD, Primary "
-                "Progressive Aphasia (PPA), Pick's disease.\n"
-                "  - *Lewy Body Dementia (LBD):* Dementia with Lewy bodies.\n"
-                "  - *Vascular Dementia (VaD):* Vascular cognitive impairment and "
-                "multi-infarct dementia.\n"
-                "  - *Parkinson's Disease Dementia (PDD):* Dementia secondary to Parkinson's.\n"
-                "- **Conservative Boundary:** General cognitive complaints without an explicit "
-                "dementia etiology (`cognitive_impairment_other`) are isolated to avoid "
-                "false-positive inflation.\n\n"
-                "**Unique Operational Realities of ADRD Clinical Trials:**\n"
-                "- **Biomarker Gating & Screen Failures:** Modern ADRD protocols require "
-                "confirmed amyloid-beta and tau pathology via amyloid PET imaging, CSF "
-                "p-tau/Aβ42, or plasma p-tau217 biomarkers, yielding 50% to 70%+ screen failure.\n"
-                "- **Caregiver / Study Partner Burden:** Inclusion criteria universally require "
-                "a designated study partner spending ≥10 hours/week with the participant "
-                "to attend all clinic visits and complete functional rating scales (CDR-SB).\n"
-                "- **Memory Clinic Saturation:** Specialized medical centers possessing PET "
-                "scanners, infusion suites, and certified psychometric raters (ADAS-Cog, MMSE) "
-                "are routinely approached by multiple competing sponsor protocols.\n"
-                "- **Extended Trial Duration:** Phase 2 and 3 disease-modifying trials run "
-                "for 18 to 24+ months, keeping investigative sites and cohorts committed."
-            )
+            if is_adrd:
+                st.markdown(
+                    "**Scope & Diagnostic Boundaries:**\n"
+                    "- **Primary Coverage:** Interventional clinical trials registered on "
+                    "ClinicalTrials.gov with U.S. study sites investigating treatments for "
+                    "Alzheimer's Disease and related neurodegenerative dementias.\n"
+                    "- **Mapped Conditions:** Categorized deterministically via version-controlled "
+                    "rule matching (`config/condition_taxonomy.yml`) into:\n"
+                    "  - *Alzheimer's Disease (AD):* Early, mild, moderate, severe AD and "
+                    "AD dementia.\n"
+                    "  - *Mild Cognitive Impairment (MCI):* Prodromal AD and amnestic MCI.\n"
+                    "  - *Frontotemporal Dementia (FTD):* Behavioral variant FTD, Primary "
+                    "Progressive Aphasia (PPA), Pick's disease.\n"
+                    "  - *Lewy Body Dementia (LBD):* Dementia with Lewy bodies.\n"
+                    "  - *Vascular Dementia (VaD):* Vascular cognitive impairment and "
+                    "multi-infarct dementia.\n"
+                    "  - *Parkinson's Disease Dementia (PDD):* Dementia secondary to Parkinson's.\n"
+                    "- **Conservative Boundary:** General cognitive complaints without an explicit "
+                    "dementia etiology (`cognitive_impairment_other`) are isolated to avoid "
+                    "false-positive inflation.\n\n"
+                    "**Unique Operational Realities of ADRD Clinical Trials:**\n"
+                    "- **Biomarker Gating & Screen Failures:** Modern ADRD protocols require "
+                    "confirmed amyloid-beta and tau pathology via amyloid PET imaging, CSF "
+                    "p-tau/Aβ42, or plasma p-tau217 biomarkers, yielding "
+                    "50% to 70%+ screen failure.\n"
+                    "- **Caregiver / Study Partner Burden:** Inclusion criteria universally "
+                    "require "
+                    "a designated study partner spending ≥10 hours/week with the participant "
+                    "to attend all clinic visits and complete functional rating scales (CDR-SB).\n"
+                    "- **Memory Clinic Saturation:** Specialized medical centers possessing PET "
+                    "scanners, infusion suites, and certified psychometric raters (ADAS-Cog, MMSE) "
+                    "are routinely approached by multiple competing sponsor protocols.\n"
+                    "- **Extended Trial Duration:** Phase 2 and 3 disease-modifying trials run "
+                    "for 18 to 24+ months, keeping investigative sites and cohorts committed."
+                )
+            else:
+                desc = f"Clinical trials investigating {profile_id}."
+                if profile_id:
+                    try:
+                        from src.profiles import get_registry
+
+                        reg = get_registry()
+                        prof = reg.get(profile_id)
+                        desc = (
+                            prof.description
+                            or f"Clinical trials investigating {prof.display_name}."
+                        )
+                    except Exception:
+                        pass
+                st.markdown(
+                    f"**Scope & Diagnostic Boundaries ({profile_id}):**\n"
+                    f"- {desc}\n"
+                    f"- Interventional U.S. clinical trials registered on ClinicalTrials.gov.\n"
+                )
 
 
 # Comprehensive decision playbooks for each dashboard page

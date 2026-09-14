@@ -44,8 +44,15 @@ required for overlap); they remain in silver and staging.
 
 ## Trend metrics (`mart_condition_geography_trends`)
 Month grain (snapshot month). `recruiting_trial_count_3m_avg` and
-`recruiting_growth_3m` use a 3-month `RANGE` window; with one snapshot the
-series has one point and growth is null (shown honestly in the dashboard).
+`recruiting_growth_3m` use a 3-month `RANGE` window over the profile ×
+condition_group × state series. `recruiting_growth_3m` is **null unless that
+window spans at least two distinct `activity_month`s**: on a single-month
+window the baseline `first_value` is the row itself, so `(x − x) / x` would read
+0.0 — "recruiting is flat" — for a quantity that is genuinely unknown. The model
+nulls it instead (pinned by
+`dbt_clinical_trials/tests/assert_trends_growth_needs_two_months.sql`). The
+mean is the opposite case: a one-point mean is honest, so
+`recruiting_trial_count_3m_avg` keeps its value even at a single month.
 
 ## Reliability metrics (`mart_data_reliability`)
 | Metric | Definition |

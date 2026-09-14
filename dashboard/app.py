@@ -8,20 +8,22 @@ from components.guidance import (
     render_indication_banner,
     render_page_guide,
 )
+from components.profile import render_profile_selector
 
 page_setup("Recruitment Competition Intelligence — Overview")
-data.require_warehouse()
+profile_id = render_profile_selector()
+data.require_warehouse(profile_id)
 
-render_indication_banner()
+render_indication_banner(profile_id)
 render_page_guide("overview")
 
-metrics = data.overview_metrics()
+metrics = data.overview_metrics(profile_id)
 
 col1, col2, col3, col4 = st.columns(4)
 col1.metric(
     "Trials tracked",
     f"{int(metrics['total_trials']):,}",
-    help="Total interventional ADRD clinical trials with U.S. sites recorded in the warehouse.",
+    help="Total interventional clinical trials with U.S. sites recorded in the warehouse.",
 )
 col2.metric(
     "Currently recruiting",
@@ -42,14 +44,15 @@ col4.metric(
     ),
 )
 
+runs_count = metrics.get("snapshot_count", metrics.get("warehouse_runs", 0))
 st.caption(
     f"Latest snapshot: {metrics['latest_snapshot']} · "
-    f"snapshots accrued: {int(metrics['snapshot_count'])}"
+    f"snapshots accrued: {int(runs_count) if runs_count is not None else 0}"
 )
 proxy_caption()
 
 st.subheader("Top of the Feasibility Review Priority Queue")
-queue = data.priority_queue()
+queue = data.priority_queue(profile_id)
 preview_df = queue.head(10)[
     [
         "priority_rank",
@@ -94,10 +97,10 @@ st.markdown(
     for **Clinical Trial Feasibility Leads**, **Study Planners**, and **Medical Directors**:
 
     1. **Prioritize Feasibility Review (Pages 1 & 2):** Use the **Priority Queue** and
-       **Competition Landscape** to rank condition × state × phase segments. Identify where memory
-       clinic density or rapid growth demands differentiated protocol strategy.
+       **Competition Landscape** to rank condition × state × phase segments. Identify where site
+       density or rapid growth demands differentiated protocol strategy.
     2. **Mitigate Site Congestion (Pages 3 & 4):** Review **Geography Trends** and **Site Overlap**
-       to identify institutions carrying multiple active ADRD protocols and assess investigator
+       to identify institutions carrying multiple active protocols and assess investigator
        bandwidth before outreach.
     3. **Benchmark Competitors & Design (Pages 5, 7, & 8):** Evaluate lead sponsors, inspect
        individual registry records in **Trial Explorer**, and use **Trial Similarity** to benchmark

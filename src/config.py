@@ -61,12 +61,48 @@ class IngestionConfig(BaseModel):
     manifest_file_pattern: str = "manifest_{run_id}.json"
 
 
+class RetentionConfig(BaseModel):
+    """How many past runs survive a prune, per profile.
+
+    bronze_runs_to_keep counts *success* ingestion runs whose raw pages are
+    retained; snapshot_runs_to_keep counts runs whose silver + manifest are
+    retained — i.e. the warehouse's longitudinal depth. Snapshot depth may run
+    deeper than bronze depth by any amount (snapshots are the cheap bytes and the
+    history); bronze deeper than snapshot is what src/utils/retention.py refuses,
+    because the runs in between keep raw pages no later prune can discover. An
+    ingest_only profile never has silver, so for it bronze_runs_to_keep is the
+    only horizon that bounds its raw pages at all.
+
+    This default is the shipped horizon (3), not a looser one: the depth was
+    brought down from 6 by a dated volume measurement (1 GB deployed, 499.7 MB
+    steady state and 866.5 MB worst-instant at 3 snapshots for two profiles,
+    2026-09-07, commit 78c2050 — docs/DEPLOY_FLY.md). A config with no
+    `retention:` block must not reintroduce the setting that overflows it.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    bronze_runs_to_keep: int = 1
+    snapshot_runs_to_keep: int = 3
+
+    @classmethod
+    def from_raw(cls, raw: dict[str, Any] | None) -> "RetentionConfig":
+        """Build from a config block, treating absent or empty as the defaults.
+
+        A bare `retention:` line in YAML parses to None, and `cls(**None)` is a
+        TypeError raised from inside the code path that deletes files. Loading
+        retention must never be the thing that fails.
+        """
+        return cls(**(raw or {}))
+
+
 class ProjectConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     api: ApiConfig
     paths: PathsConfig
     ingestion: IngestionConfig
+    retention: RetentionConfig = RetentionConfig()
     scope: dict[str, Any] = {}
     guardrails: dict[str, Any] = {}
 
@@ -92,7 +128,8 @@ def load_config(config_path: str | Path | None = None) -> ProjectConfig:
     return ProjectConfig(
         api=ApiConfig(**api_raw),
         paths=PathsConfig(**paths_raw),
-        ingestion=IngestionConfig(**raw.get("ingestion", {})),
+        ingestion=IngestionConfig(**(raw.get("ingestion") or {})),
+        retention=RetentionConfig.from_raw(raw.get("retention")),
         scope=raw.get("scope", {}),
         guardrails=raw.get("guardrails", {}),
     )

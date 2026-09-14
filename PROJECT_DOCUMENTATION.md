@@ -40,13 +40,13 @@ Documentation snapshot: built and verified against the live warehouse of **2026-
 | Property | Value |
 |---|---|
 | Domain | Clinical-operations site-feasibility intelligence |
-| Therapeutic area | Alzheimer's disease and related dementias (config-driven) |
+| Therapeutic area | Config-driven indication profiles (`config/profiles/`: ADRD, NSCLC oncology, plus an ingest-only full catalog) |
 | Geography | United States (raw data keeps all countries; marts are U.S.-only) |
 | Source | [ClinicalTrials.gov API v2](https://clinicaltrials.gov/data-api/api) (public, no key) |
 | Stack | Python 3.11+ · uv · DuckDB · dbt · Streamlit · Plotly · pytest · ruff |
 | Architecture | Local-first medallion: bronze JSON → silver Parquet → gold dbt marts |
-| Automated tests | **115 dbt data tests** + **162 pytest tests** — all green |
-| dbt resources | 32 models (8 staging views, 8 intermediate views, 16 mart tables) + 4 seeds |
+| Automated tests | dbt data tests + pytest suite: the counts, their date and the commands that regenerate them are in §14 (one place, on purpose — a second copy is the drift this document has already been burned by) |
+| dbt resources | 32 models (8 staging views, 8 intermediate views, 16 mart tables) + 4 seeds + 4 analyses (same 2026-09-07 UTC parse) |
 
 **Live warehouse figures (single snapshot, 2026-07-24):**
 
@@ -137,19 +137,19 @@ flowchart TB
     end
 
     subgraph BRONZE["Bronze — immutable raw"]
-        RAW["Raw JSON pages<br/>data/bronze/api_responses/run_id=&lt;id&gt;/page=NNNNN.json"]
-        MAN["Ingestion manifests<br/>data/bronze/manifests/manifest_&lt;run_id&gt;.json"]
-        BASE["Schema baseline<br/>_schema_baseline.json (125 field paths)"]
+        RAW["Raw JSON pages<br/>data/bronze/&lt;profile_id&gt;/api_responses/run_id=&lt;id&gt;/page=NNNNN.json"]
+        MAN["Ingestion manifests<br/>data/bronze/&lt;profile_id&gt;/manifests/manifest_&lt;run_id&gt;.json"]
+        BASE["Schema baseline<br/>_schema_baseline.json (one per profile)"]
     end
 
     subgraph SILVER["Silver — normalized entities"]
-        PQ["7 Parquet entity sets per run<br/>trials · locations · sponsors · conditions<br/>interventions · outcomes · statuses"]
+        PQ["6 Parquet entity sets per run<br/>trials · conditions · interventions<br/>sponsors · locations · outcomes"]
         QUAR["Quarantine<br/>rejected records + reason codes"]
     end
 
     subgraph GOLD["Gold — dimensional warehouse"]
         DUCK[("DuckDB<br/>data/warehouse/clinical_trials.duckdb")]
-        DBT["dbt: 8 staging + 7 intermediate<br/>+ 15 marts + 3 seeds + 73 tests"]
+        DBT["dbt: staging · intermediate · marts<br/>+ seeds · data tests<br/>(counts and their date: §14)"]
     end
 
     subgraph DELIVERY["Delivery"]
@@ -226,19 +226,21 @@ cti-dashboard/
 │   ├── seeds/                    # status_mapping, phase_mapping,
 │   │                             # feasibility_score_weights
 │   ├── models/staging/           # 8 views over silver Parquet (+ sources, tests)
-│   ├── models/intermediate/      # 7 views (status history, concentration, ...)
-│   ├── models/marts/             # 5 dims, 2 facts, 2 bridges, 6 marts (+ tests)
-│   ├── tests/                    # 6 singular SQL assertions
+│   ├── models/intermediate/      # 8 views (status history, concentration, ...)
+│   ├── models/marts/             # 5 dims, 2 facts, 2 bridges, 7 marts (+ tests)
+│   ├── tests/                    # 12 singular SQL assertion files (measured
+│   │                             # 2026-09-07: `ls dbt_clinical_trials/tests/*.sql`;
+│   │                             # §14 carries the dbt total of 138, which is not this)
 │   └── analyses/                 # 4 compiled-but-not-materialized analyses
 │
 ├── dashboard/
 │   ├── app.py                    # Overview page
-│   ├── components/               # data (cached queries), guardrails, filters
-│   └── pages/                    # 7 numbered pages (queue → trial explorer)
+│   ├── components/               # data (cached queries), guardrails, filters, profile
+│   └── pages/                    # 8 numbered pages (queue → trial similarity)
 │
-├── tests/                        # 162 pytest tests (unit + dashboard smoke)
-├── docs/                         # 10 focused documents (see §19)
-├── data/                         # git-ignored: bronze/ silver/ warehouse/ quarantine/
+├── tests/                        # pytest suite (count and its date: §14)
+├── docs/                         # 16 (`git ls-files "docs/*.md"`); §19 indexes 10 + README.md
+├── data/                         # git-ignored: bronze/<profile_id>/ silver/ gold/ warehouse/
 └── reports/                      # generated data-quality report
 ```
 
@@ -248,27 +250,26 @@ cti-dashboard/
 
 ```mermaid
 flowchart LR
-    subgraph B["Bronze (JSON, immutable)"]
+    subgraph B["Bronze (JSON, immutable)<br/>data/bronze/&lt;profile_id&gt;/"]
         direction TB
-        b1["page=00000.json … page=00025.json<br/>~100 studies per page"]
-        b2["manifest_&lt;run_id&gt;.json<br/>pages, counts, hashes, status"]
+        b1["api_responses/run_id=&lt;id&gt;/<br/>page=00000.json …"]
+        b2["manifests/manifest_&lt;run_id&gt;.json<br/>pages, counts, query hash, profile, status"]
     end
     subgraph S["Silver (Parquet, per run)"]
         direction TB
-        s1["trials/run_id=&lt;id&gt;.parquet"]
-        s2["trial_locations/…"]
-        s3["trial_sponsors/…"]
-        s4["trial_conditions/…"]
-        s5["trial_interventions/…"]
-        s6["trial_outcomes/…"]
-        s7["trial_statuses/…"]
+        s1["silver_trials/run_id=&lt;id&gt;.parquet"]
+        s2["silver_trial_locations/…"]
+        s3["silver_trial_sponsors/…"]
+        s4["silver_trial_conditions/…"]
+        s5["silver_trial_interventions/…"]
+        s6["silver_trial_outcomes/…"]
     end
     subgraph G["Gold (DuckDB tables/views)"]
         direction TB
         g1["main_staging (8 views)"]
-        g2["main_intermediate (7 views)"]
-        g3["main_marts (15 tables)"]
-        g4["main_seeds (3 mapping tables)"]
+        g2["main_intermediate (8 views)"]
+        g3["main_marts (16 tables)"]
+        g4["main_seeds (4 mapping tables)"]
     end
     B -->|"make transform<br/>(flatten, normalize, quarantine)"| S
     S -->|"make dbt-run<br/>(read_parquet sources)"| G
@@ -279,12 +280,16 @@ Grain contract at every layer:
 | Layer | Object | Grain |
 |---|---|---|
 | Bronze | JSON page | API page × ingestion run |
-| Silver | `trials` | NCT ID × ingestion run |
-| Silver | `trial_locations` | NCT ID × facility × city × state × run |
-| Gold | `dim_trial` | NCT ID (current record) |
-| Gold | `fct_trial_snapshot` | NCT ID × snapshot date |
-| Gold | `fct_trial_site` | NCT ID × facility × city × state × snapshot date |
-| Gold | `mart_feasibility_priority_queue` | condition group × state × phase × latest snapshot |
+| Silver | `trials` | NCT ID × indication profile × ingestion run |
+| Silver | `trial_locations` | NCT ID × facility × city × state × profile × run |
+| Gold | `dim_trial` | indication profile × NCT ID (current record) |
+| Gold | `fct_trial_snapshot` | indication profile × NCT ID × snapshot date |
+| Gold | `fct_trial_site` | indication profile × NCT ID × facility × city × state × snapshot date |
+| Gold | `mart_feasibility_priority_queue` | profile × condition group × state × phase × latest snapshot |
+
+The authoritative per-model grain statements live in the dbt yml files
+(`dbt_clinical_trials/models/**/_*.yml`), and the composite key is enforced by
+the `unique` tests there plus `tests/test_dbt_fixture_build.py`.
 
 ---
 
@@ -298,11 +303,11 @@ sequenceDiagram
     participant O as extract_studies
     participant C as ctg_client (requests)
     participant A as ClinicalTrials.gov API v2
-    participant D as data/bronze/
+    participant D as data/bronze/&lt;profile_id&gt;/
 
-    U->>O: run_ingestion(condition, full_refresh, max_pages)
+    U->>O: run_ingestion(condition, full_refresh, max_pages, profile)
     O->>O: incremental check — recent completed run<br/>for same query hash? reuse & exit
-    O->>O: mint run_id (UTC timestamp + query hash)
+    O->>O: mint run_id (UTC compact timestamp + uuid8)
     loop until no nextPageToken
         O->>C: GET /studies?query.cond=…&pageSize=100&pageToken=…
         C->>A: request (timeout 30s)
@@ -311,7 +316,7 @@ sequenceDiagram
         C-->>O: validated payload
         O->>D: write page=NNNNN.json (immutable)
     end
-    O->>D: write manifest_&lt;run_id&gt;.json<br/>(pages, study count, totalCount,<br/>per-page hashes, status=success)
+    O->>D: write manifest_&lt;run_id&gt;.json<br/>(pages, study count, totalCount,<br/>query hash, profile, status=success)
     O-->>U: exit 0
 ```
 
@@ -321,27 +326,36 @@ Properties worth noting:
   query completed within the reuse window (24 h); `make full-refresh` overrides.
 - **Honest partials** — a run capped by `--max-pages` or interrupted mid-way is
   marked `partial`/`failed` in its manifest and **excluded from analytics**.
-- **Verifiable** — the manifest records per-page SHA-256 hashes and the API's
-  `totalCount`, later reconciled against silver and gold row counts (§12).
-- Last full pull: **26 pages, 2,592 studies**, matching the API `totalCount` exactly.
+- **Verifiable** — the manifest records the canonical `query_hash` and the API's
+  `totalCount`, every silver row carries `source_json_hash` (SHA-256 of the study
+  JSON), and both are later reconciled against silver and gold row counts (§12).
+- Last full pull recorded here: **26 pages, 2,592 studies** (the 2026-07-24
+  snapshot above), matching the API `totalCount` exactly. Later runs are recorded
+  with their own dates in [`docs/DEPLOY_FLY.md`](docs/DEPLOY_FLY.md).
 
 ## 7. Normalization design (silver)
 
-`make transform` flattens each bronze run into seven typed Parquet entity sets.
+`python -m src.cli transform --profile <id>` (or `make transform-nsclc` for the
+one profile with a dedicated target) flattens each bronze run of one profile into
+the typed Parquet entity sets listed in `ENTITY_NAMES`
+(`src/transform/build_silver_entities.py`); the same tuple is the source of
+truth for `dbt_clinical_trials/models/staging/_sources.yml`.
 
-| Entity | Contents | Normalization applied |
+| Entity (directory under `data/silver/`) | Contents | Normalization applied |
 |---|---|---|
-| `trials` | One row per study: status, phase, dates, enrollment, sponsor | partial-date parsing (`2026`, `2026-07`), phase mapping, text cleanup |
-| `trial_locations` | Listed facilities with city/state/zip/status | state → USPS 2-letter code, facility/city casefold+trim (best-effort) |
-| `trial_sponsors` | Lead sponsor + collaborators with class | role normalized to `lead_sponsor` / `collaborator` |
-| `trial_conditions` | Registry condition terms | mapped to ADRD condition groups via `config/condition_taxonomy.yml`, with confidence flag |
-| `trial_interventions` | Intervention name + type | text normalization |
-| `trial_outcomes` | Primary/secondary outcome measures | text normalization |
-| `trial_statuses` | Status + record dates per snapshot | feeds status-history construction |
+| `silver_trials` | One row per study: status, phase, dates, enrollment, sponsor | partial-date parsing (`2026`, `2026-07`), phase mapping, text cleanup |
+| `silver_trial_locations` | Listed facilities with city/state/zip/status | state → USPS 2-letter code, facility/city casefold+trim (best-effort) |
+| `silver_trial_sponsors` | Lead sponsor + collaborators with class | role normalized to `lead_sponsor` / `collaborator` |
+| `silver_trial_conditions` | Registry condition terms | mapped to the profile's condition groups via its `taxonomy:` profile key (`config/profiles/<id>.yml` → e.g. `config/condition_taxonomy.yml`), with confidence flag |
+| `silver_trial_interventions` | Intervention name + type | text normalization |
+| `silver_trial_outcomes` | Primary/secondary outcome measures | text normalization |
 
 Records that fail structural validation (missing NCT ID, unparseable payload) go to
-`data/quarantine/` with machine-readable **reason codes** — never silently dropped.
-Every silver row carries `ingestion_run_id` and `source_json_hash` lineage columns.
+that profile's own quarantine directory — `paths.quarantine` in
+`config/profiles/<id>.yml`, e.g. `data/bronze/adrd/manifests/quarantine/` — with
+machine-readable **reason codes**: never silently dropped.
+Every silver row carries `ingestion_run_id`, `indication_profile_id` and
+`source_json_hash` lineage columns.
 
 ---
 
@@ -358,6 +372,8 @@ flowchart LR
         st4[stg_trial_conditions]
         st5[stg_trial_snapshots]
         st6["stg_trial_contacts<br/>(deliberately empty)"]
+        st7[stg_trial_interventions]
+        st8[stg_trial_outcomes]
     end
     subgraph IN["Intermediate"]
         i1[int_trial_status_history]
@@ -367,6 +383,7 @@ flowchart LR
         i5[int_trial_condition_mapping]
         i6[int_sponsor_concentration]
         i7[int_condition_geography_activity]
+        i8[int_trial_comparability_features]
     end
     subgraph MA["Marts"]
         d1[dim_trial]
@@ -384,6 +401,7 @@ flowchart LR
         m4[mart_condition_geography_trends]
         m5[mart_data_reliability]
         m6[[mart_feasibility_priority_queue]]
+        m7[mart_trial_similarity]
     end
     st1 --> i1 --> i2
     st1 --> i2
@@ -409,6 +427,12 @@ flowchart LR
     i4 --> m3
     i7 --> m4
     st5 --> m5
+    i2 --> i8
+    st1 --> i8
+    br1 --> i8
+    st7 --> i8
+    f2 --> i8
+    i8 --> m7
     m2 --> m6
     m3 --> m6
     m5 --> m6
@@ -416,12 +440,16 @@ flowchart LR
     style m6 stroke-width:3px
 ```
 
-Seeds (version-controlled mapping tables): `status_mapping` (status → is_active /
-is_recruiting flags), `phase_mapping` (registry phase → order), and
-`feasibility_score_weights` (the score's weight vector — see §10).
+Seeds (version-controlled mapping tables, `dbt_clinical_trials/seeds/`):
+`status_mapping` (status → is_active / is_recruiting flags), `phase_mapping`
+(registry phase → order), `feasibility_score_weights` (the feasibility score's
+weight vector — see §10) and `similarity_score_weights` (the trial-similarity
+score's weight vector).
 
-Four reusable macros: `generate_surrogate_key` (MD5 of concatenated inputs),
-`normalize_text`, `parse_partial_date`, `safe_divide` (null-safe denominators).
+Project macros (`dbt_clinical_trials/macros/`): `generate_surrogate_key` (MD5 of
+concatenated inputs), `normalize_text`, `parse_partial_date`, `parse_age_years`,
+`safe_divide` (null-safe denominators) and `similarity_components` (the pairwise
+comparability flags).
 
 Four analyses (compiled, not materialized) provide ready-made review queries:
 top priority segments, sponsor landscape, site-overlap hotspots, reliability trend.
@@ -432,8 +460,8 @@ top priority segments, sponsor landscape, site-overlap hotspots, reliability tre
 
 ```mermaid
 erDiagram
-    dim_trial ||--o{ fct_trial_snapshot : "nct_id"
-    dim_trial ||--o{ fct_trial_site : "nct_id"
+    dim_trial ||--o{ fct_trial_snapshot : "trial_key"
+    dim_trial ||--o{ fct_trial_site : "trial_key"
     dim_trial ||--o{ bridge_trial_condition : "trial_key"
     dim_trial ||--o{ bridge_trial_sponsor : "trial_key"
     dim_condition ||--o{ bridge_trial_condition : "condition_key"
@@ -441,10 +469,12 @@ erDiagram
     dim_geography ||--o{ fct_trial_site : "state_code"
     dim_date ||--o{ fct_trial_snapshot : "snapshot_date"
     fct_trial_snapshot }o--|| mart_feasibility_priority_queue : "aggregated into"
+    dim_trial }o--o{ mart_trial_similarity : "profile-scoped pair"
 
     dim_trial {
-        string trial_key PK
-        string nct_id UK "NCT identifier"
+        string trial_key PK "surrogate over indication_profile_id + nct_id"
+        string indication_profile_id "part of the trial grain"
+        string nct_id "NCT identifier (unique only within a profile)"
         string registry_url "clinicaltrials.gov/study/NCTxxxxxxxx"
         string current_brief_title
         string current_overall_status
@@ -458,7 +488,9 @@ erDiagram
     }
     fct_trial_snapshot {
         string snapshot_key PK
-        string nct_id FK
+        string trial_key FK "surrogate over profile + nct_id"
+        string indication_profile_id "part of the grain"
+        string nct_id
         date snapshot_date
         string overall_status
         int condition_group_count
@@ -468,7 +500,9 @@ erDiagram
     }
     fct_trial_site {
         string trial_site_key PK
-        string nct_id FK
+        string trial_key FK "surrogate over profile + nct_id"
+        string indication_profile_id "part of the grain"
+        string nct_id
         string facility_normalized "best-effort identity"
         string city_normalized
         string state_normalized
@@ -476,13 +510,15 @@ erDiagram
         string location_status
     }
     mart_feasibility_priority_queue {
-        string condition_group PK
-        string state PK
-        string phase PK
-        date snapshot_date PK
-        double feasibility_priority_score "0..1"
+        string priority_queue_key PK "surrogate over profile x group x state x phase x snapshot"
+        string indication_profile_id "part of the grain"
+        string condition_group
+        string state_normalized
+        string phase_normalized
+        date snapshot_date
+        double feasibility_review_priority_score "0..1"
         string priority_band "watch|review|priority_review"
-        int priority_rank
+        int priority_rank "within one profile"
         bool growth_uses_registry_proxy_flag
         string priority_explanation "deterministic"
         string interpretation_note "always present"
@@ -491,16 +527,21 @@ erDiagram
 
 Bridges resolve the many-to-many relationships (a trial lists many conditions and
 sponsors) and are scoped to each trial's **current** snapshot so dimension joins
-never double-count history.
+never double-count history. Every relationship above is profile-scoped: a trial
+that two profiles both list is two `dim_trial` rows, deliberately, so one
+profile's status is never attributed to the other.
 
 ---
 
 ## 10. The feasibility priority score
 
-The centerpiece mart ranks every **condition group × U.S. state × phase** segment.
+The centerpiece mart ranks every **condition group × U.S. state × phase** segment
+*within one indication profile*: normalization, banding and `priority_rank` are all
+computed per profile, because two registry queries have different denominators and
+additive ranks across them would be meaningless.
 
-**Formula** (all inputs min-max normalized to [0, 1] within the latest snapshot;
-degenerate spreads where max = min score 0):
+**Formula** (all inputs min-max normalized to [0, 1] within the latest snapshot of
+one profile; degenerate spreads where max = min score 0):
 
 ```
 score = 0.35 · norm(recruiting_trial_count)        -- competing-study density
@@ -523,7 +564,7 @@ Component definitions:
 
 | Component | Definition | Honesty mechanism |
 |---|---|---|
-| Density | `COUNT(DISTINCT nct_id)` recruiting in the segment | never a per-capita claim (no population layer yet) |
+| Density | `COUNT(DISTINCT nct_id)` recruiting in the segment, within one profile | never a per-capita claim (no population layer yet) |
 | Growth | new recruiting trials in 90 days — **snapshot transitions** when ≥2 snapshots exist, else registry `study_first_post_date` proxy | `growth_uses_registry_proxy_flag` exposed per row; dashboard warns |
 | Sponsor HHI | Σ(lead-sponsor share)² over segment listings | labeled listing concentration, not market share |
 | Site overlap | share of segment trials listing a facility that appears on >1 recruiting trial | facility identity is best-effort name matching |
@@ -540,9 +581,18 @@ flowchart LR
     style P stroke-width:3px
 ```
 
-Current live distribution: **449** segments → 374 `watch`, **75** `review`,
-0 `priority_review` (expected on single-snapshot history: the growth component
-still uses the registry proxy, and top-band evidence is intentionally hard to reach).
+Distribution in the dated 2026-07-24 snapshot above (single profile, ADRD):
+**449** segments → 374 `watch`, **75** `review`, 0 `priority_review` (expected on
+single-snapshot history: the growth component still uses the registry proxy, and
+top-band evidence is intentionally hard to reach). Regenerate it per profile with:
+
+```sql
+-- the queue already holds one row per segment at its profile's latest snapshot
+select indication_profile_id, priority_band, count(*) as segments
+from mart_feasibility_priority_queue
+group by 1, 2
+order by 1, 2;
+```
 
 Every row also ships:
 
@@ -558,6 +608,15 @@ Every row also ships:
 
 `make dashboard` → http://localhost:8501. Eight pages, all read-only.
 
+The sidebar's profile selector (`dashboard/components/profile.py`) picks which
+indication profile every page renders. Its options come from the registry —
+`get_registry().refreshable()`, i.e. `config/profiles/*.yml` minus the
+`ingest_only` ones, which is why the full-catalog profile has no tab — not from a
+`select distinct` over the warehouse, so a freshly mounted volume with no
+warehouse yet still renders. The warehouse holds all profiles side by
+side, but a single page view is scoped to exactly one, so no chart mixes
+denominators across two registry queries.
+
 ```mermaid
 flowchart TB
     APP["app.py — Overview<br/>KPIs + top-of-queue preview"]
@@ -568,7 +627,8 @@ flowchart TB
     P5["5 · Sponsor Landscape<br/>top lead sponsors by listings"]
     P6["6 · Data Reliability<br/>run health + scenario explorer"]
     P7["7 · Trial Explorer<br/>per-trial records with<br/>ClinicalTrials.gov links"]
-    APP --- P1 --- P2 --- P3 --- P4 --- P5 --- P6 --- P7
+    P8["8 · Trial Similarity<br/>top comparable pairs<br/>within one profile"]
+    APP --- P1 --- P2 --- P3 --- P4 --- P5 --- P6 --- P7 --- P8
 ```
 
 | Guardrail | Enforcement |
@@ -596,22 +656,23 @@ flowchart TB
     subgraph L1["Gate 1 — Ingestion"]
         a1["HTTP retry/backoff on 429/5xx"]
         a2["Payload structural validation"]
-        a3["Manifest: page count, study count,<br/>totalCount, per-page SHA-256"]
+        a3["Manifest: run id, query hash, profile,<br/>page count, record count, totalCount,<br/>status (success | partial | failed)"]
     end
     subgraph L2["Gate 2 — Transform"]
         b1["Quarantine + reason codes"]
-        b2["Schema-drift scan vs. baseline<br/>(125 field paths, explicit update flag)"]
+        b2["Schema-drift scan vs. the profile's<br/>own baseline (explicit<br/>--update-schema-baseline)"]
         b3["Per-run profiling stats"]
     end
-    subgraph L3["Gate 3 — Warehouse (dbt, 73 tests)"]
+    subgraph L3["Gate 3 — Warehouse (dbt; test totals and their date: §14)"]
         c1["Schema tests: unique, not_null,<br/>accepted_values, relationships"]
-        c2["6 singular assertions: one current<br/>record/trial, valid dates & states,<br/>score ∈ [0,1], site integrity,<br/>snapshot completeness"]
+        c2["Singular SQL assertions in<br/>dbt_clinical_trials/tests/: one current<br/>record/trial, valid dates & states,<br/>score ∈ [0,1], site integrity,<br/>snapshot completeness, profile-scoped<br/>similarity pairs & ranks, growth history"]
     end
-    subgraph L4["Gate 4 — Cross-layer reconciliation"]
-        d1["bronze count = silver count per run"]
-        d2["NCT uniqueness within run"]
-        d3["dim_trial = latest silver distinct NCTs"]
-        d4["current_record_flag ≤ dim_trial"]
+    subgraph L4["Gate 4 — Cross-layer reconciliation (per profile)"]
+        d1["bronze_manifest_vs_silver_rows"]
+        d2["silver_nct_ids_unique"]
+        d3["warehouse_covers_latest_silver"]
+        d4["warehouse_one_current_record_per_trial"]
+        d5["warehouse_profile_has_trials<br/>warehouse_profile_has_similar_trials"]
     end
     L1 --> L2 --> L3 --> L4 --> R["reports/data_quality_report.md<br/>(make quality-report)"]
 ```
@@ -621,8 +682,18 @@ flowchart TB
 tolerate and report (odd dates, missing fields) — real-world messiness is surfaced,
 not hidden and not fatal.
 
-Latest live reconciliation: **4/4 checks pass** — API `totalCount` 2,592 → manifest
-2,592 → silver 2,592 → `dim_trial` 2,592.
+Every reconciliation check carries the `profile_id` it is about; there is no
+cross-profile check, because comparing two profiles' row counts would be a
+meaningless comparison dressed up as an invariant (see
+`src/quality/reconciliation.py`). The last generated run of the report in this
+repository is `reports/data_quality_report.md`, stamped
+`Generated: 2026-09-05T01:32:21+00:00 (UTC)` with **4/4 reconciliation checks
+passed** on a single ADRD snapshot of 2,618 records. Those four rows are the
+*pre-widening* set, not today's: since `949242a` the reconciliation leg has
+renamed `warehouse_dim_trial_vs_latest_silver` to `warehouse_covers_latest_silver`
+and runs it once per profile, and added `warehouse_profile_has_trials` and
+`warehouse_profile_has_similar_trials`, so a two-profile run reports more rows
+than that tally. Regenerate it with `make quality-report`.
 
 ---
 
@@ -645,9 +716,26 @@ banner; every document (including this one) opens with the planning-signal rule.
 
 | Suite | Count | Scope |
 |---|---|---|
-| dbt data tests | **73** | grains, keys, referential integrity, accepted values, score bounds, current-record uniqueness, state validity, date sanity |
-| pytest | **47** | HTTP client/retry, pagination, manifests, normalization, metric math (weights sync, min-max edge cases, HHI fixtures), ROI arithmetic + disclaimer, dashboard smoke (all 8 pages via Streamlit `AppTest`) |
+| dbt data tests | **138** (measured 2026-09-07 UTC: `uv run dbt parse --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials`, then count `resource_type == "test"` in `dbt_clinical_trials/target/manifest.json`) | grains, keys, referential integrity, accepted values, score bounds, current-record uniqueness, state validity, date sanity |
+| pytest | **308** (measured 2026-09-07 UTC: `uv run pytest --collect-only`) | HTTP client/retry, pagination, manifests, normalization, metric math (weights sync, min-max edge cases, HHI fixtures), ROI arithmetic + disclaimer, dashboard smoke (all 8 pages via Streamlit `AppTest`) |
 | ruff | clean | lint + format, line length 100 |
+
+These are the only places in this file that state those two counts *as measurements*,
+which is the convention the rest of the repository follows (the §4 tree comment names
+`138` once, purely to point here, in a phrasing the guard does not read as a count
+claim): `docs/competitive_positioning.md`
+carries its own dated copy, and
+[`tests/test_docs_describe_current_paths.py`](tests/test_docs_describe_current_paths.py)
+fails the build when *that* row falls behind the commands above, or when a live
+document asserts a dbt or pytest count — phrased the way that guard recognises, and
+the recognised shapes are listed in the file — that is neither dated nor equal to
+what the tools report. Two exemptions, both stated in the guard: `docs/DEPLOY_FLY.md`
+and `docs/development_log.md` are dated records, and so is **any tracked markdown
+file whose own name contains a `YYYY-MM-DD` date** (`docs/platform_updates_2026-09-04.md`
+today) — naming a *live* document after a date therefore removes it from the guard,
+which its own test pins by asserting the exempt set. Dated figures — including the
+2026-07-24 run below — are deliberately left alone: rewriting a dated measurement is
+worse than the staleness the guard removes.
 
 Last full verification (2026-07-24): `dbt build` **105/105 PASS** (3 seeds,
 15 tables, 15 views, 72 tests at that run; now 73 after the `registry_url` test),
@@ -671,7 +759,7 @@ make setup            # uv sync, .env, data/ directories
 ### Full pipeline
 
 ```bash
-make pipeline         # ingest → transform → dbt-run → dbt-test → quality-report
+make pipeline         # orchestrate → prune-data → dbt-run → dbt-test → quality-report
 make dashboard        # http://localhost:8501
 ```
 
@@ -686,7 +774,7 @@ make dashboard        # http://localhost:8501
 | `make orchestrate-full-refresh` | force full ingest + transform across all discovered profiles |
 | `make transform` | bronze → silver Parquet (+ profiling, quarantine, drift scan) |
 | `make dbt-deps` / `dbt-run` / `dbt-test` / `dbt-docs` | warehouse build, tests, docs |
-| `make quality-report` | write `reports/data_quality_report.md` |
+| `make quality-report` | write `reports/data_quality_report.md`; exit 1 if a reconciliation check failed |
 | `make test` / `lint` / `format` | pytest / ruff check / ruff format |
 | `make clean` | remove caches and build artifacts (**never** touches `data/`) |
 
