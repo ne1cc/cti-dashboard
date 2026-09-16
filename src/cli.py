@@ -6,6 +6,17 @@ from src.profiles import IndicationProfile, get_registry, normalize_profile_id
 from src.utils.logging import setup_logging
 
 
+def _positive_int(value: str) -> int:
+    """argparse type so `--max-pages 0` doesn't silently fetch one page."""
+    try:
+        n = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("must be an integer >= 1") from None
+    if n < 1:
+        raise argparse.ArgumentTypeError("must be an integer >= 1")
+    return n
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser with all pipeline subcommands.
 
@@ -39,7 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ingest.add_argument(
         "--max-pages",
-        type=int,
+        type=_positive_int,
         default=None,
         help="Optional page cap for smoke tests (partial runs stay marked incomplete-by-cap).",
     )
@@ -109,7 +120,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     orchestrate.add_argument(
         "--max-pages",
-        type=int,
+        type=_positive_int,
         default=None,
         help="Optional page cap per profile (smoke test mode).",
     )
