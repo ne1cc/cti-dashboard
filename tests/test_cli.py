@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from src.cli import build_parser, main
 from src.quality.reconciliation import ReconciliationCheck
 
@@ -34,6 +36,23 @@ def test_cli_parser_ingest_profile_full_catalog_underscore():
     parser = build_parser()
     args = parser.parse_args(["ingest", "--profile", "full_catalog"])
     assert args.profile == "full_catalog"
+
+
+def test_cli_parser_max_pages_accepts_positive():
+    args = build_parser().parse_args(["ingest", "--max-pages", "3"])
+    assert args.max_pages == 3
+
+
+def test_cli_parser_max_pages_refuses_zero():
+    with pytest.raises(SystemExit) as exc:
+        build_parser().parse_args(["ingest", "--max-pages", "0"])
+    assert exc.value.code == 2
+
+
+def test_cli_parser_max_pages_refuses_negative():
+    with pytest.raises(SystemExit) as exc:
+        build_parser().parse_args(["ingest", "--max-pages", "-1"])
+    assert exc.value.code == 2
 
 
 def test_cli_main_ingest_resolves_profile_via_registry(monkeypatch):
