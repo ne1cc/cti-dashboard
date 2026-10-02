@@ -2,6 +2,7 @@
 
 import streamlit as st
 from components import data
+from components.audit_panel import render_metric_audit
 from components.guardrails import guarded_footer, page_setup, proxy_caption
 from components.guidance import (
     format_condition_group,
@@ -53,6 +54,11 @@ proxy_caption()
 
 st.subheader("Top of the Feasibility Review Priority Queue")
 queue = data.priority_queue(profile_id)
+queue["priority_explanation"] = (
+    queue["priority_explanation"]
+    .str.replace("data confidence", "legacy operational completeness adjustment", regex=False)
+    .str.replace("relative density", "relative trial count", regex=False)
+)
 preview_df = queue.head(10)[
     [
         "priority_rank",
@@ -97,8 +103,8 @@ st.markdown(
     for **Clinical Trial Feasibility Leads**, **Study Planners**, and **Medical Directors**:
 
     1. **Prioritize Feasibility Review (Pages 1 & 2):** Use the **Priority Queue** and
-       **Competition Landscape** to rank condition × state × phase segments. Identify where site
-       density or rapid growth demands differentiated protocol strategy.
+       **Competition Landscape** to rank condition × state × phase segments. Identify where trial
+       counts or rapid growth demands differentiated protocol strategy.
     2. **Mitigate Site Congestion (Pages 3 & 4):** Review **Geography Trends** and **Site Overlap**
        to identify institutions carrying multiple active protocols and assess investigator
        bandwidth before outreach.
@@ -109,6 +115,39 @@ st.markdown(
        **Data Reliability** to quantify the financial cost of enrollment delays ($/month burn rate)
        without arbitrary guesswork.
     """
+)
+
+render_metric_audit(
+    profile_id,
+    metric="latest_study",
+    context={
+        "displayed_measure": (
+            "Trials tracked counts current dim_trial rows; currently "
+            "recruiting filters current overall status exactly RECRUITING."
+        )
+    },
+    key="overview",
+)
+render_metric_audit(
+    profile_id,
+    metric="facility",
+    observation_metric="history",
+    context={
+        "displayed_measure": (
+            "Listed facilities counts mart_site_overlap facility rows "
+            "across captured dates, so repeat facility observations can "
+            "count again. States with sites counts profile dim_geography "
+            "rows. Inspect original locations and snapshots; the audit "
+            "summary counts distinct studies, not facility rows."
+        )
+    },
+    key="overview_locations",
+)
+render_metric_audit(
+    profile_id,
+    segments=queue.head(10),
+    context={"scope": "Queue preview row inputs; sidebar scope before derived rank filters."},
+    key="overview_queue",
 )
 
 guarded_footer()

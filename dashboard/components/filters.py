@@ -34,7 +34,8 @@ def segment_filters(
             sidebar filter selections.
     """
     st.sidebar.header("Filters")
-    filtered = frame
+    filtered = frame.copy()
+    selections = {}
 
     if condition_col in frame.columns:
         options = sorted(frame[condition_col].dropna().unique())
@@ -44,20 +45,24 @@ def segment_filters(
             format_func=format_condition_group,
             help="Filter by deterministically mapped ADRD diagnostic categories.",
         )
+        selections["conditions"] = list(selected)
         if selected:
             filtered = filtered[filtered[condition_col].isin(selected)]
 
     if state_col in frame.columns:
         options = sorted(frame[state_col].dropna().unique())
         selected = st.sidebar.multiselect("State", options)
+        selections["states"] = list(selected)
         if selected:
             filtered = filtered[filtered[state_col].isin(selected)]
 
     if phase_col in frame.columns:
         options = sorted(frame[phase_col].dropna().unique())
         selected = st.sidebar.multiselect("Phase", options)
+        selections["phases"] = list(selected)
         if selected:
             filtered = filtered[filtered[phase_col].isin(selected)]
 
     st.sidebar.caption(f"{len(filtered):,} of {len(frame):,} rows shown")
+    filtered.attrs["audit_filters"] = selections
     return filtered
