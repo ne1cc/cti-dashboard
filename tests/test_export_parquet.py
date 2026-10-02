@@ -219,3 +219,30 @@ def test_flatten_emits_exactly_entity_columns():
         assert rows, f"fixture must produce at least one {entity} row"
         for row in rows:
             assert set(row.keys()) == set(ENTITY_COLUMNS[entity]), entity
+
+
+def test_provenance_schema_survives_null_then_present_chunks(tmp_path):
+    provenance = {
+        "snapshot_id": "r1",
+        "retrieved_at_utc": "2026-10-02T10:01:00+00:00",
+        "raw_page_reference": "run_id=r1/page=00001.json",
+        "raw_study_ordinal": 1,
+    }
+    with SilverRunWriter("r1", tmp_path, flush_rows=1) as writer:
+        writer.add_rows({"silver_trials": [{}], "silver_trial_locations": [{}]})
+        writer.add_rows(
+            {
+                "silver_trials": [provenance],
+                "silver_trial_locations": [{**provenance, "location_ordinal": 2}],
+            }
+        )
+    for entity in ("silver_trials", "silver_trial_locations"):
+        table = pq.ParquetFile(tmp_path / entity / "run_id=r1.parquet").read()
+        assert table.schema.field("raw_study_ordinal").type == pa.int64()
+        rows = table.to_pylist()
+        for key, value in provenance.items():
+            assert rows[0][key] is None
+            assert rows[1][key] == value
+        if entity == "silver_trial_locations":
+            assert table.schema.field("location_ordinal").type == pa.int64()
+            assert rows[1]["location_ordinal"] == 2
