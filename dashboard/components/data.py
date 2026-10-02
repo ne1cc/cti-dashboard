@@ -486,3 +486,86 @@ def overview_metrics(profile_id: str) -> dict[str, Any]:
     res = {str(k): v for k, v in row.to_dict().items()}
     res["warehouse_runs"] = res.get("snapshot_count")
     return res
+
+
+def _audit_unavailable() -> pd.DataFrame:
+    frame = pd.DataFrame()
+    frame.attrs["audit_unavailable"] = (
+        "Audit marts unavailable; rebuild the warehouse with the current pipeline and dbt models."
+    )
+    return frame
+
+
+def audit_studies(profile_id: str, snapshot_ids: list[str]) -> pd.DataFrame:
+    """Read captured studies for explicit run IDs; an empty selection means no rows."""
+    if not _table_exists("mart_study_snapshot_audit"):
+        return _audit_unavailable()
+    return query(
+        "select * from main_marts.mart_study_snapshot_audit "
+        "where indication_profile_id = ? and snapshot_id in (select unnest(?)) "
+        "order by snapshot_date, snapshot_id, nct_id",
+        [profile_id, snapshot_ids],
+    )
+
+
+def audit_locations(profile_id: str, snapshot_ids: list[str]) -> pd.DataFrame:
+    """Read original recorded-location rows, retaining their ordinal and provenance."""
+    if not _table_exists("mart_location_snapshot_audit"):
+        return _audit_unavailable()
+    return query(
+        "select * from main_marts.mart_location_snapshot_audit "
+        "where indication_profile_id = ? and snapshot_id in (select unnest(?)) "
+        "order by snapshot_id, nct_id, location_ordinal",
+        [profile_id, snapshot_ids],
+    )
+
+
+def audit_condition_mapping(profile_id: str) -> pd.DataFrame:
+    """Load mappings before geographic exclusions, keyed by captured run and study."""
+    if not _table_exists("int_trial_condition_mapping", "main_intermediate"):
+        return _audit_unavailable()
+    return query(
+        "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, condition_group "
+        "from main_intermediate.int_trial_condition_mapping where indication_profile_id = ?",
+        [profile_id],
+    )
+
+
+def metric_audit_observations(profile_id: str, metric: str = "competition") -> pd.DataFrame:
+    """Return actual per-study observations before status/geographic exclusions.
+
+    Competition/facility use their mart's latest date, history keeps daily
+    observations, and latest_study follows the current per-study status dimension.
+    Callers may further select dates/months, without inventing a newest run.
+    """
+    if not _table_exists("mart_study_snapshot_audit"):
+        return _audit_unavailable()
+    if metric == "latest_study":
+        return query(
+            "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, snapshot_date "
+            "from main_intermediate.int_current_trial_status where indication_profile_id = ?",
+            [profile_id],
+        )
+    if metric == "history":
+        return query(
+            "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, snapshot_date "
+            "from main_intermediate.int_trial_status_history where indication_profile_id = ?",
+            [profile_id],
+        )
+    if metric == "competition":
+        return query(
+            "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, snapshot_date "
+            "from main_intermediate.int_trial_status_history where indication_profile_id = ? "
+            "and snapshot_date = (select max(snapshot_date) from main_marts."
+            "mart_recruiting_competition where indication_profile_id = ?)",
+            [profile_id, profile_id],
+        )
+    if metric == "facility":
+        return query(
+            "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, snapshot_date "
+            "from main_intermediate.int_trial_status_history where indication_profile_id = ? "
+            "and snapshot_date = (select max(snapshot_date) from main_marts."
+            "mart_site_overlap where indication_profile_id = ?)",
+            [profile_id, profile_id],
+        )
+    raise ValueError(f"Unknown audit metric: {metric}")
