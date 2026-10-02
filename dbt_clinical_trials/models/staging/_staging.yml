@@ -20,7 +20,7 @@ models:
         tests: [not_null]
 
   - name: stg_trials
-    description: One row per NCT ID per ingestion run.
+    description: One row per profile + NCT ID + ingestion run, retaining raw record provenance.
     columns:
       - name: nct_id
         tests: [not_null]
@@ -73,6 +73,7 @@ models:
         tests: [not_null]
 
   - name: stg_trial_locations
+    description: One row per profile + NCT ID + run + original recorded-location ordinal.
     columns:
       - name: nct_id
         tests: [not_null]

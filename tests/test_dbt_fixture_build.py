@@ -1328,7 +1328,7 @@ def test_marts_contracts_enforced(fixture_project_root: Path) -> None:
         if node["resource_type"] == "model"
         and node["original_file_path"].startswith("models/marts/")
     }
-    assert len(marts) == 16
+    assert len(marts) == 18
     for name, node in marts.items():
         assert node["contract"]["enforced"] is True, name
         assert {c["name"] for c in node["columns"].values()}, name
@@ -1385,6 +1385,8 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
         "mart_site_overlap",
         "mart_trial_activity",
         "mart_trial_similarity",
+        "mart_study_snapshot_audit",
+        "mart_location_snapshot_audit",
     }
     for model in doc["models"]:
         if model["name"] not in trial_grain:

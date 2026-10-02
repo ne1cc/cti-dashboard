@@ -2,9 +2,13 @@
 -- dates may be partial); raw strings preserved alongside parsed values.
 select
     ingestion_run_id,
+    snapshot_id,
+    timezone('UTC', try_cast(retrieved_at_utc as timestamptz)) as retrieved_at_utc,
+    raw_page_reference,
+    cast(raw_study_ordinal as bigint) as raw_study_ordinal,
     indication_profile_id,
-    cast(try_cast(snapshot_timestamp_utc as timestamptz) as timestamp) as snapshot_timestamp_utc,
-    cast(try_cast(snapshot_timestamp_utc as timestamptz) as date) as snapshot_date,
+    timezone('UTC', try_cast(snapshot_timestamp_utc as timestamptz)) as snapshot_timestamp_utc,
+    cast(timezone('UTC', try_cast(snapshot_timestamp_utc as timestamptz)) as date) as snapshot_date,
     nct_id,
     brief_title,
     official_title,

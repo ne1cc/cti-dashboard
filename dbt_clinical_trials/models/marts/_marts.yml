@@ -824,3 +824,168 @@ models:
         tests: [not_null]
       - name: similarity_explanation
         data_type: VARCHAR
+
+  - name: mart_study_snapshot_audit
+    description: >
+      One row per profile x successful snapshot ID x NCT ID. Source omissions remain inspectable.
+      Raw references may cease to resolve after bronze retention pruning.
+    contract:
+      enforced: true
+    columns:
+      - name: study_audit_key
+        data_type: VARCHAR
+        tests: [not_null, unique]
+      - name: indication_profile_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: snapshot_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: ingestion_run_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: nct_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: retrieved_at_utc
+        data_type: TIMESTAMP
+        description: Page receipt UTC; unknown on historical pages without metadata.
+      - name: raw_page_reference
+        data_type: VARCHAR
+      - name: raw_study_ordinal
+        data_type: BIGINT
+      - name: source_json_hash
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: registry_url
+        data_type: VARCHAR
+      - name: brief_title
+        data_type: VARCHAR
+      - name: study_type
+        data_type: VARCHAR
+      - name: overall_status
+        data_type: VARCHAR
+      - name: phase_normalized
+        data_type: VARCHAR
+      - name: lead_sponsor_name
+        data_type: VARCHAR
+      - name: last_update_post_date_raw
+        data_type: VARCHAR
+      - name: status_verified_date_raw
+        data_type: VARCHAR
+      - name: verification_date_precision
+        data_type: VARCHAR
+      - name: enrollment_type
+        data_type: VARCHAR
+      - name: enrollment_category
+        data_type: VARCHAR
+      - name: geography_category
+        data_type: VARCHAR
+      - name: state_count_exclusion_reason
+        data_type: VARCHAR
+      - name: snapshot_date
+        data_type: DATE
+      - name: posted_update_date
+        data_type: DATE
+        description: Exact day from publicly posted update text; partial or invalid dates stay null.
+      - name: snapshot_started_at_utc
+        data_type: TIMESTAMP
+      - name: snapshot_ended_at_utc
+        data_type: TIMESTAMP
+      - name: posted_update_age_days
+        data_type: BIGINT
+      - name: verification_age_months
+        data_type: BIGINT
+        description: Snapshot month minus verification month; year-only, missing and invalid dates stay null.
+      - name: recorded_location_count
+        data_type: BIGINT
+      - name: usable_location_count
+        data_type: BIGINT
+      - name: missing_geography_location_count
+        data_type: BIGINT
+      - name: missing_facility_location_count
+        data_type: BIGINT
+      - name: enrollment_count
+        data_type: INTEGER
+      - name: older_posted_update_flag
+        data_type: BOOLEAN
+        description: Project review warning strictly older than 180 days; retain the study.
+      - name: confirmed_recruiting_flag
+        data_type: BOOLEAN
+      - name: state_count_eligible_flag
+        data_type: BOOLEAN
+
+  - name: mart_location_snapshot_audit
+    description: >
+      One row per profile x successful snapshot ID x NCT ID x original location ordinal. Source omissions remain inspectable.
+      Raw references may cease to resolve after bronze retention pruning.
+    contract:
+      enforced: true
+    columns:
+      - name: location_audit_key
+        data_type: VARCHAR
+        tests: [not_null, unique]
+      - name: study_audit_key
+        data_type: VARCHAR
+        tests:
+          - not_null
+          - relationships:
+              to: ref('mart_study_snapshot_audit')
+              field: study_audit_key
+      - name: indication_profile_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: snapshot_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: ingestion_run_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: nct_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: retrieved_at_utc
+        data_type: TIMESTAMP
+        description: Page receipt UTC; unknown on historical pages without metadata.
+      - name: raw_page_reference
+        data_type: VARCHAR
+      - name: raw_study_ordinal
+        data_type: BIGINT
+      - name: source_json_hash
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: location_ordinal
+        data_type: BIGINT
+        tests: [not_null]
+      - name: facility_name
+        data_type: VARCHAR
+      - name: facility_normalized
+        data_type: VARCHAR
+      - name: city
+        data_type: VARCHAR
+      - name: city_normalized
+        data_type: VARCHAR
+      - name: state_raw
+        data_type: VARCHAR
+      - name: state_normalized
+        data_type: VARCHAR
+      - name: zip_code
+        data_type: VARCHAR
+      - name: country
+        data_type: VARCHAR
+      - name: geo_scope
+        data_type: VARCHAR
+      - name: location_status
+        data_type: VARCHAR
+      - name: geography_category
+        data_type: VARCHAR
+      - name: latitude
+        data_type: DOUBLE
+      - name: longitude
+        data_type: DOUBLE
+      - name: us_location_flag
+        data_type: BOOLEAN
+      - name: usable_geography_flag
+        data_type: BOOLEAN
+      - name: missing_facility_flag
+        data_type: BOOLEAN

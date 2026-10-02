@@ -110,6 +110,9 @@ class FixtureRun:
     manifest_profile: str | None = None  # None -> same as `profile`
     status_overrides: dict[str, str] = field(default_factory=dict)  # nct_id -> status
     added: tuple[AddedStudy, ...] = ()
+    study_overrides: dict[str, dict] = field(default_factory=dict)
+    retrieved_at: str | None = None
+    final_status: str = "success"
 
     @property
     def effective_manifest_profile(self) -> str:
@@ -344,6 +347,20 @@ def _build_fixture_root(
             else:
                 shutil.copy(page_src, page_dst)
                 doc = json.loads(page_src.read_text(encoding="utf-8"))
+            for study in doc["studies"]:
+                section = study["protocolSection"]
+                for module, fields in run.study_overrides.get(
+                    section["identificationModule"]["nctId"], {}
+                ).items():
+                    section[module].update(fields)
+            if run.study_overrides:
+                page_dst.write_text(json.dumps(doc), encoding="utf-8")
+            if run.retrieved_at:
+                metadata_dir = run_dir / "_page_metadata"
+                metadata_dir.mkdir()
+                (metadata_dir / run.page).write_text(
+                    json.dumps({"retrieved_at_utc": run.retrieved_at}), encoding="utf-8"
+                )
             record_count = len(doc["studies"])
             manifest = IngestionManifest(
                 ingestion_run_id=run.run_id,
@@ -376,6 +393,10 @@ def _build_fixture_root(
             write_manifest(profile_cfg.paths.bronze_manifests, manifest)
             write_summary(profile_cfg.paths.bronze_manifests, manifest)
             assert run_transform(profile=profiles[run.profile]) == [run.run_id]
+            if run.final_status != "success":
+                manifest.status = run.final_status
+                write_manifest(profile_cfg.paths.bronze_manifests, manifest)
+                write_summary(profile_cfg.paths.bronze_manifests, manifest)
         assert cfg.paths.silver == profiles["adrd"].config.paths.silver  # one silver tree
 
         (root / "profiles.yml").write_text(
@@ -613,3 +634,111 @@ def solo_fixture_roots(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Pa
             tmp_path_factory, "fixture_solo_nsclc", [_base_nsclc_run()]
         ),
     }
+
+
+AUDIT_RUN2_ID = "20260901T130000Z_audit02"
+AUDIT_FAILED_RUN_ID = "20260902T100000Z_auditfailed"
+
+
+def _audit_run() -> FixtureRun:
+    """Keep legacy base fixtures unchanged; adversarial audit data is isolated."""
+    locations = [
+        {
+            "facility": "Repeated site",
+            "city": "Durham",
+            "state": "NC",
+            "country": "United States",
+            "status": "COMPLETED",
+        },
+        {
+            "facility": "Repeated site",
+            "city": "Durham",
+            "state": "NC",
+            "country": "United States",
+            "status": "RECRUITING",
+        },
+        {"city": "Boston", "state": "MA", "country": "United States"},
+    ]
+    return replace(
+        _base_adrd_run(),
+        retrieved_at="2026-09-01T10:01:00+00:00",
+        study_overrides={
+            "NCT00000001": {
+                "statusModule": {
+                    "statusVerifiedDate": "2026-03",
+                    "lastUpdatePostDateStruct": {"date": "2026-03-05"},
+                },
+                "contactsLocationsModule": {"locations": locations},
+                "designModule": {"enrollmentInfo": {"count": 101, "type": "ESTIMATED"}},
+            },
+            "NCT00000002": {
+                "statusModule": {
+                    "overallStatus": "UNKNOWN",
+                    "statusVerifiedDate": "bad",
+                    "lastUpdatePostDateStruct": {"date": "2026-03-04"},
+                },
+                "contactsLocationsModule": {"locations": []},
+                "designModule": {"enrollmentInfo": {"count": 202, "type": "ACTUAL"}},
+            },
+            "NCT00000003": {
+                "statusModule": {"lastUpdatePostDateStruct": {}, "statusVerifiedDate": None},
+                "contactsLocationsModule": {"locations": [{"country": "United States"}]},
+                "designModule": {"enrollmentInfo": {}},
+            },
+            "NCT00000004": {
+                "contactsLocationsModule": {
+                    "locations": [{"state": "Ontario", "country": "Canada"}]
+                },
+                "designModule": {"enrollmentInfo": {"count": 303}},
+            },
+            "NCT00000005": {
+                "statusModule": {
+                    "statusVerifiedDate": "2026",
+                    "lastUpdatePostDateStruct": {"date": "2026-03"},
+                },
+                "designModule": {"studyType": None},
+            },
+            "NCT00000006": {
+                "statusModule": {
+                    "statusVerifiedDate": "2026-02-30",
+                    "lastUpdatePostDateStruct": {"date": "invalid"},
+                },
+            },
+            "NCT00000007": {
+                "designModule": {"enrollmentInfo": {"count": 404, "type": "UNRECOGNIZED"}},
+            },
+            "NCT00000009": {
+                "contactsLocationsModule": {"locations": []},
+            },
+            "NCT00000010": {
+                "contactsLocationsModule": {
+                    "locations": [{"state": "Atlantis", "country": "United States"}]
+                },
+            },
+        },
+    )
+
+
+@pytest.fixture(scope="session")
+def audit_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    run = _audit_run()
+    return _build_fixture_root(
+        tmp_path_factory,
+        "fixture_audit",
+        [
+            run,
+            replace(
+                run,
+                run_id=AUDIT_RUN2_ID,
+                started_at=datetime(2026, 9, 1, 0, 15, tzinfo=UTC),
+                retrieved_at=None,
+            ),
+            _base_nsclc_run(),
+            replace(
+                run,
+                run_id=AUDIT_FAILED_RUN_ID,
+                started_at=run.started_at + timedelta(days=1),
+                final_status="failed",
+            ),
+        ],
+    )
