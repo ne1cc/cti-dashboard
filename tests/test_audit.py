@@ -50,7 +50,9 @@ def inputs():
                 nct_id=nct,
                 location_ordinal=i,
                 state_normalized=state,
-                usable_geography_flag=True,
+                usable_geography_flag=nct != "E",
+                country="Canada" if nct == "E" else "United States",
+                us_location_flag=nct != "E",
                 facility_normalized=facility,
                 city_normalized="city",
                 location_status="COMPLETED",
@@ -60,6 +62,7 @@ def inputs():
                 ("A", 1, "CA", None),
                 ("A", 2, "NY", "hospital"),
                 ("D", 0, "TX", "other"),
+                ("E", 0, None, "foreign hospital"),
             ]
         ]
     )
@@ -320,3 +323,66 @@ def test_condition_activity_requires_mapping_even_without_condition_filter():
         result["studies"].set_index("nct_id").loc["A", "exclusion_reason"]
         == "missing_condition_mapping"
     )
+
+
+@pytest.mark.parametrize("mixed", [False, True])
+def test_unresolved_original_locations_are_not_known_outside(mixed):
+    studies, locations, conditions, observations = inputs()
+    studies.loc[studies.nct_id == "D", "geography_category"] = "usable" if mixed else "unsupported"
+    if not mixed:
+        locations = locations.loc[locations.nct_id != "D"]
+    unresolved = dict(
+        indication_profile_id="adrd",
+        snapshot_id="run",
+        nct_id="D",
+        location_ordinal=9,
+        state_normalized=None if mixed else "Atlantis",
+        country="United States",
+        us_location_flag=True,
+        usable_geography_flag=False,
+        facility_normalized="hospital",
+        city_normalized="city",
+        location_status="RECRUITING",
+    )
+    locations = pd.concat([locations, pd.DataFrame([unresolved])], ignore_index=True)
+    result = audit.compute_audit(
+        studies,
+        locations,
+        conditions,
+        profile_id="adrd",
+        observations=observations,
+        filters={"states": ["CA"]},
+        evaluation_time="2026-09-02T10:00:00Z",
+    )
+    row = result["studies"].set_index("nct_id").loc["D"]
+    assert row.region_membership == "undetermined"
+    assert not row.included_flag
+    assert row.exclusion_reason == ("outside_selected_region" if mixed else "unsupported_geography")
+    assert result["contributors"] == ["A"]
+
+
+@pytest.mark.parametrize("empty_studies", [True, False])
+def test_selected_snapshot_identity_survives_unavailable_study_rows(empty_studies):
+    studies, locations, conditions, observations = inputs()
+    if empty_studies:
+        studies = pd.DataFrame()
+    observations = observations.assign(snapshot_id="absent-run", snapshot_date="2026-09-03")
+    observations = pd.concat(
+        [observations, observations.assign(indication_profile_id="other", snapshot_id="other-run")]
+    )
+    result = audit.compute_audit(
+        studies,
+        locations,
+        conditions,
+        profile_id="adrd",
+        observations=observations,
+        filters={},
+        evaluation_time="2026-09-04T10:00:00Z",
+    )
+    assert result["metadata"]["snapshot_ids"] == ["absent-run"]
+    assert result["metadata"]["snapshots"] == [
+        {"snapshot_id": "absent-run", "snapshot_date": "2026-09-03"}
+    ]
+    assert json.loads(audit.export_audit(result))["metadata"]["snapshots"] == [
+        {"snapshot_id": "absent-run", "snapshot_date": "2026-09-03"}
+    ]

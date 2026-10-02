@@ -92,11 +92,13 @@ def compute_audit(
                 )
             )
         )
-    snapshot_records = []
+    selected_snapshots = selected.reindex(columns=["snapshot_id", "snapshot_date"])
+    selected_snapshots = selected_snapshots.drop_duplicates()
+    study_snapshots = []
     if not frame.empty:
         frame = frame.merge(selected[KEY].drop_duplicates(), on=KEY, how="inner")
         frame = frame.drop_duplicates(KEY)
-        snapshot_records = (
+        study_snapshots = (
             frame[["snapshot_id", "snapshot_date"]].drop_duplicates().to_dict("records")
         )
         if filters.get("conditions"):
@@ -130,6 +132,19 @@ def compute_audit(
                 .isin(identities)
             ]
     regional_keys, facility_keys = _keys(regional), _keys(facility)
+    location_keys = _keys(scoped_locations)
+    unresolved_keys = set()
+    if not scoped_locations.empty:
+        country = scoped_locations.get(
+            "country", pd.Series(index=scoped_locations.index, dtype="object")
+        )
+        us_flag = scoped_locations.get(
+            "us_location_flag", pd.Series(False, index=scoped_locations.index)
+        )
+        unresolved = ~scoped_locations.usable_geography_flag.fillna(False) & (
+            us_flag.fillna(False) | country.fillna("").str.strip().eq("")
+        )
+        unresolved_keys = _keys(scoped_locations.loc[unresolved])
     condition_keys = _keys(conditions)
     decisions = []
     for _, row in frame.iterrows():
@@ -139,7 +154,7 @@ def compute_audit(
             "inside"
             if key in regional_keys
             else "undetermined"
-            if row.geography_category == "missing"
+            if key in unresolved_keys or key not in location_keys
             else "outside"
         )
         reason = None
@@ -150,7 +165,7 @@ def compute_audit(
         elif metric != "latest_study" or filters.get("states"):
             if row.geography_category != "usable":
                 reason = f"{row.geography_category}_geography"
-            elif membership == "outside":
+            elif key not in regional_keys:
                 reason = "outside_selected_region"
             elif metric == "facility" and key not in facility_keys:
                 reason = "missing_or_unmatched_facility"
@@ -245,7 +260,19 @@ def compute_audit(
             str(sid): enrollment_totals(group) for sid, group in included.groupby("snapshot_id")
         },
     )
-    snapshots = snapshot_records
+    # Observation selections define scope even when audit rows are unavailable.
+    # Study dates only fill dates omitted by a caller's observation frame.
+    if study_snapshots:
+        selected_snapshots = selected_snapshots.merge(
+            pd.DataFrame(study_snapshots).rename(columns={"snapshot_date": "study_date"}),
+            on="snapshot_id",
+            how="left",
+        )
+        selected_snapshots["snapshot_date"] = selected_snapshots.snapshot_date.fillna(
+            selected_snapshots.study_date
+        )
+        selected_snapshots = selected_snapshots.drop(columns="study_date")
+    snapshots = selected_snapshots.to_dict("records")
     metadata = dict(
         profile_id=profile_id,
         metric=metric,
@@ -257,6 +284,7 @@ def compute_audit(
         rule_config=deepcopy(rule_config or {}),
         snapshot_ids=sorted({str(item["snapshot_id"]) for item in snapshots}),
         snapshots=snapshots,
+        study_snapshots=study_snapshots,
         evaluation_time=evaluated.isoformat(),
         update_threshold_days=update_threshold_days,
         update_threshold_policy="Project-defined review threshold; warn and retain.",
