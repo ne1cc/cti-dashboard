@@ -60,19 +60,115 @@ def test_profile_and_period_scope(warehouse):
         assert audit["metadata"]["count_status"] == "all"
 
 
-def test_panel_filter_rerun(warehouse):
+@pytest.fixture
+def captured_exports(monkeypatch):
+    from components import audit_panel
+
+    payloads = []
+    original = audit_panel.export_audit
+
+    def capture(result):
+        encoded = original(result)
+        payloads.append(json.loads(encoded))
+        return encoded
+
+    monkeypatch.setattr(audit_panel, "export_audit", capture)
+    return payloads
+
+
+def test_panel_filter_rerun(fixture_project_root, monkeypatch, captured_exports):
+    import streamlit as st
+
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(fixture_project_root))
+    monkeypatch.chdir(fixture_project_root)
+    get_config.cache_clear()
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    expected = data.query(
+        "select distinct nct_id, state_normalized from "
+        "main_intermediate.int_condition_geography_activity "
+        "where indication_profile_id = ? and overall_status = 'RECRUITING' "
+        "and snapshot_date = (select max(snapshot_date) from "
+        "main_marts.mart_recruiting_competition where indication_profile_id = ?)",
+        ["adrd", "adrd"],
+    )
+    all_ids = sorted(expected.nct_id.unique())
+    nc_ids = sorted(expected.loc[expected.state_normalized == "NC", "nct_id"].unique())
+    assert all_ids != nc_ids, "fixture must distinguish the selected region"
     at = AppTest.from_file(
         str(ROOT / "dashboard/pages/2_Competition_Landscape.py"), default_timeout=60
     ).run()
     assert not at.exception
-    state = next(w for w in at.sidebar.multiselect if w.label == "State")
-    state.set_value(["NC"])
+
+    def assert_scope(expected_ids, states):
+        shown = [json.loads(j.value) for j in at.json]
+        metadata = next(item for item in shown if "rule_version" in item)
+        summary = next(item for item in shown if "contributing_studies" in item)
+        contributors = next(
+            item["contributing_nct_ids"] for item in shown if "contributing_nct_ids" in item
+        )
+        export = captured_exports[-1]
+        assert metadata["filters"]["states"] == states
+        assert metadata["rule_config"]["display_context"]["sidebar_filters"]["states"] == states
+        assert contributors == expected_ids == export["contributors"]
+        assert summary["contributing_studies"] == len(expected_ids)
+        assert summary == export["summary"]
+        for field in ("filters", "snapshot_ids", "rule_version", "profile_id"):
+            assert metadata[field] == export["metadata"][field]
+        decisions = [row["nct_id"] for row in export["studies"] if row["included_flag"]]
+        assert sorted(set(decisions)) == expected_ids
+        return summary["contributing_studies"]
+
+    before = assert_scope(all_ids, [])
+    next(w for w in at.sidebar.multiselect if w.label == "State").set_value(["NC"])
     at.run()
     assert not at.exception
-    metadata = next(j.value for j in at.json if "rule_version" in j.value)
-    assert json.loads(metadata)["filters"]["states"] == ["NC"]
+    after = assert_scope(nc_ids, ["NC"])
+    assert before != after
     assert any(x.label == "Data coverage and caveats" for x in at.expander)
     assert any("Download metric audit" in x.proto.label for x in at.get("download_button"))
+
+
+def test_listed_site_formula_is_disclosed_in_ui_and_export(warehouse, captured_exports):
+    at = AppTest.from_file(
+        str(ROOT / "dashboard/pages/2_Competition_Landscape.py"), default_timeout=60
+    ).run()
+    assert not at.exception
+    metadata = next(json.loads(j.value) for j in at.json if "rule_version" in j.value)
+    rules = metadata["rule_config"]["display_context"]["derived_rules"]
+    assert "distinct normalized facility/city pairs per study/state" in rules
+    assert "duplicates collapse" in rules
+    assert "missing normalized facility names contribute no identity" in rules
+    assert (
+        captured_exports[-1]["metadata"]["rule_config"]["display_context"]["derived_rules"] == rules
+    )
+
+
+def test_overview_queue_discloses_priority_rules_in_ui_and_export(warehouse, captured_exports):
+    at = AppTest.from_file(str(ROOT / "dashboard/app.py"), default_timeout=60).run()
+    assert not at.exception
+    metadata = next(json.loads(j.value) for j in at.json if '"displayed_segments"' in j.value)
+    rules = metadata["rule_config"]["display_context"]["derived_rules"]
+    for phrase in [
+        "profile minimum",
+        "profile maximum",
+        "zero for no spread",
+        "active score weights",
+        "priority_review >=0.70",
+        "HHI sums squared",
+        "Growth sums daily recruiting entrants over 90 days",
+        "first-post >=",
+        "divided by distinct recruiting segment trials",
+        "0.5 segment record-quality-ok share + 0.5 latest successful-run",
+    ]:
+        assert phrase in rules
+    export = next(
+        item
+        for item in captured_exports
+        if "displayed_segments" in item["metadata"]["rule_config"]["display_context"]
+    )
+    assert export["metadata"]["rule_config"]["display_context"]["derived_rules"] == rules
+    assert export["metadata"]["snapshot_ids"] == metadata["snapshot_ids"]
 
 
 def test_missing_and_empty_guidance(warehouse, monkeypatch):

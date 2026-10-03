@@ -2,7 +2,7 @@
 
 import streamlit as st
 from components import data
-from components.audit_panel import render_metric_audit
+from components.audit_panel import PRIORITY_DERIVED_RULES, render_metric_audit
 from components.guardrails import guarded_footer, page_setup, proxy_caption
 from components.guidance import (
     format_condition_group,
@@ -146,7 +146,10 @@ render_metric_audit(
 render_metric_audit(
     profile_id,
     segments=queue.head(10),
-    context={"scope": "Queue preview row inputs; sidebar scope before derived rank filters."},
+    context={
+        "scope": "Queue preview row inputs; sidebar scope before derived rank filters.",
+        "derived_rules": PRIORITY_DERIVED_RULES,
+    },
     key="overview_queue",
 )
 

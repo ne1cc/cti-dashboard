@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from components import data
-from components.audit_panel import render_metric_audit
+from components.audit_panel import PRIORITY_DERIVED_RULES, render_metric_audit
 from components.filters import segment_filters
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import format_condition_group, render_page_guide
@@ -257,21 +257,7 @@ render_metric_audit(
     segments=filtered,
     context={
         "priority_bands": selected_bands,
-        "derived_rules": (
-            "Each component uses (input - profile minimum)/(profile maximum - minimum), "
-            "with zero for no spread; weighted sum uses the active score weights. "
-            "Bands are fixed score thresholds: priority_review >=0.70, review >=0.45, "
-            "watch otherwise. Recruiting inputs and sponsor HHI use current segment "
-            "counts; HHI sums squared normalized lead-sponsor shares of segment trials. "
-            "Growth sums daily recruiting entrants over 90 days, requiring a previous "
-            "non-null non-recruiting status; with one captured date, first-post >= "
-            "snapshot minus 90 days is the proxy. Site overlap is distinct recruiting "
-            "segment trials sharing any facility with >1 recruiting trial in the "
-            "profile divided by distinct recruiting segment trials. Legacy operational "
-            "completeness = 0.5 segment record-quality-ok share + 0.5 latest successful-run "
-            "usable-location share (missing shares coalesce to zero). This panel audits "
-            "count inputs; derived score values remain warehouse calculations."
-        ),
+        "derived_rules": PRIORITY_DERIVED_RULES,
     },
     key="priority",
 )

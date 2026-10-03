@@ -109,7 +109,9 @@ render_metric_audit(
     context={
         "derived_rules": (
             "Counts: distinct confirmed RECRUITING NCT IDs per condition/state/phase/date; "
-            "listed sites sum usable recorded-location counts per study/state. "
+            "Listed sites sum counts of distinct normalized facility/city pairs per study/state "
+            "within each segment; duplicates collapse and missing normalized facility names "
+            "contribute no identity. City nulls coalesce to empty text in the identity. "
             "HHI = sum((distinct study count per normalized lead sponsor / sum of "
             "sponsor study counts in the segment)^2); top share is the maximum share. "
             "Bands use percent_rank of recruiting trial count across all segments "
