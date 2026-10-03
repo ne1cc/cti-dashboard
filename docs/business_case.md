@@ -1,55 +1,72 @@
-# Executive Business Case: Clinical Trial Feasibility & Market Competition Intelligence
+# Proposed business use: registry-based competition screening
 
-## 1. Executive Summary
-- **Business Purpose:** Transforms public global clinical trial registries (ClinicalTrials.gov) into a time-series feasibility intelligence asset that scores competitive trial congestion, site saturation, and geographical feasibility before trial launch.
-- **Target Stakeholders:** VP of Clinical Operations, Directors of Feasibility & Study Planning, Chief Medical Officer, CRO Business Development.
-- **Key Business Impact:** Mitigates the risk of protocol enrollment delays that cost pharmaceutical sponsors `$600,000` to `$8,000,000` per day in operational burn and lost patent exclusivity.
+## Decision and intended user
 
----
+A clinical-operations analyst preparing an initial geographic review needs to
+understand the reported study landscape and identify questions for further
+investigation. This project supports that preliminary review through captured
+ClinicalTrials.gov records, explicit metric rules and contributing-study evidence.
 
-## 2. The Business Problem & Market Context
+The proposed question is: **Which patterns and data gaps warrant further
+feasibility investigation under the selected condition, phase and geography rules?**
+The workflow has not been validated through stakeholder interviews. The project
+has not measured changes in review time, costs, site selection or recruitment outcomes.
 
-### The Clinical Enrollment Crisis
-- Over **80% of clinical trials** fail to enroll their target patient cohort within the planned timeline.
-- **50% of trial sites** enroll zero or only one patient due to over-competition and poor site selection.
-- Trial delays directly burn capital and postpone commercial market entry:
+## Proposed workflow
 
-```
-Daily Cost of Clinical Trial Delays:
-Operational Site & Staff Burn Rate: ~$30,000 to $100,000 / day
-Lost Patent Exclusivity Value (Blockbuster Drug): ~$1,000,000 to $8,000,000 / day
-Average Trial Delay (6 Months) Financial Exposure: >$10,000,000 to $150,000,000
-```
+1. Agree on the condition mapping, phase, geography and captured dataset.
+2. Examine distinct matching study counts alongside coverage and exclusions.
+3. Inspect study contributors, public source dates and original location listings.
+4. Record limitations and compare the evidence with other screening configurations
+   where those configurations have explicit rules.
+5. Export the evidence and formulate follow-up questions for qualified review.
 
-### The Planning Blindspot
-Sponsors traditionally rely on static, historical investigator surveys that quickly become obsolete. They lack a continuous, automated market-wide surveillance system to monitor competitor trial starts, phase transitions, and site recruitment congestion in real time.
+A low count is an observation about recorded study presence. It does not establish
+better recruitment prospects. A high count does not establish that a facility or
+region lacks capacity. The analysis provides no automatic pivot/proceed threshold.
 
----
+## Implemented capabilities and proposed benefits
 
-## 3. Operational & Strategic Value
+| Implemented capability | Evidence | Proposed benefit requiring evaluation |
+|---|---|---|
+| Distinct recruiting-study counts by condition, phase and state | dbt marts, metric dictionary and contributor audits | Organize an initial landscape review |
+| Repeated captured snapshots | Project-created status history and explicit time windows | Identify reported changes that need investigation |
+| Coverage and caveats | Eligible denominators, exclusions and separate freshness clocks | Make incomplete reporting visible during interpretation |
+| Record-level traceability | NCT IDs, raw references, hashes and exported rules/filters | Help an analyst inspect how a result was produced |
+| Preliminary review-priority signal | Disclosed component formulas, weights and proxy limitations | Organize review effort; predictive or operational usefulness remains unvalidated |
 
-| Feature / Module | Technical Mechanism | Tangible Clinical Operations Value |
-| :--- | :--- | :--- |
-| **Market Congestion Scoring** | dbt marts calculating weighted trial density per condition, phase, and geographic country/state. | Pinpoints saturated therapeutic regions to prevent launching duplicate trials in overburdened site networks. |
-| **Weekly Snapshot Diffing** | Effective-dated tracking of status transitions (e.g., `Recruiting` → `Terminated` or `Active, not recruiting`). | Detects early signals of competitor trial terminations or recruitment headwinds. |
-| **Feasibility Review Dashboard** | Interactive Streamlit workspace with granular filtering by intervention, condition taxonomy, and phase. | Empowers clinical study teams to model site-feasibility scenarios in minutes rather than weeks. |
+Refreshes capture publicly available records on the configured cadence. Registry
+updates and operations can differ, and the data is not a real-time view of recruitment.
+The national [case study](feasibility_case_study.md) demonstrates a descriptive
+workflow with actual captured records; it does not validate a score or recommend regions.
 
----
+## Follow-up information
 
-## 4. Executive Decision-Making Framework
+Before making an operational decision, reviewers would need independent evidence
+about patient availability, relevant site capabilities, current study operations
+and the comparability of participant populations and protocols. The registry
+screen does not supply those answers.
 
-```
-Phase II/III Trial Feasibility Assessment Workflow:
-[Therapeutic Area & Inclusion Filter]
-               ↓
-[Compute Regional Site Density Index]
-               ↓
-├── If Density Index > Threshold (Congested) → Pivot site mix to emerging secondary regions
-└── If Density Index ≤ Threshold (Optimal)   → Proceed with targeted investigator outreach
-```
+## Evaluating usefulness
 
----
+A proposed workflow evaluation could ask analysts to reproduce a count, locate its
+contributors, explain the coverage denominator and identify missing evidence.
+Document participant feedback and any measured task completion times before
+claiming usability or efficiency improvements. Any comparison of review time
+would need a stated baseline and comparable tasks.
 
-## 5. Data Governance & Regulatory Disclaimer
-- **Public-Registry Planning Signals:** All pipeline metrics represent structured public registry signals for operational planning, not clinical decision support or medical outcome forecasts.
-- **Reproducible Pipeline:** Powered by DuckDB, dbt tests, and automated GitHub Actions CI.
+## Scenario costs and benefit status
+
+The existing [scenario calculator](metric_definitions.md) uses editable assumptions
+in `config/roi_assumptions.yml`. Its arithmetic is hypothetical and does not show
+observed savings, delay avoidance or financial return. Organization-specific
+assumptions and a measured workflow evaluation would be needed for such claims.
+
+## Interpretation and reproducibility
+
+Records are public registry listings, not patient-level data. Results support
+preliminary feasibility review and do not establish scientific validity or
+site-level recruitment performance. Counts reflect captured records and displayed
+inclusion rules. See the [project brief](project_brief.md),
+[metric definitions](metric_definitions.md) and
+[limitations](assumptions_and_limitations.md) for scope and retention boundaries.

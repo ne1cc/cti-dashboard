@@ -1,67 +1,62 @@
-# Executive Memo — Feasibility Review Priorities
-<!--
-TEMPLATE. Square-bracket fields are filled from the warehouse after each
-snapshot; italic figures below show the 2026-07-24 build as an example.
-Language must follow docs/clinical_interpretation_guardrails.md.
--->
+# Stakeholder memo template — registry landscape review
 
-**To:** Director of Clinical Operations
-**From:** [Analyst]
-**Date:** [YYYY-MM-DD] · Snapshot: [snapshot_date] · Run: [ingestion_run_id]
-**Re:** Where to direct the next cycle of site-feasibility reviews
+This template contains no measured figures. Fill it from a validated captured
+dataset and its audit evidence. See the completed
+[national case study](feasibility_case_study.md) for an actual example.
 
-> Source: ClinicalTrials.gov public registry listings. All figures are
-> potential competition signals for feasibility review — not recruitment
-> forecasts, patient availability, or site-performance judgments.
+**To:** [Proposed stakeholder]\
+**Date:** [Memo date]\
+**Captured dataset:** [UTC snapshot date and selected run IDs]\
+**Evaluation timestamp:** [One timezone-aware timestamp]\
+**Scope:** [Profile, condition mapping, exact phases, overall status and jurisdictions]\
+**Rules and evidence:** [Rule version, configuration identity and audit export]
 
-## 1. Bottom line
-Of [N segments] condition–state–phase segments with active recruiting
-listings *(449 on 2026-07-24)*, [K] warrant feasibility review this cycle
-*(75 in band `review`; 0 reached `priority_review`)*. The strongest
-signals concentrate in [top segments] *(Alzheimer's disease Phase 3 in
-FL, CA, TX)*.
+## Question
 
-## 2. Top segments for review
-| Rank | Segment | Score | Recruiting listings | Sponsor HHI | Why (deterministic explanation) |
-|---|---|---|---|---|---|
-| 1 | [cond · state · phase] | [0.xx] | [n] | [0.xx] | [priority_explanation] |
-| 2 | … | | | | |
-| 3 | … | | | | |
+[Describe the registry landscape question and the preliminary review it supports.]
 
-*(Source: `mart_feasibility_priority_queue`; explanations are generated
-from fixed component phrases, not written ad hoc.)*
+## Observations
 
-## 3. What is driving the signals
-- **Density:** [n] recruiting listings across the top segments
-  *(419 recruiting trials nationally, 50 states with listed sites)*.
-- **Growth:** [transition counts, or:] snapshot history is [m] snapshots
-  deep; growth currently uses the registry first-post-date proxy and is
-  labeled as such.
-- **Site overlap:** [n] facilities are listed by more than one recruiting
-  trial *(301 of 6,241 listed facilities)* — shared-listing signal only.
-- **Sponsor concentration:** [segments with HHI ≥ x] show concentrated
-  lead-sponsor listings.
+[State actual counts or comparisons with the snapshot and filter scope.]
 
-## 4. Data confidence
-[usable_location_share]% of location rows were usable for U.S. geography
-*(48.1%)*; [flagged share]% of trial records carried quality flags
-*(0.0%)*; manifest reconciliation [passed/failed] *(passed, 2,592 = 2,592,
-unique NCT IDs)*. Details: `reports/data_quality_report.md`.
+Include a complete comparison table or link to it. Count distinct studies rather
+than recorded locations. Explain overlapping geography: one study can appear in
+multiple state counts, so a national distinct total must be computed independently.
+Use “count” for a raw count and reserve density for an explicit denominator.
 
-## 5. Recommended actions (all human-review actions)
-1. Commission feasibility reviews for the top [K] segments.
-2. For overlapping facilities in those segments, verify actual site
-   availability directly — listings do not measure capacity.
-3. Re-run the pipeline next [week]; transition-based growth replaces the
-   proxy automatically once history accrues.
+## Coverage and caveats
 
-## 6. Cost framing (assumptions, not outcomes)
-Under the editable assumptions in `config/roi_assumptions.yml`
-([reviews/cycle], [cost/review], …), the [base] scenario frames
-[currency amount] of review effort better targeted. **Illustrative
-arithmetic over stated assumptions — no observed savings are claimed.**
+[Define the numerator and denominator for every displayed percentage.]
 
-## Appendix
-- Queue extract: `analysis_top_priority_segments` (dbt analysis)
-- Methodology: `docs/metric_definitions.md`
-- Limitations: `docs/assumptions_and_limitations.md`
+Distinguish geographic completeness of a captured cohort from its recorded
+representation in an individual jurisdiction. Show unavailable results and
+undefined percentages explicitly; an observed zero is not proof of no studies
+or participating locations in real-world operations.
+
+[Report excluded/undetermined geography and relevant flags.]
+Separate retrieval time, public posted-update date and verification precision.
+The posted-update threshold is project-defined. Older updates are warnings under
+the default rules, not proof that records are incorrect.
+
+Keep enrollment at study level. Do not present trial-wide targets or reported
+actual enrollment as jurisdiction totals or observed site recruitment.
+
+## Follow-up questions
+
+[Identify which source records or missing information require investigation.]
+
+Patient availability, site capabilities, study operations and protocol comparability
+require additional evidence. Do not recommend states/sites or predict recruitment
+prospects from registry counts alone.
+
+## Reproduction and validation
+
+[Link exact dataset-selection rules, commands, complete numerical reconciliation,
+and the separately documented raw-record sample.]
+
+[State source-retention limits and whether the stakeholder workflow or any benefits
+have been validated.]
+
+Registry-derived signals support preliminary feasibility review. They do not
+measure site-level recruitment performance or establish scientific validity.
+Counts reflect captured public records and the displayed inclusion rules.
