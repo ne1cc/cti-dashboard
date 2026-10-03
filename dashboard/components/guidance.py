@@ -199,18 +199,18 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
             "Ranks condition × state × phase segments using a transparent, multi-factor "
             "feasibility review priority score (0.0 to 1.0). Each segment summarizes recruiting "
             "trial volume, recent growth momentum, sponsor concentration (HHI), site overlap, "
-            "and data confidence."
+            "and the legacy operational completeness adjustment."
         ),
         "how_to_analyze": (
             "The priority score is a relative ranking index, not an enrollment prediction. "
-            "Segments in the **Priority Review** band (top 20th percentile) exhibit elevated trial "
-            "density or rapid growth; segments in **Review** (50th–80th percentile) represent "
-            "moderate activity; segments in **Watch** (bottom 50th percentile) "
-            "represent low density."
+            "Segments in the **Priority Review** band (score ≥ 0.70) exhibit elevated trial "
+            "trial counts or rapid growth; segments in **Review** (0.45 ≤ score < 0.70) represent "
+            "moderate activity; segments in **Watch** (score < 0.45) "
+            "represent low trial counts."
         ),
         "playbook": [
             (
-                "**Priority Review Segments (Top 20%):** Do NOT automatically eliminate these "
+                "**Priority Review Segments (Score ≥ 0.70):** Do NOT automatically eliminate these "
                 "regions; instead, conduct deep-dive feasibility. Check if competing trials "
                 "share identical biomarker entry criteria (e.g. early AD MMSE 22–30 vs mild-to-"
                 "moderate MMSE 16–26)."
@@ -220,7 +220,7 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
                 "sufficient patient population and clinical infrastructure with manageable overlap."
             ),
             (
-                "**Watch Segments (Emerging / Low-Density):** Ideal for expanding geographic "
+                "**Watch Segments (Emerging / Low-Count):** Ideal for expanding geographic "
                 "diversity and recruiting treatment-naive subjects through regional community "
                 "neurology networks, provided adequate diagnostic infrastructure is accessible."
             ),
@@ -239,33 +239,33 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
     "competition_landscape": {
         "title": "📖 Competition Landscape: The 4-Quadrant Strategy Matrix",
         "what_it_shows": (
-            "Scatter plot and segment table plotting Recruiting Trial Density (percentile) "
+            "Scatter plot and segment table plotting Recruiting Trial Count "
             "against Sponsor Concentration (Herfindahl-Hirschman Index, HHI). Bubble sizes "
             "represent listed trial facilities in that segment."
         ),
         "how_to_analyze": (
-            "The combination of trial density and sponsor concentration reveals distinct "
+            "The combination of trial counts and sponsor concentration reveals distinct "
             "competitive environments across the 4 quadrants of the scatter plot."
         ),
         "playbook": [
             (
-                "**Quadrant 1: High Density + High HHI (Dominant Cluster):** A single sponsor "
+                "**Quadrant 1: High Trial Count + High HHI (Dominant Cluster):** A single sponsor "
                 "leads multiple trials. Entering this market requires clear protocol "
                 "differentiation (subcutaneous vs IV infusion, novel mechanism) or targeting "
                 "independent sites."
             ),
             (
-                "**Quadrant 2: High Density + Low HHI (Fierce Competition):** Fragmented "
+                "**Quadrant 2: High Trial Count + Low HHI (Fierce Competition):** Fragmented "
                 "landscape with many sponsors competing for the same patient pool. Expect site "
                 "initiation delays, coordinator turnover, and slower enrollment velocity."
             ),
             (
-                "**Quadrant 3: Low Density + High HHI (Pioneer Territory):** A focused sponsor "
+                "**Quadrant 3: Low Trial Count + High HHI (Pioneer Territory):** A focused sponsor "
                 "program is operating with minimal external rivals. Indicates untapped patient "
                 "demand that can be activated with investigator partnerships."
             ),
             (
-                "**Quadrant 4: Low Density + Low HHI (Greenfield Frontier):** Minimal trial "
+                "**Quadrant 4: Low Trial Count + Low HHI (Greenfield Frontier):** Minimal trial "
                 "activity across the board. Ideal for teams seeking uncontested community memory "
                 "centers, though local referral networks must be verified."
             ),
@@ -291,7 +291,7 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
             (
                 "**Balance Academic vs Community Geography:** Counteract academic site "
                 "congestion by identifying neighboring states with strong healthcare networks "
-                "but lower trial density."
+                "but lower trial counts."
             ),
             (
                 "**Evaluate Trial Posting Velocity:** Rising monthly listings in a state signal "

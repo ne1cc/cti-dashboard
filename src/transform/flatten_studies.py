@@ -7,6 +7,7 @@ hasResults. Location contact/investigator fields are deliberately not extracted.
 """
 
 import json
+from pathlib import Path
 from typing import Any
 
 from src.transform.normalize_conditions import ConditionTaxonomy
@@ -67,6 +68,9 @@ def flatten_study(
     taxonomy: ConditionTaxonomy,
     geography: GeographyRules,
     indication_profile_id: str = "adrd",
+    retrieved_at_utc: str | None = None,
+    raw_page_reference: str | None = None,
+    raw_study_ordinal: int | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     """One study → rows for each silver entity.
 
@@ -90,10 +94,15 @@ def flatten_study(
         "indication_profile_id": indication_profile_id,
         "nct_id": nct_id,
         "source_json_hash": source_json_hash,
+        "snapshot_id": ingestion_run_id,
+        "retrieved_at_utc": retrieved_at_utc,
+        "raw_page_reference": raw_page_reference,
+        "raw_study_ordinal": raw_study_ordinal,
     }
 
     phase_raw, phase_normalized = normalize_phases(design.get("phases"))
     trial = {
+        **base,
         "ingestion_run_id": ingestion_run_id,
         "indication_profile_id": indication_profile_id,
         "snapshot_timestamp_utc": snapshot_timestamp_utc,
@@ -180,13 +189,16 @@ def flatten_study(
             )
 
     locations = []
-    for loc in dig(protocol, "contactsLocationsModule", "locations") or []:
+    for location_ordinal, loc in enumerate(
+        dig(protocol, "contactsLocationsModule", "locations") or []
+    ):
         norm = geography.normalize_location(
             loc.get("facility"), loc.get("city"), loc.get("state"), loc.get("country")
         )
         locations.append(
             {
                 **base,
+                "location_ordinal": location_ordinal,
                 "facility_name": loc.get("facility"),
                 "facility_normalized": normalize_text(loc.get("facility")),
                 "city": loc.get("city"),
@@ -237,3 +249,26 @@ def iter_bronze_studies(run_dir) -> Any:
     for page_path in sorted(run_dir.glob("page=*.json")):
         payload = json.loads(page_path.read_text(encoding="utf-8"))
         yield from payload.get("studies", [])
+
+
+def iter_bronze_study_records(run_dir: Path) -> Any:
+    """Yield (study, provenance) in source order; ordinals are zero-based.
+
+    Raw page references resolve relative to the configured bronze response root.
+    Historical pages without sidecars retain unknown retrieval times.
+    """
+    for page_path in sorted(run_dir.glob("page=*.json")):
+        payload = json.loads(page_path.read_text(encoding="utf-8"))
+        metadata_path = run_dir / "_page_metadata" / page_path.name
+        metadata = (
+            json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path.exists() else {}
+        )
+        for ordinal, study in enumerate(payload.get("studies", [])):
+            yield (
+                study,
+                {
+                    "retrieved_at_utc": metadata.get("retrieved_at_utc"),
+                    "raw_page_reference": f"{run_dir.name}/{page_path.name}",
+                    "raw_study_ordinal": ordinal,
+                },
+            )

@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 from src.config import ProjectConfig, get_config
 from src.ingest.snapshot_manifest import IngestionManifest, load_manifests
 from src.transform.export_parquet import DEFAULT_FLUSH_ROWS, SilverRunWriter
-from src.transform.flatten_studies import flatten_study, iter_bronze_studies
+from src.transform.flatten_studies import flatten_study, iter_bronze_study_records
 from src.transform.normalize_conditions import get_taxonomy
 from src.transform.normalize_locations import get_geography_rules
 from src.transform.silver_stats import write_transform_stats
@@ -83,7 +83,7 @@ def build_silver_for_run(
 
     writer = SilverRunWriter(run_id, cfg.paths.silver, flush_rows=FLUSH_ROWS)
     try:
-        for study in iter_bronze_studies(run_dir):
+        for study, provenance in iter_bronze_study_records(run_dir):
             rows = flatten_study(
                 study,
                 run_id,
@@ -91,6 +91,7 @@ def build_silver_for_run(
                 taxonomy,
                 geography,
                 indication_profile_id=profile_id,
+                **provenance,
             )
             nct_id = rows["silver_trials"][0]["nct_id"]
             if not nct_id:

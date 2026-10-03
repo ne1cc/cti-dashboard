@@ -1,0 +1,454 @@
+"""Pure captured-record audit computations; no warehouse or UI dependencies."""
+
+from __future__ import annotations
+
+from copy import deepcopy
+from typing import Any
+
+import pandas as pd
+
+KEY = ["indication_profile_id", "snapshot_id", "nct_id"]
+RULE_VERSION = "competition-audit-v2"
+DISCLAIMER = (
+    "Registry-derived signals support preliminary feasibility review. They do not measure "
+    "site-level recruitment performance or establish scientific validity. Counts reflect "
+    "captured public records and the displayed inclusion rules."
+)
+DEFINITIONS = {
+    "recent_recruiting": (
+        "Distinct recruiting entry events in the selected inclusive "
+        "window, with captured predecessor evidence."
+    ),
+    "first_post_proxy": (
+        "Distinct currently recruiting studies whose source "
+        "first-post date meets the lower boundary (no upper bound)."
+    ),
+    "competition": "Distinct confirmed RECRUITING NCT IDs with reported usable "
+    "U.S. state geography.",
+    "history": "Distinct NCT IDs across selected daily observations with usable "
+    "U.S. state geography.",
+    "facility": "Distinct NCT IDs with usable U.S. state and normalized facility name; facility "
+    "identity matches normalized name, city and state text.",
+    "latest_study": "Distinct NCT IDs from each study's current captured observation.",
+}
+OBSERVATION_SOURCES = {
+    "recent_recruiting": (
+        "int_trial_status_history with predecessor selected before window filtering"
+    ),
+    "first_post_proxy": "int_trial_status_history at competition latest profile date",
+    "competition": "int_trial_status_history at mart_recruiting_competition latest profile date",
+    "history": "int_trial_status_history: latest study observation per profile/date",
+    "facility": "int_trial_status_history at mart_site_overlap latest profile date",
+    "latest_study": "int_current_trial_status: latest observation per profile/study",
+}
+
+
+def _keys(frame: pd.DataFrame) -> set[tuple]:
+    return set(frame[KEY].itertuples(index=False, name=None)) if not frame.empty else set()
+
+
+def compute_audit(
+    studies: pd.DataFrame,
+    locations: pd.DataFrame,
+    conditions: pd.DataFrame,
+    *,
+    profile_id: str,
+    observations: pd.DataFrame,
+    filters: dict[str, Any],
+    metric: str = "competition",
+    count_status: str = "recruiting",
+    evaluation_time: Any,
+    update_threshold_days: int = 180,
+    rule_config: dict[str, Any] | None = None,
+    window_start: Any = None,
+    window_end: Any = None,
+) -> dict[str, Any]:
+    """Audit exact observations and filters before geographic/status exclusions.
+
+    Filters: conditions, phases, states, sponsors, and facilities (triples of
+    normalized name/city/state). Empty selections mean unrestricted. Totals
+    count distinct NCT IDs; history enrollment is separately grouped by snapshot
+    and never summed across repeated observations. Zero coverage is undefined
+    (None) when its eligible denominator is empty. Flags may overlap; the first
+    applicable exclusion wins in status, geography, region, facility order.
+    """
+    if metric not in DEFINITIONS:
+        raise ValueError(f"Unknown audit metric: {metric}")
+    if count_status not in {"recruiting", "all"}:
+        raise ValueError("count_status must be recruiting or all")
+    if update_threshold_days < 0:
+        raise ValueError("update_threshold_days must be nonnegative")
+    evaluated = pd.Timestamp(evaluation_time)
+    if evaluated.tzinfo is None:
+        raise ValueError("evaluation_time must include a UTC offset")
+    evaluated = evaluated.tz_convert("UTC")
+    event_metric = metric in {"recent_recruiting", "first_post_proxy"}
+    if event_metric and (window_start is None or window_end is None):
+        raise ValueError("Event audit requires explicit window_start and window_end")
+    evidence_columns = ["previous_status", "predecessor_snapshot_id", "predecessor_snapshot_date"]
+    predecessor_studies = studies.copy()
+    selected = (
+        observations.loc[observations.indication_profile_id == profile_id]
+        if not (observations.empty)
+        else observations
+    )
+    frame = (
+        studies.loc[studies.indication_profile_id == profile_id].copy()
+        if not (studies.empty)
+        else studies.copy()
+    )
+    if frame.empty:
+        frame = frame.reindex(
+            columns=list(
+                dict.fromkeys(
+                    [
+                        *frame.columns,
+                        *KEY,
+                        "snapshot_date",
+                        "enrollment_category",
+                        "enrollment_count",
+                    ]
+                )
+            )
+        )
+    selected_snapshots = selected.reindex(columns=["snapshot_id", "snapshot_date"])
+    selected_snapshots = selected_snapshots.drop_duplicates()
+    study_snapshots = []
+    if not frame.empty:
+        frame = frame.merge(selected[KEY].drop_duplicates(), on=KEY, how="inner")
+        frame = frame.drop_duplicates(KEY)
+        evidence = [column for column in evidence_columns if column in selected.columns]
+        if evidence:
+            frame = frame.merge(selected[KEY + evidence].drop_duplicates(KEY), on=KEY, how="left")
+        study_snapshots = (
+            frame[["snapshot_id", "snapshot_date"]].drop_duplicates().to_dict("records")
+        )
+        if filters.get("conditions"):
+            matching = conditions.loc[conditions.condition_group.isin(filters["conditions"])]
+            frame = frame.merge(matching[KEY].drop_duplicates(), on=KEY, how="inner")
+        for selection, column in [
+            ("phases", "phase_normalized"),
+            ("sponsors", "lead_sponsor_name"),
+        ]:
+            if filters.get(selection):
+                frame = frame.loc[frame[column].isin(filters[selection])].copy()
+    scoped_locations = locations.copy()
+    if not locations.empty:
+        scoped_locations = locations.merge(frame[KEY], on=KEY, how="inner")
+    valid = (
+        scoped_locations.loc[scoped_locations.usable_geography_flag.fillna(False)]
+        if not (scoped_locations.empty)
+        else scoped_locations
+    )
+    regional = valid
+    if filters.get("states") and not regional.empty:
+        regional = regional.loc[regional.state_normalized.isin(filters["states"])]
+    facility = regional
+    if metric == "facility" and not facility.empty:
+        facility = facility.loc[facility.facility_normalized.notna()]
+        if filters.get("facilities"):
+            identities = {tuple(item) for item in filters["facilities"]}
+            facility = facility.loc[
+                facility[["facility_normalized", "city_normalized", "state_normalized"]]
+                .apply(lambda row: tuple(None if pd.isna(v) else v for v in row), axis=1)
+                .isin(identities)
+            ]
+    explicit_empty_facilities = (
+        metric == "facility"
+        and filters.get("facility_restriction_applied")
+        and not filters.get("facilities")
+    )
+    if explicit_empty_facilities:
+        facility = facility.iloc[:0]
+    regional_keys, facility_keys = _keys(regional), _keys(facility)
+    location_keys = _keys(scoped_locations)
+    unresolved_keys = set()
+    if not scoped_locations.empty:
+        country = scoped_locations.get(
+            "country", pd.Series(index=scoped_locations.index, dtype="object")
+        )
+        us_flag = scoped_locations.get(
+            "us_location_flag", pd.Series(False, index=scoped_locations.index)
+        )
+        unresolved = ~scoped_locations.usable_geography_flag.fillna(False) & (
+            us_flag.fillna(False) | country.fillna("").str.strip().eq("")
+        )
+        unresolved_keys = _keys(scoped_locations.loc[unresolved])
+    condition_keys = _keys(conditions)
+    decisions = []
+    for _, row in frame.iterrows():
+        key = tuple(row[col] for col in KEY)
+        recruiting = pd.notna(row.overall_status) and row.overall_status == "RECRUITING"
+        membership = (
+            "inside"
+            if key in regional_keys
+            else "undetermined"
+            if key in unresolved_keys or key not in location_keys
+            else "outside"
+        )
+        reason = None
+        if count_status == "recruiting" and not recruiting:
+            reason = "not_confirmed_recruiting"
+        elif (
+            metric in {"competition", "history", "recent_recruiting", "first_post_proxy"}
+            and key not in condition_keys
+        ):
+            reason = "missing_condition_mapping"
+        elif metric != "latest_study" or filters.get("states"):
+            if row.geography_category != "usable":
+                reason = f"{row.geography_category}_geography"
+            elif key not in regional_keys:
+                reason = (
+                    "no_confirmed_selected_region_match"
+                    if membership == "undetermined"
+                    else "outside_selected_region"
+                )
+            elif metric == "facility" and key not in facility_keys:
+                reason = (
+                    "empty_facility_selection"
+                    if explicit_empty_facilities
+                    else "missing_or_unmatched_facility"
+                )
+        count_input_included = reason is None
+        event_qualifies = None
+        if event_metric:
+            current_date = pd.Timestamp(row.snapshot_date)
+            if metric == "recent_recruiting":
+                previous_status = row.get("previous_status")
+                event_qualifies = (
+                    recruiting
+                    and pd.notna(previous_status)
+                    and previous_status != "RECRUITING"
+                    and pd.Timestamp(window_start) <= current_date <= pd.Timestamp(window_end)
+                )
+                event_reason = "no_recruiting_entry_event"
+            else:
+                first_post = pd.to_datetime(row.get("study_first_post_date"), errors="coerce")
+                event_qualifies = (
+                    recruiting and pd.notna(first_post) and first_post >= pd.Timestamp(window_start)
+                )
+                event_reason = (
+                    "missing_first_post_date"
+                    if pd.isna(first_post)
+                    else "outside_first_post_proxy_boundary"
+                )
+            if reason is None and not event_qualifies:
+                reason = event_reason
+        flags = []
+        if membership == "undetermined":
+            flags.append("undetermined_region_membership")
+        if (
+            metric in {"competition", "history", "recent_recruiting", "first_post_proxy"}
+            and key not in condition_keys
+        ):
+            flags.append("missing_condition_mapping")
+        age = row.posted_update_age_days
+        older = pd.notna(age) and age > update_threshold_days
+        if older:
+            flags.append("older_posted_update")
+        if pd.isna(age):
+            flags.append("missing_or_unparseable_posted_update")
+        if not recruiting:
+            flags.append("not_confirmed_recruiting")
+        if row.geography_category != "usable":
+            flags.append(f"{row.geography_category}_geography")
+        if row.get("missing_facility_location_count", 0) > 0:
+            flags.append("missing_facility")
+        decisions.append(
+            dict(
+                confirmed_recruiting_flag=recruiting,
+                region_membership=membership,
+                included_flag=reason is None,
+                count_input_included_flag=count_input_included,
+                event_qualifies_flag=event_qualifies,
+                exclusion_reason=reason,
+                older_posted_update_flag=older,
+                flag_reasons=flags,
+            )
+        )
+    for column in [
+        "confirmed_recruiting_flag",
+        "region_membership",
+        "included_flag",
+        "count_input_included_flag",
+        "event_qualifies_flag",
+        "exclusion_reason",
+        "older_posted_update_flag",
+        "flag_reasons",
+    ]:
+        frame[column] = [decision[column] for decision in decisions]
+    frame["pipeline_age_hours"] = (
+        evaluated
+        - pd.to_datetime(frame.get("snapshot_ended_at_utc", pd.Series(dtype="object")), utc=True)
+    ).dt.total_seconds() / 3600
+    included = frame.loc[frame.included_flag.astype(bool)].sort_values(
+        ["snapshot_date", "snapshot_id"]
+    )
+    # A study contributing on any selected observation is included in the union.
+    unique = frame.sort_values(["snapshot_date", "snapshot_id"]).drop_duplicates(
+        "nct_id", keep="last"
+    )
+    contributor_ids = sorted(included.nct_id.unique().tolist()) if not included.empty else []
+    excluded = unique.loc[~unique.nct_id.isin(contributor_ids)] if not unique.empty else unique
+    eligible = int(frame.nct_id.nunique()) if not frame.empty else 0
+    recruiting_ids = frame.loc[frame.confirmed_recruiting_flag.astype(bool), "nct_id"].unique()
+    recruiting_contributors = included.loc[
+        included.confirmed_recruiting_flag.astype(bool), "nct_id"
+    ]
+
+    def enrollment_totals(records: pd.DataFrame) -> dict:
+        return {
+            category: {
+                "studies": int((records.enrollment_category == category).sum()),
+                "total": None
+                if category == "missing"
+                else float(
+                    records.loc[records.enrollment_category == category, "enrollment_count"].sum()
+                ),
+            }
+            for category in ["estimated", "actual", "missing", "unknown_type"]
+        }
+
+    enrollment = (
+        enrollment_totals(included.drop_duplicates("nct_id", keep="last"))
+        if not (included.empty)
+        else {
+            c: {"studies": 0, "total": None if c == "missing" else 0}
+            for c in ["estimated", "actual", "missing", "unknown_type"]
+        }
+    )
+    summary = dict(
+        eligible_studies=eligible,
+        contributing_studies=len(contributor_ids),
+        count_input_contributing_studies=int(
+            frame.loc[frame.count_input_included_flag.astype(bool), "nct_id"].nunique()
+        ),
+        contributing_events=len(included) if event_metric else None,
+        recruiting_eligible_studies=len(recruiting_ids),
+        coverage=len(contributor_ids) / eligible if eligible else None,
+        recruiting_coverage=recruiting_contributors.nunique() / len(recruiting_ids)
+        if len(recruiting_ids)
+        else None,
+        region_undetermined_studies=int(
+            frame.loc[frame.region_membership == "undetermined", "nct_id"].nunique()
+        ),
+        exclusions=excluded.exclusion_reason.value_counts().to_dict(),
+        enrollment=enrollment,
+        enrollment_by_snapshot={
+            str(sid): enrollment_totals(group) for sid, group in included.groupby("snapshot_id")
+        },
+    )
+    # Observation selections define scope even when audit rows are unavailable.
+    # Study dates only fill dates omitted by a caller's observation frame.
+    if study_snapshots:
+        selected_snapshots = selected_snapshots.merge(
+            pd.DataFrame(study_snapshots).rename(columns={"snapshot_date": "study_date"}),
+            on="snapshot_id",
+            how="left",
+        )
+        selected_snapshots["snapshot_date"] = selected_snapshots.snapshot_date.fillna(
+            selected_snapshots.study_date
+        )
+        selected_snapshots = selected_snapshots.drop(columns="study_date")
+    snapshots = selected_snapshots.to_dict("records")
+    metadata = dict(
+        profile_id=profile_id,
+        metric=metric,
+        definition=DEFINITIONS[metric],
+        observation_source=OBSERVATION_SOURCES[metric],
+        count_status=count_status,
+        filters=deepcopy(filters),
+        rule_version=RULE_VERSION,
+        rule_config=deepcopy(rule_config or {}),
+        snapshot_ids=sorted({str(item["snapshot_id"]) for item in snapshots}),
+        snapshots=snapshots,
+        study_snapshots=study_snapshots,
+        evaluation_time=evaluated.isoformat(),
+        update_threshold_days=update_threshold_days,
+        update_threshold_policy=(
+            f"Project-defined review threshold: older than {update_threshold_days} days; "
+            "warn and retain."
+        ),
+        event_window_start=str(window_start) if event_metric else None,
+        event_window_end=str(window_end) if event_metric else None,
+        event_boundary_policy=(
+            (
+                "Current snapshot date within inclusive window; overall "
+                "status RECRUITING and previous captured status "
+                "non-null/non-RECRUITING."
+            )
+            if metric == "recent_recruiting"
+            else (
+                "Source first-post date >= snapshot date minus 90 days, "
+                "inclusive lower bound; no upper bound. Current status must "
+                "be RECRUITING."
+            )
+            if metric == "first_post_proxy"
+            else None
+        ),
+        enrollment_scope="Latest included observation per study; per-run totals separate.",
+        disclaimer=DISCLAIMER,
+        raw_reference_caveat="Raw references may no longer resolve after bronze retention pruning.",
+    )
+    events = included.copy() if event_metric else frame.iloc[:0].copy()
+    if event_metric:
+        events["event_date"] = (
+            events["snapshot_date"]
+            if metric == "recent_recruiting"
+            else events.get("study_first_post_date")
+        )
+        if metric == "recent_recruiting" and not predecessor_studies.empty:
+            lookup = predecessor_studies.set_index(KEY)
+            for column in [
+                "raw_page_reference",
+                "raw_study_ordinal",
+                "source_json_hash",
+                "overall_status",
+            ]:
+                values = []
+                for _, event in events.iterrows():
+                    identity = (profile_id, event.get("predecessor_snapshot_id"), event.nct_id)
+                    values.append(
+                        lookup.loc[identity, column]
+                        if identity in lookup.index and column in lookup.columns
+                        else None
+                    )
+                events[f"predecessor_{column}"] = values
+    metadata["predecessor_snapshot_ids"] = sorted(
+        events.get("predecessor_snapshot_id", pd.Series(dtype="object")).dropna().unique().tolist()
+    )
+    return dict(
+        metadata=metadata,
+        summary=summary,
+        studies=frame,
+        locations=scoped_locations,
+        contributors=contributor_ids,
+        events=events,
+    )
+
+
+def export_audit(result: dict[str, Any]) -> bytes:
+    """Serialize all decisions/provenance to JSON, preserving nulls and date precision."""
+    import json
+
+    payload = {
+        **result,
+        "studies": result["studies"].to_dict("records"),
+        "locations": result["locations"].to_dict("records"),
+        "events": result["events"].to_dict("records"),
+    }
+
+    def clean(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {key: clean(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [clean(item) for item in value]
+        if value is None or pd.isna(value):
+            return None
+        if hasattr(value, "isoformat"):
+            return value.isoformat()
+        if hasattr(value, "item"):
+            return value.item()
+        return value
+
+    return json.dumps(clean(payload), allow_nan=False, sort_keys=True).encode("utf-8")

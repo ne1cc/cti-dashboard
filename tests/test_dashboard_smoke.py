@@ -110,6 +110,8 @@ def fixture_warehouse(fixture_project_root: Path, monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setenv("CTI_PROJECT_ROOT", str(fixture_project_root))
     get_config.cache_clear()
+    # Audit observation views resolve relative silver paths at query time.
+    monkeypatch.chdir(fixture_project_root)
     return fixture_project_root
 
 

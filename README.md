@@ -185,7 +185,7 @@ make dashboard
 | Layer | Object | Grain |
 |---|---|---|
 | Silver | `silver_trials` | NCT ID × ingestion run |
-| Silver | `silver_trial_locations` | NCT ID × facility × city × state × run |
+| Silver | `silver_trial_locations` | profile × NCT ID × run × original location ordinal |
 | Gold | `dim_trial` | NCT ID |
 | Gold | `fct_trial_snapshot` | NCT ID × snapshot date |
 | Gold | `fct_trial_site` | NCT ID × facility × city × state × snapshot date |
@@ -202,14 +202,14 @@ facility grain and are never presented as investigator capacity; only complete
 
 Weighted min-max-normalized components (weights in `config/score_weights.yml` and a
 dbt seed): recruiting-trial count (0.35), recent recruiting growth (0.20), sponsor
-concentration (0.20), site overlap (0.15), data-confidence adjustment (0.10). All
+concentration (0.20), site overlap (0.15), legacy operational completeness adjustment (0.10). All
 components, denominators, and deterministic explanations are displayed.
 
 ## 19. Data-quality and clinical interpretation guardrails
 
 Automated checks cover ingestion integrity, trial validation, relationship integrity,
-geographic validity, and metric rules — 138 dbt data tests plus a 308-test pytest suite
-(measured 2026-09-07 UTC; regenerate with `uv run dbt parse --project-dir
+geographic validity, and metric rules — 157 dbt data tests plus a 383-test pytest suite
+(measured 2026-10-03 UTC; regenerate with `uv run dbt parse --project-dir
 dbt_clinical_trials --profiles-dir dbt_clinical_trials` and
 `uv run pytest --collect-only`. `tests/test_docs_describe_current_paths.py` fails the
 build when a live document states a dbt or pytest count — phrased the way that guard
@@ -225,7 +225,7 @@ quality, or sponsor performance
 - Registry records can be incomplete, delayed, or inconsistently updated.
 - Status history begins when this project's snapshots begin.
 - Facility names are not stable unique identifiers; normalization is best-effort.
-- Density proxies are not population-adjusted until an ACS layer is added.
+- Raw recruiting counts are not population-adjusted.
 - Portfolio demonstration only; real decisions require qualified clinical-operations review.
 
 ## 21. Scenario-value methodology
@@ -268,3 +268,35 @@ organization test whether a feasibility-review process could justify its cost us
 analytical portfolio demonstration. Metrics are feasibility-review signals, not
 enrollment forecasts. Validate with qualified clinical-operations teams before any
 real-world use.
+
+## Competition audit drill-through
+
+Open **Data coverage and caveats** on any competition-bearing page to inspect the
+selected metric's definition, exact filters, profile/run IDs, contributing NCT IDs,
+exclusive exclusions, overlapping warnings and original recorded locations. Sidebar
+scope and a selected segment/sponsor/facility refinement are recorded separately.
+Distinct-study totals deduplicate across overlapping segments. Geography uses reported
+U.S. country/state; unresolved membership stays in the eligible denominator without
+claiming it belongs to a selected state. Location status does not gate confirmed
+overall `RECRUITING` counts. Missing facility text does not erase valid state geography.
+
+The panel separates pipeline age, posted-update day age and verification month age,
+with raw dates and precision retained. Its configurable project-defined warning
+(default >180 days) retains records. Enrollment categories distinguish estimated targets, reported actual,
+missing counts and unknown types; study totals are never apportioned to sites.
+Download the JSON audit for selected run IDs/dates, `competition-audit-v2`, active
+rule hashes, evaluation UTC, threshold, decisions, contributors, enrollment and raw
+page/ordinal/hash lineage, qualifying growth/proxy events and predecessor evidence.
+The audit retains wider eligible/count-input denominators; unrelated derived formulas,
+windows and warehouse values are disclosed rather than recalculated from the union.
+See [metric definitions](docs/metric_definitions.md) and
+[data dictionary](docs/data_dictionary.md) for exact grains, formulas and identity limits.
+
+Existing silver must be rebuilt from retained profile bronze, followed by dbt rebuild,
+to expose new provenance columns. For each transformable profile, run
+`uv run python -m src.cli transform --profile <id> --force`, then `make dbt-run dbt-test`;
+no registry refresh is needed for this rebuild.
+Historical page receipt metadata remains unknown. Bronze pruning can remove referenced
+pages, and active hashes do not establish historical configuration identity.
+
+Registry-derived signals support preliminary feasibility review. They do not measure site-level recruitment performance or establish scientific validity. Counts reflect captured public records and the displayed inclusion rules.

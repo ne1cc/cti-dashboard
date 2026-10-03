@@ -3,6 +3,7 @@
 import plotly.express as px
 import streamlit as st
 from components import data
+from components.audit_panel import render_metric_audit
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import render_page_guide
 from components.profile import render_profile_selector
@@ -67,6 +68,10 @@ st.dataframe(
 st.caption(
     "Counts of registry listings by lead sponsor — not market share, "
     "spend, or enrollment performance."
+)
+
+render_metric_audit(
+    profile_id, metric="latest_study", sponsors=sponsors["lead_sponsor"].tolist(), key="sponsors"
 )
 
 guarded_footer()

@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from components import data
+from components.audit_panel import PRIORITY_DERIVED_RULES, render_metric_audit
 from components.filters import segment_filters
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import format_condition_group, render_page_guide
@@ -16,6 +17,17 @@ data.require_warehouse(profile_id)
 render_page_guide("priority_queue")
 
 queue = data.priority_queue(profile_id)
+queue["priority_explanation"] = (
+    queue["priority_explanation"]
+    .str.replace("data confidence", "legacy operational completeness adjustment", regex=False)
+    .str.replace("relative density", "relative trial count", regex=False)
+)
+st.caption(
+    "Legacy operational completeness adjustment: 0.5 × "
+    "record-quality-ok share + 0.5 × latest successful-run "
+    "usable-location share. This is an operational score input; "
+    "scientific validity is not measured."
+)
 filtered = segment_filters(queue)
 
 band_options = ["priority_review", "review", "watch"]
@@ -33,23 +45,19 @@ col1.metric(
     "Priority review",
     int(band_counts.get("priority_review", 0)),
     help=(
-        "Top 20th percentile segments characterized by elevated "
-        "recruiting trial density or rapid recent growth."
+        "Score at least 0.70, reflecting elevated recruiting trial counts or rapid recent growth."
     ),
 )
 col2.metric(
     "Review",
     int(band_counts.get("review", 0)),
-    help=(
-        "50th to 80th percentile segments representing balanced "
-        "trial density and viable site capacity."
-    ),
+    help=("Score from 0.45 to below 0.70, reflecting trial counts and viable site capacity."),
 )
 col3.metric(
     "Watch",
     int(band_counts.get("watch", 0)),
     help=(
-        "Bottom 50th percentile segments with low trial density—"
+        "Score below 0.45, reflecting low trial counts—"
         "promising targets for community-based recruitment."
     ),
 )
@@ -101,7 +109,9 @@ queue_event = st.dataframe(
             "Site Overlap", format="%.1%", help="Share of listed facilities hosting multiple trials"
         ),
         "data_confidence_share": st.column_config.NumberColumn(
-            "Data Confidence", format="%.1%", help="Completeness and quality adjustment share"
+            "Legacy operational completeness adjustment",
+            format="%.1%",
+            help="0.5 record-quality-ok share + 0.5 latest successful-run usable-location share",
         ),
         "priority_explanation": st.column_config.TextColumn("Deterministic Explanation"),
     },
@@ -128,7 +138,17 @@ export_columns = [
 ]
 st.download_button(
     "Download filtered queue as CSV",
-    filtered[export_columns].to_csv(index=False).encode("utf-8"),
+    filtered[export_columns]
+    .rename(
+        columns={
+            "data_confidence_share": "legacy_operational_completeness_adjustment",
+            "normalized_data_confidence_adjustment": (
+                "normalized_legacy_operational_completeness_adjustment"
+            ),
+        }
+    )
+    .to_csv(index=False)
+    .encode("utf-8"),
     file_name="feasibility_priority_queue.csv",
     mime="text/csv",
     help="Exports exactly the rows and filters currently shown above, "
@@ -145,7 +165,7 @@ if selected_rows:
     )
     breakdown_rows = [
         (
-            "Recruiting density",
+            "Recruiting trial count",
             f"{int(segment['recruiting_trial_count'])} recruiting trials",
             segment["normalized_recruiting_trial_count"],
             segment["weight_recruiting_trial_count"],
@@ -173,8 +193,8 @@ if selected_rows:
             segment["weighted_site_overlap"],
         ),
         (
-            "Data confidence",
-            f"{segment['data_confidence_share'] * 100:.0f}% confidence",
+            "Legacy operational completeness adjustment",
+            f"{segment['data_confidence_share'] * 100:.0f}% operational completeness adjustment",
             segment["normalized_data_confidence_adjustment"],
             segment["weight_data_confidence_adjustment"],
             segment["weighted_data_confidence_adjustment"],
@@ -200,11 +220,11 @@ top["segment"] = (
     top["condition_group"] + " · " + top["state_normalized"] + " · " + top["phase_normalized"]
 )
 components = {
-    "normalized_recruiting_trial_count": "Recruiting density",
+    "normalized_recruiting_trial_count": "Recruiting trial count",
     "normalized_recent_recruiting_growth": "Recent growth",
     "normalized_sponsor_concentration": "Sponsor concentration",
     "normalized_site_overlap": "Site overlap",
-    "normalized_data_confidence_adjustment": "Data confidence",
+    "normalized_data_confidence_adjustment": "Legacy operational completeness adjustment",
 }
 melted = top.melt(
     id_vars="segment",
@@ -230,5 +250,16 @@ st.caption(
 
 if not filtered.empty:
     st.info(filtered.iloc[0]["interpretation_note"])
+
+render_metric_audit(
+    profile_id,
+    filters=filtered.attrs.get("audit_filters", {}),
+    segments=filtered,
+    context={
+        "priority_bands": selected_bands,
+        "derived_rules": PRIORITY_DERIVED_RULES,
+    },
+    key="priority",
+)
 
 guarded_footer()

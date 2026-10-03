@@ -63,7 +63,7 @@ taxonomy), `mapping_confidence` (high/medium/low), `dementia_relevance_flag`.
 `sponsor_name`, `sponsor_normalized`, `sponsor_role`
 (`lead_sponsor`/`collaborator`), `sponsor_class` (registry agency class).
 
-### `silver_trial_locations` — grain: NCT × facility × city × state × country × run
+### `silver_trial_locations` — grain: profile × NCT × run × original location ordinal
 `facility_name`, `facility_normalized`, `city`, `state_raw`,
 `state_normalized` (2-letter code via `config/geography_rules.yml`),
 `zip_code`, `country`, `latitude`, `longitude`, `location_status`,
@@ -122,10 +122,40 @@ fact, bridge and analytical mart.
 | Model | Grain | Highlights |
 |---|---|---|
 | mart_trial_activity | snapshot × segment × status | listing counts, entered/left recruiting |
-| mart_recruiting_competition | snapshot × segment (RECRUITING) | density, 30/90-day windows, HHI, `competition_signal_band` |
+| mart_recruiting_competition | snapshot × segment (RECRUITING) | recruiting count, 30/90-day windows, HHI, `competition_signal_band` |
 | mart_site_overlap | snapshot × facility | multi-trial facilities, phase_mix |
 | mart_condition_geography_trends | month × condition_group × state | 3-month rolling baseline |
 | mart_data_reliability | ingestion run | reconciliation + usability shares |
 | mart_feasibility_priority_queue | segment @ latest snapshot | score, band, rank, deterministic explanation, `interpretation_note` |
 
 Full column-level metric semantics: `docs/metric_definitions.md`.
+
+## Audit provenance and contracted marts
+
+All silver entities carry `indication_profile_id`, `snapshot_id` (immutable ingestion
+run ID), nullable `retrieved_at_utc`, `raw_page_reference` relative to the configured
+bronze API response root (normally `data/bronze/<profile>/api_responses`; the reference
+path alone is `run_id=<id>/page=00001.json`), zero-based `raw_study_ordinal`, and canonical
+`source_json_hash`. Historical receipt metadata is unknown, not reconstructed.
+Page receipts live separately at
+`data/bronze/<profile_id>/api_responses/run_id=<id>/_page_metadata/page=<number>.json`;
+the original page body stays unchanged. Original locations carry zero-based
+`location_ordinal`, preserving identical reported rows as distinct record identities.
+
+| Mart | Contracted grain | Fields and meaning |
+|---|---|---|
+| `mart_study_snapshot_audit` | profile × successful snapshot ID × NCT ID | provenance; start/end UTC; snapshot date; overall status; raw/parsed first-post date and posted update; verification text/precision/month age; enrollment count/type/category; recorded/usable/missing-geography/missing-facility counts; geography category; confirmed-recruiting flag; base state inclusion/exclusion |
+| `mart_location_snapshot_audit` | study audit key × original location ordinal | parent study lineage; original and normalized facility/city/state/country; coordinates; reported location status; geography category and usable flag; missing-facility warning; no enrollment allocation |
+
+Successful-run joins retain multiple runs on one UTC date. Staged manifest and study
+timestamps/dates explicitly normalize to UTC. Study geography is usable if any
+original location is usable, otherwise missing when required fields/locations are
+absent, otherwise unsupported. Filter-specific inside/outside/undetermined membership
+is computed from original locations, not inferred solely from the study category.
+
+`enrollment_category` is `estimated`, `actual`, `missing`, or `unknown_type`.
+`verification_date_precision` is `day`, `month`, `year`, `missing`, or `unparseable`.
+Source omissions and missing historical retrieval metadata remain nullable. Audit
+keys are record identities, not durable facility identities. See
+[metric definitions](metric_definitions.md) for clock formulas, coverage denominators,
+filter decisions and JSON fields. Raw references depend on configured bronze retention.

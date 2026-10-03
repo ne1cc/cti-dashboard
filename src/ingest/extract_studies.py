@@ -8,6 +8,7 @@ a unique ingestion_run_id, and downstream models compare snapshots.
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Any
 
 from src.config import ProjectConfig, get_config
@@ -124,8 +125,13 @@ def run_ingestion(
         last_next_token: str | None = None
         try:
             for page in iter_pages(client, params, max_pages=max_pages):
+                retrieved_at_utc = utc_now().isoformat()
                 page_path = run_dir / f"page={page.page_number:05d}.json"
                 page_path.write_text(page.raw_text, encoding="utf-8")
+                metadata_dir = ensure_dir(run_dir / "_page_metadata")
+                (metadata_dir / page_path.name).write_text(
+                    json.dumps({"retrieved_at_utc": retrieved_at_utc}), encoding="utf-8"
+                )
                 envelope = validate_page(page.payload)
                 if envelope.totalCount is not None:
                     manifest.total_count_reported = envelope.totalCount

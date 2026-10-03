@@ -9,7 +9,13 @@ sources:
       external_location: "read_parquet('data/silver/{name}/*.parquet', union_by_name=true)"
     tables:
       - name: silver_trials
-        description: One row per NCT ID per ingestion run.
+        description: >
+          One row per profile + NCT ID + ingestion run. snapshot_id is the run ID;
+          retrieved_at_utc is nullable for historical pages. raw_page_reference
+          is relative to the configured bronze API response root (normally
+          data/bronze/<profile>/api_responses); the reference path alone is
+          run_id=<id>/page=00001.json, with zero-based raw_study_ordinal
+          and canonical source_json_hash identifying the original record.
       - name: silver_trial_conditions
         description: One row per NCT ID + raw condition + run, with taxonomy mapping.
       - name: silver_trial_interventions
@@ -18,7 +24,8 @@ sources:
         description: One row per NCT ID + sponsor/collaborator + run.
       - name: silver_trial_locations
         description: >
-          One row per NCT ID + facility + city + state + country + run.
+          One row per profile + NCT ID + run + original zero-based location_ordinal.
+          Study provenance is retained on every recorded location row.
           Non-U.S. rows preserved and flagged unusable for U.S.-scope marts.
       - name: silver_trial_outcomes
         description: One row per NCT ID + outcome type + outcome index + run.

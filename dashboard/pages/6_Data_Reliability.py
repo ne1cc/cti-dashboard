@@ -2,6 +2,7 @@
 
 import streamlit as st
 from components import data
+from components.audit_panel import render_metric_audit
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import render_page_guide
 from components.profile import render_profile_selector
@@ -153,6 +154,18 @@ st.dataframe(
 st.caption(
     "Every figure above is the product of the editable assumptions in "
     "config/roi_assumptions.yml — no observed outcomes are used."
+)
+
+render_metric_audit(
+    profile_id,
+    metric="latest_study",
+    context={
+        "scope": (
+            "Current studies; ingestion run diagnostics and scenario "
+            "assumptions above have separate denominators."
+        )
+    },
+    key="reliability",
 )
 
 guarded_footer()
