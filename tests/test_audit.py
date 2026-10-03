@@ -357,7 +357,9 @@ def test_unresolved_original_locations_are_not_known_outside(mixed):
     row = result["studies"].set_index("nct_id").loc["D"]
     assert row.region_membership == "undetermined"
     assert not row.included_flag
-    assert row.exclusion_reason == ("outside_selected_region" if mixed else "unsupported_geography")
+    assert row.exclusion_reason == (
+        "no_confirmed_selected_region_match" if mixed else "unsupported_geography"
+    )
     assert result["contributors"] == ["A"]
 
 
@@ -386,3 +388,171 @@ def test_selected_snapshot_identity_survives_unavailable_study_rows(empty_studie
     assert json.loads(audit.export_audit(result))["metadata"]["snapshots"] == [
         {"snapshot_id": "absent-run", "snapshot_date": "2026-09-03"}
     ]
+
+
+def test_explicit_empty_facility_restriction_preserves_denominator():
+    result = compute(
+        metric="facility", filters={"facilities": [], "facility_restriction_applied": True}
+    )
+    assert result["summary"]["eligible_studies"] == 5
+    assert result["summary"]["coverage"] == 0
+    assert result["contributors"] == []
+    assert result["summary"]["exclusions"]["empty_facility_selection"] == 2
+    assert len(result["studies"]) == 5
+
+
+def event_inputs():
+    studies, locations, conditions, observations = inputs()
+    studies = studies.loc[studies.nct_id.isin(["A", "D"])].copy()
+    studies["study_first_post_date_raw"] = ["2026-06-03", "2026-06-02"]
+    studies["study_first_post_date"] = pd.to_datetime(studies.study_first_post_date_raw)
+    observations = studies[audit.KEY + ["snapshot_date"]].copy()
+    observations["previous_status"] = ["RECRUITING", "NOT_YET_RECRUITING"]
+    observations["predecessor_snapshot_id"] = "before-window"
+    observations["predecessor_snapshot_date"] = "2026-01-01"
+    return studies, locations, conditions, observations
+
+
+def test_recent_recruiting_event_evidence_and_filter_scope():
+    studies, locations, conditions, observations = event_inputs()
+
+    def run(filters):
+        return audit.compute_audit(
+            studies,
+            locations,
+            conditions,
+            profile_id="adrd",
+            observations=observations,
+            filters=filters,
+            metric="recent_recruiting",
+            window_start="2026-06-03",
+            window_end="2026-09-01",
+            evaluation_time="2026-09-02T10:00:00Z",
+        )
+
+    result = run({})
+    assert result["summary"]["eligible_studies"] == 2
+    assert result["summary"]["count_input_contributing_studies"] == 2
+    assert result["contributors"] == ["D"]
+    exported = json.loads(audit.export_audit(result))
+    assert exported["events"][0]["previous_status"] == "NOT_YET_RECRUITING"
+    assert exported["events"][0]["predecessor_snapshot_id"] == "before-window"
+    assert exported["events"][0]["predecessor_snapshot_date"].startswith("2026-01-01")
+    assert exported["events"][0]["snapshot_id"] == "run"
+    assert exported["events"][0]["event_date"].startswith("2026-09-01")
+    assert run({"states": ["CA"]})["contributors"] == []
+    assert run({"states": ["TX"]})["contributors"] == ["D"]
+
+
+@pytest.mark.parametrize(
+    "first_post, expected",
+    [
+        ("2026-06-02", []),
+        ("2026-06-03", ["A"]),
+        ("2026-12-01", ["A"]),
+        (None, []),
+    ],
+)
+def test_first_post_proxy_lower_boundary_and_no_upper_bound(first_post, expected):
+    studies, locations, conditions, observations = event_inputs()
+    studies = studies.loc[studies.nct_id == "A"].copy()
+    studies["study_first_post_date_raw"] = first_post
+    studies["study_first_post_date"] = pd.to_datetime(first_post)
+    result = audit.compute_audit(
+        studies,
+        locations,
+        conditions,
+        profile_id="adrd",
+        observations=observations.loc[observations.nct_id == "A"],
+        filters={},
+        metric="first_post_proxy",
+        window_start="2026-06-03",
+        window_end="2026-09-01",
+        evaluation_time="2026-09-02T10:00:00Z",
+    )
+    assert result["contributors"] == expected
+    assert result["summary"]["eligible_studies"] == 1
+    assert "no upper bound" in result["metadata"]["event_boundary_policy"]
+    assert "study_first_post_date_raw" in json.loads(audit.export_audit(result))["studies"][0]
+
+
+@pytest.fixture
+def event_readers(audit_event_fixture_root, monkeypatch):
+    import streamlit as st
+
+    from src.config import get_config
+
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(audit_event_fixture_root))
+    monkeypatch.chdir(audit_event_fixture_root)
+    get_config.cache_clear()
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    yield data
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    get_config.cache_clear()
+
+
+def test_real_transition_event_predecessor_is_before_window(event_readers):
+    observations = event_readers.metric_audit_observations("adrd", "recent_recruiting")
+    selected = observations.loc[
+        pd.to_datetime(observations.snapshot_date) >= pd.Timestamp("2026-06-03")
+    ]
+    ids = sorted(set(selected.snapshot_id) | set(selected.predecessor_snapshot_id.dropna()))
+    studies = event_readers.audit_studies("adrd", ids)
+    result = audit.compute_audit(
+        studies,
+        event_readers.audit_locations("adrd", ids),
+        event_readers.audit_condition_mapping("adrd"),
+        profile_id="adrd",
+        observations=selected,
+        filters={},
+        metric="recent_recruiting",
+        window_start="2026-06-03",
+        window_end="2026-09-01",
+        evaluation_time="2026-09-02T10:00:00Z",
+    )
+    actual = event_readers.query(
+        "select distinct nct_id from main_intermediate.int_condition_geography_activity "
+        "where indication_profile_id = ? and entered_recruiting_flag "
+        "and snapshot_date between ? and ?",
+        ["adrd", "2026-06-03", "2026-09-01"],
+    )
+    assert result["contributors"] == sorted(actual.nct_id.unique()) == ["NCT00000002"]
+    assert "NCT00000001" not in result["contributors"]
+    event = json.loads(audit.export_audit(result))["events"][0]
+    assert (
+        event["previous_status"] == event["predecessor_overall_status"] == "ACTIVE_NOT_RECRUITING"
+    )
+    assert event["predecessor_snapshot_id"] == "20260101T001500Z_event_before"
+    assert event["predecessor_snapshot_date"].startswith("2026-01-01")
+    assert event["snapshot_id"] == "20260901T001500Z_event_current"
+    assert event["predecessor_raw_page_reference"].endswith("page=00001.json")
+    assert event["predecessor_source_json_hash"]
+
+
+def test_real_first_post_proxy_source_boundary(event_readers):
+    observations = event_readers.metric_audit_observations("adrd", "first_post_proxy")
+    ids = observations.snapshot_id.unique().tolist()
+    result = audit.compute_audit(
+        event_readers.audit_studies("adrd", ids),
+        event_readers.audit_locations("adrd", ids),
+        event_readers.audit_condition_mapping("adrd"),
+        profile_id="adrd",
+        observations=observations,
+        filters={},
+        metric="first_post_proxy",
+        window_start="2026-06-03",
+        window_end="2026-09-01",
+        evaluation_time="2026-09-02T10:00:00Z",
+    )
+    actual = event_readers.query(
+        "select distinct nct_id from main_intermediate.int_condition_geography_activity "
+        "where indication_profile_id = ? and overall_status = 'RECRUITING' "
+        "and snapshot_date = ? and study_first_post_date >= snapshot_date - interval 90 day",
+        ["adrd", "2026-09-01"],
+    )
+    assert result["contributors"] == sorted(actual.nct_id.unique()) == ["NCT00000001"]
+    event = json.loads(audit.export_audit(result))["events"][0]
+    assert event["study_first_post_date_raw"] == "2026-06-03"
+    assert event["event_date"].startswith("2026-06-03")

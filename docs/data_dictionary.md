@@ -133,8 +133,9 @@ Full column-level metric semantics: `docs/metric_definitions.md`.
 ## Audit provenance and contracted marts
 
 All silver entities carry `indication_profile_id`, `snapshot_id` (immutable ingestion
-run ID), nullable `retrieved_at_utc`, profile-bronze-root-relative
-`raw_page_reference`, zero-based `raw_study_ordinal`, and canonical
+run ID), nullable `retrieved_at_utc`, `raw_page_reference` relative to the configured
+bronze API response root (normally `data/bronze/<profile>/api_responses`; the reference
+path alone is `run_id=<id>/page=00001.json`), zero-based `raw_study_ordinal`, and canonical
 `source_json_hash`. Historical receipt metadata is unknown, not reconstructed.
 Page receipts live separately at
 `data/bronze/<profile_id>/api_responses/run_id=<id>/_page_metadata/page=<number>.json`;
@@ -143,7 +144,7 @@ the original page body stays unchanged. Original locations carry zero-based
 
 | Mart | Contracted grain | Fields and meaning |
 |---|---|---|
-| `mart_study_snapshot_audit` | profile × successful snapshot ID × NCT ID | provenance; start/end UTC; snapshot date; overall status; raw/parsed posted update; verification text/precision/month age; enrollment count/type/category; recorded/usable/missing-geography/missing-facility counts; geography category; confirmed-recruiting flag; base state inclusion/exclusion |
+| `mart_study_snapshot_audit` | profile × successful snapshot ID × NCT ID | provenance; start/end UTC; snapshot date; overall status; raw/parsed first-post date and posted update; verification text/precision/month age; enrollment count/type/category; recorded/usable/missing-geography/missing-facility counts; geography category; confirmed-recruiting flag; base state inclusion/exclusion |
 | `mart_location_snapshot_audit` | study audit key × original location ordinal | parent study lineage; original and normalized facility/city/state/country; coordinates; reported location status; geography category and usable flag; missing-facility warning; no enrollment allocation |
 
 Successful-run joins retain multiple runs on one UTC date. Staged manifest and study

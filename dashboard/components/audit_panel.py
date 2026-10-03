@@ -75,16 +75,20 @@ def build_display_audit(
     metric="competition",
     count_status="recruiting",
     context=None,
+    update_threshold_days=180,
 ):
     ids = observations.snapshot_id.unique().tolist() if not observations.empty else []
+    if "predecessor_snapshot_id" in observations.columns:
+        ids = sorted(set(ids) | set(observations.predecessor_snapshot_id.dropna()))
     studies = data.audit_studies(profile_id, ids)
     locations = data.audit_locations(profile_id, ids)
     conditions = data.audit_condition_mapping(profile_id)
     for frame in (studies, locations, conditions):
         if frame.attrs.get("audit_unavailable"):
             raise ValueError(frame.attrs["audit_unavailable"])
+    filters = dict(filters)
     if (context or {}).get("empty_facility_selection"):
-        studies = studies.iloc[:0]
+        filters["facility_restriction_applied"] = True
     result = compute_audit(
         studies,
         locations,
@@ -95,7 +99,9 @@ def build_display_audit(
         metric=metric,
         count_status=count_status,
         evaluation_time=pd.Timestamp.now(tz="UTC"),
-        update_threshold_days=180,
+        update_threshold_days=update_threshold_days,
+        window_start=(context or {}).get("growth_window_start"),
+        window_end=(context or {}).get("growth_window_end"),
         rule_config={**active_rules(profile_id), "display_context": context or {}},
     )
     if (context or {}).get("observation_selection") == "history":
@@ -192,26 +198,46 @@ def render_metric_audit(
             ),
             key=f"{key}_{profile_id}_status",
         )
+        threshold = st.number_input(
+            "Project-defined posted-update review warning (days)",
+            min_value=0,
+            value=180,
+            step=1,
+            key=f"{key}_{profile_id}_threshold",
+            help=(
+                "Warn when the posting age is strictly greater than this threshold; retain studies."
+            ),
+        )
         display_context["observation_selection"] = observation_metric or metric
         observations = data.metric_audit_observations(profile_id, observation_metric or metric)
         if metric == "competition" and not observations.empty:
             mode = st.selectbox(
                 "Audit metric inputs",
-                ["Current count", "90-day growth observations"],
+                ["Current count", "90-day growth observations", "First-post (90-day proxy)"],
                 key=f"{key}_{profile_id}_window",
             )
             if mode == "90-day growth observations":
                 end = pd.Timestamp(pd.to_datetime(observations.snapshot_date).max()).date()
-                observations = data.metric_audit_observations(profile_id, "history")
+                observations = data.metric_audit_observations(profile_id, "recent_recruiting")
                 dates = pd.to_datetime(observations.snapshot_date).dt.date
                 observations = observations[(dates >= end - timedelta(days=90)) & (dates <= end)]
-                metric = "history"
+                metric = "recent_recruiting"
                 display_context["growth_window_start"] = str(end - timedelta(days=90))
                 display_context["growth_window_end"] = str(end)
                 st.caption(
-                    "These are the captured observations underlying the growth "
-                    "window. Transition counts require the previous observation "
-                    "status; this audit does not replace the derived growth value."
+                    "Contributors are captured recruiting-entry events in this inclusive "
+                    "90-day window. Predecessor evidence is retained even before the window. "
+                    "Eligible coverage and count-input contributors remain separate."
+                )
+            elif mode == "First-post (90-day proxy)":
+                end = pd.Timestamp(pd.to_datetime(observations.snapshot_date).max()).date()
+                metric = "first_post_proxy"
+                display_context["growth_window_start"] = str(end - timedelta(days=90))
+                display_context["growth_window_end"] = str(end)
+                st.caption(
+                    "Proxy contributors require RECRUITING and source first-post date "
+                    ">= snapshot date minus 90 days; the lower bound is inclusive, "
+                    "with no upper bound, matching the source formula."
                 )
         if observations.attrs.get("audit_unavailable"):
             st.warning(observations.attrs["audit_unavailable"])
@@ -260,6 +286,7 @@ def render_metric_audit(
                 metric=metric,
                 count_status=status,
                 context=display_context,
+                update_threshold_days=int(threshold),
             )
         except ValueError as error:
             st.warning(str(error))
@@ -279,7 +306,8 @@ def render_metric_audit(
         st.caption(
             "Coverage describes inclusion of captured records under these rules. "
             "Flags overlap; exclusion reasons are mutually exclusive. Older posted updates "
-            "warn after 180 days and remain included. Enrollment is study-level, separated "
+            f"warn after {int(threshold)} days and remain included. "
+            "Enrollment is study-level, separated "
             "by estimated/actual/missing/type and never summed across repeated observations. "
             "Raw references may no longer resolve after bronze retention pruning."
         )
@@ -295,6 +323,13 @@ def render_metric_audit(
             width="stretch",
             column_config={"registry_record": st.column_config.LinkColumn("Study drill-through")},
         )
+        if metric in {"recent_recruiting", "first_post_proxy"}:
+            st.subheader("Metric-specific contributing events and source evidence")
+            st.dataframe(
+                result["events"].assign(audit_rule_version=result["metadata"]["rule_version"]),
+                hide_index=True,
+                width="stretch",
+            )
         ids = result["contributors"]
         st.write({"contributing_nct_ids": ids})
         drill_ids = sorted(studies.nct_id.unique().tolist())

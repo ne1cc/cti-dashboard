@@ -230,7 +230,7 @@ def test_growth_input_window_export_metadata(warehouse):
     at.run()
     assert not at.exception
     metadata = next(json.loads(j.value) for j in at.json if "rule_version" in j.value)
-    assert metadata["metric"] == "history"
+    assert metadata["metric"] == "recent_recruiting"
     assert metadata["rule_config"]["display_context"]["growth_window_start"]
     assert metadata["rule_config"]["display_context"]["growth_window_end"]
 
@@ -248,7 +248,10 @@ def test_empty_facility_export_keeps_snapshot_scope(warehouse):
     )
     payload = json.loads(export_audit(result))
     assert payload["metadata"]["snapshot_ids"] == sorted(observations.snapshot_id.unique())
-    assert payload["summary"]["coverage"] is None
+    assert payload["summary"]["eligible_studies"] == observations.nct_id.nunique()
+    assert payload["summary"]["coverage"] == 0
+    assert payload["summary"]["exclusions"]
+    assert len(payload["studies"]) == len(observations)
     assert payload["contributors"] == []
 
 
@@ -259,3 +262,78 @@ def test_all_status_mode_matches_current_study_count(warehouse):
     )
     assert result["summary"]["contributing_studies"] == observations.nct_id.nunique()
     assert result["metadata"]["count_status"] == "all"
+
+
+def test_threshold_control_warns_retains_and_exports(warehouse, captured_exports):
+    at = AppTest.from_file(
+        str(ROOT / "dashboard/pages/2_Competition_Landscape.py"), default_timeout=60
+    ).run()
+    assert not at.exception
+    before = captured_exports[-1]
+    control = next(w for w in at.number_input if "Project-defined posted-update" in w.label)
+    assert control.value == 180
+    control.set_value(0)
+    at.run()
+    assert not at.exception
+    after = captured_exports[-1]
+    assert before["contributors"] == after["contributors"]
+    assert after["metadata"]["update_threshold_days"] == 0
+    assert "warn and retain" in after["metadata"]["update_threshold_policy"].lower()
+    old_flags = {
+        (s["snapshot_id"], s["nct_id"]): s["older_posted_update_flag"] for s in before["studies"]
+    }
+    new_flags = {
+        (s["snapshot_id"], s["nct_id"]): s["older_posted_update_flag"] for s in after["studies"]
+    }
+    assert old_flags != new_flags
+
+
+@pytest.mark.parametrize(
+    "mode, expected, state",
+    [
+        ("90-day growth observations", ["NCT00000002"], "NC"),
+        ("First-post (90-day proxy)", ["NCT00000001"], "MA"),
+    ],
+)
+def test_event_panel_filter_export_evidence(
+    audit_event_fixture_root, monkeypatch, captured_exports, mode, expected, state
+):
+    import streamlit as st
+
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(audit_event_fixture_root))
+    monkeypatch.chdir(audit_event_fixture_root)
+    get_config.cache_clear()
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    at = AppTest.from_file(
+        str(ROOT / "dashboard/pages/2_Competition_Landscape.py"), default_timeout=60
+    ).run()
+    next(w for w in at.selectbox if w.label == "Audit metric inputs").set_value(mode)
+    at.run()
+    assert not at.exception
+    before = captured_exports[-1]
+    assert before["contributors"] == expected
+    assert before["summary"]["eligible_studies"] > len(expected)
+    assert before["summary"]["count_input_contributing_studies"] > len(expected)
+    if mode == "90-day growth observations":
+        event = before["events"][0]
+        assert event["predecessor_snapshot_id"] == "20260101T001500Z_event_before"
+        assert event["previous_status"] == "ACTIVE_NOT_RECRUITING"
+        assert event["predecessor_source_json_hash"]
+    else:
+        assert before["events"][0]["study_first_post_date_raw"] == "2026-06-03"
+        assert "no upper bound" in before["metadata"]["event_boundary_policy"]
+    next(w for w in at.sidebar.multiselect if w.label == "State").set_value([state])
+    at.run()
+    assert not at.exception
+    after = captured_exports[-1]
+    assert after["contributors"] == []
+    assert after["metadata"]["filters"]["states"] == [state]
+    shown = next(
+        json.loads(j.value)["contributing_nct_ids"]
+        for j in at.json
+        if "contributing_nct_ids" in j.value
+    )
+    assert shown == after["contributors"]
+    st.cache_data.clear()
+    st.cache_resource.clear()

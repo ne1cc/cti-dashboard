@@ -159,7 +159,14 @@ def test_location_ordinals_resolve_source_rows(audit_fixture_root: Path) -> None
 
 
 def test_snapshot_utc_date_does_not_roll_back_to_local_day(audit_fixture_root: Path) -> None:
-    # 00:15Z is still the previous day in America/Los_Angeles.
+    # The isolated dbt materialization runs in a pinned non-UTC session.
+    assert "TimeZone: America/Los_Angeles" in (audit_fixture_root / "profiles.yml").read_text()
+    assert _rows(
+        audit_fixture_root,
+        "select cast(timezone('America/Los_Angeles', "
+        "timestamptz '2026-09-01 00:15:00+00') as date)",
+    ) == [(date(2026, 8, 31),)]
+    # Audit and staging below must still agree on the explicit UTC day.
     assert _rows(
         audit_fixture_root,
         f"select snapshot_date, snapshot_started_at_utc, snapshot_ended_at_utc "
@@ -171,3 +178,11 @@ def test_snapshot_utc_date_does_not_roll_back_to_local_day(audit_fixture_root: P
         "select snapshot_date, snapshot_timestamp_utc from main_staging.stg_trials "
         f"where snapshot_id = '{AUDIT_RUN2_ID}' limit 1",
     ) == [(date(2026, 9, 1), datetime(2026, 9, 1, 0, 15))]
+
+
+def test_first_post_source_clock_is_inspectable(audit_fixture_root):
+    assert _rows(
+        audit_fixture_root,
+        f"select study_first_post_date_raw, study_first_post_date from {STUDIES} "
+        f"where snapshot_id = '{FIXTURE_RUN_ID}' and nct_id = 'NCT00000001'",
+    ) == [("2025-03-15", date(2025, 3, 15))]

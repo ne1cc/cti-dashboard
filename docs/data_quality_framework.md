@@ -65,7 +65,7 @@ with added/removed paths; the baseline changes only via explicit
 table (from `mart_data_reliability`), reconciliation results, drift
 status, and the interpretation guardrails. The step is a gate as well as a
 print: it exits non-zero when a reconciliation check fails, which is what
-`make pipeline` ends on. Unit/integration suite: 371 pytest
+`make pipeline` ends on. Unit/integration suite: 383 pytest
 tests (measured 2026-10-03 UTC by `uv run pytest --collect-only`; regenerate
 with `make test`), including config-sync tests that fail if score weights or band
 thresholds diverge between YAML, the dbt seed, and dbt vars.
@@ -90,14 +90,14 @@ claims clinically or measure market completeness.
 
 The audit panel shows source omissions before geography exclusion, separately from
 known outside-state records and undetermined membership. Older posted updates warn
-strictly after 180 days and remain included; missing/unparseable dates are explicit.
+strictly after the selected project-defined threshold (default 180 days) and remain
+included; missing/unparseable dates are explicit.
 The legacy operational completeness adjustment is disclosed with its formula, not
 presented as a scientific-confidence percentage. Missing source fields are not
 assumed to be extraction failures: immutable pages, ordinals, hashes and extraction
 fixtures support the mapping review while retained bronze is available.
 
-One low, nonblocking Task 2 review item remains: the UTC-boundary fixture checks
-staging/date agreement but does not pin DuckDB to a non-UTC session timezone. A UTC
-runner could therefore fail to detect regression to the old session-dependent cast.
-The implementation explicitly uses `timezone('UTC', ...)`; additional timezone
-fixture hardening is outside this documentation task.
+The isolated audit fixture pins the dbt DuckDB session to `America/Los_Angeles`.
+Its UTC-boundary assertion proves 00:15Z is the previous local day while audit and
+staging timestamps/dates retain explicit UTC alignment, protecting against regression
+to session-dependent casts. Production explicitly uses `timezone('UTC', ...)`.

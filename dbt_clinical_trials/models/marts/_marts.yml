@@ -869,6 +869,10 @@ models:
         data_type: VARCHAR
       - name: lead_sponsor_name
         data_type: VARCHAR
+      - name: study_first_post_date_raw
+        data_type: VARCHAR
+      - name: study_first_post_date
+        data_type: DATE
       - name: last_update_post_date_raw
         data_type: VARCHAR
       - name: status_verified_date_raw

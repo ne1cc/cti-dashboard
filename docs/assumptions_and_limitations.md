@@ -55,7 +55,8 @@
 16. Pipeline age, public posted-update age, and verification month age answer
     different questions. They do not establish present recruitment activity. Legacy
     page retrieval times remain unknown; month/year text does not imply a day.
-    The project-defined >180-day warning retains records and is not a validity cutoff.
+    The configurable project-defined warning (default >180 days) retains records
+    and is not a validity cutoff.
 17. State geography uses reported country/state, not coordinates or a radius. An
     unresolved location means undetermined region membership unless another location
     supplies a selected-state match; it is not evidence of membership in that state.
@@ -68,13 +69,14 @@
     facility. Recorded-location ordinals distinguish rows only. Study segment counts
     overlap and must not be summed into a unique-study total. Derived scores, sponsor
     concentration, percentiles and growth remain warehouse calculations; the panel
-    enumerates their count inputs and discloses formulas, windows and displayed values.
+    enumerates count inputs and qualifying growth/proxy events with predecessor/source
+    evidence, and discloses formulas, windows and displayed values.
 20. Raw pages are immutable while retained. Configured pruning can remove them;
     exported references do not guarantee future resolution or indefinite bronze
     retention. Rebuild historical silver from retained bronze to expose new provenance
     fields, then rebuild dbt; this does not invent absent historical receipt timestamps.
     Missing audit marts produce rebuild guidance rather than a substitute audit.
-21. The UTC-boundary fixture does not pin a non-UTC DuckDB timezone (Task 2 low,
-    nonblocking review item); explicit production UTC conversion is implemented.
+21. The isolated UTC-boundary fixture pins DuckDB dbt sessions to
+    `America/Los_Angeles` and asserts explicit UTC alignment.
 
 Registry-derived signals support preliminary feasibility review. They do not measure site-level recruitment performance or establish scientific validity. Counts reflect captured public records and the displayed inclusion rules.

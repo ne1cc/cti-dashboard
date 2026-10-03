@@ -286,6 +286,8 @@ def _build_fixture_root(
     tmp_path_factory: pytest.TempPathFactory,
     name: str,
     runs: list[FixtureRun],
+    *,
+    session_timezone: str | None = None,
 ) -> Path:
     """Bronze→silver→gold for `runs`, then one `dbt build`; returns the scratch root.
 
@@ -407,7 +409,12 @@ def _build_fixture_root(
       type: duckdb
       path: data/warehouse/clinical_trials.duckdb
       threads: 4
-""",
+"""
+            + (
+                f"      settings:\n        TimeZone: {session_timezone}\n"
+                if session_timezone
+                else ""
+            ),
             encoding="utf-8",
         )
         (root / "data/warehouse").mkdir(parents=True, exist_ok=True)
@@ -741,4 +748,36 @@ def audit_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
                 final_status="failed",
             ),
         ],
+        session_timezone="America/Los_Angeles",
+    )
+
+
+@pytest.fixture(scope="session")
+def audit_event_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    base = _base_adrd_run()
+    return _build_fixture_root(
+        tmp_path_factory,
+        "fixture_audit_events",
+        [
+            replace(
+                base,
+                run_id="20260101T001500Z_event_before",
+                started_at=datetime(2026, 1, 1, 0, 15, tzinfo=UTC),
+            ),
+            replace(
+                base,
+                run_id="20260901T001500Z_event_current",
+                started_at=datetime(2026, 9, 1, 0, 15, tzinfo=UTC),
+                status_overrides={"NCT00000002": "RECRUITING"},
+                study_overrides={
+                    "NCT00000001": {
+                        "statusModule": {"studyFirstPostDateStruct": {"date": "2026-06-03"}}
+                    },
+                    "NCT00000002": {
+                        "statusModule": {"studyFirstPostDateStruct": {"date": "2026-06-02"}}
+                    },
+                },
+            ),
+        ],
+        session_timezone="America/Los_Angeles",
     )

@@ -48,7 +48,7 @@ warehouse calculations with exact formulas, scope, windows and displayed values 
 ## Verification evidence
 
 Before editing, `uv run pytest tests/test_docs_describe_current_paths.py` returned
-**1 failed, 5 passed in 4.96s**. The sole failure expected the current
+**1 failed, 5 passed in 4.96s**. On 2026-10-03 UTC before the final-review fixes, the sole failure expected the current
 `157 dbt tests and a 371-test pytest suite` positioning statement; the live fixture
 reported 34 models, 157 dbt tests and 371 pytest cases. After updating docs the same
 command returned **6 passed in 4.61s**.
@@ -103,3 +103,14 @@ Registry-derived signals support preliminary feasibility review. They do not mea
 After force-adding both audit artifacts, the docs guard was rerun against all eight
 tracked files: `uv run pytest tests/test_docs_describe_current_paths.py` returned
 **6 passed in 4.65s**. Final staged whitespace check passed.
+
+## Final-review correction (2026-10-03 UTC)
+
+The audit now retains the denominator for explicitly empty facility restrictions,
+exports true recruiting-entry/proxy events with predecessor/source evidence, and
+provides a nonnegative posted-update warning control (default 180 days). The prior
+UTC fixture review item is resolved by pinned America/Los_Angeles dbt sessions and
+explicit UTC alignment assertions. `uv run pytest --collect-only` now collects
+383 tests; model/test counts remain 34/157. A fresh full `uv run --group orchestration pytest`
+run returned **374 passed, 9 skipped in 345.19s**, exit 0, including the documentation-count
+guard. Earlier Task 5 measurements above are historical.

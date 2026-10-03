@@ -12,7 +12,9 @@ sources:
         description: >
           One row per profile + NCT ID + ingestion run. snapshot_id is the run ID;
           retrieved_at_utc is nullable for historical pages. raw_page_reference
-          is relative to the profile bronze root, with zero-based raw_study_ordinal
+          is relative to the configured bronze API response root (normally
+          data/bronze/<profile>/api_responses); the reference path alone is
+          run_id=<id>/page=00001.json, with zero-based raw_study_ordinal
           and canonical source_json_hash identifying the original record.
       - name: silver_trial_conditions
         description: One row per NCT ID + raw condition + run, with taxonomy mapping.

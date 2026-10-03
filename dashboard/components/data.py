@@ -546,13 +546,17 @@ def metric_audit_observations(profile_id: str, metric: str = "competition") -> p
             "from main_intermediate.int_current_trial_status where indication_profile_id = ?",
             [profile_id],
         )
-    if metric == "history":
+    if metric in {"history", "recent_recruiting"}:
         return query(
-            "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, snapshot_date "
-            "from main_intermediate.int_trial_status_history where indication_profile_id = ?",
+            "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, snapshot_date, "
+            "previous_status, lag(ingestion_run_id) over trial_window as predecessor_snapshot_id, "
+            "lag(snapshot_date) over trial_window as predecessor_snapshot_date "
+            "from main_intermediate.int_trial_status_history where indication_profile_id = ? "
+            "window trial_window as (partition by indication_profile_id, "
+            "nct_id order by snapshot_date)",
             [profile_id],
         )
-    if metric == "competition":
+    if metric in {"competition", "first_post_proxy"}:
         return query(
             "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, snapshot_date "
             "from main_intermediate.int_trial_status_history where indication_profile_id = ? "

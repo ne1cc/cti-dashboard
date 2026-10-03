@@ -19,7 +19,10 @@ observations; exact status/state/facility rules; known outside versus undetermin
 pre-geography denominators and reconciling exclusive exclusions; overlapping flags;
 three independent clocks and date precision; estimated/actual/missing/unknown-type
 enrollment without site allocation; active rule version/hashes; threshold/evaluation
-metadata; and legacy receipt/rebuild/bronze retention limits.
+metadata; and legacy receipt/rebuild/bronze retention limits. `raw_page_reference`
+is relative to the configured bronze API response root (normally
+`data/bronze/<profile>/api_responses`); the reference path alone is
+`run_id=<id>/page=00001.json`.
 
 Exact listed-site identity includes per-study/state normalized facility/city distinct
 pairs, duplicate collapse, missing-name exclusion, and null-city empty-text handling.
@@ -65,6 +68,8 @@ Independently reran `uv run dbt parse --project-dir dbt_clinical_trials --profil
 model=34, test=157, seed=4, analysis=4. `uv run pytest --collect-only` returned
 371 tests collected in 1.21s. Counts are dated 2026-10-03 UTC and include their
 regeneration commands. Singular assertion file count was inspected directly: 14 files.
+These counts describe the Task 5 commit before the subsequent final-review fixes;
+the post-fix count and full suite are in `../final-review-fix-report.md`.
 
 ## Verification
 
@@ -114,3 +119,8 @@ request should carry this walkthrough into its description/retrospective and T3 
 After force-adding both audit artifacts, the docs guard was rerun against all eight
 tracked files: `uv run pytest tests/test_docs_describe_current_paths.py` returned
 **6 passed in 4.65s**. Final staged whitespace check passed.
+
+Final-review correction: the panel now exposes a nonnegative project-defined day warning
+control (default 180), and event/proxy contributors carry source event evidence. The deferred UTC fixture issue is resolved by a pinned Los Angeles dbt session and
+explicit UTC alignment assertions. Earlier
+verification counts and outcomes above describe the original Task 5 revision.

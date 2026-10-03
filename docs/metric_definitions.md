@@ -111,7 +111,9 @@ actual selected observations, including selected history windows. Current study
 counts follow `int_current_trial_status`; competition and facility audits use their
 respective mart dates. Snapshot identity survives an empty contributor selection.
 
-Filters record condition groups, phases, states, normalized sponsors, and facility
+Sponsor filters match the displayed `lead_sponsor_name` exactly; HHI grouping separately
+uses normalized lead-sponsor names. Filters record condition groups, phases, states,
+displayed lead-sponsor names, and facility
 triples (normalized name, city, state). Sidebar selections are retained separately
 from drill-through refinements. A default segment audit covers sidebar scope before
 rank/band row filters; it is not the sum of displayed overlapping segments.
@@ -127,6 +129,10 @@ locations are absent, country is absent, or U.S. state geography is unresolved;
 only known nonmatching geography is `outside`. Usable TX plus unresolved geography
 under a CA filter is undetermined and does not contribute to CA. Missing required
 geography and unsupported geography have distinct exclusions.
+
+An explicitly empty facility restriction selects no facilities while retaining the
+eligible study denominator, study decisions, exclusions and original recorded locations.
+It is distinct from an unrestricted empty sidebar selection.
 
 Eligible denominator = distinct captured studies after observation/profile,
 condition, phase and sponsor scope, before status/geography/facility exclusions.
@@ -155,7 +161,8 @@ unparseable posted dates stay unknown. Page retrieval UTC is separate from these
 clocks and remains null for legacy pages without receipt metadata. The warning is
 strictly **greater than 180 days**, a project-defined review threshold; warn and
 retain, with no age exclusion. The pure computation accepts a threshold parameter;
-the current dashboard passes 180 and exports it with evaluation time.
+the panel provides a nonnegative day control, default 180, and exports the selected
+threshold/policy with evaluation time. Changing it changes warnings, not contributors.
 
 Enrollment categories are estimated target, reported actual, missing count, and
 present count with absent/unrecognized type (`unknown_type`). Counts and totals are
@@ -193,10 +200,15 @@ month boundaries (up to four monthly rows); the mean averages available rows.
 Growth = (current count − first available window count) / that baseline, null for
 zero baseline or fewer than two distinct months. The panel limits observation scope
 to displayed months or this inclusive input window. Competition's 90-day input
-selector retains the actual daily observations; a prior observation may additionally
-be needed to classify an entrant.
+selector identifies only true entry events and exports event date/current snapshot plus
+predecessor status, snapshot and raw-record lineage, including predecessors before the
+window. Continuing recruiters are not event contributors. The separate first-post proxy
+selector uses RECRUITING and source first-post date >= snapshot date minus 90 days,
+with an inclusive lower bound and no upper bound; raw and parsed first-post dates survive.
+Eligible coverage and count-input contributors remain separate from event contributors.
 
-The panel audits count inputs, not a recomputation of growth transitions, HHI,
+The panel audits count inputs and identifies growth/proxy contributing events, without
+recomputing unrelated HHI,
 percentiles or composite scores. Derived formulas, displayed values, source-rule
 hashes and relevant windows are exported. Min-max normalization is profile-wide,
 returns zero for no spread, and uses active weights; priority bands are fixed
@@ -205,7 +217,7 @@ union contributor count.
 
 ## Export and rule identity
 
-The UTF-8 JSON download includes definition, `competition-audit-v1`, active
+The UTF-8 JSON download includes definition, `competition-audit-v2`, active
 configuration/model SHA-256 identifiers, exact filters and sidebar scope, profile,
 selected run IDs/dates, evaluation UTC, threshold, count status, contributing IDs,
 study decisions and overlapping flags, original locations, raw references/ordinals,

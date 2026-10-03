@@ -62,6 +62,7 @@ select
     brief_title, study_type, overall_status, phase_normalized, lead_sponsor_name,
     snapshot_date, snapshot_started_at_utc, snapshot_ended_at_utc, retrieved_at_utc,
     raw_page_reference, raw_study_ordinal, source_json_hash,
+    study_first_post_date_raw, study_first_post_date,
     last_update_post_date_raw, posted_update_date, posted_update_age_days,
     posted_update_age_days > 180 as older_posted_update_flag,
     status_verified_date_raw, verification_date_precision, verification_age_months,

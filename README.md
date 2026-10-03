@@ -208,7 +208,7 @@ components, denominators, and deterministic explanations are displayed.
 ## 19. Data-quality and clinical interpretation guardrails
 
 Automated checks cover ingestion integrity, trial validation, relationship integrity,
-geographic validity, and metric rules — 157 dbt data tests plus a 371-test pytest suite
+geographic validity, and metric rules — 157 dbt data tests plus a 383-test pytest suite
 (measured 2026-10-03 UTC; regenerate with `uv run dbt parse --project-dir
 dbt_clinical_trials --profiles-dir dbt_clinical_trials` and
 `uv run pytest --collect-only`. `tests/test_docs_describe_current_paths.py` fails the
@@ -281,12 +281,13 @@ claiming it belongs to a selected state. Location status does not gate confirmed
 overall `RECRUITING` counts. Missing facility text does not erase valid state geography.
 
 The panel separates pipeline age, posted-update day age and verification month age,
-with raw dates and precision retained. Its project-defined >180-day warning retains
-records. Enrollment categories distinguish estimated targets, reported actual,
+with raw dates and precision retained. Its configurable project-defined warning
+(default >180 days) retains records. Enrollment categories distinguish estimated targets, reported actual,
 missing counts and unknown types; study totals are never apportioned to sites.
-Download the JSON audit for selected run IDs/dates, `competition-audit-v1`, active
+Download the JSON audit for selected run IDs/dates, `competition-audit-v2`, active
 rule hashes, evaluation UTC, threshold, decisions, contributors, enrollment and raw
-page/ordinal/hash lineage. The audit enumerates count inputs; derived formulas,
+page/ordinal/hash lineage, qualifying growth/proxy events and predecessor evidence.
+The audit retains wider eligible/count-input denominators; unrelated derived formulas,
 windows and warehouse values are disclosed rather than recalculated from the union.
 See [metric definitions](docs/metric_definitions.md) and
 [data dictionary](docs/data_dictionary.md) for exact grains, formulas and identity limits.
