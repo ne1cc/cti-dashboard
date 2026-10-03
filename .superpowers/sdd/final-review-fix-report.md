@@ -6,7 +6,7 @@ Status: all seven final-review findings implemented and verified in one fix wave
 
 ## Review scope and implementation
 
-Read the approved ledger and Task 2–5 reports. No registry requests, live warehouse refresh, or unrelated score changes were made. A fresh post-fix full-suite run is recorded below.
+Read the approved ledger and Task 2–5 reports. The implementer spawned no child agents; no registry requests, live warehouse refresh, or unrelated score changes were made. A fresh post-fix full-suite run is recorded below.
 
 1. **Empty facility restriction:** `dashboard/components/audit.py` distinguishes unrestricted `facilities=[]` from `facility_restriction_applied=True` with an empty identity set. `audit_panel.py` passes the explicit restriction instead of deleting study rows. The pre-facility eligible denominator, study decisions, independent flags, snapshots, recorded locations, and export survive; zero contributors produce 0 coverage when the denominator is nonzero. Exclusions retain status/geography precedence and identify `empty_facility_selection` for otherwise eligible studies. Existing tests expecting erased/null coverage now require retained denominator, decisions and exclusions.
 
@@ -79,4 +79,4 @@ Post-fix full-suite verification by the controller:
 
 Reviewed profile/run/NCT join identity, the observation-selection boundary before filtering, actual predecessor lookup, raw/parsed first-post fields, exact proxy boundary including future dates, continuing recruiter exclusion, count-input versus event contributors, explicit-empty facility semantics, exclusion reconciliation, overlapping independent flags, threshold warn/retain behavior, UTC day alignment, rule/version exports, and scope of all docs edits.
 
-No unrelated priority score or derived-measure recomputation was introduced. Active rule hashes remain active configuration identity, not invented historical rule versions. Historical receipts and raw evidence remain nullable when absent; raw references do not guarantee indefinite bronze retention. The event export enumerates distinct event observations plus distinct NCT IDs; sums across overlapping segments can still repeat studies/events. A full-suite run is intentionally left to the final controller as requested.
+No unrelated priority score or derived-measure recomputation was introduced. Active rule hashes remain active configuration identity, not invented historical rule versions. Historical receipts and raw evidence remain nullable when absent; raw references do not guarantee indefinite bronze retention. The event export enumerates distinct event observations plus distinct NCT IDs; sums across overlapping segments can still repeat studies/events.
