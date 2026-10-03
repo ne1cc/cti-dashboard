@@ -4,21 +4,37 @@
 
 **Live demo:** [cti-dashboard.fly.dev](https://cti-dashboard.fly.dev/)
 
-Over 80% of clinical trials miss their initial enrollment deadlines, largely because sponsors pick trial sites already overcrowded with competing studies for the same patient pool.
+This project turns public **ClinicalTrials.gov API v2** records into a reproducible
+workspace for preliminary geographic competition screening. Its proposed user is a
+clinical-operations analyst examining which reported studies and data gaps warrant
+further feasibility investigation.
 
-This project turns public registry data from **ClinicalTrials.gov (API v2)** into an automated feasibility and site-selection intelligence suite. It snapshots trial statuses over time, detects weekly state transitions, and calculates competition density scores across diseases, phases, and geographies—giving clinical operations teams clear signals on where to recruit before committing millions to site activation.
+Select a condition, phase and captured snapshot; compare distinct study counts and
+coverage; inspect the contributing NCT IDs and exclusions; then export the evidence
+for follow-up. Counts describe registry listings under the displayed rules. They do
+not establish patient availability, recruitment prospects or site performance.
 
-> **Executive Business Case:** See [`docs/business_case.md`](docs/business_case.md) for trial operational ROI, cost-of-delay analysis, and the site-feasibility decision framework.
+**Start here:** [Project brief](docs/project_brief.md) ·
+[National Phase 3 Alzheimer's disease case study](docs/feasibility_case_study.md) ·
+[Metric definitions](docs/metric_definitions.md).
+The case study uses an actual local captured dataset and a complete 50-state table;
+D.C. and territories appear in a separate supplement. Its observations describe
+that dataset, rather than the current live demo.
+
+> **Proposed business use:** See [`docs/business_case.md`](docs/business_case.md)
+> for the screening workflow, follow-up requirements and unmeasured benefit hypotheses.
 >
-> **Interpretation Note:** All outputs are *public-registry-based planning signals* for operational feasibility review, not clinical decision support or predictive patient forecasts.
+> **Validation status:** Calculation and pipeline checks are implemented. The
+> proposed stakeholder workflow and business benefits have not been validated
+> through stakeholder interviews or a measured operational evaluation.
 
 ---
 
 ### Highlights
 - **Weekly Snapshot History:** Builds longitudinal state transitions from an API that only provides current-day snapshots.
-- **Market Congestion Scoring:** dbt dimensional models in DuckDB ranking recruitment competition across US state and phase combinations.
-- **Interactive Feasibility App:** Streamlit dashboard with granular filtering across condition taxonomies and sponsor networks.
-- **Production-Grade Engineering:** Strict type normalization into immutable Parquet, automated dbt tests, and CI workflows.
+- **Recruiting-study Counts:** dbt dimensional models in DuckDB describe reported study presence across U.S. state and phase combinations, with distinct-study deduplication.
+- **Inspectable Screening App:** Streamlit filters, contributing-study drill-through, coverage and caveats, and audit exports.
+- **Reproducible Engineering:** Typed Parquet entities, documented transformations, automated dbt checks and CI workflows.
 
 ---
 
@@ -248,7 +264,9 @@ organization test whether a feasibility-review process could justify its cost us
 | [`docs/assumptions_and_limitations.md`](docs/assumptions_and_limitations.md) | numbered assumptions register |
 | [`docs/data_quality_framework.md`](docs/data_quality_framework.md) | five check layers, tests, severity philosophy |
 | [`docs/dashboard_spec.md`](docs/dashboard_spec.md) | page-by-page dashboard specification |
-| [`docs/executive_memo_template.md`](docs/executive_memo_template.md) | stakeholder memo template with live example figures |
+| [`docs/project_brief.md`](docs/project_brief.md) | proposed stakeholder workflow, scope and acceptance criteria |
+| [`docs/feasibility_case_study.md`](docs/feasibility_case_study.md) | actual national descriptive memo, complete state table and evidence appendix |
+| [`docs/executive_memo_template.md`](docs/executive_memo_template.md) | stakeholder memo template with required scope and evidence references |
 | [`docs/development_log.md`](docs/development_log.md) | complete step-by-step build record (Phases 1–7) |
 | [`docs/DEPLOY_STREAMLIT.md`](docs/DEPLOY_STREAMLIT.md) | deploy the dashboard to Streamlit Community Cloud |
 | [`docs/DEPLOY_FLY.md`](docs/DEPLOY_FLY.md) | deploy the dashboard to Fly.io with an auto-refreshing pipeline |
