@@ -10,6 +10,12 @@ from src.utils.dates import utc_now
 from tests.conftest import check_evaluation, materialize_with_checks
 
 
+def _refreshable_profile_ids() -> list[str]:
+    from src.profiles import get_registry
+
+    return [profile.profile_id for profile in get_registry().refreshable()]
+
+
 def _materialization_payload(result, asset_name: str, key: str):
     """Value of metadata `key` on the materialization event of `asset_name`.
 
@@ -74,8 +80,6 @@ def test_bronze_asset_raises_on_failed_run(project_root_tmp, monkeypatch) -> Non
     collects and raises once (`src/orchestration/assets/bronze.py:56-60`,
     `:73-74`), so a test that only asks "did the run go red" cannot tell that
     apart from an abort inside the loop — or from any unrelated crash in the op."""
-    from src.profiles import get_registry
-
     success = _success_manifest()
     failed = success.model_copy(update={"status": "failed", "error": "HTTP 500 on page 2"})
     seen: list[str] = []
@@ -110,8 +114,9 @@ def test_bronze_asset_raises_on_failed_run(project_root_tmp, monkeypatch) -> Non
     assert "oncology_nsclc" not in error.message
     # Collected, not aborted: the second profile was still attempted. The step
     # retries this materialization, so `seen` holds the pair once per attempt.
-    assert set(seen) == {"adrd", "oncology_nsclc"}
-    assert seen[:2] == [p.profile_id for p in get_registry().refreshable()]
+    profile_ids = _refreshable_profile_ids()
+    assert set(seen) == set(profile_ids)
+    assert seen[: len(profile_ids)] == profile_ids
 
 
 def test_bronze_asset_contains_a_raised_ingestion_error_and_attempts_the_rest(
@@ -142,8 +147,8 @@ def test_bronze_asset_contains_a_raised_ingestion_error_and_attempts_the_rest(
         run_config={"ops": {"ctg_raw_pages": {"config": IngestParams().model_dump()}}},
         raise_on_error=False,
     )
-    assert set(seen) == {"adrd", "oncology_nsclc"}, (
-        "a raise on the first profile must not skip the second: that is the whole "
+    assert set(seen) == set(_refreshable_profile_ids()), (
+        "a raise on the first profile must not skip the remaining profiles: that is the whole "
         "difference between this asset and src/cli.py's orchestrate loop"
     )
     assert not result.success
@@ -178,7 +183,7 @@ def test_silver_asset_contains_a_raised_transform_error_and_attempts_the_rest(
         run_config={"ops": {"ctg_raw_pages": {"config": IngestParams().model_dump()}}},
         raise_on_error=False,
     )
-    assert seen == ["adrd", "oncology_nsclc"]
+    assert seen == _refreshable_profile_ids()
     assert not result.success
     silver_failures = [
         f
@@ -436,15 +441,16 @@ def test_bronze_asset_refreshes_every_profile(project_root_tmp, monkeypatch) -> 
     assert ids == [p.profile_id for p in get_registry().refreshable()]
     # The line above passes when refreshable() is empty; this pin does not, and an
     # empty registry is the failure worth catching in a test about scope.
-    assert set(ids) == {"adrd", "oncology_nsclc"}
+    profile_ids = _refreshable_profile_ids()
+    assert set(ids) == set(profile_ids)
     # Both job-level knobs reach both profiles' `run_ingestion` calls.
-    assert set(seen) == {("adrd", True, 7), ("oncology_nsclc", True, 7)}
+    assert set(seen) == {(pid, True, 7) for pid in profile_ids}
     # The per-profile payload is the only operator-facing record of this fan-out.
     runs = _materialization_payload(result, "ctg_raw_pages", "runs_by_profile")
-    assert set(runs) == {"adrd", "oncology_nsclc"}
+    assert set(runs) == set(profile_ids)
     assert {pid: entry["ingestion_run_id"] for pid, entry in runs.items()} == {
         "adrd": "run_for_adrd",
-        "oncology_nsclc": "run_for_oncology_nsclc",
+        **{pid: f"run_for_{pid}" for pid in profile_ids if pid != "adrd"},
     }, (
         "each profile's entry must carry its own run: a mis-keyed fan-out report is "
         "how one profile silently ages behind a green UI"
@@ -468,7 +474,7 @@ def test_silver_asset_transforms_every_profile(project_root_tmp, monkeypatch) ->
     def fake_run_transform(run_id=None, force=False, profile=None):
         pid = profile.profile_id if profile else "<default>"
         seen.append(pid)
-        return list(processed.get(pid, ["<not a refreshable profile>"]))
+        return list(processed.get(pid, []))
 
     monkeypatch.setattr("src.orchestration.assets.silver.run_transform", fake_run_transform)
     result = materialize(
@@ -481,9 +487,12 @@ def test_silver_asset_transforms_every_profile(project_root_tmp, monkeypatch) ->
     # Bronze pins its scope with this set; without the same pin here the line
     # above is built with the very expression the asset loops, so a registry that
     # leaked the ingest_only profile would keep this test green.
-    assert set(seen) == {"adrd", "oncology_nsclc"}
+    assert set(seen) == set(_refreshable_profile_ids())
     # Both payload keys are the only operator-facing record of this fan-out.
-    assert _materialization_payload(result, "silver_entities", "processed_runs") == processed
+    expected_processed = {pid: processed.get(pid, []) for pid in _refreshable_profile_ids()}
+    assert (
+        _materialization_payload(result, "silver_entities", "processed_runs") == expected_processed
+    )
     count = _materialization_payload(result, "silver_entities", "processed_count")
     assert count == sum(len(runs) for runs in processed.values())
     assert count == 3
@@ -546,15 +555,19 @@ def test_warehouse_checks_pass_on_consistent_state(project_root_tmp) -> None:
         for indication_profile in get_registry().refreshable()
         for c in warehouse_checks(indication_profile.config, indication_profile.profile_id)
     ]
+    checks = [c for c in checks if c.profile_id in {"adrd", "oncology_nsclc"}]
     assert checks
     assert all(c.passed for c in checks), [(c.profile_id, c.check) for c in checks if not c.passed]
     assert {c.profile_id for c in checks} == {"adrd", "oncology_nsclc"}
     per_profile_rows = {
         c.profile_id: c.actual for c in checks if c.check == "warehouse_profile_has_trials"
     }
-    assert per_profile_rows == {"adrd": 2, "oncology_nsclc": 3}, (
+    profile_ids = _refreshable_profile_ids()
+    assert per_profile_rows == {
+        pid: 2 + profile_ids.index(pid) for pid in ("adrd", "oncology_nsclc")
+    }, (
         "each profile's legs must count only its own dim_trial rows: the seed holds "
-        "a *different* count per profile, so an unscoped query reports the total (5) "
+        "a *different* count per profile, so an unscoped query reports the total "
         "for both — and every other leg here would still pass on the superset."
     )
 

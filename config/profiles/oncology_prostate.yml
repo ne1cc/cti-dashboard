@@ -1,0 +1,70 @@
+profile:
+  id: oncology_prostate
+  display_name: Prostate Cancer
+  ingest_only: false
+  taxonomy: config/condition_taxonomy_prostate.yml
+  score_weights: config/score_weights.yml
+api:
+  base_url: https://clinicaltrials.gov/api/v2
+  studies_endpoint: /studies
+  openapi_spec_url: https://clinicaltrials.gov/api/oas/v2
+  docs_url: https://clinicaltrials.gov/data-api/api
+  format: json
+  page_size: 100
+  count_total: true
+  query_params:
+    query.cond: Prostate Cancer
+    filter.advanced: AREA[StudyType]INTERVENTIONAL
+    filter.overallStatus: &id001
+    - RECRUITING
+    - ACTIVE_NOT_RECRUITING
+    - NOT_YET_RECRUITING
+    - COMPLETED
+    - TERMINATED
+    - WITHDRAWN
+    - SUSPENDED
+    - ENROLLING_BY_INVITATION
+  http:
+    timeout_seconds: 30
+    max_retries: 5
+    backoff_initial_seconds: 1
+    backoff_max_seconds: 60
+    retry_on_status:
+    - 429
+    - 500
+    - 502
+    - 503
+    - 504
+scope:
+  therapeutic_area: Prostate cancer
+  geography: United States
+  study_type: INTERVENTIONAL
+  statuses: *id001
+  phases:
+  - EARLY_PHASE1
+  - PHASE1
+  - PHASE2
+  - PHASE3
+  - PHASE4
+  refresh_cadence: weekly
+  history_note: ClinicalTrials.gov returns only the current record per study. Longitudinal
+    status history is constructed by this project from repeated weekly snapshots.
+paths:
+  bronze_api_responses: data/bronze/oncology_prostate/api_responses
+  bronze_manifests: data/bronze/oncology_prostate/manifests
+  silver: data/silver
+  gold: data/gold
+  duckdb: data/warehouse/clinical_trials.duckdb
+  quarantine: data/bronze/oncology_prostate/manifests/quarantine
+ingestion:
+  mode_default: incremental
+  reuse_window_hours: 24
+  page_file_pattern: run_id={run_id}/page={page:05d}.json
+  manifest_file_pattern: manifest_{run_id}.json
+retention:
+  bronze_runs_to_keep: 1
+  snapshot_runs_to_keep: 3
+guardrails:
+  disclaimer: Public-registry-based planning signals for analytical portfolio demonstration
+    only. Not a recruitment forecast, not clinical decision support, and not an assessment
+    of site, sponsor, or population quality.

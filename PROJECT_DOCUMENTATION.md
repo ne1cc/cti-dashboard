@@ -44,7 +44,7 @@ Documentation snapshot: built and verified against the live warehouse of **2026-
 | Decision | Which condition–phase–geography segments, study records and evidence gaps should receive further investigation? |
 | Output and action | Inspectable landscape and audit export; the analyst prepares a research shortlist/memo for qualified review |
 | Validation status | Calculation and pipeline checks implemented; workflow usefulness and business benefits unvalidated |
-| Therapeutic area | Config-driven indication profiles (`config/profiles/`: ADRD, NSCLC oncology, plus an ingest-only full catalog) |
+| Therapeutic area | Config-driven indication profiles (`config/profiles/`: 12 refreshable indications across oncology and chronic disease, plus an ingest-only full catalog) |
 | Geography | United States (raw data keeps all countries; marts are U.S.-only) |
 | Source | [ClinicalTrials.gov API v2](https://clinicaltrials.gov/data-api/api) (public, no key) |
 | Stack | Python 3.11+ · uv · DuckDB · dbt · Streamlit · Plotly · pytest · ruff |

@@ -1,0 +1,14 @@
+version: 1
+default:
+  condition_group: other_arthritis_conditions
+  dementia_relevance: false
+groups:
+- condition_group: rheumatoid_arthritis
+  dementia_relevance: false
+  exact:
+  - rheumatoid arthritis
+  - arthritis rheumatoid
+  substrings:
+  - rheumatoid arthritis
+  - arthritis rheumatoid
+  - juvenile rheumatoid arthritis

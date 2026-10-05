@@ -305,14 +305,14 @@ def _build_fixture_root(
         (root / "config").mkdir()
         (root / "config" / "project_config.yml").write_text(CONFIG_YAML, encoding="utf-8")
         for cfg_name in (
-            "condition_taxonomy.yml",
-            "condition_taxonomy_nsclc.yml",
             "geography_rules.yml",
             "score_weights.yml",
             "roi_assumptions.yml",
             "shared_paths.yml",
         ):
             shutil.copy(REPO_ROOT / "config" / cfg_name, root / "config" / cfg_name)
+        for taxonomy in (REPO_ROOT / "config").glob("condition_taxonomy*.yml"):
+            shutil.copy(taxonomy, root / "config" / taxonomy.name)
         shutil.copytree(REPO_ROOT / "config" / "profiles", root / "config" / "profiles")
 
         from src.config import load_config

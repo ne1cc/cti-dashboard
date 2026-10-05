@@ -84,6 +84,29 @@ fly volumes create cti_data --region iad --size 1
 fly deploy
 ```
 
+## Adding indication profiles
+
+`make pipeline` refreshes every non-ingest-only profile found in
+`config/profiles/`. The 1 GB volume measurements above cover only ADRD and
+NSCLC. Adding condition profiles increases raw bronze, retained silver snapshots,
+warehouse size, and refresh time; the existing measurements do not establish
+capacity for a larger profile set. Before deploying added profiles, run complete
+profile snapshots in a measured environment, record peak and steady data size
+and pipeline duration, then set a volume size and retention horizon with safe
+headroom. A first deployment of new profiles also rebuilds the shared warehouse.
+
+Local measurement on 2026-10-04 for complete snapshots of ten added profiles:
+50,795 studies produced 1.4 GB of bronze and 161 MB of silver. The warehouse
+models other than trial similarity occupied 272 MB. Building
+`mart_trial_similarity` over all twelve profiles used 28 GB of temporary DuckDB
+storage after about 14 minutes without completing; the run was stopped and its
+temporary files were removed. This run does not establish a final warehouse
+size or refresh time. The 1 GB Fly volume cannot hold even the ten new raw
+snapshots, before retaining the existing profiles, silver data, or the
+warehouse. Do not deploy the expanded profile set until storage has been sized
+from a completed full build and the similarity mart's runtime and peak storage
+have been addressed.
+
 ## No secrets required
 
 ClinicalTrials.gov's API v2 is public and unauthenticated — there is
