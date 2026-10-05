@@ -39,7 +39,11 @@ Documentation snapshot: built and verified against the live warehouse of **2026-
 
 | Property | Value |
 |---|---|
-| Domain | Clinical-operations site-feasibility intelligence |
+| Domain | Public-registry landscape screening for preliminary feasibility research |
+| Proposed user | Clinical-operations analyst preparing an initial geographic feasibility review |
+| Decision | Which condition–phase–geography segments, study records and evidence gaps should receive further investigation? |
+| Output and action | Inspectable landscape and audit export; the analyst prepares a research shortlist/memo for qualified review |
+| Validation status | Calculation and pipeline checks implemented; workflow usefulness and business benefits unvalidated |
 | Therapeutic area | Config-driven indication profiles (`config/profiles/`: ADRD, NSCLC oncology, plus an ingest-only full catalog) |
 | Geography | United States (raw data keeps all countries; marts are U.S.-only) |
 | Source | [ClinicalTrials.gov API v2](https://clinicaltrials.gov/data-api/api) (public, no key) |
@@ -95,36 +99,47 @@ pie showData title Trials by normalized phase (n=2,592)
 
 ## 2. The problem and the decision supported
 
-**Stakeholder:** Director of Clinical Operations / Head of Site Feasibility at a
-sponsor or CRO.
+**Proposed user:** A clinical-operations analyst preparing an initial geographic
+feasibility review. A feasibility lead is the proposed reviewer/sponsor; the
+economic buyer and metric owner require stakeholder validation.
 
-**Question:** *"Which condition–geography–phase combinations should receive a
-feasibility review before we invest in activating or expanding clinical trial sites?"*
+**Decision:** *"Which condition–phase–geography segments, study records and evidence
+gaps should I investigate next?"*
 
-Site activation is expensive and slow. Before committing startup resources, a
-feasibility team wants to know where the public registry already shows:
+The assumed current process combines registry searches, spreadsheet comparisons
+and evidence preparation. Repeated filter reconciliation and contributor checking
+may consume analyst time and create reviewer rework. These are current-state and
+business-consequence hypotheses; no interviews or operational evaluation establish
+them yet.
 
-- high **competing-study density** (many recruiting trials in the same segment),
-- recent **trial growth** (new studies entering the segment),
-- concentrated **sponsor activity** (a few sponsors dominating listings),
-- repeated **site participation** (the same facilities listed across many trials),
-- and how much **confidence** the underlying records deserve.
-
-This project turns those public signals into a transparent, ranked
-**Feasibility Review Priority Queue** — a to-do list for *human* feasibility review,
-never an automated verdict.
+The implemented product supplies distinct study counts, contributing NCT IDs,
+coverage and exclusions, source dates and an exportable audit. The analyst inspects
+this evidence and writes a scoped research shortlist/memo with follow-up questions
+for a qualified reviewer. The **Feasibility Review Priority Queue** offers optional
+ordering from disclosed weighted signals; its operational usefulness is unvalidated,
+and its bands are not intervention or site-activation thresholds.
 
 ```mermaid
 flowchart LR
-    A[Public registry<br/>listings] --> B[Transparent<br/>weighted signals]
-    B --> C[Ranked priority queue<br/>449 segments]
-    C --> D{{Human feasibility<br/>review + outreach}}
-    D --> E[Site activation<br/>decision]
-    style D stroke-dasharray: 5 5
+    A[Captured public registry<br/>listings] --> B[Scoped landscape<br/>counts and coverage]
+    B --> C[Contributing studies<br/>and audit export]
+    C --> D[Analyst prepares<br/>research shortlist and memo]
+    D --> E[Qualified reviewer identifies<br/>further research needed]
 ```
 
-The dashed step is the point: the pipeline **stops** at prioritization. Decisions
-require qualified clinical-operations judgment and primary feasibility outreach.
+Weekly snapshots are the proposed collection cadence; no enforced freshness SLA
+is claimed. Capture age and public source age are inspected separately. A spreadsheet
+can fit a one-off question; recurring comparisons motivate consistent definitions,
+deduplication, retained observations, quality checks and traceable evidence.
+
+Success would be evaluated through preparation minutes per comparable review,
+completeness of the evidence handoff and independent count reproduction, with use
+in recurring reviews as an adoption signal. Baselines and numerical targets are
+unmeasured. The actual captured [national case study](docs/feasibility_case_study.md)
+demonstrates descriptive evidence preparation; it does not establish workflow
+improvement. See the [business case](docs/business_case.md) for the full articulation,
+alternatives and evaluation protocol, and the [project brief](docs/project_brief.md)
+for reporting requirements.
 
 ---
 

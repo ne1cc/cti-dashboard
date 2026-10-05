@@ -4,37 +4,74 @@
 
 **Live demo:** [cti-dashboard.fly.dev](https://cti-dashboard.fly.dev/)
 
-This project turns public **ClinicalTrials.gov API v2** records into a reproducible
-workspace for preliminary geographic competition screening. Its proposed user is a
-clinical-operations analyst examining which reported studies and data gaps warrant
-further feasibility investigation.
+**A clinical-operations analyst preparing a feasibility review needs to decide
+which condition–phase–geography segments, study records and evidence gaps to
+investigate next.** The assumed current workflow involves collecting registry
+listings, reconciling filters in spreadsheets and assembling evidence for a reviewer.
+Repeated manual comparisons can consume preparation time and make results difficult
+to reproduce. That workflow and its consequences still require stakeholder validation.
 
-Select a condition, phase and captured snapshot; compare distinct study counts and
-coverage; inspect the contributing NCT IDs and exclusions; then export the evidence
-for follow-up. Counts describe registry listings under the displayed rules. They do
-not establish patient availability, recruitment prospects or site performance.
+This project turns public **ClinicalTrials.gov API v2** records into an inspectable
+study landscape with contributing NCT IDs, coverage caveats and an exportable audit.
+The analyst selects a condition, phase and captured snapshot, compares distinct
+study counts, inspects the underlying records, then prepares a scoped research
+shortlist and follow-up questions for qualified feasibility review.
 
-**Start here:** [Project brief](docs/project_brief.md) ·
+Success would mean less time preparing a comparable review, more complete evidence
+handoffs and easier reproduction of published counts. Baselines and targets have
+not been measured. Counts describe registry listings under the displayed rules;
+they do not establish patient availability, recruitment prospects or site performance.
+
+**Start here:** [Business case](docs/business_case.md) ·
+[Project brief](docs/project_brief.md) ·
 [National Phase 3 Alzheimer's disease case study](docs/feasibility_case_study.md) ·
 [Metric definitions](docs/metric_definitions.md).
 The case study uses an actual local captured dataset and a complete 50-state table;
 D.C. and territories appear in a separate supplement. Its observations describe
 that dataset, rather than the current live demo.
 
-> **Proposed business use:** See [`docs/business_case.md`](docs/business_case.md)
-> for the screening workflow, follow-up requirements and unmeasured benefit hypotheses.
->
 > **Validation status:** Calculation and pipeline checks are implemented. The
 > proposed stakeholder workflow and business benefits have not been validated
 > through stakeholder interviews or a measured operational evaluation.
 
 ---
 
-### Highlights
-- **Weekly Snapshot History:** Builds longitudinal state transitions from an API that only provides current-day snapshots.
-- **Recruiting-study Counts:** dbt dimensional models in DuckDB describe reported study presence across U.S. state and phase combinations, with distinct-study deduplication.
-- **Inspectable Screening App:** Streamlit filters, contributing-study drill-through, coverage and caveats, and audit exports.
-- **Reproducible Engineering:** Typed Parquet entities, documented transformations, automated dbt checks and CI workflows.
+## Decision workflow and operational output
+
+Agree on scope → compare the captured landscape → inspect contributors and gaps →
+export evidence → prepare a research shortlist and questions for further review.
+
+The dashboard and audit supply the evidence; the analyst writes the handoff memo.
+The memo should identify the selected scope, observations, contributing studies,
+coverage limitations and information to confirm next. The optional weighted
+review-priority score offers transparent ordering, but its operational usefulness
+is unvalidated and its bands are not intervention or site-activation thresholds.
+
+Weekly snapshots are the proposed collection cadence. Capture age and registry
+source age are shown separately; a recent capture can contain an older source
+record. Freshness expectations must be agreed with the reviewer before operational
+use. There is no enforced freshness SLA.
+
+## Why this needs recurring engineering
+
+A spreadsheet or one-off registry analysis can be sufficient for an isolated
+question. Repeated reviews need consistent filters and definitions, distinct-study
+deduplication, retained observations and evidence that a reviewer can inspect.
+
+- **Snapshot history:** Captures reported changes over successive runs from an
+  API that supplies current records; history begins with this project's collection.
+- **Shared metric definitions:** dbt models in DuckDB keep counts and grains
+  consistent across the landscape, drill-through and exports.
+- **Inspectable evidence:** Contributing NCT IDs, coverage, exclusions and source
+  lineage explain what a count includes and what remains unknown.
+- **Reliable delivery:** Python ingestion, typed Parquet entities, quality checks
+  and CI support reproducible preparation of the Streamlit views and audit exports.
+
+The [business case](docs/business_case.md) defines the proposed evaluation:
+preparation minutes per comparable review, completeness of required handoff fields,
+and successful count reproduction. The captured
+[national case study](docs/feasibility_case_study.md) demonstrates calculation and
+evidence preparation; stakeholder adoption and business improvement remain unmeasured.
 
 ---
 

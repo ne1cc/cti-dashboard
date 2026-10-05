@@ -3,8 +3,15 @@
 ## Intended user and decision
 
 The proposed user is a clinical-operations analyst preparing an initial geographic
-feasibility review. The project helps describe reported study presence, inspect
-contributing records and identify questions for further investigation.
+feasibility review. The decision is: **Which condition–phase–geography segments,
+study records and evidence gaps should I investigate next?** A feasibility lead is
+the proposed reviewer; ownership and funding of the workflow require validation.
+
+The assumed current workflow combines registry searches, spreadsheet reconciliation
+and evidence preparation. Repeated scope checks and difficult-to-reproduce counts
+may consume analyst time and cause reviewer rework. The project provides a captured
+study landscape, contributing NCT IDs, coverage caveats and an exportable audit so
+the analyst can prepare a scoped research shortlist and follow-up questions.
 
 The workflow and requirements are proposed. No stakeholder interviews or measured
 business-benefit evaluation have established their operational usefulness.
@@ -12,11 +19,30 @@ business-benefit evaluation have established their operational usefulness.
 ## Proposed workflow
 
 Agree on screening scope → examine the full geographic landscape → inspect
-contributors and data gaps → export evidence → formulate follow-up questions.
+contributors and data gaps → export evidence → prepare a research shortlist/memo →
+hand scoped evidence to a qualified reviewer for further investigation.
 
 The dashboard is an exploration tool. A short memo communicates scoped observations;
 the audit export and metric dictionary let a reviewer inspect their calculation.
 The [national case study](feasibility_case_study.md) demonstrates this workflow.
+
+## Output, cadence and evaluation requirements
+
+| Requirement | Proposed workflow expectation |
+|---|---|
+| First view | Selected condition, phase, geography and captured date, alongside study counts and coverage caveats |
+| Inspectable evidence | Contributing NCT IDs, definitions, exclusions, source dates and run/rule identity |
+| Research handoff | Analyst-authored shortlist/memo with observations, evidence references, limitations and explicit questions to investigate |
+| Next action | Choose records/segments for deeper research, confirm missing information and request qualified review |
+| Review ordering | Optional disclosed score; its usefulness is unvalidated, and bands are not intervention or activation thresholds |
+| Collection cadence | Proposed weekly snapshots; inspect capture age and source age separately and agree tolerances before operational use |
+| Workflow evaluation | Compare preparation minutes, handoff completeness and count reproduction with matched manual tasks; observe use in recurring reviews |
+
+There is no enforced freshness SLA, and KPI baselines and numerical targets remain
+unmeasured. The [business case](business_case.md) defines the assumed current state,
+alternative solutions, engineering rationale and evaluation protocol. The reporting
+criteria below verify the descriptive case-study artifact; they do not establish
+adoption or business improvement.
 
 ## Case-study question and scope
 
