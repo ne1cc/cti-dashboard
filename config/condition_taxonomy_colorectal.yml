@@ -1,0 +1,21 @@
+version: 1
+default:
+  condition_group: other_colorectal_conditions
+  dementia_relevance: false
+groups:
+- condition_group: colorectal_cancer_subtype
+  dementia_relevance: false
+  exact:
+  - rectal cancer
+  - colon cancer
+  substrings:
+  - rectal cancer
+  - colon cancer
+- condition_group: colorectal_cancer
+  dementia_relevance: false
+  exact:
+  - colorectal cancer
+  - colorectal carcinoma
+  substrings:
+  - colorectal cancer
+  - colorectal carcinoma

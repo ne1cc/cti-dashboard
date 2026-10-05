@@ -1,0 +1,27 @@
+version: 1
+default:
+  condition_group: other_heart_conditions
+  dementia_relevance: false
+groups:
+- condition_group: heart_failure_reduced_ef
+  dementia_relevance: false
+  exact:
+  - heart failure with reduced ejection fraction
+  substrings:
+  - heart failure with reduced ejection fraction
+  - hfref
+- condition_group: heart_failure_preserved_ef
+  dementia_relevance: false
+  exact:
+  - heart failure with preserved ejection fraction
+  substrings:
+  - heart failure with preserved ejection fraction
+  - hfpef
+- condition_group: heart_failure
+  dementia_relevance: false
+  exact:
+  - heart failure
+  - cardiac failure
+  substrings:
+  - heart failure
+  - cardiac failure

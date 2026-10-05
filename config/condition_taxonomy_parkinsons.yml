@@ -1,0 +1,14 @@
+version: 1
+default:
+  condition_group: other_parkinsonian_conditions
+  dementia_relevance: false
+groups:
+- condition_group: parkinsons_disease
+  dementia_relevance: false
+  exact:
+  - parkinson disease
+  - parkinson's disease
+  - idiopathic parkinson disease
+  substrings:
+  - parkinson disease
+  - parkinson’s disease
