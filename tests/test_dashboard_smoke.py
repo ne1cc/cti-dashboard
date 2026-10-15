@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WAREHOUSE = ROOT / "data" / "warehouse" / "clinical_trials.duckdb"
 
 PAGES = [
-    "dashboard/app.py",
+    "dashboard/overview.py",
     "dashboard/pages/1_Priority_Queue.py",
     "dashboard/pages/2_Competition_Landscape.py",
     "dashboard/pages/3_Geography_Trends.py",
@@ -37,7 +37,7 @@ PAGES = [
 # scope in a column, and the rest are guarded in source by
 # tests/test_dashboard_profile_scope.py.
 PROFILE_SCOPED_FIRST_DATAFRAME_ROWS = {
-    "dashboard/app.py": {"adrd": 6, "oncology_nsclc": 4},
+    "dashboard/overview.py": {"adrd": 6, "oncology_nsclc": 4},
     "dashboard/pages/1_Priority_Queue.py": {"adrd": 6, "oncology_nsclc": 4},
     "dashboard/pages/2_Competition_Landscape.py": {"adrd": 6, "oncology_nsclc": 4},
     "dashboard/pages/3_Geography_Trends.py": {"adrd": 4, "oncology_nsclc": 1},
@@ -195,3 +195,13 @@ def test_every_page_shows_disclaimer():
     for script in PAGES:
         source = (ROOT / script).read_text(encoding="utf-8")
         assert "page_setup(" in source, f"{script} must use page_setup (guardrail banner)"
+
+
+def test_router_lands_on_the_overview(fixture_warehouse):
+    from streamlit.testing.v1 import AppTest
+
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    at = AppTest.from_file(str(ROOT / "dashboard/app.py"), default_timeout=60).run()
+    assert not at.exception, at.exception
+    assert at.title[0].value == "Recruitment Competition Intelligence"

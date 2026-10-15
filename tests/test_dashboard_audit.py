@@ -145,7 +145,7 @@ def test_listed_site_formula_is_disclosed_in_ui_and_export(warehouse, captured_e
 
 
 def test_overview_queue_discloses_priority_rules_in_ui_and_export(warehouse, captured_exports):
-    at = AppTest.from_file(str(ROOT / "dashboard/app.py"), default_timeout=60).run()
+    at = AppTest.from_file(str(ROOT / "dashboard/overview.py"), default_timeout=60).run()
     assert not at.exception
     metadata = next(json.loads(j.value) for j in at.json if '"displayed_segments"' in j.value)
     rules = metadata["rule_config"]["display_context"]["derived_rules"]
@@ -175,11 +175,11 @@ def test_missing_and_empty_guidance(warehouse, monkeypatch):
     missing = pd.DataFrame()
     missing.attrs["audit_unavailable"] = "Rebuild audit marts with make pipeline."
     monkeypatch.setattr(data, "metric_audit_observations", lambda *args: missing)
-    at = AppTest.from_file(str(ROOT / "dashboard/app.py"), default_timeout=60).run()
+    at = AppTest.from_file(str(ROOT / "dashboard/overview.py"), default_timeout=60).run()
     assert not at.exception
     assert any("Rebuild audit marts" in x.value for x in at.warning)
     monkeypatch.setattr(data, "metric_audit_observations", lambda *args: pd.DataFrame())
-    at = AppTest.from_file(str(ROOT / "dashboard/app.py"), default_timeout=60).run()
+    at = AppTest.from_file(str(ROOT / "dashboard/overview.py"), default_timeout=60).run()
     assert not at.exception
     assert any("No captured observations" in x.value for x in at.info)
 
@@ -187,7 +187,7 @@ def test_missing_and_empty_guidance(warehouse, monkeypatch):
 @pytest.mark.parametrize(
     "script",
     [
-        "dashboard/app.py",
+        "dashboard/overview.py",
         "dashboard/pages/1_Priority_Queue.py",
         "dashboard/pages/2_Competition_Landscape.py",
         "dashboard/pages/3_Geography_Trends.py",
