@@ -39,7 +39,9 @@ SECTIONS: dict[str, tuple[PageSpec, ...]] = {
         ),
     ),
     "Inspect": (
-        PageSpec("pages/4_Site_Overlap.py", "Site Overlap", ":material/domain:", "Site_Overlap"),
+        PageSpec(
+            "pages/4_Site_Overlap.py", "Site Overlap", ":material/location_on:", "Site_Overlap"
+        ),
         PageSpec(
             "pages/5_Sponsor_Landscape.py",
             "Sponsor Landscape",
