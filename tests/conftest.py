@@ -288,6 +288,7 @@ def _build_fixture_root(
     runs: list[FixtureRun],
     *,
     session_timezone: str | None = None,
+    dbt_vars: dict[str, object] | None = None,
 ) -> Path:
     """Bronze→silver→gold for `runs`, then one `dbt build`; returns the scratch root.
 
@@ -418,19 +419,22 @@ def _build_fixture_root(
             encoding="utf-8",
         )
         (root / "data/warehouse").mkdir(parents=True, exist_ok=True)
+        build_command = [
+            sys.executable,
+            "-m",
+            "dbt.cli.main",
+            "build",
+            "--project-dir",
+            str(REPO_ROOT / "dbt_clinical_trials"),
+            "--profiles-dir",
+            str(root),
+            "--target-path",
+            str(root / "dbt_target"),
+        ]
+        if dbt_vars:
+            build_command += ["--vars", json.dumps(dbt_vars)]
         result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "dbt.cli.main",
-                "build",
-                "--project-dir",
-                str(REPO_ROOT / "dbt_clinical_trials"),
-                "--profiles-dir",
-                str(root),
-                "--target-path",
-                str(root / "dbt_target"),
-            ],
+            build_command,
             cwd=root,
             capture_output=True,
             text=True,
@@ -560,6 +564,68 @@ UNSTAMPED_NSCLC_RUN = FixtureRun(
     fixture_dir="bronze_snapshot_nsclc",
     manifest_profile=UNSTAMPED_MANIFEST_PROFILE,
 )
+
+
+# The similarity-mart fixtures (tests/test_similarity_candidates.py). The ADRD
+# run is the dense one: 24 cloned listings sharing "Alzheimer Disease" push the
+# alzheimers_disease token to df 27, so a trial's candidate set outnumbers the
+# top-25 cap and the qualify actually binds inside the candidates -- the same
+# reason _filler_studies exists for the divergent fixture. Two Lewy Body
+# Dementia clones give a second, small token group, which is what the
+# similarity_max_token_df override drops the dominant token against: at df 4
+# the alzheimers token (27) leaves discovery while the lewy token (3) survives.
+# Both roots enable mart_trial_similarity_reference (the unbounded pre-2026-10
+# self-join, var-gated because it is the 28 GB run at registry scale) as the
+# equivalence oracle.
+SIMILARITY_RUN_ID = "20261012T090000Z_fixture06"
+SIMILARITY_STARTED_AT = datetime(2026, 10, 12, 9, tzinfo=UTC)
+
+
+def _similarity_adrd_run() -> FixtureRun:
+    return FixtureRun(
+        profile="adrd",
+        run_id=SIMILARITY_RUN_ID,
+        started_at=SIMILARITY_STARTED_AT,
+        condition=ADRD_CONDITION,
+        fixture_dir="bronze_snapshot",
+        added=(
+            *_filler_studies(20, 24),  # NCT00000020..NCT00000043, Alzheimer Disease
+            AddedStudy(
+                nct_id="NCT00000044",
+                clone_of="NCT00000006",
+                overall_status="RECRUITING",
+                condition="Lewy Body Dementia",
+            ),
+            AddedStudy(
+                nct_id="NCT00000045",
+                clone_of="NCT00000006",
+                overall_status="COMPLETED",
+                condition="Lewy Body Dementia",
+            ),
+        ),
+    )
+
+
+@pytest.fixture(scope="session")
+def similarity_equivalence_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Default candidate cap; the reference self-join built alongside."""
+    return _build_fixture_root(
+        tmp_path_factory,
+        "similarity_equivalence",
+        [_similarity_adrd_run(), _base_nsclc_run()],
+        dbt_vars={"build_similarity_reference": True},
+    )
+
+
+@pytest.fixture(scope="session")
+def similarity_cap_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """similarity_max_token_df: 4 drops the dominant alzheimers token."""
+    return _build_fixture_root(
+        tmp_path_factory,
+        "similarity_cap",
+        [_similarity_adrd_run(), _base_nsclc_run()],
+        dbt_vars={"build_similarity_reference": True, "similarity_max_token_df": 4},
+    )
 
 
 @pytest.fixture(scope="session")

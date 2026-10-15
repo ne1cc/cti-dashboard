@@ -1,6 +1,12 @@
 -- Deterministic trial-pair comparability. Grain: one row per
 -- (indication_profile_id, nct_id_a, nct_id_b) pair, where nct_id_b is one of
--- nct_id_a's top-25 most comparable trials within that profile's query scope.
+-- nct_id_a's top-25 most comparable candidate trials within that profile's
+-- query scope. Candidates are the pairs from int_similarity_candidates —
+-- pairs sharing a condition-group token — not every pair in the profile: the
+-- unbounded self-join this replaced measured 28 GB of DuckDB temporary
+-- storage at twelve profiles without completing. Scoring is unchanged; the
+-- narrowed discovery is pinned to the old logic's output by
+-- tests/test_similarity_candidates.py against mart_trial_similarity_reference.
 -- A structural/design comparability signal --
 -- NOT a claim of clinical equivalence, and NOT itself a competition or
 -- recruitment signal. Weights live in the similarity_score_weights seed
@@ -16,9 +22,9 @@ with weights as (
 
 pairs as (
     select
-        a.indication_profile_id as indication_profile_id,
-        a.nct_id as nct_id_a,
-        b.nct_id as nct_id_b,
+        c.indication_profile_id,
+        c.nct_id_a,
+        c.nct_id_b,
         a.phase_normalized as a_phase, b.phase_normalized as b_phase,
         a.enrollment_band as a_enrollment_band, b.enrollment_band as b_enrollment_band,
         case when len(list_intersect(a.condition_groups, b.condition_groups)) > 0
@@ -42,10 +48,13 @@ pairs as (
             then 1 else 0 end as eligibility_compatible,
         case when a.enrollment_band = b.enrollment_band
             then 1 else 0 end as enrollment_band_match
-    from {{ ref('int_trial_comparability_features') }} a
+    from {{ ref('int_similarity_candidates') }} c
+    inner join {{ ref('int_trial_comparability_features') }} a
+        on c.indication_profile_id = a.indication_profile_id
+        and c.nct_id_a = a.nct_id
     inner join {{ ref('int_trial_comparability_features') }} b
-        on a.nct_id != b.nct_id
-        and a.indication_profile_id = b.indication_profile_id
+        on c.indication_profile_id = b.indication_profile_id
+        and c.nct_id_b = b.nct_id
 ),
 
 scored as (

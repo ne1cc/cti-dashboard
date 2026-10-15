@@ -59,7 +59,8 @@ the dispatch explicitly requires them in the Task 5 commit.
 
 Before editing: `uv run pytest tests/test_docs_describe_current_paths.py` returned
 1 failed, 5 passed in 4.96s. Sole failure was the stale competitive-positioning count;
-its live fixture reported 34 dbt models, 157 dbt tests and 371 pytest cases.
+its live fixture reported 34 dbt models, 157 dbt tests and 371 pytest cases
+(as measured 2026-10-02).
 After update: the same command returned 6 passed in 4.61s; after final self-review
 it returned 6 passed in 4.84s.
 
