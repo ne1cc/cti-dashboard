@@ -20,7 +20,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 DASHBOARD = ROOT / "dashboard"
 PAGES = [
-    "dashboard/app.py",
+    "dashboard/overview.py",
     "dashboard/pages/1_Priority_Queue.py",
     "dashboard/pages/2_Competition_Landscape.py",
     "dashboard/pages/3_Geography_Trends.py",

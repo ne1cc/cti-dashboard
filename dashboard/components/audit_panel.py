@@ -124,9 +124,10 @@ def render_metric_audit(
     states=None,
     context=None,
     key="metric",
+    label="Data coverage and caveats",
 ):
     """Audit whole filtered scope or a displayed row, with explicit status/period."""
-    with st.expander("Data coverage and caveats"):
+    with st.expander(label):
         st.caption(
             "Every count, chart and derived signal above can be inspected here. "
             "Choose a row to inspect its inputs; summary counts use distinct NCT IDs "

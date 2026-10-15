@@ -45,7 +45,7 @@ def render_indication_banner(profile_id: str | None = None) -> None:
     Provides transparent visibility into the therapeutic area scope, included
     diagnostic sub-groups, and unique operational realities of clinical trials.
     """
-    display_title = "🧠 Alzheimer's Disease & Related Dementias (ADRD)"
+    display_title = "Alzheimer's Disease & Related Dementias (ADRD)"
     is_adrd = profile_id is None or profile_id == "adrd"
 
     if not is_adrd and profile_id:
@@ -54,52 +54,17 @@ def render_indication_banner(profile_id: str | None = None) -> None:
 
             reg = get_registry()
             prof = reg.get(profile_id)
-            display_title = f"🔬 {prof.display_name}"
+            display_title = prof.display_name
         except Exception:
-            display_title = f"🔬 {profile_id.replace('_', ' ').title()}"
+            display_title = profile_id.replace("_", " ").title()
 
     with st.container():
         st.markdown(
-            f"""
-            <div style="
-                border: 1px solid rgba(59, 130, 246, 0.25);
-                border-radius: 8px;
-                padding: 12px 16px;
-                margin-bottom: 16px;
-                background-color: rgba(59, 130, 246, 0.05);
-            ">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <span style="
-                            font-size: 0.75rem;
-                            font-weight: 700;
-                            text-transform: uppercase;
-                            letter-spacing: 0.05em;
-                            color: #3b82f6;
-                        ">Active Indication Profile</span>
-                        <h4 style="margin: 2px 0 0 0; font-size: 1.05rem;">
-                            {display_title}
-                        </h4>
-                    </div>
-                    <div style="text-align: right;">
-                        <span style="
-                            font-size: 0.75rem;
-                            background: rgba(59, 130, 246, 0.15);
-                            color: #2563eb;
-                            padding: 3px 8px;
-                            border-radius: 12px;
-                            font-weight: 600;
-                        ">Interventional U.S. Trials</span>
-                    </div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
+            f":gray[Active indication profile] &nbsp; **{display_title}** &nbsp; "
+            ":blue-badge[Interventional U.S. trials]"
         )
 
-        with st.expander(
-            "🔍 Indication Scope, Taxonomy & Clinical Validity Details", expanded=False
-        ):
+        with st.expander("Indication scope, taxonomy & clinical validity"):
             if is_adrd:
                 st.markdown(
                     "**Scope & Diagnostic Boundaries:**\n"
@@ -159,7 +124,7 @@ def render_indication_banner(profile_id: str | None = None) -> None:
 # Comprehensive decision playbooks for each dashboard page
 PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
     "overview": {
-        "title": "📖 Executive Overview: 3-Step Feasibility Framework",
+        "title": "Executive Overview: 3-Step Feasibility Framework",
         "what_it_shows": (
             "Aggregated metrics and high-level priority segments across all tracked "
             "interventional ADRD trials in the United States. Identifies total active studies, "
@@ -194,7 +159,7 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         ),
     },
     "priority_queue": {
-        "title": "📖 Priority Queue Playbook: Eliminating Feasibility Guesswork",
+        "title": "Priority Queue Playbook: Reading the Ranked Segments",
         "what_it_shows": (
             "Ranks condition × state × phase segments using a transparent, multi-factor "
             "feasibility review priority score (0.0 to 1.0). Each segment summarizes recruiting "
@@ -237,7 +202,7 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         ),
     },
     "competition_landscape": {
-        "title": "📖 Competition Landscape: The 4-Quadrant Strategy Matrix",
+        "title": "Competition Landscape: The 4-Quadrant Strategy Matrix",
         "what_it_shows": (
             "Scatter plot and segment table plotting Recruiting Trial Count "
             "against Sponsor Concentration (Herfindahl-Hirschman Index, HHI). Bubble sizes "
@@ -277,7 +242,7 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         ),
     },
     "geography_trends": {
-        "title": "📖 Geography Trends Playbook: Geographic Optimization & Saturation",
+        "title": "Geography Trends Playbook: Geographic Optimization & Saturation",
         "what_it_shows": (
             "U.S. choropleth map and regional activity distribution displaying recruiting trial "
             "listings across states for the selected condition group, alongside monthly trends."
@@ -309,7 +274,7 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         ),
     },
     "site_overlap": {
-        "title": "📖 Site Overlap Playbook: Institutional Fatigue vs Site Capacity",
+        "title": "Site Overlap Playbook: Institutional Fatigue vs Site Capacity",
         "what_it_shows": (
             "Facilities listed on multiple recruiting trials within the same indication. "
             "Identifies experienced clinical trial sites and flags institutional congestion "
@@ -345,7 +310,7 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         ),
     },
     "sponsor_landscape": {
-        "title": "📖 Sponsor Landscape: Strategic Benchmarking",
+        "title": "Sponsor Landscape: Strategic Benchmarking",
         "what_it_shows": (
             "Lead sponsors ranked by count of actively recruiting interventional trials, broken "
             "down by registry sponsor class (Industry / Commercial vs Other / NIH / Academic)."
@@ -378,7 +343,7 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         ),
     },
     "data_reliability": {
-        "title": "📖 Data Reliability & Scenario Modeling: Risk-Informed Budgeting",
+        "title": "Data Reliability & Scenario Modeling: Risk-Informed Budgeting",
         "what_it_shows": (
             "Pipeline ingestion audit trail, bronze→silver→gold data reconciliation metrics, and "
             "an interactive clinical trial delay cost calculator. Sliders adjust study burn rate "
@@ -386,8 +351,8 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         ),
         "how_to_analyze": (
             "Use the ingestion audit logs to verify that only fully successful, validated weekly "
-            "snapshots feed analytics. Use the scenario model to replace arbitrary feasibility "
-            "budget guesswork with structured low/base/high sensitivity projections."
+            "snapshots feed analytics. Use the scenario model to explore structured "
+            "low/base/high sensitivity projections."
         ),
         "playbook": [
             (
@@ -411,7 +376,7 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         ),
     },
     "trial_explorer": {
-        "title": "📖 Trial Explorer Playbook: Protocol Deep-Dive & Direct Verification",
+        "title": "Trial Explorer Playbook: Protocol Deep-Dive & Direct Verification",
         "what_it_shows": (
             "Comprehensive, searchable registry records for individual clinical trials. Enables "
             "filtering by overall status, phase, indication profile, and text search across "
@@ -444,7 +409,7 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         ),
     },
     "trial_similarity": {
-        "title": "📖 Trial Similarity Playbook: Structural Protocol Benchmarking",
+        "title": "Trial Similarity Playbook: Structural Protocol Benchmarking",
         "what_it_shows": (
             "Pairwise similarity scores (0.0 to 1.0) benchmarking a selected index trial "
             "against all other trials in the warehouse across 7 structural protocol factors: "
@@ -481,11 +446,12 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
 }
 
 
-def render_page_guide(page_key: str) -> None:
+def render_page_guide(page_key: str, profile_id: str) -> None:
     """Render the contextual decision playbook for the specified dashboard page.
 
     Args:
         page_key: Identifier of the page (e.g. ``'priority_queue'``, ``'site_overlap'``).
+        profile_id: Active indication profile; ADRD-specific notes show only for ``"adrd"``.
     """
     guide = PAGE_PLAYBOOKS.get(page_key)
     if not guide:
@@ -495,14 +461,15 @@ def render_page_guide(page_key: str) -> None:
         st.markdown(f"**What This Data Shows:**\n{guide['what_it_shows']}")
         st.markdown(f"**How to Analyze the Data:**\n{guide['how_to_analyze']}")
 
-        st.markdown("**Operational Decision Playbook (Eliminating Guesswork):**")
+        st.markdown("**Operational Decision Playbook:**")
         for item in guide["playbook"]:
             st.markdown(f"- {item}")
 
-        st.markdown(f"**🧠 ADRD Clinical Feasibility Nuances:**\n{guide['adrd_context']}")
+        if profile_id == "adrd":
+            st.markdown(f"**ADRD clinical feasibility nuances:**\n{guide['adrd_context']}")
 
         st.caption(
-            "🛡️ **Guardrail Notice:** Signals are computed strictly from public registry listings "
+            "**Guardrail notice:** Signals are computed strictly from public registry listings "
             "to prioritize human feasibility investigation. They are not automated predictions of "
             "enrollment velocity, site quality, or clinical efficacy."
         )

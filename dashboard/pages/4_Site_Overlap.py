@@ -12,7 +12,7 @@ page_setup("Site Overlap")
 profile_id = render_profile_selector()
 data.require_warehouse(profile_id)
 
-render_page_guide("site_overlap")
+render_page_guide("site_overlap", profile_id)
 
 overlap = data.site_overlap(profile_id)
 

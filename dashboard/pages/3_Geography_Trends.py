@@ -12,7 +12,7 @@ page_setup("Geography Trends")
 profile_id = render_profile_selector()
 data.require_warehouse(profile_id)
 
-render_page_guide("geography_trends")
+render_page_guide("geography_trends", profile_id)
 
 trends = data.condition_geography_trends(profile_id)
 

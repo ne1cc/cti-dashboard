@@ -14,7 +14,7 @@ page_setup("Feasibility Review Priority Queue")
 profile_id = render_profile_selector()
 data.require_warehouse(profile_id)
 
-render_page_guide("priority_queue")
+render_page_guide("priority_queue", profile_id)
 
 queue = data.priority_queue(profile_id)
 queue["priority_explanation"] = (

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from components.formatting import format_phase
 from components.guidance import format_condition_group
 
 
@@ -58,7 +59,7 @@ def segment_filters(
 
     if phase_col in frame.columns:
         options = sorted(frame[phase_col].dropna().unique())
-        selected = st.sidebar.multiselect("Phase", options)
+        selected = st.sidebar.multiselect("Phase", options, format_func=format_phase)
         selections["phases"] = list(selected)
         if selected:
             filtered = filtered[filtered[phase_col].isin(selected)]

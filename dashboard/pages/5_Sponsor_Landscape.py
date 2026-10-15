@@ -12,7 +12,7 @@ page_setup("Sponsor Landscape")
 profile_id = render_profile_selector()
 data.require_warehouse(profile_id)
 
-render_page_guide("sponsor_landscape")
+render_page_guide("sponsor_landscape", profile_id)
 
 sponsors = data.sponsor_landscape(profile_id)
 

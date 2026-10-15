@@ -384,3 +384,24 @@ def test_guidance_all_pages_have_playbooks():
         assert "playbook" in playbook
         assert len(playbook["playbook"]) >= 3
         assert "adrd_context" in playbook
+
+
+def test_page_guide_shows_adrd_nuances_only_for_adrd():
+    from streamlit.testing.v1 import AppTest
+
+    def page(profile_id):
+        from components.guidance import render_page_guide
+
+        render_page_guide("overview", profile_id)
+
+    for profile_id, expected in (("adrd", True), ("oncology_nsclc", False)):
+        at = AppTest.from_function(page, args=(profile_id,)).run()
+        assert not at.exception, at.exception
+        shown = any("ADRD clinical feasibility nuances" in m.value for m in at.markdown)
+        assert shown is expected, profile_id
+
+
+def test_guidance_copy_does_not_overclaim():
+    from components.guidance import PAGE_PLAYBOOKS
+
+    assert "guesswork" not in str(PAGE_PLAYBOOKS).lower()

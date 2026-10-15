@@ -12,13 +12,16 @@ Every page renders the shared disclaimer banner via
 | guardrails.py | disclaimer banner, snapshot-proxy note, footer |
 | filters.py | condition/state/phase sidebar multiselects with row-count caption |
 | profile.py | sidebar indication-profile selector; options come from `get_registry().refreshable()`, not a warehouse query, so it renders before the first build |
+| navigation.py | `st.navigation` registry: pages grouped Compare / Inspect / Verify; `app.py` only runs it. Page URLs match the former file-based paths |
+| formatting.py | display labels for phase (from `seeds/phase_mapping.csv`), priority band and snapshot date |
 
 ## Pages
 
-### Overview (`app.py`)
-KPIs (trials tracked, recruiting, states, facilities), snapshot count,
-top-10 queue preview, "how to read this dashboard". Link to the full
-queue.
+### Overview (`overview.py`)
+KPIs (trials tracked, recruiting, states, facilities), snapshot date and
+count, top-10 queue preview with display labels and a score bar, link to
+the full queue, "Where to look next" cards built from the navigation
+sections, and three separately named metric audits.
 
 ### 1 · Priority Queue
 Band KPIs (priority_review / review / watch), priority band sidebar
