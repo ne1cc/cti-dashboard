@@ -27,6 +27,7 @@ No Python changes required.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -244,8 +245,35 @@ class ProfileRegistry:
         `ingest_only` profiles (full_catalog) keep their bronze but never reach
         silver or the warehouse, so they are excluded here — `orchestrate` and
         the dashboard must not be able to pick one up.
+
+        When `CTI_REFRESHABLE_PROFILES` is set (comma-separated profile ids),
+        the returned set is narrowed to it. The Fly deployment sets this
+        because the deployed volume and VM cannot run every refreshable
+        profile — docs/DEPLOY_FLY.md, "Adding indication profiles", requires
+        storage to be sized from a completed full build before a profile set
+        is deployed. A name the registry does not know fails loudly here
+        rather than silently shrinking the refresh.
         """
-        return [p for p in self.all() if not p.ingest_only]
+        profiles = [profile for profile in self.all() if not profile.ingest_only]
+        scope = os.environ.get("CTI_REFRESHABLE_PROFILES")
+        if scope is None:
+            return profiles
+        requested = {
+            normalize_profile_id(name.strip()) for name in scope.split(",") if name.strip()
+        }
+        known = {profile.profile_id for profile in profiles}
+        unknown = sorted(requested - known)
+        if unknown:
+            raise ValueError(
+                f"CTI_REFRESHABLE_PROFILES names unknown refreshable profile(s) {unknown}; "
+                f"known refreshable profiles: {sorted(known)}"
+            )
+        if not requested:
+            raise ValueError(
+                "CTI_REFRESHABLE_PROFILES is set but names no refreshable profile; "
+                "refusing to refresh nothing."
+            )
+        return [profile for profile in profiles if profile.profile_id in requested]
 
     def get(self, profile_id: str) -> IndicationProfile:
         """Return the named profile, raising KeyError if not found."""

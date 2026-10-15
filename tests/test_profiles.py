@@ -181,6 +181,73 @@ def test_registry_refreshable_excludes_ingest_only(
     assert [p.profile_id for p in registry.all()] == ["test_ind"]
 
 
+def _write_refreshable_profile(profiles_dir: Path, profile_id: str) -> None:
+    """Add a non-ingest-only profile so refreshable() has something to filter."""
+    raw = dict(yaml.safe_load(MINIMAL_PROFILE_YAML))
+    raw["profile"] = dict(raw["profile"])
+    raw["profile"]["id"] = profile_id
+    raw["profile"]["ingest_only"] = False
+    (profiles_dir / f"{profile_id}.yml").write_text(yaml.dump(raw))
+
+
+def test_refreshable_env_var_scopes_profiles(
+    tmp_profiles_dir: Path,
+    tmp_shared_paths: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CTI_REFRESHABLE_PROFILES pins which profiles the full pipeline refreshes.
+
+    The deployment sets it because the deployed volume and VM cannot run every
+    refreshable profile (docs/DEPLOY_FLY.md, "Adding indication profiles")."""
+    _write_refreshable_profile(tmp_profiles_dir, "alpha")
+    _write_refreshable_profile(tmp_profiles_dir, "beta")
+    monkeypatch.setenv("CTI_REFRESHABLE_PROFILES", "alpha")
+
+    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths_file=tmp_shared_paths)
+    assert [p.profile_id for p in registry.refreshable()] == ["alpha"]
+
+
+def test_refreshable_env_var_unset_returns_all_refreshable(
+    tmp_profiles_dir: Path,
+    tmp_shared_paths: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_refreshable_profile(tmp_profiles_dir, "alpha")
+    _write_refreshable_profile(tmp_profiles_dir, "beta")
+    monkeypatch.delenv("CTI_REFRESHABLE_PROFILES", raising=False)
+
+    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths_file=tmp_shared_paths)
+    assert {p.profile_id for p in registry.refreshable()} == {"alpha", "beta"}
+
+
+def test_refreshable_env_var_unknown_id_fails_loudly(
+    tmp_profiles_dir: Path,
+    tmp_shared_paths: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A typo in the deploy env must not silently shrink the refresh."""
+    _write_refreshable_profile(tmp_profiles_dir, "alpha")
+    monkeypatch.setenv("CTI_REFRESHABLE_PROFILES", "alpha,nope")
+
+    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths_file=tmp_shared_paths)
+    with pytest.raises(ValueError, match="nope"):
+        registry.refreshable()
+
+
+def test_refreshable_env_var_blank_fails_loudly(
+    tmp_profiles_dir: Path,
+    tmp_shared_paths: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Blank or whitespace-only would silently refresh nothing."""
+    _write_refreshable_profile(tmp_profiles_dir, "alpha")
+    monkeypatch.setenv("CTI_REFRESHABLE_PROFILES", "  ")
+
+    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths_file=tmp_shared_paths)
+    with pytest.raises(ValueError, match="no refreshable profile"):
+        registry.refreshable()
+
+
 def test_registry_active_is_gone() -> None:
     """`active()` returned ingest_only profiles, which sent `orchestrate` after a
     full-registry pull. One vocabulary: all() or refreshable()."""

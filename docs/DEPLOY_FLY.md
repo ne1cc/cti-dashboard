@@ -107,6 +107,28 @@ warehouse. Do not deploy the expanded profile set until storage has been sized
 from a completed full build and the similarity mart's runtime and peak storage
 have been addressed.
 
+### 2026-10-07 outage: the precondition above was not met, and production went down
+
+Release v26 (2026-10-05) deployed the twelve-profile set onto the 2 GB volume.
+The set's own bronze exceeded the volume's steady budget, the volume reached
+100%, and the machine entered a crash loop: `entrypoint.sh`'s `log()` helper
+failed its first append with ENOSPC and `set -euo pipefail` killed the
+container within seconds of boot, before anything could be logged. With
+`auto_start_machines` off, the stopped machine stayed dark until 2026-10-15.
+Remediation in PR `fix/production-volume-and-profile-scope`:
+
+- `fly.toml` sets `CTI_REFRESHABLE_PROFILES = 'adrd,oncology_nsclc'`; the
+  deployed refresh is the measured-passing two-profile configuration again.
+  `src/profiles.py` `refreshable()` enforces the variable and fails loudly on
+  unknown names. Remove the variable only after the paragraph above is
+  satisfied: the similarity mart bounded, and storage sized from a completed
+  local full build.
+- The volume was extended 2 GB → 5 GB (`fly volumes extend cti_data --size 5`).
+  The stale ten-profile bronze (~1.4 GB) is retained by `prune_all`, which
+  intentionally prunes `registry.all()` at `bronze_runs_to_keep: 1`.
+- `entrypoint.sh` logging is non-fatal; `auto_start_machines` is on so a
+  stopped machine wakes on traffic.
+
 ## No secrets required
 
 ClinicalTrials.gov's API v2 is public and unauthenticated — there is
