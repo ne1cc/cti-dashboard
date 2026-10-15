@@ -59,7 +59,7 @@ Final covering command:
 
 **134 passed, 9 skipped in 88.24s**, no warnings. This includes real isolated dbt builds/contracts and AppTests. Nine existing live-warehouse smoke cases skip because production marts are absent; independent fixture dashboard cases run.
 
-`uv run pytest --collect-only` → **383 tests collected in 1.75s** (measured 2026-10-03 UTC). Twelve cases were added by this wave. Live docs guard independently confirms **34 dbt models / 157 dbt tests / 383 collected pytest cases**.
+`uv run pytest --collect-only` → **383 tests collected in 1.75s** (measured 2026-10-03 UTC). Twelve cases were added by this wave. Live docs guard independently confirms **34 dbt models / 157 dbt tests / 383 collected pytest cases** (counts as they stood 2026-10-03).
 
 Docs GREEN: `uv run pytest tests/test_docs_describe_current_paths.py` → **6 passed in 5.19s**.
 
@@ -71,7 +71,7 @@ Docs GREEN: `uv run pytest tests/test_docs_describe_current_paths.py` → **6 pa
 Post-fix full-suite verification by the controller:
 
 - `uv run --group orchestration pytest`: **374 passed, 9 skipped in 345.19s**; exit 0.
-- `uv run pytest --collect-only`: **383 tests collected**; live documentation counts match 34 dbt models and 157 dbt tests.
+- `uv run pytest --collect-only`: **383 tests collected**; live documentation counts match 34 dbt models and 157 dbt tests (as measured 2026-10-03).
 - The full-suite run includes and passes the documentation-count guard.
 - The focused suite, Ruff check/format, mypy, and diff check were also rerun after the final review changes; all passed.
 

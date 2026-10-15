@@ -41,7 +41,8 @@ warehouse calculations with exact formulas, scope, windows and displayed values 
 - `docs/assumptions_and_limitations.md`: state/facility/retention/history limits,
   multi-profile scope, fixed-vs-percentile bands, unknown receipts and disclaimer.
 - `docs/competitive_positioning.md`: ledger-authorized live count/measurement
-  correction only; 34 dbt models, 157 dbt tests, 371 collected pytest cases.
+  correction only; 34 dbt models, 157 dbt tests, 371 collected pytest cases
+  (as measured 2026-10-02).
 - `.scratch/competition-auditability/walkthrough.md`: this immediate audit record.
 - `.superpowers/sdd/implementation_plan/task-5-report.md`: Task 5 execution report.
 
@@ -50,14 +51,15 @@ warehouse calculations with exact formulas, scope, windows and displayed values 
 Before editing, `uv run pytest tests/test_docs_describe_current_paths.py` returned
 **1 failed, 5 passed in 4.96s**. On 2026-10-03 UTC before the final-review fixes, the sole failure expected the current
 `157 dbt tests and a 371-test pytest suite` positioning statement; the live fixture
-reported 34 models, 157 dbt tests and 371 pytest cases. After updating docs the same
+reported 34 models, 157 dbt tests and 371 pytest cases (as measured 2026-10-02).
+After updating docs the same
 command returned **6 passed in 4.61s**.
 
 Independent live commands on 2026-10-03 UTC:
 
 - `uv run dbt parse --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials`:
   exit 0; dbt 1.11.14 / duckdb adapter 1.10.1. A `resource_type` counter over its
-  manifest returned model=34, test=157, seed=4, analysis=4.
+  manifest returned model=34, test=157, seed=4, analysis=4 (as measured 2026-10-02).
 - `uv run pytest --collect-only`: **371 tests collected in 1.21s**.
 - `uv run pytest tests/test_extract_studies.py tests/test_build_silver.py tests/test_normalization.py tests/test_export_parquet.py`:
   **43 passed in 1.28s**.

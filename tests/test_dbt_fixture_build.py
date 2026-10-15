@@ -94,6 +94,10 @@ MARTS_WITH_PROFILE_SCOPED_WINDOWS = [
     "mart_recruiting_competition",
     "mart_feasibility_priority_queue",
     "mart_trial_similarity",
+    # The var-gated reference copy of mart_trial_similarity's old unbounded
+    # join: same profile-scoped top-25 rank as the real mart, kept under the
+    # same guard so a repartitioned rank cannot slip in through the oracle.
+    "mart_trial_similarity_reference",
     "fct_trial_site",
 ]
 

@@ -123,6 +123,15 @@ Remediation in PR `fix/production-volume-and-profile-scope`:
   unknown names. Remove the variable only after the paragraph above is
   satisfied: the similarity mart bounded, and storage sized from a completed
   local full build.
+  Update 2026-10-15: the first half is now done — `mart_trial_similarity`
+  discovers pairs through `int_similarity_candidates` (shared condition-group
+  tokens, capped by `var('similarity_max_token_df')`) instead of an unbounded
+  pairwise self-join, and `tests/test_similarity_candidates.py` pins the new
+  output to the old logic restricted to candidates. Trials sharing no
+  surviving token now get zero neighbors instead of 25 minimum-score rows.
+  The sizing half still stands: no production re-expansion until a completed
+  twelve-profile local build has recorded pairs, temp peak, warehouse size,
+  and refresh duration.
 - The volume was extended 2 GB → 5 GB (`fly volumes extend cti_data --size 5`).
   The stale ten-profile bronze (~1.4 GB) is retained by `prune_all`, which
   intentionally prunes `registry.all()` at `bronze_runs_to_keep: 1`.
