@@ -222,3 +222,17 @@ def test_overview_reads_as_labels_not_codes(fixture_warehouse):
     assert len(audit_labels) == len(set(audit_labels)) == 3
     section_titles = {m.value for m in at.markdown}
     assert {"**Compare**", "**Inspect**", "**Verify**"} <= section_titles
+
+
+def test_phase_filter_offers_display_labels(fixture_warehouse):
+    from streamlit.testing.v1 import AppTest
+
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    at = AppTest.from_file(
+        str(ROOT / "dashboard/pages/2_Competition_Landscape.py"), default_timeout=60
+    ).run()
+    assert not at.exception, at.exception
+    phase = next(w for w in at.sidebar.multiselect if w.label == "Phase")
+    assert phase.options, "fixture should expose at least one phase"
+    assert not any(option.isupper() for option in phase.options)

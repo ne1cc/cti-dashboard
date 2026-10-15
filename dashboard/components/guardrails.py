@@ -25,7 +25,7 @@ def page_setup(title: str, icon: str = ":material/monitor_heart:") -> None:
     st.set_page_config(page_title=title, page_icon=icon, layout="wide")
     apply_table_scroll_fix()
     st.title(title)
-    st.info(DISCLAIMER)
+    st.info(DISCLAIMER, icon=":material/policy:")
 
 
 def proxy_caption() -> None:
