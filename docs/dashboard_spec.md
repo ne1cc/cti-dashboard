@@ -18,9 +18,10 @@ Every page renders the shared disclaimer banner via
 ## Pages
 
 ### Overview (`overview.py`)
-KPIs (trials tracked, recruiting, states, facilities), snapshot count,
-top-10 queue preview, "how to read this dashboard". Link to the full
-queue.
+KPIs (trials tracked, recruiting, states, facilities), snapshot date and
+count, top-10 queue preview with display labels and a score bar, link to
+the full queue, "Where to look next" cards built from the navigation
+sections, and three separately named metric audits.
 
 ### 1 · Priority Queue
 Band KPIs (priority_review / review / watch), priority band sidebar

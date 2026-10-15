@@ -64,7 +64,7 @@ def render_indication_banner(profile_id: str | None = None) -> None:
             ":blue-badge[Interventional U.S. trials]"
         )
 
-        with st.expander("Indication scope, taxonomy & clinical validity", icon=":material/info:"):
+        with st.expander("Indication scope, taxonomy & clinical validity"):
             if is_adrd:
                 st.markdown(
                     "**Scope & Diagnostic Boundaries:**\n"
@@ -457,7 +457,7 @@ def render_page_guide(page_key: str, profile_id: str) -> None:
     if not guide:
         return
 
-    with st.expander(guide["title"], expanded=False, icon=":material/menu_book:"):
+    with st.expander(guide["title"], expanded=False):
         st.markdown(f"**What This Data Shows:**\n{guide['what_it_shows']}")
         st.markdown(f"**How to Analyze the Data:**\n{guide['how_to_analyze']}")
 

@@ -205,3 +205,20 @@ def test_router_lands_on_the_overview(fixture_warehouse):
     at = AppTest.from_file(str(ROOT / "dashboard/app.py"), default_timeout=60).run()
     assert not at.exception, at.exception
     assert at.title[0].value == "Recruitment Competition Intelligence"
+
+
+def test_overview_reads_as_labels_not_codes(fixture_warehouse):
+    from streamlit.testing.v1 import AppTest
+
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    at = AppTest.from_file(str(ROOT / "dashboard/overview.py"), default_timeout=60).run()
+    assert not at.exception, at.exception
+    preview = at.dataframe[0].value
+    assert not preview["phase_normalized"].str.fullmatch(r"[A-Z0-9_/]+").any()
+    assert set(preview["priority_band"]) <= {"Priority review", "Review", "Watch"}
+    assert not any("00:00:00" in c.value for c in at.caption)
+    audit_labels = [e.label for e in at.expander if e.label.startswith("Audit:")]
+    assert len(audit_labels) == len(set(audit_labels)) == 3
+    section_titles = {m.value for m in at.markdown}
+    assert {"**Compare**", "**Inspect**", "**Verify**"} <= section_titles
