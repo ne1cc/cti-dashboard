@@ -14,7 +14,11 @@ DASHBOARD_PID=""
 SHUTDOWN=0
 SINCE_CHECK=0
 
-log() { echo "[entrypoint] $(date -u +%FT%TZ) $*" >> "$LOG_DIR/pipeline.log"; }
+# The append must not be fatal: on 2026-10-07 a full data volume made this very
+# echo fail with ENOSPC, `set -euo pipefail` killed the machine within seconds
+# of boot, and the crash loop could not log its own cause. Losing a log line on
+# a full disk is acceptable; losing the boot is not.
+log() { echo "[entrypoint] $(date -u +%FT%TZ) $*" >> "$LOG_DIR/pipeline.log" 2>/dev/null || true; }
 
 # DuckDB does not create parent directories for a new database file (verified:
 # duckdb.connect() raises IOException on a missing directory), and a Fly Volume
