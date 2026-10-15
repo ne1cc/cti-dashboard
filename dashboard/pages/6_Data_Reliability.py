@@ -13,7 +13,7 @@ page_setup("Data Reliability & Assumptions")
 profile_id = render_profile_selector()
 data.require_warehouse(profile_id)
 
-render_page_guide("data_reliability")
+render_page_guide("data_reliability", profile_id)
 
 reliability = data.data_reliability(profile_id)
 

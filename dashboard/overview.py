@@ -16,7 +16,7 @@ profile_id = render_profile_selector()
 data.require_warehouse(profile_id)
 
 render_indication_banner(profile_id)
-render_page_guide("overview")
+render_page_guide("overview", profile_id)
 
 metrics = data.overview_metrics(profile_id)
 

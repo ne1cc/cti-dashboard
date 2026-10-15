@@ -24,7 +24,7 @@ profile_id = render_profile_selector()
 data.require_warehouse(profile_id)
 
 render_indication_banner(profile_id)
-render_page_guide("trial_similarity")
+render_page_guide("trial_similarity", profile_id)
 
 st.info(
     "This page scores **structural trial-design comparability** — "

@@ -13,7 +13,7 @@ page_setup("Competition Landscape")
 profile_id = render_profile_selector()
 data.require_warehouse(profile_id)
 
-render_page_guide("competition_landscape")
+render_page_guide("competition_landscape", profile_id)
 
 competition = data.recruiting_competition(profile_id)
 filtered = segment_filters(competition)

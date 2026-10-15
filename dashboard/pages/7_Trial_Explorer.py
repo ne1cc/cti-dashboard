@@ -11,7 +11,7 @@ profile_id = render_profile_selector()
 data.require_warehouse(profile_id)
 
 render_indication_banner(profile_id)
-render_page_guide("trial_explorer")
+render_page_guide("trial_explorer", profile_id)
 
 trials = data.trial_explorer(profile_id)
 
