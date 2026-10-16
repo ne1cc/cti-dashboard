@@ -55,13 +55,15 @@ st.dataframe(
     latest.sort_values("recruiting_trial_count", ascending=False)[
         [
             "state_normalized",
-            "trial_count",
             "recruiting_trial_count",
+            "trial_count",
             "sponsor_count",
             "newly_posted_in_month_proxy",
             "recruiting_growth_3m",
         ]
-    ].head(20),
+    ]
+    .head(20)
+    .assign(recruiting_growth_3m=lambda frame: frame.recruiting_growth_3m * 100),
     hide_index=True,
     width="stretch",
     column_config={
@@ -74,7 +76,7 @@ st.dataframe(
         ),
         "recruiting_growth_3m": st.column_config.NumberColumn(
             "3-Month Growth",
-            format="%+.1%",
+            format="%+.1f%%",
             help="Relative change from the earliest recruiting count in the three-month window",
         ),
     },

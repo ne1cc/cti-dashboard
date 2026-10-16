@@ -6,6 +6,7 @@ import streamlit as st
 from components import data
 from components.audit_panel import PRIORITY_DERIVED_RULES, render_metric_audit
 from components.filters import segment_filters
+from components.formatting import format_band, format_phase
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import format_condition_group, render_page_guide
 from components.profile import render_profile_selector
@@ -85,6 +86,8 @@ queue_columns = [
 ]
 display_df = filtered[queue_columns].copy()
 display_df["condition_group"] = display_df["condition_group"].apply(format_condition_group)
+display_df["phase_normalized"] = display_df["phase_normalized"].map(format_phase)
+display_df["priority_band"] = display_df["priority_band"].map(format_band)
 
 queue_event = st.dataframe(
     display_df,
@@ -103,17 +106,22 @@ queue_event = st.dataframe(
         "priority_band": st.column_config.TextColumn("Band"),
         "recruiting_trial_count": st.column_config.NumberColumn("Recruiting Trials", format="%d"),
         "sponsor_hhi": st.column_config.NumberColumn(
-            "Sponsor HHI", format="%.3f", help="Herfindahl-Hirschman Index of sponsor concentration"
+            "Sponsor concentration",
+            format="%.3f",
+            help="Herfindahl-Hirschman Index (0–1); higher means more concentrated",
         ),
         "site_overlap_share": st.column_config.NumberColumn(
-            "Site Overlap", format="%.1%", help="Share of listed facilities hosting multiple trials"
+            "Site Overlap",
+            format="percent",
+            help="Share of listed facilities hosting multiple trials",
         ),
         "data_confidence_share": st.column_config.NumberColumn(
-            "Legacy operational completeness adjustment",
-            format="%.1%",
-            help="0.5 record-quality-ok share + 0.5 latest successful-run usable-location share",
+            "Completeness adjustment",
+            format="percent",
+            help="Legacy operational completeness adjustment: 0.5 record-quality-ok share + "
+            "0.5 latest successful-run usable-location share",
         ),
-        "priority_explanation": st.column_config.TextColumn("Deterministic Explanation"),
+        "priority_explanation": st.column_config.TextColumn("Explanation", width="large"),
     },
 )
 
@@ -159,8 +167,8 @@ selected_rows = queue_event.selection.rows if queue_event.selection else []
 if selected_rows:
     segment = filtered.iloc[selected_rows[0]]
     st.subheader(
-        f"Score breakdown — {segment['condition_group']} · "
-        f"{segment['state_normalized']} · {segment['phase_normalized']} "
+        f"Score breakdown — {format_condition_group(segment['condition_group'])} · "
+        f"{segment['state_normalized']} · {format_phase(segment['phase_normalized'])} "
         f"(rank #{int(segment['priority_rank'])})"
     )
     breakdown_rows = [
@@ -204,7 +212,20 @@ if selected_rows:
         breakdown_rows,
         columns=["Component", "Raw value", "Normalized (0-1)", "Weight", "Weighted contribution"],
     )
-    st.dataframe(breakdown, hide_index=True, width="stretch")
+    st.dataframe(
+        breakdown,
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "Component": st.column_config.TextColumn("Factor", width="large"),
+            "Raw value": st.column_config.TextColumn("Observed input", width="large"),
+            "Normalized (0-1)": st.column_config.NumberColumn("Scaled value (0–1)", format="%.3f"),
+            "Weight": st.column_config.NumberColumn("Weight", format="percent"),
+            "Weighted contribution": st.column_config.NumberColumn(
+                "Score contribution", format="%.4f"
+            ),
+        },
+    )
     weighted_total = sum(row[4] for row in breakdown_rows)
     st.metric(
         "Weighted total (sum of weighted contributions)",
