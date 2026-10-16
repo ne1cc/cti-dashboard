@@ -6,6 +6,17 @@ from pathlib import Path
 CONFIG = Path(__file__).resolve().parents[1] / ".streamlit" / "config.toml"
 
 
+def _relative_luminance(color: str) -> float:
+    channels = (int(color[index : index + 2], 16) / 255 for index in (1, 3, 5))
+    linear = (
+        channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4
+        for channel in channels
+    )
+    return sum(
+        channel * weight for channel, weight in zip(linear, (0.2126, 0.7152, 0.0722), strict=True)
+    )
+
+
 def test_dashboard_themes() -> None:
     theme = tomllib.loads(CONFIG.read_text(encoding="utf-8"))["theme"]
     assert theme["base"] == "dark"
@@ -49,4 +60,4 @@ def test_dashboard_themes() -> None:
         light[key] != dark[key]
         for key in ("backgroundColor", "secondaryBackgroundColor", "dataframeHeaderBackgroundColor")
     )
-    assert int(light["backgroundColor"][1:], 16) > int(light["textColor"][1:], 16)
+    assert _relative_luminance(light["backgroundColor"]) > _relative_luminance(light["textColor"])
