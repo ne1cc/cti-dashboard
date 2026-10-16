@@ -4,6 +4,7 @@ import plotly.express as px
 import streamlit as st
 from components import data
 from components.audit_panel import render_metric_audit
+from components.formatting import format_phase
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import render_page_guide
 from components.profile import render_profile_selector
@@ -43,8 +44,16 @@ col2.metric(
 )
 
 st.subheader("Facilities by recruiting-trial listings")
+display_facilities = filtered.copy()
+display_facilities["phase_mix"] = display_facilities["phase_mix"].map(
+    lambda value: (
+        " · ".join(format_phase(phase.strip()) for phase in value.split("|"))
+        if isinstance(value, str)
+        else value
+    )
+)
 st.dataframe(
-    filtered[
+    display_facilities[
         [
             "facility_name",
             "city",
@@ -58,7 +67,7 @@ st.dataframe(
     hide_index=True,
     width="stretch",
     column_config={
-        "facility_name": st.column_config.TextColumn("Facility Name"),
+        "facility_name": st.column_config.TextColumn("Facility", width="large"),
         "city": st.column_config.TextColumn("City"),
         "state_normalized": st.column_config.TextColumn("State"),
         "recruiting_trial_count": st.column_config.NumberColumn(
@@ -73,7 +82,7 @@ st.dataframe(
         ),
         "sponsor_count": st.column_config.NumberColumn("Sponsors", format="%d"),
         "phase_mix": st.column_config.TextColumn(
-            "Phase Mix", help="Distribution of trial phases active at this location"
+            "Listed study phases", help="Phases of all studies listing this facility"
         ),
     },
 )

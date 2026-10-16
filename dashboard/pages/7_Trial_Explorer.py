@@ -2,6 +2,7 @@
 
 import streamlit as st
 from components import data
+from components.formatting import format_phase
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import render_indication_banner, render_page_guide
 from components.profile import render_profile_selector
@@ -54,23 +55,47 @@ if search:
 
 st.caption(f"{len(filtered):,} of {len(trials):,} trials shown.")
 
+display_trials = filtered.copy()
+display_trials["phase"] = display_trials["phase"].map(format_phase)
+display_trials["overall_status"] = (
+    display_trials["overall_status"].str.replace("_", " ").str.capitalize()
+)
+
 column_config = {
+    "overall_status": st.column_config.TextColumn("Status"),
+    "phase": st.column_config.TextColumn("Phase"),
+    "lead_sponsor": st.column_config.TextColumn("Lead sponsor"),
     "registry_url": st.column_config.LinkColumn(
         "Registry record",
         help="Opens the public ClinicalTrials.gov record",
-        display_text="View on ClinicalTrials.gov",
+        display_text="Open registry",
     ),
     "nct_id": st.column_config.TextColumn("NCT ID"),
     "brief_title": st.column_config.TextColumn("Brief title", width="large"),
-    "study_first_post_date": st.column_config.DateColumn("First posted"),
-    "enrollment_count": st.column_config.NumberColumn("Planned enrollment"),
+    "study_first_post_date": st.column_config.DateColumn("First posted", format="MMM D, YYYY"),
+    "enrollment_count": st.column_config.NumberColumn(
+        "Reported enrollment",
+        format="%d",
+        help="Registry-reported enrollment; may be estimated or actual",
+    ),
     "us_states": st.column_config.TextColumn("Listed U.S. states"),
 }
 if "indication_profile_id" in filtered.columns:
-    column_config["indication_profile_id"] = st.column_config.TextColumn("Indication")
+    column_config["indication_profile_id"] = None
 
 st.dataframe(
-    filtered,
+    display_trials,
+    column_order=[
+        "brief_title",
+        "phase",
+        "overall_status",
+        "lead_sponsor",
+        "us_states",
+        "enrollment_count",
+        "study_first_post_date",
+        "nct_id",
+        "registry_url",
+    ],
     hide_index=True,
     width="stretch",
     column_config=column_config,
@@ -79,7 +104,7 @@ st.dataframe(
 st.caption(
     "Each row is a public registry record as of this project's latest snapshot; "
     "the link opens the authoritative current record on ClinicalTrials.gov. "
-    "Listed enrollment is the sponsor-reported plan, not actual accrual."
+    "Reported enrollment may be estimated or actual; this view does not distinguish the type."
 )
 
 guarded_footer()
