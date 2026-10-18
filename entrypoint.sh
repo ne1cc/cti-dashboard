@@ -65,7 +65,7 @@ run_pipeline() {
 run_similarity_rebuild() {
     log "starting scoped Trial Similarity dbt build"
     if make dbt-seed >> "$LOG_DIR/pipeline.log" 2>&1 \
-        && uv run dbt build --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials --select +mart_trial_similarity --resource-type model >> "$LOG_DIR/pipeline.log" 2>&1; then
+        && uv run dbt build --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials --select +mart_trial_similarity --resource-type model --threads 1 >> "$LOG_DIR/pipeline.log" 2>&1; then
         log "Trial Similarity schema rebuild succeeded"
         return 0
     fi
