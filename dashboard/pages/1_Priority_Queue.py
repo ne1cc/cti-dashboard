@@ -6,7 +6,7 @@ import streamlit as st
 from components import data
 from components.audit_panel import PRIORITY_DERIVED_RULES, render_metric_audit
 from components.filters import segment_filters
-from components.formatting import format_band, format_phase
+from components.formatting import format_band, format_phase, format_priority_explanation
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import format_condition_group, render_page_guide
 from components.profile import render_profile_selector
@@ -88,11 +88,16 @@ display_df = filtered[queue_columns].copy()
 display_df["condition_group"] = display_df["condition_group"].apply(format_condition_group)
 display_df["phase_normalized"] = display_df["phase_normalized"].map(format_phase)
 display_df["priority_band"] = display_df["priority_band"].map(format_band)
+display_df["priority_explanation"] = [
+    format_priority_explanation(row) for _, row in filtered.iterrows()
+]
 
 queue_event = st.dataframe(
     display_df,
+    row_height=76,
+    height=440,
     hide_index=True,
-    width="stretch",
+    width="content",
     on_select="rerun",
     selection_mode="single-row",
     column_config={
@@ -103,8 +108,10 @@ queue_event = st.dataframe(
         "feasibility_review_priority_score": st.column_config.NumberColumn(
             "Priority Score", format="%.4f", help="Weighted composite score (0.0 - 1.0)"
         ),
-        "priority_band": st.column_config.TextColumn("Band"),
-        "recruiting_trial_count": st.column_config.NumberColumn("Recruiting Trials", format="%d"),
+        "priority_band": st.column_config.TextColumn("Band", width=110),
+        "recruiting_trial_count": st.column_config.NumberColumn(
+            "Recruiting Trials", format="%d", width=125
+        ),
         "sponsor_hhi": st.column_config.NumberColumn(
             "Sponsor concentration",
             format="%.3f",
@@ -121,7 +128,12 @@ queue_event = st.dataframe(
             help="Legacy operational completeness adjustment: 0.5 record-quality-ok share + "
             "0.5 latest successful-run usable-location share",
         ),
-        "priority_explanation": st.column_config.TextColumn("Explanation", width="large"),
+        "priority_explanation": st.column_config.TextColumn(
+            "Explanation",
+            width=700,
+            help="HHI measures sponsor concentration from 0–1. Completeness reflects "
+            "record and location coverage, not scientific confidence.",
+        ),
     },
 )
 
@@ -215,7 +227,7 @@ if selected_rows:
     st.dataframe(
         breakdown,
         hide_index=True,
-        width="stretch",
+        width="content",
         column_config={
             "Component": st.column_config.TextColumn("Factor", width="large"),
             "Raw value": st.column_config.TextColumn("Observed input", width="large"),

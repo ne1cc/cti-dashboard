@@ -65,7 +65,7 @@ st.dataframe(
         ]
     ].head(200),
     hide_index=True,
-    width="stretch",
+    width="content",
     column_config={
         "facility_name": st.column_config.TextColumn("Facility", width="large"),
         "city": st.column_config.TextColumn("City"),

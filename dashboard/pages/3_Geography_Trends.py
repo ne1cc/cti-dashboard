@@ -65,7 +65,7 @@ st.dataframe(
     .head(20)
     .assign(recruiting_growth_3m=lambda frame: frame.recruiting_growth_3m * 100),
     hide_index=True,
-    width="stretch",
+    width="content",
     column_config={
         "state_normalized": st.column_config.TextColumn("State"),
         "trial_count": st.column_config.NumberColumn("Total Trials", format="%d"),

@@ -339,7 +339,7 @@ def render_metric_audit(
         st.dataframe(
             studies[study_display_columns],
             hide_index=True,
-            width="stretch",
+            width="content",
             column_config={
                 "brief_title": st.column_config.TextColumn("Trial", width="large"),
                 "study_type": st.column_config.TextColumn("Study type"),
@@ -383,7 +383,7 @@ def render_metric_audit(
             st.dataframe(
                 events[[column for column in event_columns if column in events]],
                 hide_index=True,
-                width="stretch",
+                width="content",
                 column_config={
                     "brief_title": st.column_config.TextColumn("Trial", width="large"),
                     "phase_normalized": st.column_config.TextColumn("Phase"),
@@ -433,7 +433,7 @@ def render_metric_audit(
             st.dataframe(
                 locations[location_columns],
                 hide_index=True,
-                width="stretch",
+                width="content",
                 column_config={
                     "facility_name": st.column_config.TextColumn(
                         "Recorded facility", width="large"
