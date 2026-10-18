@@ -62,6 +62,17 @@ run_pipeline() {
     return 1
 }
 
+run_similarity_rebuild() {
+    log "starting scoped Trial Similarity dbt build"
+    if make dbt-seed >> "$LOG_DIR/pipeline.log" 2>&1 \
+        && uv run dbt build --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials --select +mart_trial_similarity >> "$LOG_DIR/pipeline.log" 2>&1; then
+        log "Trial Similarity schema rebuild succeeded"
+        return 0
+    fi
+    log "Trial Similarity schema rebuild FAILED"
+    return 1
+}
+
 similarity_mart_is_current() {
     [ -f "$WAREHOUSE" ] || return 1
     /app/.venv/bin/python - "$WAREHOUSE" <<'PY'
@@ -113,8 +124,8 @@ if [ ! -f "$WAREHOUSE" ]; then
     log "no warehouse found, running first-boot pipeline"
     run_pipeline || log "first-boot pipeline failed; dashboard will show 'warehouse not found' until the next successful refresh"
 elif ! similarity_mart_is_current; then
-    log "trial similarity mart schema is outdated; rebuilding warehouse before serving"
-    run_pipeline || log "schema rebuild failed; dashboard will show a rebuild message for Trial Similarity"
+    log "trial similarity mart schema is outdated; rebuilding its dbt dependency graph before serving"
+    run_similarity_rebuild || log "schema rebuild failed; dashboard will show a rebuild message for Trial Similarity"
 fi
 
 start_dashboard
