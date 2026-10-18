@@ -75,7 +75,14 @@ selected_nct_id = options[selected_label]
 
 sim_df = data.trial_similarity(profile_id, selected_nct_id)
 if sim_df.empty or "nct_id_b" not in sim_df.columns:
-    st.info("No comparable trials found in the current warehouse for this trial.")
+    if data._table_exists("mart_trial_similarity") and not data._has_column(
+        "mart_trial_similarity", "indication_profile_id"
+    ):
+        st.warning(
+            "Trial similarity data is out of date. Rebuild the warehouse to enable comparisons."
+        )
+    else:
+        st.info("No comparable trials found in the current warehouse for this trial.")
     guarded_footer()
     st.stop()
 
