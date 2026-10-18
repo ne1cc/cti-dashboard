@@ -5,6 +5,7 @@ import streamlit as st
 from components import data
 from components.audit_panel import render_metric_audit
 from components.filters import segment_filters
+from components.formatting import format_phase
 from components.guardrails import guarded_footer, page_setup, proxy_caption
 from components.guidance import format_condition_group, render_page_guide
 from components.profile import render_profile_selector
@@ -80,6 +81,8 @@ table_df = filtered.sort_values(
     ]
 ].copy()
 table_df["condition_group"] = table_df["condition_group"].apply(format_condition_group)
+table_df["phase_normalized"] = table_df["phase_normalized"].map(format_phase)
+table_df["competition_signal_band"] = table_df["competition_signal_band"].str.capitalize()
 
 st.dataframe(
     table_df,
@@ -96,8 +99,12 @@ st.dataframe(
             "Newly Posted (90d Proxy)", format="%d"
         ),
         "sponsor_count": st.column_config.NumberColumn("Sponsors", format="%d"),
-        "top_sponsor_share": st.column_config.NumberColumn("Top Sponsor Share", format="%.1%"),
-        "sponsor_hhi": st.column_config.NumberColumn("Sponsor HHI", format="%.3f"),
+        "top_sponsor_share": st.column_config.NumberColumn("Top Sponsor Share", format="percent"),
+        "sponsor_hhi": st.column_config.NumberColumn(
+            "Sponsor concentration",
+            format="%.3f",
+            help="Herfindahl-Hirschman Index (0–1); higher means more concentrated",
+        ),
         "competition_signal_band": st.column_config.TextColumn("Signal Band"),
     },
 )
