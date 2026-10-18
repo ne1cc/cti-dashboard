@@ -130,7 +130,7 @@ if "indication_profile_id" in match_columns:
 match_event = st.dataframe(
     matches[match_columns],
     hide_index=True,
-    width="stretch",
+    width="content",
     column_config=col_cfg,
     on_select="rerun",
     selection_mode="single-row",
@@ -156,7 +156,7 @@ if selected_rows:
     st.dataframe(
         breakdown,
         hide_index=True,
-        width="stretch",
+        width="content",
         column_config={
             "Matches": st.column_config.CheckboxColumn("Matches"),
             "Weight": st.column_config.NumberColumn("Weight", format="percent"),

@@ -65,7 +65,7 @@ st.dataframe(
     display_sponsors,
     column_order=["lead_sponsor", "sponsor_class", "recruiting_trial_count", "phase_mix"],
     hide_index=True,
-    width="stretch",
+    width="content",
     column_config={
         "lead_sponsor": st.column_config.TextColumn("Lead sponsor", width="large"),
         "indication_profile_id": None,

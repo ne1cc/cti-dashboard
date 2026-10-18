@@ -36,7 +36,7 @@ st.dataframe(
         ]
     ],
     hide_index=True,
-    width="stretch",
+    width="content",
     column_config={
         "ingestion_run_id": st.column_config.TextColumn("Run ID"),
         "snapshot_date": st.column_config.DateColumn("Captured on", format="MMM D, YYYY"),
@@ -151,7 +151,7 @@ st.dataframe(
         for r in results
     ],
     hide_index=True,
-    width="stretch",
+    width="content",
     column_config={
         "Reviews deprioritized (assumed)": st.column_config.NumberColumn(format="%.1f"),
         "Activations influenced (assumed)": st.column_config.NumberColumn(format="%.1f"),

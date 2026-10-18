@@ -97,7 +97,7 @@ st.dataframe(
         "registry_url",
     ],
     hide_index=True,
-    width="stretch",
+    width="content",
     column_config=column_config,
 )
 

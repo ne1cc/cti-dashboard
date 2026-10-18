@@ -87,7 +87,7 @@ table_df["competition_signal_band"] = table_df["competition_signal_band"].str.ca
 st.dataframe(
     table_df,
     hide_index=True,
-    width="stretch",
+    width="content",
     column_config={
         "condition_group": st.column_config.TextColumn("Condition Group"),
         "state_normalized": st.column_config.TextColumn("State"),

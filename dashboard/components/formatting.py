@@ -49,3 +49,19 @@ def format_snapshot_date(value: object) -> str:
         return "not yet captured"
     stamp = pd.Timestamp(value)
     return f"{stamp:%b} {stamp.day}, {stamp.year}"
+
+
+def format_priority_explanation(row: pd.Series) -> str:
+    """Summarize score inputs without presenting first-post proxies as recruiting events."""
+    growth = (
+        "First posted (90d proxy)"
+        if row["growth_uses_registry_proxy_flag"]
+        else "Newly recruiting (90d)"
+    )
+    return (
+        f"Recruiting trials: {row['recruiting_trial_count']:.0f} · "
+        f"{growth}: {row['recent_growth_input']:.0f} · "
+        f"Sponsors: {row['sponsor_count']:.0f} (HHI {row['sponsor_hhi']:.2f}) · "
+        f"Trials sharing sites: {row['site_overlap_share']:.0%} · "
+        f"Completeness adjustment: {row['data_confidence_share']:.0%}"
+    )

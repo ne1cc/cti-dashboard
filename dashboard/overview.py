@@ -3,7 +3,12 @@
 import streamlit as st
 from components import data
 from components.audit_panel import PRIORITY_DERIVED_RULES, render_metric_audit
-from components.formatting import format_band, format_phase, format_snapshot_date
+from components.formatting import (
+    format_band,
+    format_phase,
+    format_priority_explanation,
+    format_snapshot_date,
+)
 from components.guardrails import guarded_footer, page_setup, proxy_caption
 from components.guidance import (
     format_condition_group,
@@ -86,9 +91,14 @@ preview_df = queue.head(10)[
 preview_df["condition_group"] = preview_df["condition_group"].apply(format_condition_group)
 preview_df["phase_normalized"] = preview_df["phase_normalized"].map(format_phase)
 preview_df["priority_band"] = preview_df["priority_band"].map(format_band)
+preview_df["priority_explanation"] = [
+    format_priority_explanation(row) for _, row in queue.head(10).iterrows()
+]
 
 st.dataframe(
     preview_df,
+    row_height=76,
+    height=440,
     hide_index=True,
     width="content",
     column_config={
@@ -103,7 +113,12 @@ st.dataframe(
         "recruiting_trial_count": st.column_config.NumberColumn(
             "Recruiting Trials", format="%d", width=125
         ),
-        "priority_explanation": st.column_config.TextColumn("Explanation", width=2400),
+        "priority_explanation": st.column_config.TextColumn(
+            "Explanation",
+            width=700,
+            help="HHI measures sponsor concentration from 0–1. Completeness reflects "
+            "record and location coverage, not scientific confidence.",
+        ),
     },
 )
 st.page_link(
