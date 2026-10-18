@@ -5,6 +5,6 @@ clinical_trials:
       type: duckdb
       path: data/warehouse/clinical_trials.duckdb
       threads: 1
-      settings:
+      config_options:
         memory_limit: 512MB
         temp_directory: data/tmp/dbt
