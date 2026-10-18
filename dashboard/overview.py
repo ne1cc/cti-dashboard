@@ -90,18 +90,20 @@ preview_df["priority_band"] = preview_df["priority_band"].map(format_band)
 st.dataframe(
     preview_df,
     hide_index=True,
-    width="stretch",
+    width="content",
     column_config={
-        "priority_rank": st.column_config.NumberColumn("Rank", format="%d"),
-        "condition_group": st.column_config.TextColumn("Condition Group"),
-        "state_normalized": st.column_config.TextColumn("State"),
-        "phase_normalized": st.column_config.TextColumn("Phase"),
+        "priority_rank": st.column_config.NumberColumn("Rank", format="%d", width=60),
+        "condition_group": st.column_config.TextColumn("Condition Group", width=240),
+        "state_normalized": st.column_config.TextColumn("State", width=70),
+        "phase_normalized": st.column_config.TextColumn("Phase", width=110),
         "feasibility_review_priority_score": st.column_config.ProgressColumn(
-            "Priority Score", format="%.3f", min_value=0.0, max_value=1.0
+            "Priority Score", format="%.3f", min_value=0.0, max_value=1.0, width=180
         ),
-        "priority_band": st.column_config.TextColumn("Band"),
-        "recruiting_trial_count": st.column_config.NumberColumn("Recruiting Trials", format="%d"),
-        "priority_explanation": st.column_config.TextColumn("Explanation", width="large"),
+        "priority_band": st.column_config.TextColumn("Band", width=110),
+        "recruiting_trial_count": st.column_config.NumberColumn(
+            "Recruiting Trials", format="%d", width=125
+        ),
+        "priority_explanation": st.column_config.TextColumn("Explanation", width=2400),
     },
 )
 st.page_link(
