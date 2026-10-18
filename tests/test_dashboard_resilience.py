@@ -124,6 +124,32 @@ def test_trial_similarity_legacy_schema_returns_empty_dataframe(temp_duckdb_lega
     assert df.empty
 
 
+def test_trial_similarity_legacy_mart_returns_empty_dataframe(
+    temp_duckdb_legacy_schema: Path,
+):
+    from components import data
+
+    con = duckdb.connect(str(temp_duckdb_legacy_schema))
+    con.execute(
+        "create table main_marts.mart_trial_similarity "
+        "(nct_id_a varchar, nct_id_b varchar, similarity_rank integer)"
+    )
+    con.close()
+    data._table_exists.clear()
+
+    df = data.trial_similarity("adrd", "NCT00000001")
+
+    assert isinstance(df, pd.DataFrame)
+    assert df.empty
+
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file(str(ROOT / "dashboard/pages/8_Trial_Similarity.py"), default_timeout=30)
+    at.run()
+    assert not at.exception, at.exception[0].value if at.exception else ""
+    assert any("out of date" in str(msg.value) for msg in at.warning)
+
+
 def test_trial_explorer_page_smoke_legacy_schema(temp_duckdb_legacy_schema: Path):
     from streamlit.testing.v1 import AppTest
 
