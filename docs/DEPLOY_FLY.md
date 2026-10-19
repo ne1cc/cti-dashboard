@@ -132,6 +132,29 @@ Remediation in PR `fix/production-volume-and-profile-scope`:
   The sizing half still stands: no production re-expansion until a completed
   twelve-profile local build has recorded pairs, temp peak, warehouse size,
   and refresh duration.
+  Update 2026-10-19: that build is done. It first found that
+  `int_similarity_candidates` never joined on the token, so every trial with
+  any surviving token paired with every other one, and that group-only tokens
+  gave oncology_colorectal and type2_diabetes zero pairs (2 of 72
+  reconciliation checks failed). Tokens are now (condition group, phase) and
+  the join requires a shared token. Measured in this image (Docker 29.4.0,
+  linux/arm64, `--memory=1g --cpus=1`, empty named volume, real pulls):
+  - Ingest + transform, 12 profiles, 60,134 studies: ~260 s; 1.7 GB bronze,
+    195 MB silver.
+  - DuckDB defaults (80% of RAM, 4 threads): `dbt-run` OOM-killed (exit 137).
+  - With `threads: 1`, `memory_limit: '500MB'`, `preserve_insertion_order:
+    false`: prune + dbt-run + dbt-test + quality-report in 332 s
+    (`mart_trial_similarity` 196 s), 35 models, 162 tests and 72/72
+    reconciliation checks pass; 38.2 M candidate rows; warehouse 1.3 GB.
+  - Peak `/app/data` 8.0 GB (DuckDB spill), steady 3.2 GB; a weekly refresh
+    also holds the previous bronze run until prune, so budget ~10 GB peak.
+  - Similarity coverage: every trial has neighbours in 9 profiles;
+    oncology_breast 49%, type2_diabetes 56%, heart_failure 76% (their
+    catch-all groups still exceed the cap within one phase).
+  Sizing for twelve profiles on any host: >= 2 GB RAM (or 1 GB with the DuckDB
+  settings above), >= 15 GB disk, and a ~10-minute weekly refresh outage,
+  which exceeds Fly's 300 s `kill_timeout` ceiling. `CTI_REFRESHABLE_PROFILES`
+  stays set here; hosting is moving off Fly.
 - The volume was extended 2 GB → 5 GB (`fly volumes extend cti_data --size 5`).
   The stale ten-profile bronze (~1.4 GB) is retained by `prune_all`, which
   intentionally prunes `registry.all()` at `bronze_runs_to_keep: 1`.
