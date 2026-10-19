@@ -778,6 +778,7 @@ def test_profile_scores_are_bit_identical_built_alone_or_alongside(
     differ by design. Its profile column is asserted where it belongs, in
     `test_reliability_prefers_the_silver_profile_when_the_manifest_disagrees`.
     """
+    compared = dict.fromkeys(_INVARIED_MODELS, 0)
     for profile, solo_root in solo_fixture_roots.items():
         for model in _INVARIED_MODELS:
             query = (
@@ -786,14 +787,16 @@ def test_profile_scores_are_bit_identical_built_alone_or_alongside(
             )
             alone = _rows(solo_root, query)
             together = _rows(divergent_fixture_root, query)
-            # A comparison of two empty lists proves nothing, and a typo in the
-            # profile literal would produce exactly that.
-            assert alone, f"{model}: profile {profile} is empty built alone"
+            compared[model] += bool(alone)
             assert together == alone, (
                 f"{model}/{profile}: {len(together)} rows built alongside another profile vs"
                 f" {len(alone)} built alone -- a per-profile number changed because a second"
                 " indication was loaded"
             )
+    # Two empty lists prove nothing, and a typo in the profile literal would
+    # produce exactly that. Per model, not per profile: NSCLC's base page has no
+    # similarity neighbours, so mart_trial_similarity is proven on ADRD alone.
+    assert all(compared.values()), f"models empty for every profile: {compared}"
 
 
 def test_segment_mart_contracts_declare_the_profile(fixture_project_root: Path) -> None:
@@ -1403,57 +1406,41 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
         assert "not_null" in (column.get("tests") or []), model["name"]
 
 
-def test_similarity_top_25_cap_trims_a_busy_profile(divergent_fixture_root: Path) -> None:
+def test_similarity_top_25_cap_trims_a_busy_profile(similarity_equivalence_root: Path) -> None:
     """`qualify similarity_rank <= 25` in mart_trial_similarity.sql, made countable.
 
-    The cap is invisible on a small profile: with 10 or 12 trials each, every
-    trial has 9 or 11 candidates and all of them fit, so deleting the `qualify`
-    line changes no row in the warehouse and no test in the repository could
-    notice (measured 2026-09-06 on the pre-growth divergent fixture: adrd's
-    maximum similarity_rank was 11 over 132 rows). A15 item 2's warehouse grows
-    ADRD to 27 listings, which puts every one of its trials over the line -- 26
-    candidates against a cap of 25 -- so the cap now trims exactly one row per
-    trial and its removal is a countable 702 vs 675.
-
-    A grown fixture rather than a second static guard, deliberately. The static
-    guard this module already has (`test_window_frames_partition_by_profile`)
-    checks the *partition* of the frame that produces the rank, which is a
-    property of the source text; whether the cap *binds* is a property of the
-    data, and no amount of reading `mart_trial_similarity.sql` can tell a clause
-    that removes 27 rows from one that removes none. A text search for
-    `qualify similarity_rank <= 25` would also be satisfied by a cap at any other
-    number, by a commented-out one, and by one whose rank column is all nulls.
-    Both halves of the claim matter and they are checked in different places: the
-    frame's partition statically, the clause's effect here.
-
-    NSCLC is the other half of the assertion and it is not a throwaway: 10 trials
-    give each one 9 candidates, so its 90 rows are exactly 10 x 9 and its maximum
-    rank is 9. A cap that fired there -- a `<= 25` that became `<= 5`, or a rank
-    computed over the whole warehouse instead of per profile -- would delete real
-    neighbours from the thin profile, and the 90 would drop.
+    Every trial keeps exactly min(its candidate count, 25) rows. The dense
+    similarity fixture is what makes both halves observable: ADRD trials in
+    the (alzheimers_disease, PHASE3) token have 27 candidates, so the cap must
+    trim them, while NSCLC's three PHASE3 trials have 2 each, so a cap that
+    fired on a thin profile (a `<= 5`, or a rank over the whole warehouse
+    instead of per profile) would delete real neighbours there. A text search
+    for the clause could not tell either case from a commented-out cap.
     """
-    assert _rows(
-        divergent_fixture_root,
-        "select indication_profile_id, count(*), count(distinct nct_id_a),"
-        " max(similarity_rank) from main_marts.mart_trial_similarity group by 1 order by 1",
-    ) == [("adrd", 675, 27, 25), ("oncology_nsclc", 90, 10, 9)]
-    # Candidates, from the model's own input: 27 ADRD trials join to 26 partners
-    # each = 702 scored pairs, against the 675 rows the cap lets through.
-    assert _rows(
-        divergent_fixture_root,
-        "select indication_profile_id, count(*), count(distinct nct_id)"
-        " from main_intermediate.int_trial_comparability_features group by 1 order by 1",
-    ) == [("adrd", 27, 27), ("oncology_nsclc", 10, 10)]
-    # Every busy-profile trial sits exactly on the cap, so the trim is uniform
-    # rather than one trial's rank column running away: an ADRD trial with any
-    # other row count means the cap stopped doing its job.
-    assert _rows(
-        divergent_fixture_root,
-        "select count(*) from (select nct_id_a, count(*) c"
-        " from main_marts.mart_trial_similarity where indication_profile_id = 'adrd'"
-        " group by 1 having c <> 25)",
-    ) == [(0,)]
-    assert _rows(
-        divergent_fixture_root,
-        "select count(*) from main_marts.mart_trial_similarity where similarity_rank > 25",
-    ) == [(0,)]
+    rows = _rows(
+        similarity_equivalence_root,
+        """
+        with candidates as (
+            select indication_profile_id, nct_id_a, count(*) as n
+            from main_intermediate.int_similarity_candidates
+            group by 1, 2
+        ),
+        kept as (
+            select indication_profile_id, nct_id_a, count(*) as n
+            from main_marts.mart_trial_similarity
+            group by 1, 2
+        )
+        select
+            c.indication_profile_id,
+            max(c.n) as max_candidates,
+            count(*) filter (where coalesce(k.n, 0) <> least(c.n, 25)) as off_cap
+        from candidates c
+        left join kept k using (indication_profile_id, nct_id_a)
+        group by 1
+        order by 1
+        """,
+    )
+    assert [(p, off) for p, _, off in rows] == [("adrd", 0), ("oncology_nsclc", 0)]
+    max_candidates = {p: hi for p, hi, _ in rows}
+    assert max_candidates["adrd"] > 25, "the cap never binds on the dense profile"
+    assert max_candidates["oncology_nsclc"] < 25, "NSCLC must stay under the cap"

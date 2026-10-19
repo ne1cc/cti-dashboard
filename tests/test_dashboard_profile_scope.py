@@ -462,11 +462,18 @@ def test_overview_metrics_counts_only_its_profile(fixture_project_root) -> None:
         )
 
 
-def test_trial_similarity_stays_inside_its_profile(fixture_project_root) -> None:
+def test_trial_similarity_stays_inside_its_profile(
+    similarity_equivalence_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from src.config import get_config
+
+    # The base fixture's trials share too few (condition group, phase) tokens to
+    # have neighbours; NCT00000001 has them in both profiles of the dense one.
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(similarity_equivalence_root))
+    get_config.cache_clear()
     data = _load_data_module()
     for profile in PROFILES:
-        index_trial = data.trial_explorer(profile).iloc[0]["nct_id"]
-        matches = data.trial_similarity(profile, index_trial)
+        matches = data.trial_similarity(profile, "NCT00000001")
         assert not matches.empty, f"{profile} has no similarity rows"
         assert set(matches["indication_profile_id"]) == {profile}
 

@@ -567,13 +567,15 @@ UNSTAMPED_NSCLC_RUN = FixtureRun(
 
 
 # The similarity-mart fixtures (tests/test_similarity_candidates.py). The ADRD
-# run is the dense one: 24 cloned listings sharing "Alzheimer Disease" push the
-# alzheimers_disease token to df 27, so a trial's candidate set outnumbers the
-# top-25 cap and the qualify actually binds inside the candidates -- the same
+# run is the dense one: 52 cloned listings sharing "Alzheimer Disease",
+# alternating PHASE2/PHASE3, put 26 trials in the (alzheimers_disease, PHASE2)
+# token and 28 in (alzheimers_disease, PHASE3), so a trial's candidate set
+# outnumbers the top-25 cap and the qualify actually binds inside the
+# candidates -- the same
 # reason _filler_studies exists for the divergent fixture. Two Lewy Body
 # Dementia clones give a second, small token group, which is what the
 # similarity_max_token_df override drops the dominant token against: at df 4
-# the alzheimers token (27) leaves discovery while the lewy token (3) survives.
+# both alzheimers tokens leave discovery while the lewy token (3) survives.
 # Both roots enable mart_trial_similarity_reference (the unbounded pre-2026-10
 # self-join, var-gated because it is the 28 GB run at registry scale) as the
 # equivalence oracle.
@@ -590,6 +592,7 @@ def _similarity_adrd_run() -> FixtureRun:
         fixture_dir="bronze_snapshot",
         added=(
             *_filler_studies(20, 24),  # NCT00000020..NCT00000043, Alzheimer Disease
+            *_filler_studies(46, 28),  # NCT00000046..NCT00000073, past the Lewy clones
             AddedStudy(
                 nct_id="NCT00000044",
                 clone_of="NCT00000006",
@@ -606,14 +609,26 @@ def _similarity_adrd_run() -> FixtureRun:
     )
 
 
+def _similarity_nsclc_run() -> FixtureRun:
+    # The base page's ten studies share no (condition group, phase) token, so
+    # NSCLC has no similarity rows without these two PHASE3 clones of NCT00000001.
+    return replace(
+        _base_nsclc_run(),
+        added=tuple(
+            AddedStudy(nct_id=nct_id, clone_of="NCT00000001", overall_status="COMPLETED")
+            for nct_id in ("NCT00000090", "NCT00000091")
+        ),
+    )
+
+
 @pytest.fixture(scope="session")
 def similarity_equivalence_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """Default candidate cap; the reference self-join built alongside."""
     return _build_fixture_root(
         tmp_path_factory,
         "similarity_equivalence",
-        [_similarity_adrd_run(), _base_nsclc_run()],
-        dbt_vars={"build_similarity_reference": True},
+        [_similarity_adrd_run(), _similarity_nsclc_run()],
+        dbt_vars={"build_similarity_reference": True, "similarity_reference_top_n": 1000},
     )
 
 
@@ -625,6 +640,18 @@ def similarity_cap_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
         "similarity_cap",
         [_similarity_adrd_run(), _base_nsclc_run()],
         dbt_vars={"build_similarity_reference": True, "similarity_max_token_df": 4},
+    )
+
+
+@pytest.fixture(scope="session")
+def similarity_phase_split_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """similarity_max_token_df: 27 sits between the alzheimers PHASE2 token
+    (df 26) and the PHASE3 token (df 28)."""
+    return _build_fixture_root(
+        tmp_path_factory,
+        "similarity_phase_split",
+        [_similarity_adrd_run(), _base_nsclc_run()],
+        dbt_vars={"similarity_max_token_df": 27},
     )
 
 
