@@ -13,14 +13,18 @@
 `GET https://clinicaltrials.gov/api/v2/studies`
 
 ## Parameters (all config-driven, none hard-coded)
-Defined in `config/project_config.yml` and verified against the live API
-on 2026-07-24 (HTTP 200, `totalCount` 2,592 for the MVP query):
+Defined authoritatively in `config/profiles/adrd.yml` (referenced by `config/project_config.yml`
+via `default_profile: adrd`) and verified against the live API:
 
-| Parameter | Value (MVP) | Notes |
+| Parameter | Value (ADRD profile) | Notes |
 |---|---|---|
 | `query.cond` | `Alzheimer Disease` | condition query |
-| `filter.overallStatus` | `RECRUITING\|ACTIVE_NOT_RECRUITING\|NOT_YET_RECRUITING\|COMPLETED` | pipe-joined list |
+| `filter.overallStatus` | `RECRUITING\|ACTIVE_NOT_RECRUITING\|NOT_YET_RECRUITING\|COMPLETED\|TERMINATED\|WITHDRAWN\|SUSPENDED\|ENROLLING_BY_INVITATION` | pipe-joined list (8 authoritative statuses) |
 | `filter.advanced` | `AREA[StudyType]INTERVENTIONAL` | Essie expression |
+
+Total tracked/historical trials across the landscape include completed and stopped
+statuses (`TERMINATED`, `WITHDRAWN`, `SUSPENDED`, `COMPLETED`, `ENROLLING_BY_INVITATION`),
+whereas active recruiting metrics strictly require overall status `RECRUITING`.
 | `format` | `json` | |
 | `pageSize` | `100` | |
 | `countTotal` | `true` | enables reconciliation vs `totalCount` |

@@ -8,12 +8,15 @@ ProfileRegistry auto-discovers all *.yml files in config/profiles/ and
 exposes them by profile_id. The shared silver/gold/duckdb paths are loaded
 once from config/shared_paths.yml and injected into every profile's config.
 
-Backward compatibility
-─────────────────────
+Backward compatibility & default profile link
+────────────────────────────────────────────
 get_config() and get_taxonomy() in src/config.py and
-src/transform/normalize_conditions.py continue to work unchanged; they load
-the ADRD profile's config/taxonomy directly from the original YAML files.
-ProfileRegistry supplements — it does not replace — those singletons.
+src/transform/normalize_conditions.py continue to work unchanged.
+config/project_config.yml explicitly declares `default_profile: adrd`, making
+config/profiles/adrd.yml the authoritative single source of truth for ADRD
+query scope and parameters. When load_config() executes, it resolves query_params
+and scope from the referenced profile. ProfileRegistry supplements — it does not
+replace — those singletons.
 
 Adding a new indication
 ───────────────────────

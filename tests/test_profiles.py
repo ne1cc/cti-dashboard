@@ -387,6 +387,37 @@ def test_default_config_bronze_paths_match_the_adrd_profile() -> None:
     assert default.paths.quarantine == adrd.paths.quarantine
 
 
+def test_default_config_scope_and_query_params_match_the_adrd_profile() -> None:
+    """Guard single source of truth for ADRD scope and query parameters (Issue #87).
+
+    `config/project_config.yml` delegates scope and query_params to `config/profiles/adrd.yml`
+    via `default_profile: adrd`. Both must agree and contain all 8 authoritative statuses.
+    """
+    from src.config import load_config
+    from src.profiles import get_registry
+
+    default = load_config()
+    adrd = get_registry().get("adrd").config
+
+    assert default.api.query_params == adrd.api.query_params
+    assert default.scope == adrd.scope
+
+    expected_statuses = [
+        "RECRUITING",
+        "ACTIVE_NOT_RECRUITING",
+        "NOT_YET_RECRUITING",
+        "COMPLETED",
+        "TERMINATED",
+        "WITHDRAWN",
+        "SUSPENDED",
+        "ENROLLING_BY_INVITATION",
+    ]
+    assert default.scope["statuses"] == expected_statuses
+    assert adrd.scope["statuses"] == expected_statuses
+    assert default.api.query_params["filter.overallStatus"] == expected_statuses
+    assert adrd.api.query_params["filter.overallStatus"] == expected_statuses
+
+
 def test_dbt_bronze_source_reads_the_configured_manifests_dir() -> None:
     """dbt cannot import src.config, so _sources.yml repeats the manifests root
     as a literal string. This test is the seam that keeps the two from drifting

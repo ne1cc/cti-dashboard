@@ -126,7 +126,7 @@ erDiagram
 - **Therapeutic area:** Alzheimer's disease and related dementias (config-driven taxonomy).
 - **Geography:** United States (all raw records preserved; U.S.-only in marts).
 - **Study type:** Interventional.
-- **Statuses:** RECRUITING, ACTIVE_NOT_RECRUITING, NOT_YET_RECRUITING, COMPLETED.
+- **Statuses:** RECRUITING, ACTIVE_NOT_RECRUITING, NOT_YET_RECRUITING, COMPLETED, TERMINATED, WITHDRAWN, SUSPENDED, ENROLLING_BY_INVITATION (8 statuses defined authoritatively in `config/profiles/adrd.yml`, referenced by `config/project_config.yml`). Total tracked landscape includes stopped and completed trials, while active recruiting metrics strictly require `RECRUITING`.
 - **Phases:** EARLY_PHASE1 – PHASE4 where available.
 - **Cadence:** Weekly snapshots; history accrues from this project's own runs.
 

@@ -65,6 +65,10 @@ usable locations. Trial cards use each trial's latest-observed record across
 retained captures, with **Currently recruiting** filtering status exactly
 `RECRUITING`. The combined location audit retains historical study observations;
 its distinct-study summary does not reproduce either location card's scalar.
+Total tracked/historical trials across the landscape include all 8 ingested statuses
+(`RECRUITING`, `ACTIVE_NOT_RECRUITING`, `NOT_YET_RECRUITING`, `COMPLETED`, `TERMINATED`,
+`WITHDRAWN`, `SUSPENDED`, `ENROLLING_BY_INVITATION`), whereas active recruiting metrics
+strictly require overall status `RECRUITING`.
 
 ---
 
@@ -163,7 +167,7 @@ flowchart TB
 | Bronze is immutable | Reproducibility: any downstream layer can be rebuilt byte-identically from raw pages |
 | Snapshot-based history | The API serves only *current* records; history is constructed by retaining weekly snapshots keyed by `run_id` |
 | DuckDB + dbt locally | Zero-cost, fully tested warehouse; SQL is portable to BigQuery/Snowflake later |
-| All query parameters in YAML | `config/project_config.yml` — nothing is hard-coded in ingestion code |
+| All query parameters in YAML | Indication profiles (`config/profiles/adrd.yml`) linked via `default_profile: adrd` in `config/project_config.yml` — nothing is hard-coded in ingestion code |
 | Dashboard is read-only | Connection opened `read_only=True`; the UI can never mutate the warehouse |
 | Contacts deliberately excluded | `stg_trial_contacts` is an intentionally empty model (`where 1=0`) — a mechanical privacy guardrail |
 
@@ -315,9 +319,12 @@ Properties worth noting:
 - **Verifiable** — the manifest records the canonical `query_hash` and the API's
   `totalCount`, every silver row carries `source_json_hash` (SHA-256 of the study
   JSON), and both are later reconciled against silver and gold row counts (§12).
-- Last full pull recorded here: **26 pages, 2,592 studies** (the 2026-07-24
-  snapshot above), matching the API `totalCount` exactly. Later runs are recorded
-  with their own dates in [`docs/DEPLOY_FLY.md`](docs/DEPLOY_FLY.md).
+- **Scope & authoritative statuses** — ADRD queries 8 statuses: `RECRUITING`,
+  `ACTIVE_NOT_RECRUITING`, `NOT_YET_RECRUITING`, `COMPLETED`, `TERMINATED`, `WITHDRAWN`,
+  `SUSPENDED`, `ENROLLING_BY_INVITATION` per authoritative `config/profiles/adrd.yml`
+  (referenced by `config/project_config.yml`). Total tracked landscape includes
+  stopped/completed/suspended studies, while active recruiting metrics strictly require `RECRUITING`.
+  Historical and deployed runs are recorded with their own dates in [`docs/DEPLOY_FLY.md`](docs/DEPLOY_FLY.md).
 
 ## 7. Normalization design (silver)
 
@@ -783,8 +790,9 @@ status-transition counts (and `growth_uses_registry_proxy_flag` flips off).
 
 | File | Controls |
 |---|---|
+| `config/project_config.yml` | Central runtime configuration: API transport, paths, retention, guardrails; references `default_profile: adrd` |
 | `config/profiles/*.yml` | Indication profiles: API query, status/type filters, page size, bronze paths, taxonomy & score-weight references |
-| `config/profiles/adrd.yml` | ADRD indication profile (migrated from `project_config.yml`) |
+| `config/profiles/adrd.yml` | ADRD indication profile (authoritative single source of truth for 8-status ADRD query scope and bronze paths) |
 | `config/profiles/full_catalog.yml` | Opt-in full registry profile (`ingest_only: true`) |
 | `config/shared_paths.yml` | Shared silver, gold, and DuckDB paths across non-ingest-only profiles |
 | `config/condition_taxonomy.yml` | mapping of registry condition strings → ADRD condition groups, with confidence rules |

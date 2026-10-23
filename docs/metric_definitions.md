@@ -119,7 +119,11 @@ from drill-through refinements. A default segment audit covers sidebar scope bef
 rank/band row filters; it is not the sum of displayed overlapping segments.
 Confirmed recruiting is exactly overall status `RECRUITING`; missing/unknown and
 other statuses do not qualify. The all-status mode supports listed-trial and current
-study counts. Location status is inspectable but does not gate state counts.
+study counts. Total tracked/historical trials across the landscape include all 8
+ingested statuses (active, recruiting, completed, and stopped statuses such as
+`TERMINATED`, `WITHDRAWN`, `SUSPENDED`, and `ENROLLING_BY_INVITATION`), while
+active recruiting metrics strictly require confirmed overall status `RECRUITING`.
+Location status is inspectable but does not gate state counts.
 
 Geography uses reported U.S. country and normalized supported state under active
 `config/geography_rules.yml`. City and coordinates are displayed, not radius inputs.

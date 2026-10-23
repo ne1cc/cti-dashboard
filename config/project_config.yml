@@ -1,7 +1,12 @@
 # ============================================================
 # Clinical Trial Access & Recruitment Competition Intelligence
-# Central runtime configuration. All API query parameters live
-# here — never hard-coded in Python.
+# Central runtime configuration. API transport, paths, retention
+# and project guardrails live here.
+#
+# Query parameters and indication scope are reconciled from the
+# default indication profile (`default_profile: adrd`, see
+# config/profiles/adrd.yml), which serves as the authoritative
+# single source of truth for ADRD scope.
 #
 # Parameter syntax verified against the live ClinicalTrials.gov
 # API v2 (GET /api/v2/studies) on 2026-07-24:
@@ -25,6 +30,8 @@ project:
     Signals only — not a recruitment forecast and not clinical decision support.
   timezone: UTC
 
+default_profile: adrd
+
 api:
   base_url: https://clinicaltrials.gov/api/v2
   studies_endpoint: /studies
@@ -33,41 +40,12 @@ api:
   format: json
   page_size: 100            # API max is 1000; 100 keeps bronze pages reviewable
   count_total: true
-  # Query parameters sent verbatim (values below are joined/encoded by the client)
-  query_params:
-    query.cond: "Alzheimer Disease"
-    filter.advanced: "AREA[StudyType]INTERVENTIONAL"
-    filter.overallStatus:      # joined with "|" at request time
-      - RECRUITING
-      - ACTIVE_NOT_RECRUITING
-      - NOT_YET_RECRUITING
-      - COMPLETED
   http:
     timeout_seconds: 30
     max_retries: 5
     backoff_initial_seconds: 1
     backoff_max_seconds: 60
     retry_on_status: [429, 500, 502, 503, 504]
-
-scope:
-  therapeutic_area: "Alzheimer's disease and related dementias"
-  geography: "United States"          # analysis scope; all raw records preserved
-  study_type: INTERVENTIONAL
-  statuses:
-    - RECRUITING
-    - ACTIVE_NOT_RECRUITING
-    - NOT_YET_RECRUITING
-    - COMPLETED
-  phases:                             # normalized in silver; source may omit phase
-    - EARLY_PHASE1
-    - PHASE1
-    - PHASE2
-    - PHASE3
-    - PHASE4
-  refresh_cadence: weekly
-  history_note: >-
-    ClinicalTrials.gov returns only the current record per study. Longitudinal
-    status history is constructed by this project from repeated weekly snapshots.
 
 # bronze_* mirror config/profiles/adrd.yml: `ingest --profile default` resolves
 # to the adrd profile and writes there, while transform and the quality readers

@@ -1,6 +1,8 @@
 """Typed access to config/project_config.yml with .env overrides.
 
 All API query parameters live in YAML — never hard-coded in ingestion code.
+Indication scope and query parameters default to the authoritative profile
+referenced by `default_profile` (e.g. `config/profiles/adrd.yml`).
 """
 
 import os
@@ -99,6 +101,7 @@ class RetentionConfig(BaseModel):
 class ProjectConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
+    default_profile: str | None = None
     api: ApiConfig
     paths: PathsConfig
     ingestion: IngestionConfig
@@ -114,8 +117,34 @@ def load_config(config_path: str | Path | None = None) -> ProjectConfig:
     if not path.is_absolute():
         path = project_root() / path
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError(f"Config at {path} is not a valid YAML dictionary")
 
-    api_raw = dict(raw["api"])
+    default_profile = raw.get("default_profile")
+    if default_profile:
+        from src.profiles import PROFILES_DIR, normalize_profile_id
+
+        canonical_id = normalize_profile_id(str(default_profile))
+        profile_path = project_root() / PROFILES_DIR / f"{canonical_id}.yml"
+        if not profile_path.exists():
+            raise FileNotFoundError(
+                f"Referenced default profile '{default_profile}' not found at {profile_path}"
+            )
+        profile_raw = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
+        if (
+            not isinstance(profile_raw, dict)
+            or "api" not in profile_raw
+            or not isinstance(profile_raw.get("api"), dict)
+        ):
+            raise ValueError(f"Profile at {profile_path} is invalid or missing 'api' configuration")
+        resolved_query_params = profile_raw.get("api", {}).get("query_params", {})
+        resolved_scope = profile_raw.get("scope", {})
+    else:
+        resolved_query_params = raw.get("api", {}).get("query_params", {})
+        resolved_scope = raw.get("scope", {})
+
+    api_raw = dict(raw.get("api", {}))
+    api_raw["query_params"] = resolved_query_params
     http_raw = dict(api_raw.get("http", {}))
     if os.getenv("CTI_HTTP_TIMEOUT_SECONDS"):
         http_raw["timeout_seconds"] = float(os.environ["CTI_HTTP_TIMEOUT_SECONDS"])
@@ -123,14 +152,15 @@ def load_config(config_path: str | Path | None = None) -> ProjectConfig:
         http_raw["max_retries"] = int(os.environ["CTI_MAX_RETRIES"])
     api_raw["http"] = http_raw
 
-    paths_raw = {key: resolve_path(value) for key, value in raw["paths"].items()}
+    paths_raw = {key: resolve_path(value) for key, value in raw.get("paths", {}).items()}
 
     return ProjectConfig(
+        default_profile=default_profile,
         api=ApiConfig(**api_raw),
         paths=PathsConfig(**paths_raw),
         ingestion=IngestionConfig(**(raw.get("ingestion") or {})),
         retention=RetentionConfig.from_raw(raw.get("retention")),
-        scope=raw.get("scope", {}),
+        scope=resolved_scope,
         guardrails=raw.get("guardrails", {}),
     )
 
