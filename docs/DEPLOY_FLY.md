@@ -28,6 +28,54 @@ shape.
   and `tests/test_fly_config.py` pins that relation. The earlier 90s was set
   from a 59s *one-profile* cold run and would have force-killed a
   two-profile refresh mid-write.
+- `.github/workflows/ci.yml` — unified CI/CD workflow: gates production
+  deployment on the `lint-and-test` job passing on pushes to `main`.
+- `.github/scripts/deploy_fly.sh` — automated deployment script with pre-rollout
+  release image capture, post-deployment smoke check against `/_stcore/health`,
+  and automated rollback on rollout or smoke failure.
+
+## Automated deployment (GitHub Actions)
+
+Production deployments are automated and gated by CI in `.github/workflows/ci.yml`.
+The uncoordinated standalone `.github/workflows/fly-deploy.yml` has been removed
+so broken code can never deploy to production if tests fail.
+
+### Unified Pipeline & CI Gating
+The `deploy` job runs strictly downstream of `lint-and-test` (`needs: lint-and-test`).
+If code fails linting, code formatting, type checking, or unit test coverage gates,
+the deployment job does not execute.
+
+- **Trigger:** Gated strictly to pushes on `main` (`github.event_name == 'push' && github.ref == 'refs/heads/main'`).
+  Pull requests and manual `workflow_dispatch` invocations run the full verification
+  suite without triggering a deploy.
+- **GitHub Environment:** The deploy job runs in the GitHub environment `production`,
+  restricting `FLY_API_TOKEN` secret exposure to the deploy step. This allows
+  repository administrators to configure protection rules (such as required reviewers)
+  without impacting CI test execution.
+- **Concurrency:** Uses concurrency group `deploy-production` with `cancel-in-progress: false`.
+  This serializes production rollouts so overlapping runs cannot clobber each other
+  or deploy out of order, while ensuring an active in-flight rollout is never terminated
+  mid-run.
+
+### Deployment Script & Health Verification
+Rollouts are executed by `.github/scripts/deploy_fly.sh`:
+1. **Pre-rollout image capture:** Inspects current releases using
+   `flyctl releases --image --json -a cti-dashboard` to capture the Docker image
+   reference of the active release before deploying new code.
+2. **Rollout execution:** Runs `flyctl deploy --remote-only --app cti-dashboard`.
+3. **Smoke check:** Polls `/_stcore/health` with bounded retries (12 attempts,
+   10-second intervals, 5-second request timeout; matching the ~2-minute initial boot budget).
+   HTTP 200 signals a healthy deployment.
+
+### Automated Rollback
+If either the deployment command or the post-deployment smoke check fails:
+- The script automatically initiates a rollback by redeploying the previously captured
+  image reference: `flyctl deploy --image "$PREV_IMAGE" --app cti-dashboard`.
+- It performs a follow-up health check against `/_stcore/health` to confirm recovery.
+- Regardless of whether rollback restores service, the script **always exits with a non-zero exit code**,
+  ensuring GitHub Actions marks the workflow failed and surfaces the failure immediately.
+- If no previous image exists (e.g. first deployment), rollback is skipped and failure is
+  reported directly.
 
 ## One-time setup (you run these — they provision billed Fly resources)
 
@@ -80,7 +128,7 @@ fly launch --no-deploy
 # monthly trend series; see "What to expect" for that mechanism and number.
 fly volumes create cti_data --region iad --size 1
 
-# Deploy.
+# Deploy manually if needed.
 fly deploy
 ```
 
@@ -138,10 +186,12 @@ Remediation in PR `fix/production-volume-and-profile-scope`:
 - `entrypoint.sh` logging is non-fatal; `auto_start_machines` is on so a
   stopped machine wakes on traffic.
 
-## No secrets required
+## Secrets and CI environment
 
-ClinicalTrials.gov's API v2 is public and unauthenticated — there is
-nothing to pass via `fly secrets set`.
+- ClinicalTrials.gov's API v2 is public and unauthenticated — there is nothing
+  to pass via `fly secrets set` on the running Fly machine.
+- GitHub Actions automated deployment requires a `FLY_API_TOKEN` configured in
+  repository secrets or within the `production` GitHub Environment settings.
 
 ## What to expect
 
@@ -209,7 +259,7 @@ nothing to pass via `fly secrets set`.
   that profile), so **one retained bronze run per profile = 331.9 MB** (the whole
   bronze directory walks 332.0 MB — the 0.1 MB is per-directory rounding);
   34.9 MB of silver per additional retained snapshot across both profiles; DuckDB
-  walked at 44.6 MB for one snapshot and 63.2 MB for three — no steady walk
+  walked at 44.6 MB for one snapshot and 63.2 MB at three — no steady walk
   isolated the 2-snapshot value, so between them it follows the fit's ~9.3
   MB/snapshot; and `data/gold` at 0.0 MB at every walk with no `data/quarantine`
   directory present at all — the mart bytes live in the warehouse file, the term
