@@ -54,6 +54,12 @@ nulls it instead (pinned by
 mean is the opposite case: a one-point mean is honest, so
 `recruiting_trial_count_3m_avg` keeps its value even at a single month.
 
+### Population-normalized listings (`recruiting_trials_per_100k`)
+- **Formula:** `100000.0 * recruiting_trial_count / population`
+- **Denominator:** Static U.S. Census Bureau resident population estimates (Vintage 2024, July 1, 2024 / `POPESTIMATE2024`) joined from `ref('state_population')`. Includes all 50 states, District of Columbia, and Puerto Rico.
+- **Null handling:** Null when state resident population is missing, null, or non-positive (e.g. U.S. territories without Vintage 2024 population estimates such as Guam, American Samoa, and U.S. Virgin Islands).
+- **Interpretation & Limitations:** Normalizes monthly recruiting registry listings against general resident population to reveal geographic density without population size skew. This metric reflects public registry listing counts per capita, **neither patient access, disease prevalence, nor clinical need**.
+
 ## Reliability metrics (`mart_data_reliability`)
 | Metric | Definition |
 |---|---|

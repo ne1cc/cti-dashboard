@@ -587,6 +587,39 @@ def test_trends_growth_guard_emits_non_null_only_on_a_two_month_segment(
     )
 
 
+def test_mart_condition_geography_trends_population_normalization(
+    fixture_project_root: Path,
+) -> None:
+    """Verify state_population seed is loaded and mart_condition_geography_trends
+    calculates recruiting_trials_per_100k correctly using Vintage 2024 population."""
+    seed_rows = _rows(
+        fixture_project_root,
+        "select count(*), count(distinct state_code), min(population) "
+        "from main_seeds.state_population",
+    )
+    assert seed_rows == [(52, 52, 587618)]
+
+    rows = _rows(
+        fixture_project_root,
+        "select indication_profile_id, state_normalized, recruiting_trial_count, "
+        "population, source_vintage, estimate_date, recruiting_trials_per_100k "
+        "from main_marts.mart_condition_geography_trends "
+        "where state_normalized is not null order by indication_profile_id, state_normalized",
+    )
+    assert len(rows) > 0
+    for _profile, state, recruiting_count, pop, vintage, est_date, rate in rows:
+        if state in {"UNKNOWN", "GU", "VI", "AS", "MP"}:
+            assert pop is None
+            assert rate is None
+        else:
+            assert pop is not None and pop > 0
+            assert vintage == "Vintage 2024"
+            assert est_date == "2024-07-01"
+            assert rate is not None
+            expected_rate = (100000.0 * recruiting_count) / pop
+            assert abs(rate - expected_rate) < 1e-6
+
+
 def test_mart_feasibility_priority_queue_shape(fixture_project_root: Path) -> None:
     """Segments pinned per profile, replacing one pooled count.
 

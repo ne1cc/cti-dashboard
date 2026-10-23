@@ -64,3 +64,16 @@ ClinicalTrials.gov data is publicly available. This project stores
 unmodified raw copies, attributes the source in every deliverable, and
 adds interpretation guardrails because registry listings do not describe
 trial conduct, site performance, or patient availability.
+
+## U.S. Census Bureau Resident Population Estimates (Vintage 2024)
+
+- **Source:** U.S. Census Bureau, Population Division, Population Estimates Program (PEP).
+- **Dataset:** State Population Totals: 2020-2024 (`NST-EST2024-ALLDATA.csv`).
+- **Official URL:** `https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv`
+- **File Layout Specification:** `https://www2.census.gov/programs-surveys/popest/technical-documentation/file-layouts/2020-2024/NST-EST2024-ALLDATA.pdf`
+- **Estimate Date:** July 1, 2024 (`POPESTIMATE2024`).
+- **Vintage:** Vintage 2024.
+- **Retrieval Date:** October 2026.
+- **Source File SHA-256:** `b8b50bd345d8a5f33d5c8a28c95aeaa0a50971356f000d9b48276a65fd9022a7`.
+- **Scope & Filtering:** Filtered to individual state records (`SUMLEV = '040'`), comprising the 50 states, the District of Columbia, and Puerto Rico (52 rows). National and regional summary rows are excluded. State postal abbreviations are mapped via `config/geography_rules.yml`.
+- **Purpose:** Static interim denominator seed (`dbt_clinical_trials/seeds/state_population.csv`) for calculating per-100k resident recruiting trial listing density (`recruiting_trials_per_100k`) in `mart_condition_geography_trends`.

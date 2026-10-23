@@ -236,3 +236,51 @@ def test_phase_filter_offers_display_labels(fixture_warehouse):
     phase = next(w for w in at.sidebar.multiselect if w.label == "Phase")
     assert phase.options, "fixture should expose at least one phase"
     assert not any(option.isupper() for option in phase.options)
+
+
+def test_geography_trends_per_100k_toggle_and_table(fixture_warehouse):
+    from streamlit.testing.v1 import AppTest
+
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+
+    for profile_id in ("adrd", "oncology_nsclc"):
+        at = AppTest.from_file(
+            str(ROOT / "dashboard/pages/3_Geography_Trends.py"), default_timeout=60
+        ).run()
+        selector = next(w for w in at.sidebar.selectbox if w.key == "indication_profile_selector")
+        selector.set_value(profile_id)
+        at.run()
+        assert not at.exception, f"Geography Trends error for {profile_id}: {at.exception}"
+
+        # 1. Verify view mode radio toggle
+        radios = [r for r in at.sidebar.radio]
+        assert len(radios) >= 1
+        view_toggle = radios[0]
+        assert "Per 100k residents" in view_toggle.options
+        assert "Raw count" in view_toggle.options
+        assert view_toggle.value == "Per 100k residents"
+
+        # 2. Check top states dataframe has per-100k and raw count columns
+        frames = at.dataframe
+        assert len(frames) >= 1
+        df = frames[0].value
+        assert "recruiting_trials_per_100k" in df.columns
+        assert "recruiting_trial_count" in df.columns
+        assert "population" in df.columns
+
+        # 3. Check caption mentions Census Vintage 2024
+        captions = [c.value for c in at.caption]
+        assert any("Vintage 2024" in c and "100,000 residents" in c for c in captions)
+
+        # 4. Switch to Raw count toggle and verify re-run
+        view_toggle.set_value("Raw count")
+        at.run()
+        assert not at.exception, (
+            f"Geography Trends error on Raw count for {profile_id}: {at.exception}"
+        )
+        frames_raw = at.dataframe
+        assert len(frames_raw) >= 1
+        df_raw = frames_raw[0].value
+        assert "recruiting_trials_per_100k" in df_raw.columns
+        assert "recruiting_trial_count" in df_raw.columns

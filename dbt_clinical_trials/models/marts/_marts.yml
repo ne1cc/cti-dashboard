@@ -530,6 +530,18 @@ models:
         data_type: BIGINT
       - name: recruiting_growth_3m
         data_type: DOUBLE
+      - name: population
+        data_type: BIGINT
+        description: Deliberately fixed Census resident population estimate for the state (Vintage 2024).
+      - name: source_vintage
+        data_type: VARCHAR
+        description: Denominator vintage identifier ('Vintage 2024').
+      - name: estimate_date
+        data_type: VARCHAR
+        description: Effective date of resident population estimate ('2024-07-01').
+      - name: recruiting_trials_per_100k
+        data_type: DOUBLE
+        description: Recruiting trial listings per 100,000 residents using static Census denominator. Null if population is missing or non-positive.
 
   - name: mart_data_reliability
     description: >

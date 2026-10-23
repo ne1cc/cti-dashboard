@@ -1,0 +1,31 @@
+version: 2
+
+seeds:
+  - name: state_population
+    description: >
+      Deliberately fixed Census resident population estimates (Vintage 2024,
+      July 1, 2024 / POPESTIMATE2024) used as a static interim denominator for
+      per-100k geographic normalization. Covers all 50 states, District of
+      Columbia, and Puerto Rico; excludes national and regional aggregates.
+    columns:
+      - name: state_code
+        description: Two-letter USPS postal abbreviation for the state or territory.
+        tests:
+          - unique
+          - not_null
+      - name: state_name
+        description: Full name of the state or territory as reported by the U.S. Census Bureau.
+        tests:
+          - not_null
+      - name: population
+        description: Resident population estimate as of July 1, 2024 (POPESTIMATE2024).
+        tests:
+          - not_null
+      - name: source_vintage
+        description: U.S. Census Bureau population estimates vintage (e.g., 'Vintage 2024').
+        tests:
+          - not_null
+      - name: estimate_date
+        description: Effective date of the resident population estimate ('2024-07-01').
+        tests:
+          - not_null

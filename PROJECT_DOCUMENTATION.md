@@ -429,8 +429,9 @@ flowchart LR
 Seeds (version-controlled mapping tables, `dbt_clinical_trials/seeds/`):
 `status_mapping` (status → is_active / is_recruiting flags), `phase_mapping`
 (registry phase → order), `feasibility_score_weights` (the feasibility score's
-weight vector — see §10) and `similarity_score_weights` (the trial-similarity
-score's weight vector).
+weight vector — see §10), `similarity_score_weights` (the trial-similarity
+score's weight vector), and `state_population` (static U.S. Census Bureau
+Vintage 2024 resident population estimates for per-100k geographic normalization).
 
 Project macros (`dbt_clinical_trials/macros/`): `generate_surrogate_key` (MD5 of
 concatenated inputs), `normalize_text`, `parse_partial_date`, `parse_age_years`,
@@ -608,7 +609,7 @@ flowchart TB
     APP["app.py — Overview<br/>KPIs + top-of-queue preview"]
     P1["1 · Priority Queue<br/>ranked segments, score components<br/>stacked bar, proxy warning"]
     P2["2 · Competition Landscape<br/>density vs. sponsor-HHI scatter"]
-    P3["3 · Geography Trends<br/>US choropleth + monthly trend"]
+    P3["3 · Geography Trends<br/>US choropleth (per-100k & raw) + monthly trend"]
     P4["4 · Site Overlap<br/>multi-trial facilities table"]
     P5["5 · Sponsor Landscape<br/>top lead sponsors by listings"]
     P6["6 · Data Reliability<br/>run health + scenario explorer"]

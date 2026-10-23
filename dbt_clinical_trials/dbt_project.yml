@@ -53,3 +53,10 @@ seeds:
     feasibility_score_weights:
       +column_types:
         weight: double
+    state_population:
+      +column_types:
+        state_code: varchar
+        state_name: varchar
+        population: bigint
+        source_vintage: varchar
+        estimate_date: varchar

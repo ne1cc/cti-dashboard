@@ -251,6 +251,11 @@ rules: trial counts are always `COUNT(DISTINCT nct_id)`; site counts use the doc
 facility grain and are never presented as investigator capacity; only complete
 (`success`) snapshots feed metrics.
 
+State geography trends provide both raw recruiting trial counts and population-normalized
+listings per 100,000 residents (`recruiting_trials_per_100k`) using a static U.S. Census Bureau
+Vintage 2024 denominator. These reflect public registry listings per resident, not clinical
+need or patient access.
+
 ## 18. Feasibility score methodology
 
 Weighted min-max-normalized components (weights in `config/score_weights.yml` and a
