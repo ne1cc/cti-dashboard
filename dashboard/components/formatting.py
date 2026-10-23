@@ -7,6 +7,7 @@ pipeline learns to map is labelled here without a second edit.
 from __future__ import annotations
 
 import csv
+from datetime import date, datetime
 from functools import cache
 from pathlib import Path
 
@@ -43,7 +44,7 @@ def format_band(band: object) -> str:
     return BAND_LABELS.get(band, band)
 
 
-def format_snapshot_date(value: object) -> str:
+def format_snapshot_date(value: str | pd.Timestamp | datetime | date | None) -> str:
     """Calendar date of a snapshot, e.g. ``"Oct 5, 2026"``."""
     if value is None or pd.isna(value):
         return "not yet captured"

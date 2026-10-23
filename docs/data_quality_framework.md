@@ -60,6 +60,13 @@ repeated here). Drift produces a report
 with added/removed paths; the baseline changes only via explicit
 `--update-schema-baseline`. Drift is surfaced, never auto-accepted.
 
+## 6. Continuous integration quality contract (`.github/workflows/ci.yml`)
+CI enforces automated verification on every push and pull request before deployment:
+- **Linting & Formatting**: `ruff check` and `ruff format --check` across `src`, `tests`, and `dashboard`.
+- **Strict Typing**: Strict `mypy` type check across `src` and `dashboard` with zero errors.
+- **Coverage Gate**: Combined test coverage across `src` and `dashboard` enforced at >= 71% (`--cov=src --cov=dashboard --cov-report=term-missing --cov-fail-under=71`).
+- **Independent dbt CI Execution**: In addition to fixture tests in pytest, CI prepares a multi-profile warehouse fixture under `RUNNER_TEMP` via `python -m tests.fixture_warehouse --prepare-only` and runs independent `dbt parse` and `dbt build` steps with isolated target and log directories. Execution results are published to the job step summary, and failure artifacts are captured automatically.
+
 ## Reporting
 `make quality-report` → `reports/data_quality_report.md`: run reliability
 table (from `mart_data_reliability`), reconciliation results, drift

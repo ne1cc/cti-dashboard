@@ -1,6 +1,7 @@
 """Command-line entry point: python -m src.cli <command>."""
 
 import argparse
+from pathlib import Path
 
 from src.profiles import IndicationProfile, get_registry, normalize_profile_id
 from src.utils.logging import setup_logging
@@ -322,7 +323,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "init-data-dirs":
         from src.utils.paths import ensure_dir
 
-        dirs: set = set()
+        dirs: set[Path] = set()
         for indication_profile in get_registry().all():
             p = indication_profile.config.paths
             dirs.update(
