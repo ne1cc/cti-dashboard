@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterable, Sequence
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import streamlit as st
@@ -32,7 +34,7 @@ PRIORITY_DERIVED_RULES = (
 )
 
 
-def active_rules(profile_id: str) -> dict:
+def active_rules(profile_id: str) -> dict[str, Any]:
     """Identify the active configuration; do not claim historical rule identity."""
     root = project_root()
     profile = yaml.safe_load((root / f"config/profiles/{profile_id}.yml").read_text())
@@ -69,15 +71,15 @@ def active_rules(profile_id: str) -> dict:
 
 
 def build_display_audit(
-    profile_id,
-    observations,
-    filters,
+    profile_id: str,
+    observations: pd.DataFrame,
+    filters: dict[str, Any],
     *,
-    metric="competition",
-    count_status="recruiting",
-    context=None,
-    update_threshold_days=180,
-):
+    metric: str = "competition",
+    count_status: str = "recruiting",
+    context: dict[str, Any] | None = None,
+    update_threshold_days: int = 180,
+) -> dict[str, Any]:
     ids = observations.snapshot_id.unique().tolist() if not observations.empty else []
     if "predecessor_snapshot_id" in observations.columns:
         ids = sorted(set(ids) | set(observations.predecessor_snapshot_id.dropna()))
@@ -113,20 +115,20 @@ def build_display_audit(
 
 
 def render_metric_audit(
-    profile_id,
+    profile_id: str,
     *,
-    filters=None,
-    metric="competition",
-    observation_metric=None,
-    segments=None,
-    sponsors=None,
-    facilities=None,
-    months=None,
-    states=None,
-    context=None,
-    key="metric",
-    label="Data coverage and caveats",
-):
+    filters: dict[str, Any] | None = None,
+    metric: str = "competition",
+    observation_metric: str | None = None,
+    segments: pd.DataFrame | None = None,
+    sponsors: Sequence[str] | None = None,
+    facilities: Sequence[Sequence[Any]] | None = None,
+    months: Iterable[Any] | None = None,
+    states: Sequence[str] | None = None,
+    context: dict[str, Any] | None = None,
+    key: str = "metric",
+    label: str = "Data coverage and caveats",
+) -> None:
     """Audit whole filtered scope or a displayed row, with explicit status/period."""
     with st.expander(label):
         st.caption(
@@ -143,7 +145,7 @@ def render_metric_audit(
                 ["condition_group", "state_normalized", "phase_normalized"]
             ].drop_duplicates()
             options = [tuple(row) for row in rows.itertuples(index=False, name=None)]
-            chosen = st.selectbox(
+            chosen_segment = st.selectbox(
                 "Audit segment",
                 [None, *options],
                 format_func=lambda row: (
@@ -151,17 +153,19 @@ def render_metric_audit(
                 ),
                 key=f"{key}_{profile_id}_segment",
             )
-            if chosen:
+            if chosen_segment:
                 selected_filters.update(
-                    conditions=[chosen[0]], states=[chosen[1]], phases=[chosen[2]]
+                    conditions=[chosen_segment[0]],
+                    states=[chosen_segment[1]],
+                    phases=[chosen_segment[2]],
                 )
             display_context["displayed_segments"] = options
             values = segments
-            if chosen:
+            if chosen_segment:
                 values = segments[
-                    (segments.condition_group == chosen[0])
-                    & (segments.state_normalized == chosen[1])
-                    & (segments.phase_normalized == chosen[2])
+                    (segments.condition_group == chosen_segment[0])
+                    & (segments.state_normalized == chosen_segment[1])
+                    & (segments.phase_normalized == chosen_segment[2])
                 ]
             display_context["displayed_metric_values"] = values.rename(
                 columns=lambda name: name.replace(
@@ -178,7 +182,7 @@ def render_metric_audit(
             if sponsor:
                 selected_filters["sponsors"] = [sponsor]
         if facilities is not None:
-            chosen = st.selectbox(
+            chosen_facility = st.selectbox(
                 "Audit facility",
                 [None, *facilities],
                 format_func=lambda row: (
@@ -186,7 +190,7 @@ def render_metric_audit(
                 ),
                 key=f"{key}_{profile_id}_facility",
             )
-            selected_filters["facilities"] = [chosen] if chosen else facilities
+            selected_filters["facilities"] = [chosen_facility] if chosen_facility else facilities
             display_context["empty_facility_selection"] = not facilities
         if states is not None:
             selected_filters["states"] = st.multiselect(
@@ -248,7 +252,7 @@ def render_metric_audit(
             periods = sorted(
                 {str(pd.Timestamp(month).to_period("M")) for month in months if pd.notna(month)}
             )
-            chosen = st.selectbox(
+            chosen_month = st.selectbox(
                 "Audit displayed month",
                 ["All displayed months", *periods],
                 key=f"{key}_{profile_id}_month",
@@ -258,7 +262,7 @@ def render_metric_audit(
                 ["Monthly counts", "Three-month growth inputs"],
                 key=f"{key}_{profile_id}_history_scope",
             )
-            scoped = periods if chosen == "All displayed months" else [chosen]
+            scoped = periods if chosen_month == "All displayed months" else [chosen_month]
             if scope == "Three-month growth inputs":
                 scoped = sorted(
                     {

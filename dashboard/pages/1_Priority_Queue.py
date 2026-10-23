@@ -175,7 +175,9 @@ st.download_button(
     "including the interpretation note on every row.",
 )
 
-selected_rows = queue_event.selection.rows if queue_event.selection else []
+selected_rows = (
+    queue_event.get("selection", {}).get("rows", []) if isinstance(queue_event, dict) else []
+)
 if selected_rows:
     segment = filtered.iloc[selected_rows[0]]
     st.subheader(
