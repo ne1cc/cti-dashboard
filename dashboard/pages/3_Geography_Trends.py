@@ -17,16 +17,17 @@ render_page_guide("geography_trends", profile_id)
 trends = data.condition_geography_trends(profile_id)
 
 condition_options = sorted(trends["condition_group"].dropna().unique())
-default_index = (
-    condition_options.index("alzheimers_disease")
-    if "alzheimers_disease" in condition_options
-    else 0
-)
+if not condition_options:
+    st.info("No condition group records available for this profile.")
+    render_metric_audit(profile_id, metric="latest_study", key="geography")
+    guarded_footer()
+    st.stop()
+
 condition = st.sidebar.selectbox(
     "Condition group",
     condition_options,
-    index=default_index,
-    format_func=format_condition_group,
+    index=0,
+    format_func=lambda g: format_condition_group(g, profile_id),
     help="Select diagnostic category to view state-level distribution and monthly trends.",
 )
 scoped = trends[trends["condition_group"] == condition]
@@ -34,7 +35,7 @@ scoped = trends[trends["condition_group"] == condition]
 latest_month = scoped["activity_month"].max()
 latest = scoped[scoped["activity_month"] == latest_month]
 
-st.subheader(f"Recruiting listings by state — {format_condition_group(condition)}")
+st.subheader(f"Recruiting listings by state — {format_condition_group(condition, profile_id)}")
 fig = px.choropleth(
     latest,
     locations="state_normalized",
@@ -113,8 +114,7 @@ render_metric_audit(
             "Posting proxy requires first-post month equal to snapshot month. "
             "Growth = (current monthly recruiting count - earliest recruiting count "
             "in the inclusive preceding three-calendar-month range)/earliest count; "
-            "null with fewer than two months or zero baseline. State sums may repeat "
-            "studies. This panel audits window counts; deltas remain warehouse calculations."
+            "empty history yields proxy flag."
         )
     },
     key="geography",

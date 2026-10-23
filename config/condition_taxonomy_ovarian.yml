@@ -1,9 +1,11 @@
 version: 1
 default:
   condition_group: other_ovarian_conditions
+  display_name: Other Ovarian Conditions
   dementia_relevance: false
 groups:
 - condition_group: ovarian_cancer_subtype
+  display_name: Ovarian Cancer Subtypes
   dementia_relevance: false
   exact:
   - ovarian clear cell carcinoma
@@ -12,6 +14,7 @@ groups:
   - ovarian clear cell
   - ovarian serous
 - condition_group: ovarian_cancer
+  display_name: Ovarian Cancer
   dementia_relevance: false
   exact:
   - ovarian cancer

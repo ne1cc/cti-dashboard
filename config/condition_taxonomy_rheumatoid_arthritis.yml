@@ -1,9 +1,11 @@
 version: 1
 default:
   condition_group: other_arthritis_conditions
+  display_name: Other Arthritis Conditions
   dementia_relevance: false
 groups:
 - condition_group: rheumatoid_arthritis
+  display_name: Rheumatoid Arthritis
   dementia_relevance: false
   exact:
   - rheumatoid arthritis

@@ -1,9 +1,11 @@
 version: 1
 default:
   condition_group: other_heart_conditions
+  display_name: Other Heart Conditions
   dementia_relevance: false
 groups:
 - condition_group: heart_failure_reduced_ef
+  display_name: Heart Failure with Reduced Ejection Fraction (HFrEF)
   dementia_relevance: false
   exact:
   - heart failure with reduced ejection fraction
@@ -11,6 +13,7 @@ groups:
   - heart failure with reduced ejection fraction
   - hfref
 - condition_group: heart_failure_preserved_ef
+  display_name: Heart Failure with Preserved Ejection Fraction (HFpEF)
   dementia_relevance: false
   exact:
   - heart failure with preserved ejection fraction
@@ -18,6 +21,7 @@ groups:
   - heart failure with preserved ejection fraction
   - hfpef
 - condition_group: heart_failure
+  display_name: Heart Failure
   dementia_relevance: false
   exact:
   - heart failure

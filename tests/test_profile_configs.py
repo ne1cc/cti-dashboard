@@ -170,3 +170,17 @@ def test_nsclc_query_targets_nsclc(registry: ProfileRegistry) -> None:
     profile = registry.get("oncology_nsclc")
     assert profile.config.api.query_params["query.cond"] == "Non-Small Cell Lung Cancer"
     assert profile.config.api.query_params["filter.advanced"] == "AREA[StudyType]INTERVENTIONAL"
+
+
+def test_all_shipped_profiles_have_display_labels_in_taxonomy(registry: ProfileRegistry) -> None:
+    for profile in registry.refreshable():
+        tax = profile.taxonomy
+        assert tax is not None, f"Profile {profile.profile_id} missing taxonomy"
+        assert tax.default_display_name is not None, (
+            f"Profile {profile.profile_id} default group missing display_name"
+        )
+        for group in tax.groups:
+            assert group.display_name is not None, (
+                f"Profile {profile.profile_id} group {group.condition_group} missing display_name"
+            )
+            assert group.label == group.display_name

@@ -101,7 +101,10 @@ def test_schema_helpers_detect_presence_and_absence(temp_duckdb_legacy_schema: P
 def test_trial_explorer_legacy_schema_omits_indication_column(temp_duckdb_legacy_schema: Path):
     from components import data
 
-    df = data.trial_explorer()
+    with pytest.raises(TypeError):
+        data.trial_explorer()
+
+    df = data.trial_explorer("adrd")
     assert isinstance(df, pd.DataFrame)
     assert not df.empty
     assert "nct_id" in df.columns
@@ -119,7 +122,10 @@ def test_get_indication_profiles_legacy_schema_returns_empty(temp_duckdb_legacy_
 def test_trial_similarity_legacy_schema_returns_empty_dataframe(temp_duckdb_legacy_schema: Path):
     from components import data
 
-    df = data.trial_similarity("NCT00000001")
+    with pytest.raises(TypeError):
+        data.trial_similarity("NCT00000001")
+
+    df = data.trial_similarity("adrd", "NCT00000001")
     assert isinstance(df, pd.DataFrame)
     assert df.empty
 
@@ -334,7 +340,7 @@ def test_get_indication_profiles_modern_schema_resolves_display_names(
 def test_trial_similarity_modern_schema_returns_matches(temp_duckdb_modern_schema: Path):
     from components import data
 
-    df = data.trial_similarity("NCT00000001")
+    df = data.trial_similarity("adrd", "NCT00000001")
     assert not df.empty
     assert len(df) == 1
     assert df.iloc[0]["nct_id_b"] == "NCT00000002"
@@ -354,16 +360,29 @@ def test_trial_similarity_page_smoke_modern_schema(temp_duckdb_modern_schema: Pa
 def test_guidance_format_condition_group():
     from components.guidance import format_condition_group
 
-    assert format_condition_group("alzheimers_disease") == "Alzheimer's Disease"
-    assert format_condition_group("mild_cognitive_impairment") == "Mild Cognitive Impairment (MCI)"
-    assert format_condition_group("frontotemporal_dementia") == "Frontotemporal Dementia (FTD)"
-    assert format_condition_group("lewy_body_dementia") == "Lewy Body Dementia (LBD)"
-    assert format_condition_group("vascular_dementia") == "Vascular Dementia (VaD)"
-    assert format_condition_group("custom_neuro_group") == "Custom Neuro Group"
+    assert format_condition_group("alzheimers_disease", "adrd") == "Alzheimer's Disease"
+    assert format_condition_group("mild_cognitive_impairment", "adrd") == (
+        "Mild Cognitive Impairment (MCI)"
+    )
+    assert format_condition_group("frontotemporal_dementia", "adrd") == (
+        "Frontotemporal Dementia (FTD)"
+    )
+    assert format_condition_group("lewy_body_dementia", "adrd") == "Lewy Body Dementia (LBD)"
+    assert format_condition_group("vascular_dementia", "adrd") == "Vascular Dementia (VaD)"
+    assert format_condition_group("custom_neuro_group", "adrd") == "Custom Neuro Group"
+    assert format_condition_group("nsclc_adenocarcinoma", "oncology_nsclc") == (
+        "NSCLC Adenocarcinoma"
+    )
+    assert format_condition_group("nsclc_biomarker_targeted", "oncology_nsclc") == (
+        "Biomarker-Targeted NSCLC"
+    )
+    assert format_condition_group("heart_failure_reduced_ef", "heart_failure") == (
+        "Heart Failure with Reduced Ejection Fraction (HFrEF)"
+    )
 
 
-def test_guidance_all_pages_have_playbooks():
-    from components.guidance import PAGE_PLAYBOOKS
+def test_guidance_all_pages_have_guidance():
+    from components.guidance import PAGE_GUIDANCE
 
     expected_keys = {
         "overview",
@@ -376,17 +395,15 @@ def test_guidance_all_pages_have_playbooks():
         "trial_explorer",
         "trial_similarity",
     }
-    assert set(PAGE_PLAYBOOKS.keys()) == expected_keys
-    for _key, playbook in PAGE_PLAYBOOKS.items():
-        assert "title" in playbook
-        assert "what_it_shows" in playbook
-        assert "how_to_analyze" in playbook
-        assert "playbook" in playbook
-        assert len(playbook["playbook"]) >= 3
-        assert "adrd_context" in playbook
+    assert set(PAGE_GUIDANCE.keys()) == expected_keys
+    for _key, guide in PAGE_GUIDANCE.items():
+        assert "title" in guide
+        assert "what" in guide
+        assert "why" in guide
+        assert "how_to_verify" in guide
 
 
-def test_page_guide_shows_adrd_nuances_only_for_adrd():
+def test_page_guide_renders_neutral_guidance_across_profiles():
     from streamlit.testing.v1 import AppTest
 
     def page(profile_id):
@@ -394,14 +411,16 @@ def test_page_guide_shows_adrd_nuances_only_for_adrd():
 
         render_page_guide("overview", profile_id)
 
-    for profile_id, expected in (("adrd", True), ("oncology_nsclc", False)):
+    for profile_id in ("adrd", "oncology_nsclc"):
         at = AppTest.from_function(page, args=(profile_id,)).run()
         assert not at.exception, at.exception
-        shown = any("ADRD clinical feasibility nuances" in m.value for m in at.markdown)
-        assert shown is expected, profile_id
+        assert not any("ADRD clinical feasibility nuances" in m.value for m in at.markdown)
+        assert any("What This Data Shows:" in m.value for m in at.markdown)
+        assert any("How It Is Computed:" in m.value for m in at.markdown)
+        assert any("How to Verify & Caveats:" in m.value for m in at.markdown)
 
 
 def test_guidance_copy_does_not_overclaim():
-    from components.guidance import PAGE_PLAYBOOKS
+    from components.guidance import PAGE_GUIDANCE
 
-    assert "guesswork" not in str(PAGE_PLAYBOOKS).lower()
+    assert "guesswork" not in str(PAGE_GUIDANCE).lower()

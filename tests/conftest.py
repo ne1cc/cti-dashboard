@@ -308,7 +308,6 @@ def _build_fixture_root(
         for cfg_name in (
             "geography_rules.yml",
             "score_weights.yml",
-            "roi_assumptions.yml",
             "shared_paths.yml",
         ):
             shutil.copy(REPO_ROOT / "config" / cfg_name, root / "config" / cfg_name)

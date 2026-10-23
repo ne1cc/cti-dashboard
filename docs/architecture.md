@@ -124,8 +124,8 @@ collection. This is documented, not hidden.
 ## 5. Reproducibility and operations
 
 - `Makefile` is the single entry point (`make pipeline` = orchestrate → prune-data → dbt-run → dbt-test → quality-report).
-- All query parameters, taxonomy, geography rules, score weights, and scenario
-  assumptions live in `config/*.yml` under version control.
+- All query parameters, taxonomy, geography rules, and score weights
+  live in `config/*.yml` under version control.
 - `.env` carries only local paths/log levels — no secrets exist in this project.
 - Logging via loguru with run-context fields; no sensitive data is ever logged
   (the source is public, but site contacts/investigators are still excluded from

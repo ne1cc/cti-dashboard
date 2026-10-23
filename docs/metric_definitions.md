@@ -87,11 +87,6 @@ Purpose: **rank segments for human feasibility review.** Not a forecast.
    same inputs always yield the same sentence. Every row carries an
    `interpretation_note`.
 
-## Scenario values (`src/analysis/roi_scenarios.py`)
-Pure products of user-editable assumptions in `config/roi_assumptions.yml`
-(reviews_per_cycle × deprioritized share × unit cost, etc.). Outputs embed
-the disclaimer; **no observed outcomes are ever used or implied**.
-
 ## Audit definitions and scope
 
 **Data coverage and caveats** appears on Overview, Priority Queue, Competition

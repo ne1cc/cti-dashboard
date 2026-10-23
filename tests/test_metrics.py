@@ -1,4 +1,4 @@
-"""Metric-definition tests: config consistency, score math, ROI arithmetic."""
+"""Metric-definition tests: config consistency, score math."""
 
 import csv
 from pathlib import Path
@@ -7,18 +7,10 @@ import duckdb
 import pytest
 import yaml
 
-from src.analysis.roi_scenarios import (
-    RoiConfig,
-    compute_scenarios,
-    load_roi_config,
-    render_markdown,
-)
-
 ROOT = Path(__file__).resolve().parents[1]
 SCORE_WEIGHTS_YML = ROOT / "config" / "score_weights.yml"
 SEED_CSV = ROOT / "dbt_clinical_trials" / "seeds" / "feasibility_score_weights.csv"
 DBT_PROJECT_YML = ROOT / "dbt_clinical_trials" / "dbt_project.yml"
-ROI_YML = ROOT / "config" / "roi_assumptions.yml"
 
 
 @pytest.fixture(scope="module")
@@ -112,50 +104,3 @@ def test_sponsor_hhi_math():
     assert abs(hhi - 0.375) < 1e-9
     solo = duckdb.sql("select power(3.0 / 3.0, 2)").fetchone()[0]
     assert solo == 1.0
-
-
-class TestRoiScenarios:
-    def test_load_and_compute(self):
-        config = load_roi_config(ROI_YML)
-        results = compute_scenarios(config)
-        assert {r.scenario_key for r in results} == set(config.scenarios)
-        for r in results:
-            assert r.illustrative_total_value == pytest.approx(
-                r.illustrative_review_effort_value + r.illustrative_activation_value
-            )
-            assert "not" in r.disclaimer.lower()
-
-    def test_arithmetic_is_pure_assumption_product(self):
-        config = RoiConfig.model_validate(
-            {
-                "disclaimer": "Illustrative only — not observed outcomes.",
-                "currency": "USD",
-                "assumptions": {
-                    "cost_per_feasibility_review": 1000,
-                    "deprioritized_review_share": 0.5,
-                    "cost_per_underperforming_site_activation": 10000,
-                    "site_activations_per_cycle": 4,
-                    "activation_decisions_influenced_share": 0.25,
-                },
-                "scenarios": {
-                    "base": {
-                        "label": "Base",
-                        "review_multiplier": 1.0,
-                        "activation_multiplier": 1.0,
-                    }
-                },
-                "reviews_per_cycle": 10,
-            }
-        )
-        (result,) = compute_scenarios(config)
-        assert result.reviews_deprioritized == 5.0
-        assert result.illustrative_review_effort_value == 5000.0
-        assert result.activations_influenced == 1.0
-        assert result.illustrative_activation_value == 10000.0
-        assert result.illustrative_total_value == 15000.0
-
-    def test_markdown_carries_disclaimer(self):
-        config = load_roi_config(ROI_YML)
-        markdown = render_markdown(compute_scenarios(config))
-        assert "Illustrative" in markdown
-        assert "not observed outcomes" in markdown

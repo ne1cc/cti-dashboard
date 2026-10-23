@@ -14,6 +14,7 @@ def segment_filters(
     condition_col: str = "condition_group",
     state_col: str = "state_normalized",
     phase_col: str = "phase_normalized",
+    profile_id: str | None = None,
 ) -> pd.DataFrame:
     """Render Streamlit sidebar multiselect filters over segment DataFrame columns.
 
@@ -29,6 +30,7 @@ def segment_filters(
             "state_normalized".
         phase_col: Column name representing normalized trial phases. Defaults to
             "phase_normalized".
+        profile_id: Active indication profile ID used to format condition labels.
 
     Returns:
         pd.DataFrame: Filtered subset of the input DataFrame matching all active
@@ -43,8 +45,8 @@ def segment_filters(
         selected = st.sidebar.multiselect(
             "Condition group",
             options,
-            format_func=format_condition_group,
-            help="Filter by deterministically mapped ADRD diagnostic categories.",
+            format_func=lambda g: format_condition_group(g, profile_id),
+            help="Filter by deterministically mapped diagnostic condition categories.",
         )
         selections["conditions"] = list(selected)
         if selected:
