@@ -52,48 +52,19 @@ Documentation snapshot: built and verified against the live warehouse of **2026-
 | Automated tests | dbt data tests + pytest suite: the counts, their date and the commands that regenerate them are in §14 (one place, on purpose — a second copy is the drift this document has already been burned by) |
 | dbt resources | 32 models (8 staging views, 8 intermediate views, 16 mart tables) + 4 seeds + 4 analyses (same 2026-09-07 UTC parse) |
 
-**Live warehouse figures (single snapshot, 2026-07-24):**
+Dashboard values depend on the selected indication profile and captured date;
+see [metric definitions](docs/metric_definitions.md) for grains and limitations.
+The Overview's **Listed facilities** card counts best-effort normalized
+name + city + state identities at that profile's latest captured snapshot date.
+Retaining earlier snapshots does not increase this count; a latest capture with
+no attributable facilities yields zero. This is a count of listing identities,
+not globally unique institutions or site capacity.
 
-| Measure | Value |
-|---|---|
-| Versioned trial records (`dim_trial`) | 2,592 |
-| Currently recruiting | 419 |
-| Not yet recruiting | 157 |
-| Active, not recruiting | 139 |
-| Completed | 1,877 |
-| U.S. states/territories with listed sites | 50 |
-| Distinct listed facilities (best-effort normalized) | 6,241 |
-| Facilities listed on >1 recruiting trial | 301 |
-| Trial × facility × snapshot rows | 12,244 |
-| Lead sponsors | 1,743 |
-| Distinct condition terms | 1,173 |
-| Ranked condition × state × phase segments | 449 |
-| Segments in `review`/`priority_review` bands | 75 |
-
-Trial status mix in the current snapshot:
-
-```mermaid
-pie showData title Trials by current overall status (n=2,592)
-    "COMPLETED" : 1877
-    "RECRUITING" : 419
-    "NOT_YET_RECRUITING" : 157
-    "ACTIVE_NOT_RECRUITING" : 139
-```
-
-Phase mix (registry-reported; `NOT_APPLICABLE` dominates because many dementia
-studies are behavioral/device interventions):
-
-```mermaid
-pie showData title Trials by normalized phase (n=2,592)
-    "NOT_APPLICABLE" : 1203
-    "PHASE2" : 452
-    "PHASE1" : 416
-    "PHASE3" : 225
-    "PHASE4" : 108
-    "PHASE1/PHASE2" : 83
-    "EARLY_PHASE1" : 55
-    "PHASE2/PHASE3" : 50
-```
+**States with listed sites** spans distinct states/territories across retained
+usable locations. Trial cards use each trial's latest-observed record across
+retained captures, with **Currently recruiting** filtering status exactly
+`RECRUITING`. The combined location audit retains historical study observations;
+its distinct-study summary does not reproduce either location card's scalar.
 
 ---
 

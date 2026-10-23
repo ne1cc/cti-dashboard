@@ -335,6 +335,15 @@ U.S. country/state; unresolved membership stays in the eligible denominator with
 claiming it belongs to a selected state. Location status does not gate confirmed
 overall `RECRUITING` counts. Missing facility text does not erase valid state geography.
 
+The Overview's **Listed facilities** card counts best-effort normalized
+name + city + state identities in the selected profile's latest captured snapshot.
+Earlier retained snapshots do not add to the count; a latest capture with no
+attributable facilities yields zero. **States with listed sites** spans distinct
+states/territories across retained usable locations, while trial cards use each
+trial's latest-observed record. The combined location audit retains historical
+study observations and summarizes distinct studies. See
+[metric definitions](docs/metric_definitions.md) for grains and identity limits.
+
 The panel separates pipeline age, posted-update day age and verification month age,
 with raw dates and precision retained. Its configurable project-defined warning
 (default >180 days) retains records. Enrollment categories distinguish estimated targets, reported actual,

@@ -38,7 +38,7 @@ OBSERVATION_SOURCES = {
     "first_post_proxy": "int_trial_status_history at competition latest profile date",
     "competition": "int_trial_status_history at mart_recruiting_competition latest profile date",
     "history": "int_trial_status_history: latest study observation per profile/date",
-    "facility": "int_trial_status_history at mart_site_overlap latest profile date",
+    "facility": "int_trial_status_history at fct_trial_snapshot latest profile date",
     "latest_study": "int_current_trial_status: latest observation per profile/study",
 }
 
