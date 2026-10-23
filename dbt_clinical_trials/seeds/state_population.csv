@@ -1,0 +1,53 @@
+state_code,fips_code,state_name,population,estimate_date,vintage,source_url
+AL,01,Alabama,5157699,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+AK,02,Alaska,740133,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+AZ,04,Arizona,7582384,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+AR,05,Arkansas,3088354,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+CA,06,California,39431263,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+CO,08,Colorado,5957493,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+CT,09,Connecticut,3675069,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+DE,10,Delaware,1051917,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+DC,11,District of Columbia,702250,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+FL,12,Florida,23372215,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+GA,13,Georgia,11180878,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+HI,15,Hawaii,1446146,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+ID,16,Idaho,2001619,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+IL,17,Illinois,12710158,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+IN,18,Indiana,6924275,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+IA,19,Iowa,3241488,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+KS,20,Kansas,2970606,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+KY,21,Kentucky,4588372,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+LA,22,Louisiana,4597740,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+ME,23,Maine,1405012,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+MD,24,Maryland,6263220,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+MA,25,Massachusetts,7136171,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+MI,26,Michigan,10140459,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+MN,27,Minnesota,5793151,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+MS,28,Mississippi,2943045,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+MO,29,Missouri,6245466,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+MT,30,Montana,1137233,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+NE,31,Nebraska,2005465,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+NV,32,Nevada,3267467,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+NH,33,New Hampshire,1409032,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+NJ,34,New Jersey,9500851,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+NM,35,New Mexico,2130256,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+NY,36,New York,19867248,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+NC,37,North Carolina,11046024,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+ND,38,North Dakota,796568,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+OH,39,Ohio,11883304,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+OK,40,Oklahoma,4095393,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+OR,41,Oregon,4272371,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+PA,42,Pennsylvania,13078751,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+RI,44,Rhode Island,1112308,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+SC,45,South Carolina,5478831,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+SD,46,South Dakota,924669,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+TN,47,Tennessee,7227750,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+TX,48,Texas,31290831,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+UT,49,Utah,3503613,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+VT,50,Vermont,648493,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+VA,51,Virginia,8811195,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+WA,53,Washington,7958180,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+WV,54,West Virginia,1769979,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+WI,55,Wisconsin,5960975,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+WY,56,Wyoming,587618,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv
+PR,72,Puerto Rico,3203295,2024-07-01,Vintage 2024,https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv

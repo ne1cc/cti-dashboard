@@ -530,6 +530,18 @@ models:
         data_type: BIGINT
       - name: recruiting_growth_3m
         data_type: DOUBLE
+      - name: population
+        data_type: BIGINT
+        description: Resident population estimate from U.S. Census Bureau (Vintage 2024, July 1, 2024). Null for unmatched territories.
+      - name: population_source
+        data_type: VARCHAR
+        description: Denominator source agency (U.S. Census Bureau). Null when population is missing.
+      - name: population_vintage
+        data_type: VARCHAR
+        description: Denominator vintage release (Vintage 2024). Null when population is missing.
+      - name: recruiting_trials_per_100k
+        data_type: DOUBLE
+        description: Monthly recruiting trial listings per 100,000 state residents. Null when population is missing or nonpositive.
 
   - name: mart_data_reliability
     description: >
