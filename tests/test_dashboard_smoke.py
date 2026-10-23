@@ -236,3 +236,36 @@ def test_phase_filter_offers_display_labels(fixture_warehouse):
     phase = next(w for w in at.sidebar.multiselect if w.label == "Phase")
     assert phase.options, "fixture should expose at least one phase"
     assert not any(option.isupper() for option in phase.options)
+
+
+def test_geography_trends_view_mode_toggle(fixture_warehouse):
+    from streamlit.testing.v1 import AppTest
+
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    at = AppTest.from_file(
+        str(ROOT / "dashboard/pages/3_Geography_Trends.py"), default_timeout=60
+    ).run()
+    assert not at.exception, at.exception
+
+    # Radio toggle exists with "Per 100k residents" and "Raw count"
+    radio = next(w for w in at.radio if w.label == "Listing metric")
+    assert radio.options == ["Per 100k residents", "Raw count"]
+    assert radio.value == "Per 100k residents"
+
+    # Default view shows per 100k subheader
+    assert any("per 100k" in s.value.lower() for s in at.subheader)
+
+    # Top states dataframe has both columns
+    df = at.dataframe[0].value
+    assert "recruiting_trials_per_100k" in df.columns
+    assert "recruiting_trial_count" in df.columns
+
+    # Vintage is visible in caption
+    assert any("Vintage 2024" in c.value for c in at.caption)
+
+    # Toggle to "Raw count" works
+    radio.set_value("Raw count").run()
+    assert not at.exception, at.exception
+    assert radio.value == "Raw count"
+    assert any("recruiting listings by state" in s.value.lower() for s in at.subheader)
