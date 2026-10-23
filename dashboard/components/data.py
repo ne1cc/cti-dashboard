@@ -220,6 +220,13 @@ def trial_similarity(profile_id: str, nct_id: str | None = None) -> pd.DataFrame
         profile_id = "adrd"
     if not _table_exists("mart_trial_similarity"):
         return pd.DataFrame()
+    required_columns = ("indication_profile_id", "nct_id_a", "nct_id_b", "similarity_rank")
+    if not all(_has_column("mart_trial_similarity", column) for column in required_columns):
+        st.error(
+            "Trial Similarity is unavailable because the warehouse has an outdated "
+            "similarity mart. Rebuild it with `make pipeline`."
+        )
+        return pd.DataFrame()
     return query(
         "select * from main_marts.mart_trial_similarity"
         " where indication_profile_id = ? and nct_id_a = ? order by similarity_rank",
