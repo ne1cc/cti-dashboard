@@ -37,27 +37,30 @@ col1, col2, col3, col4 = st.columns(4)
 col1.metric(
     "Trials tracked",
     f"{int(metrics['total_trials']):,}",
-    help="Total interventional clinical trials with U.S. sites recorded in the warehouse.",
+    help="Trials known from retained captures, using each trial's latest-observed record.",
     border=True,
 )
 col2.metric(
     "Currently recruiting",
     f"{int(metrics['recruiting_trials']):,}",
-    help="Active trials with overall status RECRUITING in the latest snapshot.",
+    help="Trials whose latest-observed overall status is exactly RECRUITING.",
     border=True,
 )
 col3.metric(
     "States with listed sites",
     int(metrics["states_with_sites"]),
-    help="Distinct U.S. states and territories containing at least one listed trial facility.",
+    help=(
+        "Distinct U.S. states and territories with usable listed locations "
+        "across retained captures."
+    ),
     border=True,
 )
 col4.metric(
     "Listed facilities",
     f"{int(metrics['listed_facilities']):,}",
     help=(
-        "Total facility listings across all trial site records "
-        "(best-effort facility normalization)."
+        "Facility identities in the selected profile's latest captured snapshot "
+        "(best-effort normalized name + city + state); zero if none are attributable."
     ),
     border=True,
 )
@@ -147,8 +150,8 @@ render_metric_audit(
     metric="latest_study",
     context={
         "displayed_measure": (
-            "Trials tracked counts current dim_trial rows; currently "
-            "recruiting filters current overall status exactly RECRUITING."
+            "Trials tracked counts each trial's latest-observed dim_trial row across "
+            "retained captures; currently recruiting filters that status exactly RECRUITING."
         )
     },
     key="overview",
@@ -160,11 +163,13 @@ render_metric_audit(
     observation_metric="history",
     context={
         "displayed_measure": (
-            "Listed facilities counts mart_site_overlap facility rows "
-            "across captured dates, so repeat facility observations can "
-            "count again. States with sites counts profile dim_geography "
-            "rows. Inspect original locations and snapshots; the audit "
-            "summary counts distinct studies, not facility rows."
+            "Listed facilities counts best-effort normalized name + city + state "
+            "identities at the selected profile's latest captured snapshot date; "
+            "zero if that capture has no attributable facilities. States with sites "
+            "counts distinct profile/state geography rows across retained captures. "
+            "This combined audit keeps historical study observations and original "
+            "locations across retained captures; its summary counts distinct studies, "
+            "not either location card's scalar."
         )
     },
     key="overview_locations",

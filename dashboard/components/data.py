@@ -268,7 +268,7 @@ def condition_geography_trends(profile_id: str) -> pd.DataFrame:
 
 
 def site_overlap(profile_id: str) -> pd.DataFrame:
-    """Fetch trial site overlap metrics for one profile's latest snapshot date.
+    """Fetch trial site overlap metrics for one profile's latest captured date.
 
     Queries ``main_marts.mart_site_overlap`` for facility co-location and trial
     congestion, ordered by recruiting trial count and listed trial count descending.
@@ -277,13 +277,14 @@ def site_overlap(profile_id: str) -> pd.DataFrame:
         profile_id: Indication profile id to scope the overlap to.
 
     Returns:
-        pd.DataFrame: Facility site overlap records for that profile's latest snapshot.
+        pd.DataFrame: Facility rows at the profile's latest ``fct_trial_snapshot`` date;
+            empty when that capture has no attributable facilities.
     """
     return query(
         "select * from main_marts.mart_site_overlap"
         " where indication_profile_id = ?"
         "   and snapshot_date = ("
-        "     select max(snapshot_date) from main_marts.mart_site_overlap"
+        "     select max(snapshot_date) from main_marts.fct_trial_snapshot"
         "     where indication_profile_id = ?)"
         " order by recruiting_trial_count desc, listed_trial_count desc",
         [profile_id, profile_id],
@@ -456,12 +457,14 @@ def overview_metrics(profile_id: str) -> dict[str, Any]:
 
     Returns:
         dict: Mapping of metric keys to counts/dates:
-            - ``total_trials``: Total number of trials in this profile.
-            - ``recruiting_trials``: Number of trials currently in 'RECRUITING' status.
-            - ``states_with_sites``: Geographic rows in ``dim_geography`` for this profile.
-            - ``listed_facilities``: Facility locations tracked in ``mart_site_overlap``.
-            - ``latest_snapshot``: Date of this profile's most recent snapshot.
-            - ``snapshot_count``: Number of unique snapshot runs for this profile.
+            - ``total_trials``: One latest-observed row per trial across retained captures.
+            - ``recruiting_trials``: Latest-observed trial status exactly 'RECRUITING'.
+            - ``states_with_sites``: Distinct profile/state rows across retained locations.
+            - ``listed_facilities``: Best-effort normalized name/city/state identities in
+              ``mart_site_overlap`` at the profile's latest ``fct_trial_snapshot`` date;
+              zero when that capture has no attributable facilities.
+            - ``latest_snapshot``: Date of this profile's most recent captured snapshot.
+            - ``snapshot_count``: Number of distinct captured dates for this profile.
     """
     row = query(
         """
@@ -474,14 +477,16 @@ def overview_metrics(profile_id: str) -> dict[str, Any]:
             (select count(*) from main_marts.dim_geography
              where indication_profile_id = ?) as states_with_sites,
             (select count(*) from main_marts.mart_site_overlap
-             where indication_profile_id = ?) as listed_facilities,
+             where indication_profile_id = ?
+               and snapshot_date = (select max(snapshot_date) from main_marts.fct_trial_snapshot
+                                    where indication_profile_id = ?)) as listed_facilities,
             (select max(snapshot_date) from main_marts.fct_trial_snapshot
              where indication_profile_id = ?) as latest_snapshot,
             (select count(distinct snapshot_date)
              from main_marts.fct_trial_snapshot
              where indication_profile_id = ?) as snapshot_count
         """,
-        [profile_id] * 6,
+        [profile_id] * 7,
     ).iloc[0]
     res = {str(k): v for k, v in row.to_dict().items()}
     res["warehouse_runs"] = res.get("snapshot_count")
@@ -534,8 +539,9 @@ def audit_condition_mapping(profile_id: str) -> pd.DataFrame:
 def metric_audit_observations(profile_id: str, metric: str = "competition") -> pd.DataFrame:
     """Return actual per-study observations before status/geographic exclusions.
 
-    Competition/facility use their mart's latest date, history keeps daily
-    observations, and latest_study follows the current per-study status dimension.
+    Competition uses its mart's latest date; facility uses the profile's latest
+    fct_trial_snapshot date, even without facility rows. History keeps daily
+    observations, and latest_study follows the latest-observed per-study status dimension.
     Callers may further select dates/months, without inventing a newest run.
     """
     if not _table_exists("mart_study_snapshot_audit"):
@@ -569,7 +575,7 @@ def metric_audit_observations(profile_id: str, metric: str = "competition") -> p
             "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, snapshot_date "
             "from main_intermediate.int_trial_status_history where indication_profile_id = ? "
             "and snapshot_date = (select max(snapshot_date) from main_marts."
-            "mart_site_overlap where indication_profile_id = ?)",
+            "fct_trial_snapshot where indication_profile_id = ?)",
             [profile_id, profile_id],
         )
     raise ValueError(f"Unknown audit metric: {metric}")
