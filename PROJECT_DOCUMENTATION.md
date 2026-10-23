@@ -186,8 +186,7 @@ cti-dashboard/
 │   ├── shared_paths.yml          # shared silver, gold, and DuckDB paths across profiles
 │   ├── condition_taxonomy.yml    # ADRD condition-group mapping rules
 │   ├── geography_rules.yml       # US state normalization rules
-│   ├── score_weights.yml         # feasibility score weights + bands
-│   └── roi_assumptions.yml       # editable scenario-calculator assumptions
+│   └── score_weights.yml         # feasibility score weights + bands
 │
 ├── src/
 │   ├── cli.py                    # python -m src.cli {ingest,transform,quality-report,orchestrate}
@@ -201,7 +200,6 @@ cti-dashboard/
 │   │                             # build_silver_entities (orchestrator)
 │   ├── quality/                  # profiling, schema_drift, reconciliation,
 │   │                             # data_quality_report
-│   ├── analysis/roi_scenarios.py # pure-arithmetic scenario calculator
 │   └── utils/                    # dates, hashing, logging, paths, text
 │
 ├── dbt_clinical_trials/
@@ -623,13 +621,7 @@ flowchart TB
 | Growth-proxy warning | shown whenever any displayed row has `growth_uses_registry_proxy_flag` |
 | Read-only warehouse | `duckdb.connect(..., read_only=True)` behind `st.cache_resource` |
 | Query caching | `st.cache_data(ttl=600)` |
-| Scenario explorer never writes | sliders adjust session-only copies of `config/roi_assumptions.yml` |
 | Trial links | `registry_url` column rendered with `st.column_config.LinkColumn` — opens the authoritative public record |
-
-The page-6 **scenario explorer** replaces fake ROI claims: users plug in *their own*
-cost assumptions (review cost, deprioritized-share, activation cost, influence share)
-under conservative/base/optimistic multipliers; the arithmetic is pure
-multiplication, and the disclaimer renders above every result.
 
 ---
 
@@ -790,7 +782,6 @@ status-transition counts (and `growth_uses_registry_proxy_flag` flips off).
 | `config/condition_taxonomy.yml` | mapping of registry condition strings → ADRD condition groups, with confidence rules |
 | `config/geography_rules.yml` | state-name → USPS code normalization |
 | `config/score_weights.yml` | score weights, normalization method, band thresholds (mirrored in seed + dbt vars; sync enforced by pytest) |
-| `config/roi_assumptions.yml` | scenario-calculator assumptions and multipliers (with embedded disclaimer) |
 | `.env` | optional local overrides (`CTI_CONFIG_PATH`, `CTI_HTTP_TIMEOUT_SECONDS`, `CTI_MAX_RETRIES`) — no secrets required |
 | `dbt_clinical_trials/dbt_project.yml` | schema routing, seed types, feasibility band vars |
 

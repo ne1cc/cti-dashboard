@@ -38,7 +38,7 @@ def render_profile_selector() -> str:
     drift out of sync. `format_func` only affects what the reader sees.
 
     Returns:
-        str: The selected indication profile id, e.g. `"adrd"`.
+        str: The selected indication profile id.
     """
     profiles = refreshable_profiles()
     if not profiles:
@@ -59,11 +59,5 @@ def render_profile_selector() -> str:
         [profile_id for profile_id, _ in profiles],
         format_func=lambda profile_id: display_names.get(profile_id, profile_id),
         key="indication_profile_selector",
-    )
-    st.sidebar.caption(
-        "All figures cover this indication profile only. Profiles are **not** "
-        "additive: a trial listed under two profiles is counted once in each, "
-        "because each profile is a separate registry query with its own "
-        "condition taxonomy."
     )
     return str(chosen)

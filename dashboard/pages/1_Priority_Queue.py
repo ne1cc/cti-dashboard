@@ -29,7 +29,7 @@ st.caption(
     "usable-location share. This is an operational score input; "
     "scientific validity is not measured."
 )
-filtered = segment_filters(queue)
+filtered = segment_filters(queue, profile_id=profile_id)
 
 band_options = ["priority_review", "review", "watch"]
 selected_bands = st.sidebar.multiselect("Priority band", band_options)
@@ -85,7 +85,9 @@ queue_columns = [
     "priority_explanation",
 ]
 display_df = filtered[queue_columns].copy()
-display_df["condition_group"] = display_df["condition_group"].apply(format_condition_group)
+display_df["condition_group"] = display_df["condition_group"].apply(
+    lambda g: format_condition_group(g, profile_id)
+)
 display_df["phase_normalized"] = display_df["phase_normalized"].map(format_phase)
 display_df["priority_band"] = display_df["priority_band"].map(format_band)
 display_df["priority_explanation"] = [
@@ -179,7 +181,7 @@ selected_rows = queue_event.selection.rows if queue_event.selection else []
 if selected_rows:
     segment = filtered.iloc[selected_rows[0]]
     st.subheader(
-        f"Score breakdown — {format_condition_group(segment['condition_group'])} · "
+        f"Score breakdown — {format_condition_group(segment['condition_group'], profile_id)} · "
         f"{segment['state_normalized']} · {format_phase(segment['phase_normalized'])} "
         f"(rank #{int(segment['priority_rank'])})"
     )

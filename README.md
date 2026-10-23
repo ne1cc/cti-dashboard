@@ -281,13 +281,7 @@ quality, or sponsor performance
 - Raw recruiting counts are not population-adjusted.
 - Portfolio demonstration only; real decisions require qualified clinical-operations review.
 
-## 21. Scenario-value methodology
-
-No fake ROI. A configurable scenario calculator (`config/roi_assumptions.yml`) lets an
-organization test whether a feasibility-review process could justify its cost using
-*its own* site-startup and study-burn assumptions, under low/base/high scenarios.
-
-## 22. Documentation index
+## 21. Documentation index
 
 | Document | Contents |
 |---|---|
@@ -309,7 +303,7 @@ organization test whether a feasibility-review process could justify its cost us
 | [`docs/DEPLOY_FLY.md`](docs/DEPLOY_FLY.md) | deploy the dashboard to Fly.io with an auto-refreshing pipeline |
 | [`docs/competitive_positioning.md`](docs/competitive_positioning.md) | how CTI's free registry-only scope compares to Citeline/IQVIA/H1, and where that leaves room to grow |
 
-## 23. Roadmap
+## 22. Roadmap
 
 1. MVP: ClinicalTrials.gov-only pipeline, marts, dashboard (Phases 1–7).
 2. ACS population layer for population-adjusted density.

@@ -1,9 +1,11 @@
 version: 1
 default:
   condition_group: other_colorectal_conditions
+  display_name: Other Colorectal Conditions
   dementia_relevance: false
 groups:
 - condition_group: colorectal_cancer_subtype
+  display_name: Colorectal Cancer Subtypes
   dementia_relevance: false
   exact:
   - rectal cancer
@@ -12,6 +14,7 @@ groups:
   - rectal cancer
   - colon cancer
 - condition_group: colorectal_cancer
+  display_name: Colorectal Cancer
   dementia_relevance: false
   exact:
   - colorectal cancer

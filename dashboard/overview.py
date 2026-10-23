@@ -91,7 +91,9 @@ preview_df = queue.head(10)[
         "priority_explanation",
     ]
 ].copy()
-preview_df["condition_group"] = preview_df["condition_group"].apply(format_condition_group)
+preview_df["condition_group"] = preview_df["condition_group"].apply(
+    lambda g: format_condition_group(g, profile_id)
+)
 preview_df["phase_normalized"] = preview_df["phase_normalized"].map(format_phase)
 preview_df["priority_band"] = preview_df["priority_band"].map(format_band)
 preview_df["priority_explanation"] = [

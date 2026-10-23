@@ -200,7 +200,7 @@ def _has_column(table_name: str, column_name: str, schema: str = "main_marts") -
 
 
 @st.cache_data(ttl=600)
-def trial_similarity(profile_id: str, nct_id: str | None = None) -> pd.DataFrame:
+def trial_similarity(profile_id: str, nct_id: str) -> pd.DataFrame:
     """Fetch pairwise trial similarity scores for one profile and index trial.
 
     Queries ``main_marts.mart_trial_similarity`` for candidate trials compared
@@ -215,9 +215,6 @@ def trial_similarity(profile_id: str, nct_id: str | None = None) -> pd.DataFrame
             and component factor scores. Empty DataFrame if the similarity mart
             has not been built yet.
     """
-    if nct_id is None:
-        nct_id = profile_id
-        profile_id = "adrd"
     if not _table_exists("mart_trial_similarity"):
         return pd.DataFrame()
     return query(
@@ -328,7 +325,7 @@ def sponsor_landscape(profile_id: str) -> pd.DataFrame:
     )
 
 
-def trial_explorer(profile_id: str = "adrd") -> pd.DataFrame:
+def trial_explorer(profile_id: str) -> pd.DataFrame:
     """Fetch denormalized trial registry records and active site states for browsing.
 
     Combines ``dim_trial`` with active US site states from ``fct_trial_site``
@@ -401,8 +398,6 @@ def get_indication_profiles(profile_id: str | None = None) -> list[dict[str, str
         profile_id: Optional indication profile id filter.
 
     Returns:
-        list[dict[str, str]]: List of dictionaries with keys ``id`` (e.g. "adrd")
-            and ``display_name`` (e.g. "Alzheimer's Disease & Related Dementias"). Empty list
             if indication_profile_id is not present in dim_trial.
     """
     if not _has_column("dim_trial", "indication_profile_id"):
