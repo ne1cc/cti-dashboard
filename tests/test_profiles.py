@@ -1,5 +1,7 @@
 """Tests for IndicationProfile, load_profile, and ProfileRegistry."""
 
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -375,6 +377,9 @@ def test_default_config_bronze_paths_match_the_adrd_profile() -> None:
     load the global config. If the two disagree, `make pipeline` ingests
     snapshots the transform never sees and exits 0 with "No runs to transform",
     so the warehouse goes stale silently.
+
+    With adrd.yml established as the single source of truth for scope, the
+    complete query parameters dictionary and documented scope must also match.
     """
     from src.config import load_config
     from src.profiles import get_registry
@@ -385,6 +390,203 @@ def test_default_config_bronze_paths_match_the_adrd_profile() -> None:
     assert default.paths.bronze_manifests == adrd.paths.bronze_manifests
     assert default.paths.bronze_api_responses == adrd.paths.bronze_api_responses
     assert default.paths.quarantine == adrd.paths.quarantine
+    assert default.api.query_params == adrd.api.query_params
+    assert default.scope == adrd.scope
+
+    expected_statuses = {
+        "RECRUITING",
+        "ACTIVE_NOT_RECRUITING",
+        "NOT_YET_RECRUITING",
+        "COMPLETED",
+        "TERMINATED",
+        "WITHDRAWN",
+        "SUSPENDED",
+        "ENROLLING_BY_INVITATION",
+    }
+    assert set(default.api.query_params["filter.overallStatus"]) == expected_statuses
+    assert set(default.scope["statuses"]) == expected_statuses
+
+
+def test_editing_referenced_profile_updates_default_api_and_scope_dynamically(
+    tmp_path: Path,
+) -> None:
+    """Editing the referenced profile updates default API and scope dynamically."""
+    from src.config import load_config
+
+    prof_dir = tmp_path / "profiles"
+    prof_dir.mkdir()
+    prof_file = prof_dir / "custom.yml"
+    prof_file.write_text(
+        """\
+profile:
+  id: custom
+  display_name: Custom
+  ingest_only: false
+api:
+  base_url: https://clinicaltrials.gov/api/v2
+  query_params:
+    query.cond: "Initial Condition"
+    filter.overallStatus:
+      - RECRUITING
+scope:
+  statuses:
+    - RECRUITING
+paths:
+  bronze_api_responses: data/bronze/custom/api_responses
+  bronze_manifests: data/bronze/custom/manifests
+  silver: data/silver
+  gold: data/gold
+  duckdb: data/warehouse/x.duckdb
+  quarantine: data/bronze/custom/manifests/quarantine
+"""
+    )
+
+    cfg_file = tmp_path / "custom_config.yml"
+    cfg_file.write_text(
+        f"""\
+default_profile: {prof_file}
+api:
+  base_url: https://clinicaltrials.gov/api/v2
+paths:
+  bronze_api_responses: data/bronze/custom/api_responses
+  bronze_manifests: data/bronze/custom/manifests
+  silver: data/silver
+  gold: data/gold
+  duckdb: data/warehouse/x.duckdb
+  quarantine: data/bronze/custom/manifests/quarantine
+"""
+    )
+
+    cfg1 = load_config(cfg_file)
+    assert cfg1.api.query_params["query.cond"] == "Initial Condition"
+    assert cfg1.scope["statuses"] == ["RECRUITING"]
+
+    # Now edit the referenced profile dynamically
+    prof_file.write_text(
+        """\
+profile:
+  id: custom
+  display_name: Custom
+  ingest_only: false
+api:
+  base_url: https://clinicaltrials.gov/api/v2
+  query_params:
+    query.cond: "Updated Condition"
+    filter.overallStatus:
+      - RECRUITING
+      - COMPLETED
+scope:
+  statuses:
+    - RECRUITING
+    - COMPLETED
+paths:
+  bronze_api_responses: data/bronze/custom/api_responses
+  bronze_manifests: data/bronze/custom/manifests
+  silver: data/silver
+  gold: data/gold
+  duckdb: data/warehouse/x.duckdb
+  quarantine: data/bronze/custom/manifests/quarantine
+"""
+    )
+
+    cfg2 = load_config(cfg_file)
+    assert cfg2.api.query_params["query.cond"] == "Updated Condition"
+    assert cfg2.scope["statuses"] == ["RECRUITING", "COMPLETED"]
+
+
+def test_standalone_yaml_works_without_default_profile(tmp_path: Path) -> None:
+    """Standalone YAML works without default_profile specified."""
+    from src.config import load_config
+
+    cfg_file = tmp_path / "standalone.yml"
+    cfg_file.write_text(
+        """\
+api:
+  base_url: https://clinicaltrials.gov/api/v2
+  query_params:
+    query.cond: "Standalone Condition"
+    filter.overallStatus:
+      - RECRUITING
+paths:
+  bronze_api_responses: data/bronze/sa/api_responses
+  bronze_manifests: data/bronze/sa/manifests
+  silver: data/silver
+  gold: data/gold
+  duckdb: data/warehouse/sa.duckdb
+  quarantine: data/bronze/sa/quarantine
+scope:
+  statuses:
+    - RECRUITING
+"""
+    )
+
+    cfg = load_config(cfg_file)
+    assert cfg.default_profile is None
+    assert cfg.api.query_params["query.cond"] == "Standalone Condition"
+    assert cfg.scope["statuses"] == ["RECRUITING"]
+
+
+def test_missing_default_profile_fails(tmp_path: Path) -> None:
+    """Missing or invalid default_profile fails cleanly with FileNotFoundError or ValueError."""
+    from src.config import load_config
+
+    cfg_file = tmp_path / "missing_prof.yml"
+    cfg_file.write_text(
+        """\
+default_profile: nonexistent_profile_xyz
+api:
+  base_url: https://clinicaltrials.gov/api/v2
+paths:
+  bronze_api_responses: data/bronze/adrd/api_responses
+  bronze_manifests: data/bronze/adrd/manifests
+  silver: data/silver
+  gold: data/gold
+  duckdb: data/warehouse/x.duckdb
+  quarantine: data/bronze/adrd/manifests/quarantine
+"""
+    )
+
+    with pytest.raises((FileNotFoundError, ValueError)):
+        load_config(cfg_file)
+
+    blank_cfg = tmp_path / "blank_prof.yml"
+    blank_cfg.write_text(
+        """\
+default_profile: ""
+api:
+  base_url: https://clinicaltrials.gov/api/v2
+paths:
+  bronze_api_responses: data/bronze/adrd/api_responses
+  bronze_manifests: data/bronze/adrd/manifests
+  silver: data/silver
+  gold: data/gold
+  duckdb: data/warehouse/x.duckdb
+  quarantine: data/bronze/adrd/manifests/quarantine
+"""
+    )
+    with pytest.raises(ValueError):
+        load_config(blank_cfg)
+
+
+def test_both_import_orders_work_without_error() -> None:
+    """Both import orders work without circular import error."""
+    # Order 1: src.config then src.profiles
+    proc1 = subprocess.run(
+        [sys.executable, "-c", "import src.config; import src.profiles; print('OK')"],
+        capture_output=True,
+        text=True,
+    )
+    assert proc1.returncode == 0, proc1.stderr
+    assert "OK" in proc1.stdout
+
+    # Order 2: src.profiles then src.config
+    proc2 = subprocess.run(
+        [sys.executable, "-c", "import src.profiles; import src.config; print('OK')"],
+        capture_output=True,
+        text=True,
+    )
+    assert proc2.returncode == 0, proc2.stderr
+    assert "OK" in proc2.stdout
 
 
 def test_dbt_bronze_source_reads_the_configured_manifests_dir() -> None:
@@ -395,8 +597,7 @@ def test_dbt_bronze_source_reads_the_configured_manifests_dir() -> None:
     Since the two-profile fixture the literal is a glob whose one wildcard
     segment stands for the profile id, so the guard checks every profile the
     registry knows about, not just the default one. Comparison is segment-wise
-    because DuckDB's `*` does not cross a `/`.
-    """
+    because DuckDB's `*` does not cross a `/`."""
     import fnmatch
     import re
 
