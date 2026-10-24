@@ -159,3 +159,17 @@ Source omissions and missing historical retrieval metadata remain nullable. Audi
 keys are record identities, not durable facility identities. See
 [metric definitions](metric_definitions.md) for clock formulas, coverage denominators,
 filter decisions and JSON fields. Raw references depend on configured bronze retention.
+
+## Glossary
+
+| Term | Meaning here |
+|---|---|
+| **NCT ID** | ClinicalTrials.gov study identifier; trial identity is scoped by indication profile in the shared warehouse |
+| **Snapshot** | A complete ingestion run's captured view of matching current records; snapshot-date facts can collapse multiple runs on one UTC date |
+| **Segment** | Condition group × U.S. state × phase within an indication profile |
+| **Run ID** | UTC timestamp plus UUID suffix minted for a new ingestion run; partitions bronze and silver |
+| **Manifest** | Per-run JSON recording endpoint, query parameters/hash, page/record counts, timestamps, profile, and completion status |
+| **HHI** | Herfindahl–Hirschman Index: sum of squared lead-sponsor listing shares within a segment; see [metric definitions](metric_definitions.md) for denominator rules |
+| **Proxy growth** | Registry-first-post-date proxy used when snapshot history is insufficient, identified by `growth_uses_registry_proxy_flag`; not an observed recruiting transition |
+| **Quarantine** | Records rejected by ingestion screening, retained with reason codes; transformation skips records without an NCT ID |
+| **Priority band** | `watch`, `review`, or `priority_review`: a queue-ordering label, not a clinical or operational verdict |

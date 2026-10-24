@@ -140,7 +140,7 @@ make setup
 
 ### Environment Configuration
 
-Copy [`.env.example`](.env.example) to `.env`. No API keys are needed — the API is public. Variables control local paths, logging, and optional HTTP overrides.
+Copy [`.env.example`](.env.example) to `.env`. No API keys are needed — the API is public. See the [configuration reference](docs/architecture.md#configuration-reference) for YAML responsibilities, supported environment variables, and loader-specific overrides.
 
 ### Running Ingestion and Snapshots
 
@@ -150,7 +150,7 @@ make ingest                      # python -m src.cli ingest --condition "Alzheim
 
 For the opt-in full-catalog profile instead, see [Optional: Full-Catalog Ingestion](#optional-full-catalog-ingestion).
 
-Run `make ingest` weekly (cron, systemd timer, or GitHub Actions). Each run gets a unique `ingestion_run_id`; completed runs are never silently re-downloaded (incremental default), and `make full-refresh` forces a complete re-pull.
+Run `make ingest` weekly (cron, systemd timer, or GitHub Actions). New runs get a unique `ingestion_run_id`; incremental ingestion reuses a successful matching query within the configured window (24 hours by default). `make full-refresh` forces a complete re-pull. See [incremental reuse](docs/source_documentation.md#incremental-reuse) for the exact eligibility rule.
 
 ### Running dbt Models and Tests
 
@@ -186,6 +186,29 @@ Headless execution hits the real ClinicalTrials.gov API; local `dagster dev` is 
 ```bash
 make dashboard
 ```
+
+### Development and Pipeline Commands
+
+The [Makefile](Makefile) defines the entry points; `make help` lists available commands.
+These pipeline commands use configured data paths and can contact the live registry.
+
+| Command | Behavior |
+|---|---|
+| `make pipeline` | Sequentially runs orchestrate → prune-data → dbt-run → dbt-test → quality-report; ingestion uses incremental reuse, and pruning deletes artifacts beyond configured retention |
+| `make orchestrate` / `make orchestrate-full-refresh` | Ingest + transform refreshable profiles; the full-refresh variant bypasses ingestion reuse |
+| `make transform` | Transform completed ADRD bronze runs into silver Parquet and profile the results |
+| `make dbt-deps` / `make dbt-docs` | Install dbt packages / generate warehouse documentation; `make dbt-run` seeds before building models |
+| `make test` | Run pytest |
+| `make lint` | Check ruff lint, formatting, and mypy types |
+| `make format` | Apply ruff formatting |
+| `make clean` | Remove caches, logs, coverage output, and dbt build artifacts; preserves `data/` |
+
+**DuckDB access:** stop a local dashboard before rebuilding or writing its warehouse.
+Before `make test`, stop the server if tests will open that same file with write access
+or different connection settings; a separate fixture root avoids that conflict.
+Fixture-backed smoke tests use their own warehouse. The optional repository-warehouse
+smoke tests open it read-only and skip when marts are absent; simultaneous read-only
+processes can share the file, while writes require exclusive access.
 
 ---
 
@@ -240,9 +263,9 @@ No fake ROI. A configurable scenario calculator (`config/roi_assumptions.yml`) l
 |---|---|
 | [`PROJECT_DOCUMENTATION.md`](PROJECT_DOCUMENTATION.md) | documentation index and compatibility guide |
 | [`docs/study_guide.md`](docs/study_guide.md) | guided learning path: run it, trace a record, read the code, exercises |
-| [`docs/architecture.md`](docs/architecture.md) | pipeline and layer design, contracts, and architecture diagrams |
-| [`docs/data_dictionary.md`](docs/data_dictionary.md) | every layer, entity, and column specification |
-| [`docs/source_documentation.md`](docs/source_documentation.md) | API v2 usage, verification, and history caveats |
+| [`docs/architecture.md`](docs/architecture.md) | pipeline and layer design, contracts, architecture diagrams, and configuration reference |
+| [`docs/data_dictionary.md`](docs/data_dictionary.md) | every layer, entity, and column specification, plus glossary |
+| [`docs/source_documentation.md`](docs/source_documentation.md) | API v2 usage, incremental reuse, verification, and history caveats |
 | [`docs/metric_definitions.md`](docs/metric_definitions.md) | formula and grain for every metric and score |
 | [`docs/competition_audit.md`](docs/competition_audit.md) | competition audit panel specification, drill-through, and audit JSON artifacts |
 | [`docs/clinical_interpretation_guardrails.md`](docs/clinical_interpretation_guardrails.md) | required/prohibited language and enforcement |
