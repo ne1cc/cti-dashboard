@@ -22,7 +22,7 @@ Documentation snapshot: built and verified against the live warehouse of **2026-
 8. [Warehouse design (gold — dbt on DuckDB)](#8-warehouse-design-gold--dbt-on-duckdb)
 9. [Dimensional data model](#9-dimensional-data-model)
 10. [The feasibility priority score](#10-the-feasibility-priority-score)
-11. [Streamlit dashboard](#11-streamlit-dashboard)
+11. [Delivery interfaces: analyst workbench and patient finder](#11-delivery-interfaces-analyst-workbench-and-patient-finder)
 12. [Data quality framework](#12-data-quality-framework)
 13. [Clinical interpretation guardrails](#13-clinical-interpretation-guardrails)
 14. [Testing and verification](#14-testing-and-verification)
@@ -47,7 +47,8 @@ Documentation snapshot: built and verified against the live warehouse of **2026-
 | Therapeutic area | Config-driven indication profiles (`config/profiles/`: 12 refreshable indications across oncology and chronic disease, plus an ingest-only full catalog) |
 | Geography | United States (raw data keeps all countries; marts are U.S.-only) |
 | Source | [ClinicalTrials.gov API v2](https://clinicaltrials.gov/data-api/api) (public, no key) |
-| Stack | Python 3.11+ · uv · DuckDB · dbt · Streamlit · Plotly · pytest · ruff |
+| Stack | Python 3.11+ · uv · DuckDB · dbt · FastAPI · Jinja2 · Streamlit · Plotly · pytest · ruff |
+| Delivery surfaces | Dual-frontend model ([ADR 0061](docs/decisions/0061-patient-frontend.md)): Public patient trial finder (FastAPI + Jinja server-rendered HTML) · Internal analyst workbench (Streamlit on port 8501) |
 | Architecture | Local-first medallion: bronze JSON → silver Parquet → gold dbt marts |
 | Automated tests | dbt data tests + pytest suite: the counts, their date and the commands that regenerate them are in §14 (one place, on purpose — a second copy is the drift this document has already been burned by) |
 | dbt resources | 32 models (8 staging views, 8 intermediate views, 16 mart tables) + 4 seeds + 4 analyses (same 2026-09-07 UTC parse) |
@@ -138,8 +139,10 @@ flowchart TB
         DBT["dbt: staging · intermediate · marts<br/>+ seeds · data tests<br/>(counts and their date: §14)"]
     end
 
-    subgraph DELIVERY["Delivery"]
-        APP["Streamlit dashboard<br/>8 pages, read-only"]
+    subgraph DELIVERY["Delivery (Dual-Frontend Model — ADR 0061)"]
+        APP["Analyst Workbench<br/>Streamlit dashboard<br/>8 pages, read-only (port 8501)"]
+        PATIENT["Patient & Caregiver Finder<br/>FastAPI + Jinja templates<br/>server-rendered HTML (/)"]
+        API["Public Read API<br/>FastAPI (/api/v1)"]
         DQ["Data-quality report<br/>reports/data_quality_report.md"]
         MEMO["Executive memo template"]
     end
@@ -152,6 +155,8 @@ flowchart TB
     PQ -->|"read_parquet() sources"| DBT
     DBT --> DUCK
     DUCK --> APP
+    DUCK --> PATIENT
+    DUCK --> API
     DUCK --> DQ
     DUCK --> MEMO
 ```
@@ -166,6 +171,7 @@ flowchart TB
 | All query parameters in YAML | `config/project_config.yml` — nothing is hard-coded in ingestion code |
 | Dashboard is read-only | Connection opened `read_only=True`; the UI can never mutate the warehouse |
 | Contacts deliberately excluded | `stg_trial_contacts` is an intentionally empty model (`where 1=0`) — a mechanical privacy guardrail |
+| Dual-frontend delivery | Public patient finder is server-rendered (FastAPI + Jinja) for instant mobile FCP, deep-linking, and accessibility; Streamlit is retained for internal analyst workflows ([ADR 0061](docs/decisions/0061-patient-frontend.md)) |
 
 ---
 
@@ -590,7 +596,13 @@ Every row also ships:
 
 ---
 
-## 11. Streamlit dashboard
+## 11. Delivery interfaces: analyst workbench and patient finder
+
+The platform delivers data through two distinct frontends based on user context ([ADR 0061](docs/decisions/0061-patient-frontend.md)):
+1. **Public Patient & Caregiver Finder (`/`, `/trials`):** Server-rendered HTML powered by FastAPI and Jinja2 templates with lightweight progressive enhancement (vanilla JS/CSS). Designed for instant mobile First Contentful Paint (FCP), fluid layout at 360px viewport width, canonical deep-linkable URLs, zero client-side npm/bundler toolchain, and strict WCAG 2.1 AA accessibility.
+2. **Internal Analyst Workbench (`dashboard/app.py`, Port 8501):** Streamlit application reading Gold DuckDB marts directly, providing deep interactive exploration for feasibility analysts.
+
+### Streamlit analyst workbench
 
 `make dashboard` → http://localhost:8501. Eight pages, all read-only.
 
@@ -630,6 +642,8 @@ The page-6 **scenario explorer** replaces fake ROI claims: users plug in *their 
 cost assumptions (review cost, deprioritized-share, activation cost, influence share)
 under conservative/base/optimistic multipliers; the arithmetic is pure
 multiplication, and the disclaimer renders above every result.
+
+The analyst workbench deliberately retains stability workarounds (`_materialize()` in `dashboard/components/data.py` to prevent DuckDB/Arrow SIGSEGV crashes, `pyarrow<22` in `pyproject.toml`, and `dashboard/components/scroll_fix.py` for iframe layout management). These workarounds remain isolated to the internal analyst tool and do not affect the public patient application.
 
 ---
 
@@ -826,6 +840,7 @@ flowchart LR
 |---|---|
 | [`README.md`](README.md) | front door: setup, scope, methodology summary |
 | [`docs/architecture.md`](docs/architecture.md) | layer-by-layer architecture detail |
+| [`docs/decisions/0061-patient-frontend.md`](docs/decisions/0061-patient-frontend.md) | ADR 0061: dual-frontend architecture (server-rendered patient finder vs analyst Streamlit) |
 | [`docs/source_documentation.md`](docs/source_documentation.md) | API v2 endpoint, parameters, pagination, snapshot rationale |
 | [`docs/data_dictionary.md`](docs/data_dictionary.md) | every object and column, silver + gold |
 | [`docs/metric_definitions.md`](docs/metric_definitions.md) | formal definition + denominator + guardrail per metric |
