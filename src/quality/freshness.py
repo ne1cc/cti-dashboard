@@ -89,8 +89,11 @@ def _write_marker(payload: dict[str, Any]) -> None:
 def _record_attempt(status: Literal["running", "failed"], error: str | None = None) -> None:
     try:
         raw = marker_path().read_text(encoding="utf-8")
-        Marker.model_validate_json(raw)
+        marker = Marker.model_validate_json(raw)
         previous = json.loads(raw).get("last_success")
+        # The supervisor records failure again after the verifier has stored its reason.
+        if status == "failed" and marker.attempt_status == "failed" and error is None:
+            error = marker.error
     except (OSError, ValueError):
         previous = None
     _write_marker(
@@ -141,6 +144,8 @@ def status(profile_id: str | None = None) -> dict[str, Any]:
             raise ValueError("CTI_FRESHNESS_MAX_AGE_DAYS must be positive and finite")
         marker = _read_marker()
         result["metadata"] = marker.model_dump(mode="json")
+        if marker.error is not None:
+            result["errors"].append(marker.error)
         success = _verify_success(marker)
         if marker.attempt_status != "success":
             result["errors"].append(f"Latest refresh attempt is {marker.attempt_status}")

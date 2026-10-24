@@ -400,6 +400,10 @@ recent pipeline completion must not hide that. Without a flag, the CLI prints
 metadata/status for inspection without enforcing freshness as an exit code.
 `--preflight` is read-only. The supervisor uses `--record-attempt` before the
 pipeline and `--record-failure` on failure; these preserve the last success.
+If success verification records an error, the subsequent `--record-failure`
+preserves it. Status and `--check` expose that reason in `metadata.error` and
+`errors`, including when no prior success exists; the dashboard warning uses
+the same `errors`. A new `--record-attempt` clears the previous attempt's error.
 Those writer flags change only the local marker and never run the pipeline.
 Do not use `--record-success` to label an unverified warehouse successful.
 

@@ -1,5 +1,6 @@
 """Exercise the real supervisor with local command stubs; never touch /app or Fly."""
 
+import json
 import os
 import signal
 import subprocess
@@ -8,6 +9,8 @@ import time
 from pathlib import Path
 
 import pytest
+
+from tests.test_freshness import marker_payload
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -157,3 +160,43 @@ def test_legacy_epoch_keeps_refresh_schedule(supervisor):
     (supervisor / "data/.last_pipeline_run").write_text(str(int(time.time())))
     run_supervisor(supervisor, {}, lambda text: "refresh check:" in text)
     assert not (supervisor / "pipeline-ran").exists()
+
+
+def test_real_freshness_verification_error_survives_supervisor_failure(
+    supervisor, project_root_tmp
+):
+    executable(
+        supervisor / ".venv/bin/python",
+        f'#!/bin/bash\nexec "{sys.executable}" "$@"\n',
+    )
+    marker = supervisor / "data/.freshness.json"
+    previous = marker_payload()
+    marker.write_text(json.dumps(previous))
+    env = {
+        "CTI_PROJECT_ROOT": str(project_root_tmp),
+        "CTI_REFRESHABLE_PROFILES": "adrd,oncology_nsclc",
+        "CTI_REFRESH_MIN_FREE_BYTES": "1",
+        "CTI_FRESHNESS_MAX_AGE_DAYS": "10",
+    }
+    text = run_supervisor(supervisor, env, lambda text: "dashboard serving again" in text)
+    reason = "Missing successful capture for adrd"
+    assert reason in text
+    assert "pipeline stdout sentinel" in text
+    after = json.loads(marker.read_text())
+    assert after["attempt_status"] == "failed"
+    assert after["last_success"] == previous["last_success"]
+    assert after["error"] == reason
+    assert (supervisor / "data/.last_pipeline_run").read_text() == "1\n"
+    result = subprocess.run(
+        [sys.executable, "-m", "src.quality.freshness", "--check"],
+        cwd=ROOT,
+        env={**os.environ, **env},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1
+    checked = json.loads(result.stdout)
+    assert not checked["ok"]
+    assert checked["metadata"]["error"] == reason
+    assert reason in checked["errors"]

@@ -159,6 +159,32 @@ def test_attempt_marker_keeps_prior_success_but_warns(freshness, status):
     assert not freshness.status()["ok"]
 
 
+@pytest.mark.parametrize("has_success", [True, False])
+def test_failure_diagnostic_is_visible_with_or_without_prior_success(freshness, has_success):
+    payload = marker_payload()
+    payload["attempt_status"] = "failed"
+    payload["error"] = "Reconciliation failed for adrd"
+    if not has_success:
+        payload["last_success"] = None
+    write_marker(freshness, payload)
+    result = freshness.status()
+    assert not result["ok"]
+    assert result["metadata"]["error"] == payload["error"]
+    assert payload["error"] in result["errors"]
+
+
+def test_new_attempt_clears_previous_failure_diagnostic(freshness):
+    payload = marker_payload()
+    payload["attempt_status"] = "failed"
+    payload["error"] = "Reconciliation failed for adrd"
+    path = write_marker(freshness, payload)
+    for flag in ("--record-attempt", "--record-failure"):
+        assert freshness.main([flag]) == 0
+        after = json.loads(path.read_text())
+        assert after["error"] is None
+        assert after["last_success"] == payload["last_success"]
+
+
 @pytest.fixture
 def accepted_root(freshness):
     profiles = get_registry().refreshable()
