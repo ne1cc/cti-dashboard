@@ -11,8 +11,11 @@ once from config/shared_paths.yml and injected into every profile's config.
 Backward compatibility
 ─────────────────────
 get_config() and get_taxonomy() in src/config.py and
-src/transform/normalize_conditions.py continue to work unchanged; they load
-the ADRD profile's config/taxonomy directly from the original YAML files.
+src/transform/normalize_conditions.py continue to work unchanged.
+config/project_config.yml references config/profiles/adrd.yml as its single
+source of truth via `default_profile: adrd`, dynamically resolving ADRD query
+parameters and scope (all 8 overall statuses) while preserving standalone
+config semantics when default_profile is omitted.
 ProfileRegistry supplements — it does not replace — those singletons.
 
 Adding a new indication

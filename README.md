@@ -125,8 +125,12 @@ erDiagram
 
 - **Therapeutic area:** Alzheimer's disease and related dementias (config-driven taxonomy).
 - **Geography:** United States (all raw records preserved; U.S.-only in marts).
-- **Study type:** Interventional.
-- **Statuses:** RECRUITING, ACTIVE_NOT_RECRUITING, NOT_YET_RECRUITING, COMPLETED.
+- **Study type:** Interventional (`AREA[StudyType]INTERVENTIONAL`).
+- **Statuses:** All 8 overall statuses: `RECRUITING`, `ACTIVE_NOT_RECRUITING`, `NOT_YET_RECRUITING`, `COMPLETED`, `TERMINATED`, `WITHDRAWN`, `SUSPENDED`, `ENROLLING_BY_INVITATION`. Defined authoritatively in `config/profiles/adrd.yml` and referenced by `config/project_config.yml` (`default_profile: adrd`).
+- **Downstream implications of the 8-status scope:**
+  - **Tracked trial totals:** Total trial counts (`dim_trial`, `trial_count`, warehouse trials) reflect the entire interventional landscape across all 8 statuses, rather than only active/completed studies.
+  - **Stopped studies & feasibility risk:** Studies that stopped early (`TERMINATED`, `WITHDRAWN`, `SUSPENDED`) are ingested and retained, powering why-stopped and feasibility risk analyses.
+  - **Similarity candidate pool vs. recruiting competition:** The candidate pool for trial similarity scoring spans all 8 statuses to identify relevant precedents across past and stopped trials, while active competition metrics (`recruiting_trial_count`, `new_recruiting_30d/90d`, `sponsor_hhi`, and priority scoring) strictly isolate confirmed currently-recruiting studies (`overall_status = 'RECRUITING'`).
 - **Phases:** EARLY_PHASE1 – PHASE4 where available.
 - **Cadence:** Weekly snapshots; history accrues from this project's own runs.
 
