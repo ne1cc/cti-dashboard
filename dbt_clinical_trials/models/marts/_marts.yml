@@ -59,6 +59,51 @@ models:
         data_type: DATE
       - name: active_in_latest_snapshot_flag
         data_type: BOOLEAN
+      - name: minimum_age_raw
+        data_type: VARCHAR
+        description: Preserved verbatim ClinicalTrials.gov minimum age string.
+      - name: maximum_age_raw
+        data_type: VARCHAR
+        description: Preserved verbatim ClinicalTrials.gov maximum age string.
+      - name: min_age_years
+        data_type: DOUBLE
+        description: Minimum eligibility age in fractional years; null if unstated/unbounded/malformed.
+      - name: max_age_years
+        data_type: DOUBLE
+        description: Maximum eligibility age in fractional years; null if unstated/unbounded/malformed.
+      - name: std_age_groups
+        data_type: VARCHAR[]
+        description: Standard age groups (CHILD, ADULT, OLDER_ADULT) applicable to this trial.
+      - name: sex_eligibility
+        data_type: VARCHAR
+        description: Sex eligibility restriction (ALL, FEMALE, MALE, or null/unknown).
+      - name: gender_based
+        data_type: BOOLEAN
+        description: Whether eligibility is based on gender/sex criteria.
+      - name: gender_description
+        data_type: VARCHAR
+        description: Registry description explaining gender-based eligibility.
+      - name: accepts_healthy_volunteers
+        data_type: BOOLEAN
+        description: Whether healthy volunteers are accepted (true, false, or null if unstated).
+      - name: age_bounds_valid_flag
+        data_type: BOOLEAN
+        description: True when age bounds are not contradictory and non-null bounds parsed without error.
+      - name: age_bounds_contradictory_flag
+        data_type: BOOLEAN
+        description: True when both bounds are present and minimum age exceeds maximum age.
+      - name: has_unspecified_min_age
+        data_type: BOOLEAN
+        description: True when minimum age limit is not stated or unbounded.
+      - name: has_unspecified_max_age
+        data_type: BOOLEAN
+        description: True when maximum age limit is not stated or unbounded.
+      - name: healthy_volunteers_unknown_flag
+        data_type: BOOLEAN
+        description: True when healthy volunteer status is unstated or missing.
+      - name: sex_eligibility_unknown_flag
+        data_type: BOOLEAN
+        description: True when sex eligibility is unstated, empty, or unknown.
 
   - name: dim_condition
     description: >
