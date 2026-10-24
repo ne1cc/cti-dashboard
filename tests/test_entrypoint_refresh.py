@@ -200,3 +200,62 @@ def test_real_freshness_verification_error_survives_supervisor_failure(
     assert not checked["ok"]
     assert checked["metadata"]["error"] == reason
     assert reason in checked["errors"]
+
+
+def test_real_low_disk_replaces_previous_reconciliation_error(supervisor, project_root_tmp):
+    executable(
+        supervisor / ".venv/bin/python",
+        f"#!{sys.executable}\n"
+        "import os, runpy, sys\n"
+        "if '--preflight' in sys.argv:\n"
+        " import shutil\n"
+        " from types import SimpleNamespace\n"
+        " shutil.disk_usage = lambda path: SimpleNamespace(free=1)\n"
+        " sys.argv = ['src.quality.freshness', '--preflight']\n"
+        " runpy.run_module('src.quality.freshness', run_name='__main__')\n"
+        "else:\n"
+        " os.execv(sys.executable, [sys.executable, *sys.argv[1:]])\n",
+    )
+    marker = supervisor / "data/.freshness.json"
+    previous = marker_payload()
+    previous["attempt_status"] = "failed"
+    previous["error"] = "Reconciliation failed for adrd"
+    marker.write_text(json.dumps(previous))
+    warehouse = supervisor / "data/warehouse/clinical_trials.duckdb"
+    before = warehouse.read_bytes()
+    env = {
+        "CTI_PROJECT_ROOT": str(project_root_tmp),
+        "CTI_REFRESHABLE_PROFILES": "adrd,oncology_nsclc",
+        "CTI_REFRESH_MIN_FREE_BYTES": "500000000",
+    }
+    text = run_supervisor(
+        supervisor,
+        env,
+        lambda text: (
+            "refresh skipped" in text
+            and json.loads(marker.read_text())["attempt_at_utc"] != previous["attempt_at_utc"]
+        ),
+    )
+    assert '"free_bytes": 1' in text and '"min_free_bytes": 500000000' in text
+    after = json.loads(marker.read_text())
+    assert after["attempt_status"] == "failed"
+    assert after["error"] != previous["error"]
+    assert "disk preflight" in after["error"].lower()
+    assert after["last_success"] == previous["last_success"]
+    assert warehouse.read_bytes() == before
+    assert not (supervisor / "pipeline-ran").exists()
+    assert (supervisor / "data/.last_pipeline_run").read_text() == "1\n"
+    result = subprocess.run(
+        [sys.executable, "-m", "src.quality.freshness", "--check"],
+        cwd=ROOT,
+        env={**os.environ, **env},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1
+    checked = json.loads(result.stdout)
+    assert not checked["ok"]
+    assert checked["metadata"]["error"] == after["error"]
+    assert after["error"] in checked["errors"]
+    assert previous["error"] not in checked["errors"]

@@ -404,6 +404,10 @@ If success verification records an error, the subsequent `--record-failure`
 preserves it. Status and `--check` expose that reason in `metadata.error` and
 `errors`, including when no prior success exists; the dashboard warning uses
 the same `errors`. A new `--record-attempt` clears the previous attempt's error.
+Use `--record-failure --error "REASON"` to replace an earlier diagnostic for a
+different failure. The supervisor records `Disk preflight failed` for a rejected
+scheduled refresh; actual free/floor bytes remain on stdout. `--error` requires
+`--record-failure`; omitting it keeps an already-recorded verifier reason.
 Those writer flags change only the local marker and never run the pipeline.
 Do not use `--record-success` to label an unverified warehouse successful.
 

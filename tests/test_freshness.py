@@ -185,6 +185,33 @@ def test_new_attempt_clears_previous_failure_diagnostic(freshness):
         assert after["last_success"] == payload["last_success"]
 
 
+def test_explicit_failure_reason_replaces_previous_diagnostic(freshness):
+    payload = marker_payload()
+    payload["attempt_status"] = "failed"
+    payload["error"] = "Reconciliation failed for adrd"
+    path = write_marker(freshness, payload)
+    reason = "Disk preflight failed"
+    assert freshness.main(["--record-failure", "--error", reason]) == 0
+    after = json.loads(path.read_text())
+    assert after["attempt_status"] == "failed"
+    assert after["error"] == reason
+    assert after["last_success"] == payload["last_success"]
+    result = freshness.status()
+    assert not result["ok"]
+    assert reason in result["errors"]
+    assert payload["error"] not in result["errors"]
+
+
+@pytest.mark.parametrize("action", [[], ["--record-attempt"]])
+def test_error_requires_record_failure(freshness, action):
+    path = write_marker(freshness, marker_payload())
+    before = path.read_bytes()
+    with pytest.raises(SystemExit) as exc:
+        freshness.main([*action, "--error", "Disk preflight failed"])
+    assert exc.value.code == 2
+    assert path.read_bytes() == before
+
+
 @pytest.fixture
 def accepted_root(freshness):
     profiles = get_registry().refreshable()

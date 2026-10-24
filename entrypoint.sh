@@ -97,6 +97,7 @@ refresh_if_due() {
     if ! run_logged "$PYTHON_BIN" -m src.quality.freshness --preflight; then
         log "refresh skipped: disk preflight FAILED; keeping the existing dashboard serving"
         run_logged "$PYTHON_BIN" -m src.quality.freshness --record-failure \
+            --error "Disk preflight failed" \
             || log "failed to persist disk rejection; inspect stdout"
         return 0
     fi

@@ -232,12 +232,15 @@ def main(argv: list[str] | None = None) -> int:
     actions = parser.add_mutually_exclusive_group()
     for action in ("check", "preflight", "record-attempt", "record-success", "record-failure"):
         actions.add_argument(f"--{action}", action="store_true")
+    parser.add_argument("--error", help="Reason for --record-failure; replaces any previous error")
     args = parser.parse_args(argv)
+    if args.error is not None and not args.record_failure:
+        parser.error("--error requires --record-failure")
     try:
         if args.preflight:
             result = preflight()
         elif args.record_attempt or args.record_failure:
-            _record_attempt("running" if args.record_attempt else "failed")
+            _record_attempt("running" if args.record_attempt else "failed", args.error)
             result = {"ok": True}
         elif args.record_success:
             try:
