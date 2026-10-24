@@ -25,7 +25,7 @@ kill_timeout = '270s'
 # temporary storage for mart_trial_similarity without completing; the 2026-10-07
 # outage was that set filling the volume, then entrypoint.sh dying on its first
 # log append. adrd + oncology_nsclc is the measured-passing configuration
-# (~130 s, 32 models, 137 tests). Re-expand only after the similarity mart is
+# (~130 s). Re-expand only after the similarity mart is
 # bounded and storage is sized from a completed local full build.
 [env]
   CTI_REFRESHABLE_PROFILES = 'adrd,oncology_nsclc'

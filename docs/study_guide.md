@@ -10,8 +10,8 @@ from the repository root.
 
 Read these, in order, before touching code:
 
-1. `README.md` sections 1–7 (what and why)
-2. `PROJECT_DOCUMENTATION.md` §3 (architecture diagram) and §5 (layer grains)
+1. [README](../README.md) (what, why, and fixture quickstart)
+2. [Architecture](architecture.md) (pipeline diagram and layer grains)
 3. `docs/clinical_interpretation_guardrails.md` (the language rules that shape everything)
 
 The whole system in one sentence: **download public registry pages verbatim (bronze),
@@ -95,10 +95,10 @@ The order matters; each file is more understandable after the previous one.
 | 6 | `src/transform/flatten_studies.py` | one JSON study → seven entity row-sets; where every silver column is born |
 | 7 | `src/transform/normalize_locations.py` + `normalize_conditions.py` | best-effort normalization and why it's labeled that way |
 | 8 | `dbt_clinical_trials/models/staging/stg_trials.sql` + `_sources.yml` | how dbt reads Parquet via `read_parquet`, staging conventions |
-| 9 | `models/intermediate/int_current_trial_status.sql` + `int_trial_status_history.sql` | snapshot logic: latest record per trial, history construction |
-| 10 | `models/marts/dim_trial.sql`, `fct_trial_snapshot.sql`, `fct_trial_site.sql` | dimensional modeling: surrogate keys, grains, current-record flag |
-| 11 | `models/marts/mart_feasibility_priority_queue.sql` | the centerpiece — read every CTE; map each to a score component in §10 of `PROJECT_DOCUMENTATION.md` |
-| 12 | `models/marts/_marts.yml` + `tests/*.sql` | how invariants become executable tests |
+| 9 | `dbt_clinical_trials/models/intermediate/int_current_trial_status.sql` + `int_trial_status_history.sql` | snapshot logic: latest record per trial, history construction |
+| 10 | `dbt_clinical_trials/models/marts/dim_trial.sql`, `fct_trial_snapshot.sql`, `fct_trial_site.sql` | dimensional modeling: surrogate keys, grains, current-record flag |
+| 11 | `dbt_clinical_trials/models/marts/mart_feasibility_priority_queue.sql` | the centerpiece — read every CTE; map each to a score component in [metric definitions](metric_definitions.md) |
+| 12 | `dbt_clinical_trials/models/marts/_marts.yml` + `tests/*.sql` | how invariants become executable tests |
 | 13 | `src/quality/reconciliation.py` + `schema_drift.py` | cross-layer trust: counts must agree, schema changes must be noticed |
 | 14 | `dashboard/components/data.py` + `guardrails.py` | cached read-only access; mechanically enforced disclaimers |
 | 15 | `tests/test_metrics.py` | the three-way config sync test and score edge cases |
@@ -126,7 +126,7 @@ Doing these will teach more than any reading. Each is safe and reversible.
    `growth_uses_registry_proxy_flag` and `has_multi_snapshot_history` change.
    This is the single best demonstration of the snapshot-history design.
 6. **Dashboard change.** Add a phase filter to the Sponsor Landscape page using
-   `components/filters.py` as a pattern. Run `make test` — the smoke test will
+   `dashboard/components/filters.py` as a pattern. Run `make test` — the smoke test will
    exercise your page.
 
 ## Level 5 — Explain it out loud
@@ -164,13 +164,13 @@ You understand the project when you can answer these without notes
 
 | "I want to understand…" | Read |
 |---|---|
-| the whole system at once | `PROJECT_DOCUMENTATION.md` |
+| the whole system at once | [README](../README.md) and [architecture](architecture.md) |
 | a specific column | `docs/data_dictionary.md` |
 | a specific metric formula | `docs/metric_definitions.md` |
 | why a number can't be trusted further | `docs/assumptions_and_limitations.md` |
 | what the tests guarantee | `docs/data_quality_framework.md` |
 | what we refuse to claim | `docs/clinical_interpretation_guardrails.md` |
-| how it was actually built, mistakes included | `docs/development_log.md` |
+| how it was actually built, mistakes included | `docs/archive/development_log.md` |
 | how to present it to a stakeholder | `docs/executive_memo_template.md` |
 
 ---

@@ -1,3 +1,6 @@
+> [!NOTE]
+> Historical archive note (2026-09-04). Engineering-count inventories were omitted during archival to prevent stale count drift.
+
 # Platform Updates — 2026-09-04
 
 This document explains, in plain language, what was decided today for the
@@ -20,7 +23,7 @@ interviewers look for.
 | Running the pipeline | You run `make pipeline` by hand | A scheduler runs it every week, automatically |
 | Where data lives | Only your laptop (and the Fly volume) | Also a durable cloud bucket (Google Cloud Storage) |
 | If something breaks | You'd only notice when you next look | The run fails visibly, retries, and never publishes bad data |
-| Proving data quality | Tests exist but don't run in CI against real dbt models | CI builds the models and runs all 73 dbt tests on every push |
+| Proving data quality | Tests exist but don't run in CI against real dbt models | CI builds the models and runs dbt tests on every push |
 | Code style safety | Ruff lint only | Ruff + type checking + pre-commit hooks (after a one-time `pre-commit install`) |
 | Schema changes | A changed column could silently break dashboards | Contracts make the build fail loudly instead |
 | Warehouse | DuckDB only | DuckDB + BigQuery (free tier) from the same dbt code |
@@ -65,7 +68,7 @@ problems never make it into the repo.
 
 **dbt build in CI, on fixture data.** CI will carry a tiny handmade dataset
 (~10 fake trials covering every status and phase). Every push to GitHub builds
-the real dbt models against it and runs all 73 tests. This proves the models
+the real dbt models against it and runs the dbt tests. This proves the models
 themselves work — not just the Python around them.
 
 **BigQuery (stretch, but included).** Google's cloud data warehouse, free tier.

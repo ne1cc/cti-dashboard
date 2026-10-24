@@ -32,9 +32,23 @@ ingester follows tokens until absent; an optional `--max-pages` cap marks
 the run **partial**, and partial runs are excluded from reuse and from all
 downstream layers by default.
 
+## Incremental reuse
+
+Without `--full-refresh`, ingestion reuses the most recent `success` manifest in
+the selected profile's manifest directory with the same endpoint/parameter query
+hash and a start time within `ingestion.reuse_window_hours` (24 hours by default
+and for shipped refreshable profiles; the ingest-only `full_catalog` profile uses
+720 hours).
+The window is measured from `started_at_utc`, not completion time; partial and
+failed runs are ineligible. After the window expires, ingestion creates a new run.
+`make full-refresh` and `make orchestrate-full-refresh` bypass reuse. See
+[`src/ingest/snapshot_manifest.py`](../src/ingest/snapshot_manifest.py) for eligibility.
+
 ## Retry / politeness
 `requests` + `tenacity`: exponential backoff (1s → 60s), max 5 attempts,
-retried statuses 429/500/502/503/504 (all in config, overridable via env).
+retried statuses 429/500/502/503/504 (all in the active config). HTTP environment
+overrides apply only to the legacy loader; see the
+[configuration reference](architecture.md#configuration-reference).
 
 ## The history caveat (core design driver)
 **The API serves only the current version of each study record.** There is
