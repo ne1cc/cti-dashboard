@@ -45,7 +45,8 @@ flowchart TB
     end
 
     subgraph OUT["Delivery"]
-        APP["Streamlit dashboard<br/>(reads Gold only)"]
+        API["Read API contract (OpenAPI 3.1)<br/>FastAPI · RFC 7807"]
+        APP["Streamlit dashboard / Patient UI<br/>(reads Gold marts &amp; API)"]
         MEMODOC["Executive memo template"]
     end
 
@@ -60,8 +61,10 @@ flowchart TB
     MANIFEST --> STG
     ENTITIES --> PROF
     MARTS --> DBTTEST
+    MARTS --> API
     MARTS --> APP
     MARTS --> MEMODOC
+    API --> APP
 ```
 
 ## 2. Layer contracts
@@ -90,7 +93,23 @@ flowchart TB
 - Staging → intermediate → marts; each layer documents and tests its grain.
 - Snapshot facts turn repeated ingestion runs into longitudinal status history —
   the source API only serves current records.
-- The dashboard reads Gold marts only; no dashboard-side business logic.
+- Delivery applications read Gold marts only; no dashboard-side business logic.
+
+### Delivery — dual surfaces & read API (OpenAPI 3.1)
+- Contract formalized in `docs/api/openapi.yaml`, companion examples in `docs/api/examples.md`,
+  and field traceability in `docs/api/source-field-map.md`.
+- **Dual delivery surfaces (ADR 0061)**: Serves both the server-rendered patient discovery
+  interface with progressive enhancement and the analytical workbench over shared Gold marts.
+- **Privacy guardrail (ADR 0065)**: Strictly excludes personal investigator and facility contact
+  PII from all endpoints; provides deep link `registry_contact_url` pointing to official
+  ClinicalTrials.gov record.
+- **Structured eligibility (Issue #62)**: Exposes `minimum_age_years`, `maximum_age_years`,
+  `age_not_stated`, `sex`, `accepts_healthy_volunteers`, and `std_age_groups`; preserves unstated
+  bounds without silent dropping.
+- **Standard error model (RFC 7807)**: All 4xx and 5xx responses return `application/problem+json`
+  Problem Details payloads.
+- **Provenance & caching headers**: Every response carries `Data-Snapshot`, `Data-Updated`,
+  `ETag`, and `Cache-Control`.
 
 ## 3. Snapshot-history design
 
@@ -118,6 +137,7 @@ collection. This is documented, not hidden.
 | Validation | pydantic v2 | Envelope/schema validation with clear errors |
 | Storage | Parquet + DuckDB | Local-first, columnar, zero-ops warehouse |
 | Modeling | dbt-duckdb | Tested, documented, grain-safe SQL layers |
+| Read API contract | OpenAPI 3.1 + RFC 7807 | Versioned, typed REST contract for multi-client consumption |
 | Dashboard | Streamlit + Plotly | Fast decision-ready delivery from Gold marts |
 | CI | GitHub Actions | Lint, unit tests, dbt build on synthetic fixtures |
 

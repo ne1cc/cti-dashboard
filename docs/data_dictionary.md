@@ -2,7 +2,8 @@
 
 Layers: **bronze** (immutable raw JSON), **silver** (normalized Parquet),
 **gold** (dbt models in DuckDB: `main_staging`, `main_intermediate`,
-`main_marts`, `main_seeds`).
+`main_marts`, `main_seeds`), and **delivery** (v1 Read API OpenAPI contract
+and dashboards).
 
 Conventions: `nct_id` matches `^NCT\d{8}$`; `*_normalized` columns are
 lowercased, punctuation-stripped text for matching only (display columns
@@ -159,3 +160,28 @@ Source omissions and missing historical retrieval metadata remain nullable. Audi
 keys are record identities, not durable facility identities. See
 [metric definitions](metric_definitions.md) for clock formulas, coverage denominators,
 filter decisions and JSON fields. Raw references depend on configured bronze retention.
+
+---
+
+## Delivery: Read API (v1 REST Contract)
+
+The delivery layer provides standard JSON REST endpoints over DuckDB Gold marts and
+cached registry sources, contracted via OpenAPI 3.1.0 at [openapi.yaml](api/openapi.yaml).
+Full example payloads are in [examples.md](api/examples.md), and end-to-end field
+lineage is in [source-field-map.md](api/source-field-map.md).
+
+### Core Resources and Grains
+| Route | Method | Grain / Scope | Key Schemas | Governance Alignment |
+|---|---|---|---|---|
+| `/v1/trials` | GET | Paginated trial summaries matching query filters | `TrialsListResponse`, `TrialSummary`, `StructuredEligibilitySummary` | Keyset cursor pagination; Issue #62 eligibility filtering preserving unstated age bounds; great-circle geographic proximity. |
+| `/v1/trials/{nct_id}` | GET | NCT ID protocol and listed facilities | `TrialDetail`, `StructuredEligibility`, `TrialSite`, `DataProvenance` | ADR 0065 contact policy: excludes investigator/coordinator PII; requires `registry_contact_url` deep link. |
+| `/v1/conditions` | GET | MeSH condition ontology and synonyms | `ConditionsListResponse`, `ConditionNode` | Autocomplete prefix matching and MeSH tree branch browsing. |
+| `/v1/trials/{nct_id}/related` | GET | NCT ID × candidate comparable study (top-25) | `RelatedTrialsResponse`, `RelatedTrialItem`, `ComparabilityFactors` | Deterministic comparability scoring from `mart_trial_similarity`; factor weight disclosure; explicit non-clinical disclaimer. |
+| `/v1/geo/access` | GET | State × condition group access snapshot | `GeoAccessResponse`, `TravelBurdenSummary`, `RegionalSiteCount` | Site density, sponsor concentration (HHI), and travel burden analytics. |
+| `/v1/meta/freshness` | GET | System and per-profile ingestion status | `MetaFreshnessResponse`, `ProfileFreshness`, `QualitySummary` | Ingestion run IDs, source versions, and data quality pass rates. |
+
+### Contract Rules
+1. **Error Standard**: All 4xx and 5xx responses strictly adhere to RFC 7807 Problem Details (`application/problem+json`).
+2. **Provenance & Caching Headers**: Every successful response includes `Data-Snapshot`, `Data-Updated`, `ETag`, and `Cache-Control`.
+3. **Structured Eligibility (Issue #62)**: `minimum_age_years` and `maximum_age_years` are null-safe numeric values; `age_not_stated: true` marks unstated bounds; search filters do not silently drop studies with unstated criteria.
+4. **Contact Privacy Guardrail (ADR 0065)**: Trial sites provide public facility names, normalized addresses, and geocoordinates. Personal contact names, emails, and phone numbers are omitted across all endpoints. Direct inquiries link to `https://clinicaltrials.gov/study/{nct_id}#contacts-and-locations`.
