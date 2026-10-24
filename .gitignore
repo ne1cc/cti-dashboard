@@ -33,6 +33,7 @@ dbt_clinical_trials/dbt_target/
 dbt_clinical_trials/dbt_packages/
 dbt_clinical_trials/logs/
 dbt_clinical_trials/profiles.yml
+dbt_clinical_trials/.user.yml
 logs/
 
 # Streamlit
@@ -49,3 +50,4 @@ logs/
 # Superpowers / agent planning artifacts
 docs/superpowers/
 .superpowers/
+.scratch/

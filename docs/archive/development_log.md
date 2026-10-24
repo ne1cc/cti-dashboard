@@ -1,3 +1,7 @@
+> [!NOTE]
+> Historical build record. Engineering test/model/seed/analysis inventories were
+> omitted during archival; measured dataset results and incident evidence are retained.
+
 # Development Log — Clinical Trial Access & Recruitment Competition Intelligence
 
 A chronological record of every step taken to build this project, including
@@ -105,7 +109,7 @@ API only serves current records.
       most-recent-wins, Parquet/CSV summary contents.
 12. **Wrote `.github/workflows/ci.yml`** — uv setup → `ruff check` → `pytest`.
 13. **Fixed 4 ruff findings** (two long lines, `datetime.UTC` alias, import
-    order). Result: lint clean, **15/15 tests passing**.
+    order). Result: lint clean, **tests passing**.
 14. **Live smoke test:** `python -m src.cli ingest --condition "Alzheimer Disease"
     --max-pages 2` → run `20260724T203236Z_cade2517`, 2 pages / 200 studies
     saved, 0 quarantined, `totalCount` 2,592, status correctly `partial`,
@@ -170,12 +174,12 @@ API only serves current records.
     `data/silver/_profiles/profile_<run_id>.json`.
 11. **Extended `src/cli.py`** — `transform` subcommand (`--run-id`, `--force`),
     auto-profiles every processed run.
-12. **Wrote `tests/test_normalization.py`** — 13 tests: text/date helpers,
+12. **Wrote `tests/test_normalization.py`** — tests for text/date helpers,
     taxonomy ordering (specific groups beat the dementia catch-all), default
     low-confidence fallback, state normalization, non-U.S. flagging, phase
     normalization, quality flags, and a full fixture-study flatten across all
     six entities. Fixed 4 ruff long-line findings via `ruff format`.
-    **Result: 28/28 tests passing, lint clean.**
+    **Result: tests passing, lint clean.**
 13. **Live verification on real data:**
     - Full ingest: run `20260724T203950Z_46dc682b`, 26 pages, **2,592 studies**
       (matches API `totalCount`), 0 quarantined, status `success`.
@@ -206,23 +210,23 @@ dropped; all mapping logic lives in version-controlled YAML.
    `normalize_text` (SQL mirror of the Python normalizer),
    `parse_partial_date` (coalesced `try_strptime` for YYYY / YYYY-MM /
    YYYY-MM-DD registry dates).
-3. **Wrote 3 seeds** — `status_mapping` (14 statuses), `phase_mapping`
+3. **Wrote seeds** — `status_mapping` (14 statuses), `phase_mapping`
    (ordering + MVP scope), `feasibility_score_weights` (5 components summing
    to 1.0, consumed in Phase 5).
 4. **Defined sources** (`_sources.yml`) — silver Parquet via
    `external_location: read_parquet('data/silver/<entity>/*.parquet',
    union_by_name=true)`; bronze manifests from `summary_*.parquet`.
-5. **Wrote 8 staging models** — snapshots, trials (partial-date parsing with
+5. **Wrote staging models** — snapshots, trials (partial-date parsing with
    `*_raw` preserved), conditions, interventions, sponsors, locations,
    outcomes, and **`stg_trial_contacts` as a deliberately empty model**
    (`where 1 = 0`) so the privacy guardrail is enforced structurally.
-6. **Wrote 7 intermediate models** — status history from complete snapshots
+6. **Wrote intermediate models** — status history from complete snapshots
    only (QUALIFY dedupe, named window for previous-status / entered- /
    left-recruiting flags), current status, condition mapping, geography
    (usable U.S. rows), site activity, condition-geography activity (single
    shared grain feeding all geography marts), sponsor concentration
    (top share + HHI via `safe_divide` + `power`).
-7. **Wrote 12 mart models** — `dim_trial`, `dim_condition`, `dim_sponsor`,
+7. **Wrote mart models** — `dim_trial`, `dim_condition`, `dim_sponsor`,
    `dim_geography` (state grain), `dim_date` (1999 → +3y spine);
    `fct_trial_snapshot` (snapshot grain, `record_hash`,
    `current_record_flag`, condition/site counts); `fct_trial_site`
@@ -239,7 +243,7 @@ dropped; all mapping logic lives in version-controlled YAML.
    baseline); `mart_data_reliability` (run-level reconciliation +
    missing-data shares).
 8. **Wrote schema tests** (`_staging.yml`, `_marts.yml`) — not_null / unique /
-   accepted_values / relationships across keys and grains — plus **5 singular
+   accepted_values / relationships across keys and grains — plus **singular
    tests**: `assert_valid_study_dates` (warn),
    `assert_one_current_record_per_trial`,
    `assert_trial_site_relationship_integrity`, `assert_valid_us_state`,
@@ -254,8 +258,7 @@ dropped; all mapping logic lives in version-controlled YAML.
    - `not_null_mart_site_overlap_facility_normalized` failed with 266 rows:
      real listings with no facility name. Decision: exclude them from the
      overlap mart only (identity required for overlap), keep them upstream.
-10. **Live verification** (`dbt build`): **97/97 passing** — 29 models,
-    3 seeds, 65 tests, 0 warnings. Row counts: dim_trial 2,592 (= ingest),
+10. **Live verification** (`dbt build`): **passing**, 0 warnings. Row counts: dim_trial 2,592 (= ingest),
     fct_trial_snapshot 2,592, fct_trial_site 12,244, bridges 4,037 / 4,642,
     mart_recruiting_competition 449 segments (230 low / 140 moderate /
     79 elevated), mart_site_overlap 6,241 facilities (top overlap:
@@ -299,7 +302,7 @@ feed analytical marts.
    (conservative/base/optimistic multipliers); pydantic-validated, every
    output carries the "illustrative, not observed outcomes" disclaimer;
    `render_markdown` for the Phase 7 memo and Phase 6 dashboard.
-5. **Wrote 4 dbt analyses** — top priority segments, sponsor landscape,
+5. **Wrote dbt analyses** — top priority segments, sponsor landscape,
    site-overlap hotspots, data-reliability trend (all `ref`-based).
 6. **Wrote `src/quality/schema_drift.py`** — records observed bronze field
    paths (depth 3) per run; first run creates
@@ -313,7 +316,7 @@ feed analytical marts.
    Markdown report (`reports/data_quality_report.md`) combining the
    reliability mart, reconciliation results, schema-drift status, and the
    interpretation guardrails; wired to the existing `make quality-report`.
-9. **Wrote `tests/test_metrics.py`** — 10 tests: weight sums, YAML↔seed↔dbt
+9. **Wrote `tests/test_metrics.py`** — tests for weight sums, YAML↔seed↔dbt
    var consistency, score boundedness (via in-memory DuckDB), degenerate
    normalization → 0, HHI math (0.375 fixture / 1.0 solo), ROI arithmetic
    and disclaimer propagation. One fix: DuckDB returns `Decimal` from
@@ -321,7 +324,7 @@ feed analytical marts.
 10. **Live verification:** priority queue = 449 segments (75 review /
     374 watch, none ≥ 0.70 yet — expected with single-snapshot history);
     top segment alzheimers_disease × FL × PHASE3 (score 0.6263). Full
-    `dbt build`: **105/105 passing.** Pytest: **38/38.** Ruff clean.
+    `dbt build`: **passing.** Pytest: **passing.** Ruff clean.
     `quality-report` run live: 4/4 reconciliation checks passed, schema
     baseline created (125 field paths), report written.
 
@@ -367,7 +370,7 @@ embedded in every result object.
      disclaimer always renders above results).
 3. **Live verification:**
    - `streamlit run dashboard/app.py` served HTTP 200 headless.
-   - Every page executed via Streamlit's `AppTest` harness — 7/7 clean.
+   - Every page executed via Streamlit's `AppTest` harness — clean.
    - Debugging notes: a first combined AppTest run segfaulted while the
      dev server still held the DuckDB file — re-ran after stopping the
      server and all pages passed (kept pages tested without a live
@@ -378,7 +381,7 @@ embedded in every result object.
 4. **Added `tests/test_dashboard_smoke.py`** — parametrized AppTest run of
    all 7 scripts (auto-skips when no warehouse, e.g. CI) plus a static
    check that every page calls `page_setup` (guardrail banner). Suite now
-   **46/46 passing**, ruff clean.
+   **passing**, ruff clean.
 
 **Key decisions:** the dashboard is read-only against the warehouse
 (connection opened `read_only=True`); every page carries the disclaimer
@@ -420,12 +423,11 @@ warehouse and guarded interpretation language:
 ### Step 7.2 — README completion
 
 - Section 17 now links `docs/metric_definitions.md`.
-- Section 19 cites the tested reality: **72 dbt data tests + 46 pytest
-  tests** with links to the framework and guardrail docs.
+- Section 19 cites tested reality with links to the framework and guardrail docs (engineering-count inventories omitted during archival).
 - Section 22's screenshot placeholders became a 10-row documentation
   index table.
 - Section 24 resume bullets use measured values: 2,592 versioned trial
-  records, 29 tested dbt models, 419 recruiting trials across 50 states,
+  records, tested dbt models, 419 recruiting trials across 50 states,
   6,241 normalized facilities, 449 ranked segments.
 - Section 25 lists 8 numbered interview talking points.
 - Removed all leftover `*(Phase N)*` markers from section headers now
@@ -435,13 +437,11 @@ warehouse and guarded interpretation language:
 
 | Check | Result |
 |---|---|
-| `uv run pytest -q` | 46/46 passed |
+| `uv run pytest -q` | passed |
 | `uv run ruff check src tests dashboard` | clean |
-| `dbt build` (root, `--project-dir`/`--profiles-dir`) | 105/105 PASS — 3 seeds, 15 tables, 15 views, 72 data tests |
+| `dbt build` (root, `--project-dir`/`--profiles-dir`) | PASS — seeds, tables, views, and data tests green |
 
-One accuracy fix during verification: earlier docs said "66 dbt data
-tests"; the actual built count is **72** — corrected in README §19/§25
-and `data_quality_framework.md`.
+One accuracy fix during verification: corrected in README and `data_quality_framework.md` (engineering-count inventories omitted during archival).
 
 **Key decisions:** documentation numbers are never typed from memory —
 each figure was queried from the warehouse immediately before writing;
@@ -550,10 +550,10 @@ logic) rather than forking an ingestion path:
 
 | Check | Command | Result |
 |---|---|---|
-| Unit tests | `uv run pytest -q -rs` | 64 passed, 8 skipped |
+| Unit tests | `uv run pytest -q -rs` | passed; dashboard smoke skipped |
 | Lint | `make lint` (ruff on src/tests/dashboard) | clean |
 
-The 8 skips are `tests/test_dashboard_smoke.py` marts-not-built skips —
+The skips are `tests/test_dashboard_smoke.py` marts-not-built skips —
 pre-existing behavior in a worktree without a built warehouse, unrelated
 to this change.
 
@@ -687,9 +687,9 @@ a latent bug present on `main`: the transform handler called
 - `src/cli.py` — `transform --profile` + config pass-through (fixes the
   latent wrong-tree profiling bug).
 - `Makefile` — `transform-full-catalog` target.
-- Tests: `tests/test_export_parquet.py` (+6), new
-  `tests/test_build_silver.py` (3), `tests/test_quality.py` (+3),
-  `tests/test_cli.py` (+4).
+- Tests: `tests/test_export_parquet.py`, new
+  `tests/test_build_silver.py`, `tests/test_quality.py`,
+  `tests/test_cli.py`.
 - Docs: `docs/architecture.md` §6 (chunked transform → implemented),
   `README.md` §7a, `config/full_catalog_config.yml` scope comments.
 
@@ -713,10 +713,10 @@ both).
 
 | Check | Command | Result |
 |---|---|---|
-| Unit tests | `uv run pytest` | 82 passed, 9 skipped |
+| Unit tests | `uv run pytest` | passed; dashboard smoke skipped |
 | Lint | `uv run ruff check src tests dashboard` | clean |
 
-The 9 skips are the pre-existing `test_dashboard_smoke.py` marts-not-built
+The skips are the pre-existing `test_dashboard_smoke.py` marts-not-built
 skips, unrelated to this change.
 
 ### Incident during live verification: two flatten columns missing from the schema
@@ -732,7 +732,7 @@ writer correctly dropped "unknown" keys — deleting two live columns.
 
 Symptom: `make dbt-run` failed with
 `Binder Error: Referenced column "allocation" not found in FROM clause!`
-(1 model error, 20 skips; 97 downstream dbt tests errored).
+(1 model error, 20 skips; downstream dbt tests errored).
 
 Fix (`6f185d7`): add both columns to `ENTITY_COLUMNS["silver_trials"]`
 (string type via the arrow-schema default) and pin the contract with
@@ -764,9 +764,9 @@ fresh worktree):
   pandas-written silver **exactly**: 2,618 trials / 5,368 conditions /
   4,958 interventions / 4,674 sponsors / 25,935 locations / 20,255
   outcomes — identical counts before and after the writer swap.
-- `make dbt-run`: **32/32 models PASS**; `make dbt-test`: **114/114 tests
+- `make dbt-run`: **models PASS**; `make dbt-test`: **tests
   PASS** against streaming-writer silver.
-- `uv run pytest`: **98 passed, 0 failed, 0 skipped** (dashboard smoke
+- `uv run pytest`: **passed, none failed or skipped** (dashboard smoke
   tests now run for real against the rebuilt warehouse).
 
 Full-catalog streaming transform (run `20260905T184736Z_a62964b0`,

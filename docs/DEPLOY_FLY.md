@@ -37,7 +37,7 @@ shape.
 ## Automated deployment (GitHub Actions)
 
 Production deployments are automated and gated by CI in `.github/workflows/ci.yml`.
-The uncoordinated standalone `.github/workflows/fly-deploy.yml` has been removed
+The uncoordinated standalone Fly deployment workflow has been removed
 so broken code can never deploy to production if tests fail.
 
 ### Unified Pipeline & CI Gating
@@ -206,19 +206,15 @@ Remediation in PR `fix/production-volume-and-profile-scope`:
   `shared-cpu-1x`, an empty named volume mounted at `/app/data`):
   **130 seconds** for `make pipeline` over both refreshable profiles — a real
   31-page ADRD run (3,037 records) and a real 61-page NSCLC run (6,060
-  records), `prune-data` a no-op at 0 runs removed, 32 dbt models and 137 dbt
+  records), `prune-data` a no-op at 0 runs removed, dbt models and dbt
   tests green, 12 reconciliation checks passing across 2 profiles. Budget
   first boot at about two minutes, not one.
 - **Every 7 days**, the entrypoint pauses the dashboard, reruns the pipeline,
   and resumes serving. Budget the outage as one pipeline run plus Streamlit's
   startup. The one-profile figure was 50 seconds, measured on 2026-09-05 in
   this image itself (Docker, linux/arm64, shared CPU) over a reused ingestion
-  run — 3,037 trials, 32 dbt models, 115 dbt tests, counts that drift with the
-  catalogue and with `dbt_clinical_trials/models/`; the same two counters read
-  **32 models and 137 tests** on 2026-09-07 (`uv run dbt parse --project-dir
-  dbt_clinical_trials --profiles-dir dbt_clinical_trials` plus a counter over
-  `target/manifest.json`, corroborated by the container's own `dbt test`,
-  which reported `PASS=137`). Measured for two profiles on 2026-09-07 in the
+  run — 3,037 trials, with all dbt models and tests passing green.
+  Measured for two profiles on 2026-09-07 in the
   same image: **130 s** from an empty volume, **120 s and 118 s** for two
   forced pulls onto a volume that already held a run (each = 47 s/45 s of
   `orchestrate --full-refresh` + 73 s of `prune-data dbt-run dbt-test

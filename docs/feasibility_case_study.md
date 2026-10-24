@@ -193,8 +193,7 @@ the compact results, while individual audit lines support drill-through.
 exclusion reason counts, unresolved counts and older-update contributor counts were
 compared against independent SQL starting at staging tables. Contributor union
 matches the separately calculated national total. Every displayed table value
-comes from the reconciled CSV. The captured warehouse passed its dbt data checks
-(measured 2026-10-03: 157 dbt tests passed).
+comes from the reconciled CSV. The captured warehouse passed its dbt data checks on 2026-10-03.
 
 **Raw-record inspection.** Select the alphabetically first NCT ID in each of nine
 available categories: national contributor, multi-state contributor, recruiting

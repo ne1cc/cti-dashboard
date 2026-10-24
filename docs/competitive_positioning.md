@@ -1,27 +1,17 @@
 # CTI Competitive Positioning
 
-## How to use this document
+## Context and Purpose
 
-This is competitive and market context, not a commitment list. It exists
-to answer one question: given that Citeline, IQVIA, and H1 sell
-proprietary clinical-trial intelligence, what can CTI Dashboard credibly
-and usefully offer using only free, public ClinicalTrials.gov data — and
-to whom?
+This document provides competitive and market context. It answers one central
+question: given that Citeline, IQVIA, and H1 sell proprietary clinical-trial
+intelligence, what can CTI Dashboard credibly and usefully offer using only
+free, public ClinicalTrials.gov data — and to whom?
 
-The backlog near the end is a set of loose ideas that fit that niche, not
-a plan. Before building any of them, pick one and run it through this
-project's normal process: brainstorm the specific feature, write a design
-spec to `docs/superpowers/specs/`, then a task-by-task plan to
-`docs/superpowers/plans/`. Do not try to build the whole list at once.
-
----
-
-Your dashboard has moved beyond a portfolio prototype: it is now a live,
-containerized ClinicalTrials.gov intelligence product with a weekly
-refresh loop, dbt quality gates, and seven decision-oriented dashboard
-pages. The best next step is **not** to imitate Citeline, IQVIA, or H1's
-proprietary data; it is to deepen the **free, explainable feasibility
-workflow** that public registry data can genuinely support.
+CTI Dashboard is a live, containerized ClinicalTrials.gov intelligence product
+with a weekly refresh loop, dbt quality gates, and decision-oriented dashboard
+pages. The strategic direction is to deepen the **free, explainable feasibility
+workflow** that public registry data can genuinely support, rather than imitating
+proprietary commercial databases.
 
 ## TL;DR
 

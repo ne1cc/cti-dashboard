@@ -92,6 +92,20 @@ flowchart TB
   the source API only serves current records.
 - The dashboard reads Gold marts only; no dashboard-side business logic.
 
+### Grain contract at every layer
+
+| Layer | Object | Grain |
+|---|---|---|
+| Bronze | JSON page | API page × ingestion run |
+| Silver | `trials` | NCT ID × indication profile × ingestion run |
+| Silver | `trial_locations` | profile × NCT ID × run × original location ordinal |
+| Gold | `dim_trial` | indication profile × NCT ID (current record) |
+| Gold | `fct_trial_snapshot` | indication profile × NCT ID × snapshot date |
+| Gold | `fct_trial_site` | indication profile × NCT ID × facility × city × state × snapshot date |
+| Gold | `mart_feasibility_priority_queue` | profile × condition group × state × phase × latest snapshot |
+
+Authoritative per-model grain statements live in the dbt model definitions (`dbt_clinical_trials/models/**/_*.yml`), and composite keys are enforced by unique schema tests.
+
 ## 3. Snapshot-history design
 
 ```mermaid

@@ -22,21 +22,13 @@ Five layers of automated checks; nothing is silently dropped or fixed.
   per run (`data/silver/_profiles/`).
 
 ## 3. Warehouse tests (dbt)
-The suite is 157 dbt tests (measured 2026-10-03 UTC with `uv run dbt parse
---project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials` plus
-a `resource_type` counter over `dbt_clinical_trials/target/manifest.json` — the same
-manifest `tests/test_docs_describe_current_paths.py` reads; that guard fails the build
-when a live document states a dbt or pytest count, phrased the way the guard
-recognises (the recognised shapes are listed in that file), with no date and no
-command behind it — which is why this line carries both). Run them with
-`make dbt-test`; the last dated full green run is recorded in
-[`docs/DEPLOY_FLY.md`](docs/DEPLOY_FLY.md).
+The dbt test suite runs schema tests and singular data tests across models
+from staging through marts. Run them with `make dbt-test` or `uv run dbt test
+--project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials`.
 - Schema tests: `not_null`, `unique`, `accepted_values`, `relationships`
   on every key and grain, staging through marts.
-- Singular tests (`dbt_clinical_trials/tests/` holds the full set of 14 SQL
-  assertion files; the six below are the ones this document names, and their
-  severity is the point — four fail the build at dbt's default `error` and two are
-  deliberately `warn`, set in the test file itself):
+- Singular tests in `dbt_clinical_trials/tests/` include the examples below;
+  severity is set in each test file:
   | Test | Severity | Asserts |
   |---|---|---|
   | assert_valid_study_dates | warn | start ≤ completion where both exist |
@@ -72,10 +64,9 @@ CI enforces automated verification on every push and pull request before deploym
 table (from `mart_data_reliability`), reconciliation results, drift
 status, and the interpretation guardrails. The step is a gate as well as a
 print: it exits non-zero when a reconciliation check fails, which is what
-`make pipeline` ends on. Unit/integration suite: 383 pytest
-tests (measured 2026-10-03 UTC by `uv run pytest --collect-only`; regenerate
-with `make test`), including config-sync tests that fail if score weights or band
-thresholds diverge between YAML, the dbt seed, and dbt vars.
+`make pipeline` ends on. The pytest unit and integration suite (run with `make test`)
+includes config-sync tests that fail if score weights or band thresholds
+diverge between YAML, the dbt seed, and dbt vars.
 
 ## Severity philosophy
 - **error** = structural contract broken → fix before shipping metrics.
