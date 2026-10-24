@@ -68,8 +68,8 @@ taxonomy), `mapping_confidence` (high/medium/low), `dementia_relevance_flag`.
 `state_normalized` (2-letter code via `config/geography_rules.yml`),
 `zip_code`, `country`, `latitude`, `longitude`, `location_status`,
 `us_location_flag`, `usable_geography_flag`. **Facility names are not
-stable unique site identifiers.** No contact or investigator fields exist
-anywhere in this project.
+stable unique site identifiers.** No personal contact or investigator fields
+exist anywhere in this project (formalized in ADR 0065).
 
 ### `silver_trial_outcomes` — grain: NCT × outcome × run
 `outcome_type` (primary/secondary), `measure`, `time_frame`. Descriptive
@@ -80,7 +80,8 @@ text only — never interpreted clinically.
 ## Gold: staging (`main_staging`, views)
 Typed 1:1 reads of silver plus `stg_trial_snapshots` (manifest rows) and
 `stg_trial_contacts` — **deliberately empty** (`where 1=0`) privacy
-guardrail.
+guardrail (enforcing ADR 0065: official registry contact link plus site list,
+with zero contact information stored or exposed by design).
 
 Every grain in the three Gold sections below is additionally scoped by
 `indication_profile_id`: the multi-indication migration made the trial grain
