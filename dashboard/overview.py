@@ -10,6 +10,7 @@ from components.formatting import (
 )
 from components.guardrails import guarded_footer, page_setup, proxy_caption
 from components.guidance import (
+    clinicaltrials_gov_search_url,
     format_condition_group,
     render_indication_banner,
     render_page_guide,
@@ -84,9 +85,16 @@ preview_df = queue.head(10)[
         "sponsor_hhi",
         "site_overlap_rate",
         "distinct_sponsors",
+        "listed_site_count",
         "priority_explanation",
     ]
 ].copy()
+preview_df["registry_search_url"] = [
+    clinicaltrials_gov_search_url(cg, state)
+    for cg, state in zip(
+        preview_df["condition_group"], preview_df["state_normalized"], strict=False
+    )
+]
 preview_df["condition_group"] = preview_df["condition_group"].apply(format_condition_group)
 preview_df["phase_normalized"] = preview_df["phase_normalized"].map(format_phase)
 preview_df["priority_explanation"] = [
@@ -126,6 +134,10 @@ st.dataframe(
             format="%d",
             width=90,
             help="Distinct sponsors in this segment",
+        ),
+        "listed_site_count": st.column_config.NumberColumn("Listed Sites", format="%d"),
+        "registry_search_url": st.column_config.LinkColumn(
+            "Registry Search", display_text="Search ClinicalTrials.gov"
         ),
         "priority_explanation": st.column_config.TextColumn(
             "Explanation",

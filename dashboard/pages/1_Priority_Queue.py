@@ -8,7 +8,11 @@ from components.audit_panel import PRIORITY_DERIVED_RULES, render_metric_audit
 from components.filters import segment_filters
 from components.formatting import format_phase, format_priority_explanation
 from components.guardrails import guarded_footer, page_setup
-from components.guidance import format_condition_group, render_page_guide
+from components.guidance import (
+    clinicaltrials_gov_search_url,
+    format_condition_group,
+    render_page_guide,
+)
 from components.profile import render_profile_selector
 
 page_setup("Registry Segments")
@@ -33,6 +37,12 @@ if bool(filtered["growth_uses_registry_proxy_flag"].any()):
         "not accrued yet."
     )
 
+filtered = filtered.copy()
+filtered["registry_search_url"] = [
+    clinicaltrials_gov_search_url(cg, st_val)
+    for cg, st_val in zip(filtered["condition_group"], filtered["state_normalized"], strict=False)
+]
+
 st.subheader("Registry segments")
 st.caption(
     "Default sort is active recruiting trials descending. "
@@ -50,6 +60,7 @@ queue_columns = [
     "distinct_sponsors",
     "listed_site_count",
     "data_confidence_share",
+    "registry_search_url",
     "priority_explanation",
 ]
 display_df = filtered[queue_columns].copy()
@@ -110,6 +121,11 @@ queue_event = st.dataframe(
             width=160,
             help="0.5 record-quality-ok share + 0.5 latest usable-location share",
         ),
+        "registry_search_url": st.column_config.LinkColumn(
+            "Registry Search",
+            display_text="Search ClinicalTrials.gov",
+            help="Pre-filtered search for active recruiting studies in this market",
+        ),
         "priority_explanation": st.column_config.TextColumn(
             "Explanation",
             width=700,
@@ -123,15 +139,16 @@ export_columns = [
     "state_normalized",
     "phase_normalized",
     "active_recruiting_trials",
-    "recruiting_trial_count",
     "sponsor_hhi",
     "site_overlap_rate",
     "distinct_sponsors",
     "listed_site_count",
     "recent_growth_input",
     "data_confidence_share",
+    "registry_search_url",
     "priority_explanation",
     "interpretation_note",
+    "snapshot_date",
 ]
 st.download_button(
     "Download filtered segments as CSV",
@@ -189,6 +206,46 @@ if selected_rows:
         },
     )
     st.caption(segment["priority_explanation"])
+
+    st.subheader(
+        f"Constituent Clinical Trials — {format_condition_group(segment['condition_group'])} · "
+        f"{segment['state_normalized']} · {segment['phase_normalized']}"
+    )
+    st.caption(
+        "Individual recruiting protocols registered on ClinicalTrials.gov contributing to this "
+        "market segment. Click 'View on ClinicalTrials.gov' to inspect official protocol "
+        "eligibility, inclusion criteria, and trial sites."
+    )
+    trials_df = data.trials_for_segment(
+        profile_id,
+        condition_group=str(segment["condition_group"]),
+        state_normalized=str(segment["state_normalized"]),
+        phase_normalized=str(segment["phase_normalized"]),
+    )
+    if trials_df.empty:
+        st.info("No individual active recruiting trial records identified for this segment.")
+    else:
+        st.dataframe(
+            trials_df,
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "nct_id": st.column_config.TextColumn("NCT ID"),
+                "brief_title": st.column_config.TextColumn("Brief Title", width="large"),
+                "lead_sponsor": st.column_config.TextColumn("Lead Sponsor"),
+                "phase": st.column_config.TextColumn("Phase"),
+                "overall_status": st.column_config.TextColumn("Status"),
+                "enrollment_count": st.column_config.NumberColumn(
+                    "Planned Enrollment", format="%d"
+                ),
+                "study_first_post_date": st.column_config.DateColumn("First Posted"),
+                "registry_url": st.column_config.LinkColumn(
+                    "Registry Record",
+                    display_text="View on ClinicalTrials.gov",
+                    help="Direct link to official trial record on ClinicalTrials.gov",
+                ),
+            },
+        )
 
 st.subheader("Active Recruiting Trials by Segment (Top 15)")
 top = filtered.head(15).copy()
