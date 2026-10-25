@@ -171,4 +171,4 @@ select
         || ' Not a recruitment forecast; requires human feasibility review.'
         as interpretation_note
 from inputs
-order by active_recruiting_trials desc
+order by active_recruiting_trials desc, distinct_sponsors desc, priority_queue_key asc

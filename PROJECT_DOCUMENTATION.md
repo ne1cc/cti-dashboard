@@ -88,9 +88,10 @@ them yet.
 The implemented product supplies distinct study counts, contributing NCT IDs,
 coverage and exclusions, source dates and an exportable audit. The analyst inspects
 this evidence and writes a scoped research shortlist/memo with follow-up questions
-for a qualified reviewer. The **Feasibility Review Priority Queue** offers optional
-ordering from disclosed weighted signals; its operational usefulness is unvalidated,
-and its bands are not intervention or site-activation thresholds.
+for a qualified reviewer. The **Registry Segments** view provides sortable raw registry
+metrics (recruiting trial volume, distinct sponsors, sponsor HHI, and site overlap)
+for human feasibility review without composite scoring, arbitrary weighting, or automated
+priority bands.
 
 ```mermaid
 flowchart LR
@@ -211,7 +212,7 @@ cti-dashboard/
 │   └── utils/                    # dates, hashing, logging, paths, text
 │
 ├── dbt_clinical_trials/
-│   ├── dbt_project.yml           # schemas + feasibility band vars
+│   ├── dbt_project.yml           # schemas + model configurations
 │   ├── profiles.yml              # DuckDB target
 │   ├── macros/                   # generate_surrogate_key, normalize_text,
 │   │                             # parse_partial_date, safe_divide
@@ -580,7 +581,7 @@ denominators across two registry queries.
 ```mermaid
 flowchart TB
     APP["app.py — Overview<br/>KPIs + top-of-queue preview"]
-    P1["1 · Priority Queue<br/>ranked segments, score components<br/>stacked bar, proxy warning"]
+    P1["1 · Registry Segments<br/>segment metrics, recruiting volume<br/>bar chart, proxy warning"]
     P2["2 · Competition Landscape<br/>density vs. sponsor-HHI scatter"]
     P3["3 · Geography Trends<br/>US choropleth + monthly trend"]
     P4["4 · Site Overlap<br/>multi-trial facilities table"]
@@ -768,7 +769,7 @@ status-transition counts (and `growth_uses_registry_proxy_flag` flips off).
 | `config/geography_rules.yml` | state-name → USPS code normalization |
 | `config/roi_assumptions.yml` | scenario-calculator assumptions and multipliers (with embedded disclaimer) |
 | `.env` | optional local overrides (`CTI_CONFIG_PATH`, `CTI_HTTP_TIMEOUT_SECONDS`, `CTI_MAX_RETRIES`) — no secrets required |
-| `dbt_clinical_trials/dbt_project.yml` | schema routing, seed types, feasibility band vars |
+| `dbt_clinical_trials/dbt_project.yml` | schema routing, seed types |
 
 ## 17. Known limitations
 
@@ -825,7 +826,6 @@ flowchart LR
 | **HHI** | Herfindahl–Hirschman Index of lead-sponsor listing shares within a segment |
 | **Proxy growth** | growth measured from registry first-post dates when snapshot history is insufficient (always flagged) |
 | **Quarantine** | storage for records rejected at transform time, with reason codes |
-| **Priority band** | `watch` / `review` / `priority_review` — a queueing label, not a verdict |
 
 ---
 

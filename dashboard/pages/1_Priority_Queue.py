@@ -18,11 +18,6 @@ data.require_warehouse(profile_id)
 render_page_guide("priority_queue", profile_id)
 
 queue = data.priority_queue(profile_id)
-queue["priority_explanation"] = (
-    queue["priority_explanation"]
-    .str.replace("data confidence", "legacy operational completeness adjustment", regex=False)
-    .str.replace("relative density", "relative trial count", regex=False)
-)
 st.caption(
     "Segments are defined by condition group, U.S. state, and clinical trial phase. "
     "Sort directly by any raw metric below (e.g. active recruiting trials, sponsor "
@@ -33,8 +28,9 @@ filtered = segment_filters(queue)
 
 if bool(filtered["growth_uses_registry_proxy_flag"].any()):
     st.warning(
-        "Growth component currently uses the registry first-post-date proxy "
-        "because multi-snapshot history has not accrued yet."
+        "Recent recruiting growth metric (recent_growth_input) currently uses "
+        "the registry first-post-date proxy because multi-snapshot history has "
+        "not accrued yet."
     )
 
 st.subheader("Registry segments")
@@ -159,9 +155,19 @@ if selected_rows:
         f"Segment details — {format_condition_group(segment['condition_group'])} · "
         f"{segment['state_normalized']} · {format_phase(segment['phase_normalized'])}"
     )
+    growth_label = (
+        "First-posted registry proxy"
+        if bool(segment.get("growth_uses_registry_proxy_flag", False))
+        else "Recent recruiting growth"
+    )
+    growth_val = (
+        f"{int(segment['recent_growth_input'])} newly posted (proxy)"
+        if bool(segment.get("growth_uses_registry_proxy_flag", False))
+        else f"{int(segment['recent_growth_input'])} newly recruiting"
+    )
     details_rows = [
         ("Active recruiting trials", f"{int(segment['active_recruiting_trials'])} trials"),
-        ("Recent recruiting growth", f"{int(segment['recent_growth_input'])} newly recruiting"),
+        (growth_label, growth_val),
         ("Sponsor count", f"{int(segment['distinct_sponsors'])} distinct sponsor(s)"),
         ("Sponsor concentration HHI", f"{segment['sponsor_hhi']:.3f}"),
         ("Top sponsor share", f"{segment['top_sponsor_share'] * 100:.1f}%"),

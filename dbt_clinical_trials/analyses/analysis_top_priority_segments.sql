@@ -14,5 +14,5 @@ select
     priority_explanation,
     interpretation_note
 from {{ ref('mart_feasibility_priority_queue') }}
-order by indication_profile_id, active_recruiting_trials desc
+order by indication_profile_id, active_recruiting_trials desc, distinct_sponsors desc, priority_queue_key asc
 limit 25

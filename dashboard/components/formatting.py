@@ -17,12 +17,6 @@ PHASE_SEED = (
     Path(__file__).resolve().parents[2] / "dbt_clinical_trials" / "seeds" / "phase_mapping.csv"
 )
 
-BAND_LABELS: dict[str, str] = {
-    "priority_review": "Priority review",
-    "review": "Review",
-    "watch": "Watch",
-}
-
 
 @cache
 def _phase_labels() -> dict[str, str]:
@@ -35,13 +29,6 @@ def format_phase(code: object) -> str:
     if not isinstance(code, str):
         return ""
     return _phase_labels().get(code, code.replace("_", " ").title())
-
-
-def format_band(band: object) -> str:
-    """``"priority_review"`` → ``"Priority review"``; unknown bands pass through."""
-    if not isinstance(band, str):
-        return ""
-    return BAND_LABELS.get(band, band)
 
 
 def format_snapshot_date(value: str | pd.Timestamp | datetime | date | None) -> str:

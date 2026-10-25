@@ -70,7 +70,7 @@ niche:
 | Competitive trial landscape | `mart_recruiting_competition` and Competition Landscape | Registry data will not represent every commercial intelligence signal |
 | Geographic trial activity | `mart_condition_geography_trends` and Geography Trends | Site location does not prove recruitment capacity or patient availability |
 | Study/site overlap | `mart_site_overlap` and Site Overlap | Co-location signals competition, not verified site performance |
-| Trial prioritization | `mart_feasibility_priority_queue` and Priority Queue | Ranking is an analytical hypothesis, not an operational recommendation |
+| Segment screening | `mart_feasibility_priority_queue` and Registry Segments | Transparent raw metrics provide screening signals, not operational recommendations |
 | Sponsor landscape | `dim_sponsor`, bridge table, Sponsor Landscape | Sponsor normalization is difficult with registry-entered organization names |
 | Data confidence | `mart_data_reliability` and Data Reliability | Reliability reflects registry completeness and timeliness, not scientific validity |
 
@@ -122,7 +122,7 @@ is context for that conversation, not a spec itself.
   site overlap rate) with deterministic explanations per segment, turning
   landscape screening into an auditable research tool instead of an unvalidated
   black box (ADR 0077).
-- **Priority Queue filtering and export.** Add condition/phase/state/
+- **Registry Segments filtering and export.** Add condition/phase/state/
   sponsor/freshness filters and a "download the filtered view" option —
   low effort, direct usability win for an analyst doing real research.
 

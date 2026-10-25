@@ -1,7 +1,7 @@
 # ADR 0082: Repositioning Analyst Persona as Exploratory Hypotheses and Archiving Business Case
 
 - **Status:** Accepted (Approved User Mandate)
-- **Deciders:** Product, Architecture, Clinical Operations Review
+- **Deciders:** Repository Owner / Product & Architecture Review (2026-10-23 Mandate)
 - **Date:** 2026-10-25
 - **Technical Story:** Issue #82 (Part of Epic #46 — Rework the analyst workbench: score, small-n handling, provenance UX)
 
@@ -31,7 +31,7 @@ Specifically:
      ```markdown
      > [!NOTE]
      > **Archived Exploratory Hypothesis (ADR 0082)**
-     > This document details an exploratory business case and persona hypothesis for clinical feasibility analysts. It has not been validated through empirical practitioner interviews or operational time-and-motion studies. Current development focuses on the open, multi-stakeholder access platform (ADR 0040).
+     > This document details an exploratory business case and persona hypothesis for clinical feasibility analysts. It has not been validated through empirical practitioner interviews or operational time-and-motion studies. Current development focuses on the open, multi-stakeholder access platform (Epic #40).
      ```
 2. **Headline Open Multi-Stakeholder Access Platform:**
    - Update `README.md` and `PROJECT_DOCUMENTATION.md` to establish the primary identity of the project: an open access trial discovery and competition intelligence platform that serves patients, caregivers, investigators, and researchers.
@@ -49,11 +49,11 @@ Specifically:
   - *Pros:* Would gather primary empirical evidence on whether feasibility analysts actually need this specific workflow.
   - *Cons:* Delays platform development; prioritizes an unproven commercial niche over high-impact patient and multi-stakeholder access capabilities (Epic #42).
 - **Option B (Adopted — Approved):** Reposition the analyst persona and business case as exploratory hypotheses; archive `docs/business_case.md`; headline the open multi-stakeholder access platform.
-  - *Pros:* Immediately aligns documentation with truth; removes unvalidated marketing claims; anchors the project around its open-data core mission (ADR 0040); preserves exploratory code without false claims.
+  - *Pros:* Immediately aligns documentation with truth; removes unvalidated marketing claims; anchors the project around its open-data core mission (Epic #40); preserves exploratory code without false claims.
   - *Cons:* Explicitly acknowledges that commercial ROI for analysts is an open, unvalidated question.
-- **Option C (Rejected):** Completely deprecate and remove all analyst views, retaining only patient-facing interfaces.
-  - *Pros:* Single persona focus.
-  - *Cons:* Destroys valuable analytical models (e.g., sponsor concentration HHI, site overlap, geographic density) that researchers and developers actively use.
+- **Option C (Rejected):** Both, in sequence (Validate through interviews, followed by repositioning/archival as appropriate).
+  - *Pros:* Combines empirical validation with architectural repositioning.
+  - *Cons:* Delays platform documentation alignment and multi-stakeholder roadmap execution.
 
 ---
 

@@ -34,7 +34,7 @@ The [national case study](feasibility_case_study.md) demonstrates this workflow.
 | Inspectable evidence | Contributing NCT IDs, definitions, exclusions, source dates and run/rule identity |
 | Research handoff | Analyst-authored shortlist/memo with observations, evidence references, limitations and explicit questions to investigate |
 | Next action | Choose records/segments for deeper research, confirm missing information and request qualified review |
-| Review ordering | Optional disclosed score; its usefulness is unvalidated, and bands are not intervention or activation thresholds |
+| Review ordering | Sortable raw segment metrics (recruiting trial counts, distinct sponsors, sponsor HHI, site overlap); no composite score or automated priority bands |
 | Collection cadence | Proposed weekly snapshots; inspect capture age and source age separately and agree tolerances before operational use |
 | Workflow evaluation | Compare preparation minutes, handoff completeness and count reproduction with matched manual tasks; observe use in recurring reviews |
 
@@ -94,8 +94,8 @@ for its headline recruiting-cohort representation and national coverage.
 
 Counts establish reported study presence under stated screening rules. They do
 not measure patient availability, site capacity, recruitment speed, clinical
-validity or protocol equivalence. No state/site recommendation or unsupported
-feasibility score belongs in this descriptive case study.
+validity or protocol equivalence. No state/site recommendation or composite
+priority score belongs in this descriptive case study; analysts inspect and sort raw metrics.
 
 Follow-up requires protocol review, confirmation of current study information,
 relevant site capabilities and other evidence appropriate to the decision.

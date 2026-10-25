@@ -665,57 +665,81 @@ models:
         tests: [not_null, unique]
       - name: snapshot_date
         data_type: DATE
+        description: Date of the underlying trial snapshot.
       - name: latest_snapshot_date
         data_type: DATE
+        description: Standardized alias of snapshot_date for readability across UI consumers.
       - name: indication_profile_id
         data_type: VARCHAR
         description: Indication profile whose query scope produced this segment. Part of the model's grain.
         tests: [not_null]
       - name: condition_group
         data_type: VARCHAR
+        description: Clinical condition / indication taxonomy group.
       - name: state_normalized
         data_type: VARCHAR
+        description: Two-letter abbreviation of US state or jurisdiction.
       - name: phase_normalized
         data_type: VARCHAR
+        description: Clinical trial phase (e.g. PHASE1, PHASE2, PHASE3).
       - name: recruiting_trial_count
         data_type: BIGINT
+        description: Raw count of actively recruiting interventional trials within the segment.
       - name: active_recruiting_trials
         data_type: BIGINT
+        description: Standardized alias of recruiting_trial_count for clarity in downstream consumers.
       - name: listed_site_count
         data_type: HUGEINT
+        description: Count of attributable clinical trial facility listings in this state for this segment.
       - name: new_recruiting_90d
         data_type: HUGEINT
+        description: Count of trials newly transitioning into recruiting status within the last 90 days.
       - name: newly_posted_90d_proxy
         data_type: BIGINT
+        description: Count of trials first posted on the registry within the last 90 days (fallback proxy).
       - name: has_multi_snapshot_history
         data_type: BOOLEAN
+        description: Flag indicating whether multi-snapshot history has accrued for this profile.
       - name: recent_growth_input
         data_type: HUGEINT
+        description: Raw trial count or growth measure used for segment observation.
       - name: growth_uses_registry_proxy_flag
         data_type: BOOLEAN
+        description: Flag indicating whether recent growth uses the first-posted registry date proxy.
       - name: sponsor_count
         data_type: BIGINT
+        description: Count of distinct lead sponsors in the segment.
       - name: distinct_sponsors
         data_type: BIGINT
+        description: Standardized alias of sponsor_count.
       - name: top_sponsor_share
         data_type: DOUBLE
+        description: Share of segment trials held by the leading sponsor.
       - name: sponsor_hhi
         data_type: DOUBLE
+        description: Herfindahl-Hirschman Index of lead sponsor concentration, bounded in [0, 1].
       - name: competition_signal_band
         data_type: VARCHAR
+        description: Descriptive competition signal tier derived from sponsor concentration.
       - name: site_overlap_share
         data_type: DOUBLE
+        description: Share of trial sites hosting multiple trials in this segment, bounded in [0, 1].
       - name: site_overlap_rate
         data_type: DOUBLE
+        description: Standardized alias of site_overlap_share.
       - name: record_quality_ok_share
         data_type: DOUBLE
+        description: Share of trials in this segment meeting baseline record quality criteria.
       - name: data_confidence_share
         data_type: DOUBLE
+        description: Operational data completeness share (retained pending Issue #78).
       - name: priority_explanation
         data_type: VARCHAR
+        description: Plain-language summary of raw segment metrics for human review.
         tests: [not_null]
       - name: interpretation_note
         data_type: VARCHAR
+        description: Mandatory guardrail notice that signals are public registry counts requiring human feasibility review.
 
   - name: mart_trial_similarity
     description: >

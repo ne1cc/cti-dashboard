@@ -150,18 +150,18 @@ def test_overview_queue_discloses_priority_rules_in_ui_and_export(warehouse, cap
     metadata = next(json.loads(j.value) for j in at.json if '"displayed_segments"' in j.value)
     rules = metadata["rule_config"]["display_context"]["derived_rules"]
     for phrase in [
-        "profile minimum",
-        "profile maximum",
-        "zero for no spread",
-        "active score weights",
-        "priority_review >=0.70",
-        "HHI sums squared",
+        "Raw segment metrics are derived directly from dimensional marts",
+        "recruiting_trial_count",
+        "distinct_sponsors",
+        "sponsor_hhi",
         "Growth sums daily recruiting entrants over 90 days",
         "first-post >=",
-        "divided by distinct recruiting segment trials",
+        "site_overlap_rate",
         "0.5 segment record-quality-ok share + 0.5 latest successful-run",
     ]:
         assert phrase in rules
+    for forbidden in ["min-max", "weighted sum", "0.70", "0.45", "priority_review"]:
+        assert forbidden not in rules.lower()
     export = next(
         item
         for item in captured_exports

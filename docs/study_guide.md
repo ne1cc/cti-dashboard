@@ -16,7 +16,7 @@ Read these, in order, before touching code:
 
 The whole system in one sentence: **download public registry pages verbatim (bronze),
 flatten them into typed tables (silver), model them into tested analytics tables
-(gold), and rank market segments for human feasibility review (dashboard).**
+(gold), and inspect sortable market segments for human feasibility review (dashboard).**
 
 Three ideas explain most design decisions:
 
@@ -47,7 +47,7 @@ Questions to answer yourself (all answerable with SQL against `main_marts`):
 
 - How many trials are recruiting in your state, and in which phases?
 - Which facility appears on the most recruiting trials?
-- What are the top 5 segments in the priority queue, and what does each
+- What are the top 5 segments in the registry segments mart, and what does each
   `priority_explanation` say?
 
 ## Level 2 — Trace one trial through every layer

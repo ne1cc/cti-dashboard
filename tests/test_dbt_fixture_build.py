@@ -608,7 +608,7 @@ def test_mart_feasibility_priority_queue_shape(fixture_project_root: Path) -> No
     show anything else, and this module's header note in tests/conftest.py
     explains why that date is pinned on purpose. A real spread is a property of
     multi-snapshot, unevenly-sized segments, so it is asserted in
-    `test_priority_rank_spreads_within_a_profile_on_multi_snapshot_history`
+    `test_registry_segments_raw_metrics_non_empty`
     against `divergent_fixture_root`, not here; keeping the two claims in
     separate tests is A16 item 4's point, so neither can be read as covering the
     other.
@@ -646,7 +646,7 @@ def test_mart_feasibility_priority_queue_shape(fixture_project_root: Path) -> No
     assert "priority_rank" not in cols
 
 
-def test_priority_rank_spreads_within_a_profile_on_multi_snapshot_history(
+def test_registry_segments_raw_metrics_non_empty(
     divergent_fixture_root: Path,
 ) -> None:
     """Multi-snapshot raw metrics and absence of composite score columns (ADR 0077)."""
@@ -679,24 +679,11 @@ def test_priority_rank_spreads_within_a_profile_on_multi_snapshot_history(
         " from main_marts.mart_feasibility_priority_queue"
         " where indication_profile_id = 'adrd' and active_recruiting_trials = 2",
     ) == [("alzheimers_disease", "NC", "PHASE3", 2)]
-    # Item L's tripwire, asserted as a literal rather than as `< 25` so it goes
-    # red the moment the fixture grows instead of quietly becoming reachable.
-    # `analyses/analysis_top_priority_segments.sql` ends with `order by
-    # indication_profile_id, priority_rank limit 25`, and priority_rank is a
-    # rank(), so tied segments share a value the order by cannot separate: if the
-    # 25-row cut ever lands *inside* a tie band, which rows appear is whatever the
-    # sort happens to emit. Measured 2026-09-06, it cannot land there from this
-    # fixture -- 12 queue rows in total, 8 in the busiest profile -- so the limit
-    # never fires and the tie bands above are a presentation-order matter only.
-    # On a real warehouse the exposure is larger and much closer. Measured
-    # 2026-09-06 by querying main's checkout read-only
-    # (../../../data/warehouse/clinical_trials.duckdb): 448 queue rows over 79
-    # distinct ranks, and rows with priority_rank <= 25 number exactly 25 because
-    # the band at rank 25 is one row wide. That is deterministic today by luck; the
-    # very next band (rank 26) holds 31 rows, and the largest bands hold 153 and 63,
-    # so one score change moves the cut inside a band and which 25 segments a reader
-    # sees becomes sort-order chosen. What turns this from latent into live per
-    # profile is more than 25 segments, which is the number pinned below.
+    # Item L's tripwire: `analyses/analysis_top_priority_segments.sql` orders by
+    # `indication_profile_id, active_recruiting_trials desc, distinct_sponsors desc,`
+    # `priority_queue_key asc limit 25`.
+    # Deterministic tie-breaking on distinct_sponsors and priority_queue_key ensures
+    # reproducible cuts.
     assert _rows(
         divergent_fixture_root,
         "select max(c) from (select indication_profile_id, count(*) c"
@@ -1194,7 +1181,7 @@ def test_window_frames_partition_by_profile() -> None:
     and a global `rank()` over all-tied scores still yields (1, 1). Task 12's
     divergent warehouse does discriminate --
     test_profile_scores_are_bit_identical_built_alone_or_alongside and
-    test_priority_rank_spreads_within_a_profile_on_multi_snapshot_history read
+    test_registry_segments_raw_metrics_non_empty read
     real, unevenly distributed scores -- so the value assertions and this guard
     now cover each other's blind spots: a frame this file never reads is caught
     there, and a partition that is present but pointed at the wrong column is

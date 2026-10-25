@@ -6,7 +6,7 @@ Global rules:
 - Downstream implications:
   - **Tracked trial totals**: Total trial counts (`dim_trial`, `trial_count`, warehouse trials) encompass the full 8-status landscape rather than only active/completed studies.
   - **Stopped studies**: Studies with premature termination statuses (`TERMINATED`, `WITHDRAWN`, `SUSPENDED`) are retained to support why-stopped and feasibility risk analyses.
-  - **Similarity pool vs. recruiting competition**: The trial similarity candidate pool spans all 8 statuses for historical precedent matching, whereas active competition metrics (`recruiting_trial_count`, `new_recruiting_30d/90d`, `sponsor_hhi`, etc.) and the priority queue filter specifically for confirmed currently-recruiting listings (`overall_status = 'RECRUITING'`).
+  - **Similarity pool vs. recruiting competition**: The trial similarity candidate pool spans all 8 statuses for historical precedent matching, whereas active competition metrics (`recruiting_trial_count`, `new_recruiting_30d/90d`, `sponsor_hhi`, etc.) and Registry Segments filter specifically for confirmed currently-recruiting listings (`overall_status = 'RECRUITING'`).
 - A **segment** is condition_group × state × phase (the shared grain from
   `int_condition_geography_activity`; only trials with ≥1 usable U.S.
   location appear).
@@ -87,7 +87,7 @@ the disclaimer; **no observed outcomes are ever used or implied**.
 
 ## Audit definitions and scope
 
-**Data coverage and caveats** appears on Overview, Priority Queue, Competition
+**Data coverage and caveats** appears on Overview, Registry Segments, Competition
 Landscape, Geography Trends, Site Overlap, Sponsor Landscape, and Data Reliability.
 The source chain is unchanged page JSON → page receipt sidecar → silver study and
 original-location rows → staging → successful-snapshot audit marts → selected
@@ -109,7 +109,7 @@ uses normalized lead-sponsor names. Filters record condition groups, phases, sta
 displayed lead-sponsor names, and facility
 triples (normalized name, city, state). Sidebar selections are retained separately
 from drill-through refinements. A default segment audit covers sidebar scope before
-rank/band row filters; it is not the sum of displayed overlapping segments.
+segment-table row selections; it is not the sum of displayed overlapping segments.
 Confirmed recruiting is exactly overall status `RECRUITING`; missing/unknown and
 other statuses do not qualify. The all-status mode supports listed-trial and current
 study counts. Location status is inspectable but does not gate state counts.

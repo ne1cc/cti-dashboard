@@ -1,6 +1,6 @@
 > [!NOTE]
 > **Archived Exploratory Hypothesis (ADR 0082)**
-> This document details an exploratory business case and persona hypothesis for clinical feasibility analysts. It has not been validated through empirical practitioner interviews or operational time-and-motion studies. Current development focuses on the open, multi-stakeholder access platform (ADR 0040).
+> This document details an exploratory business case and persona hypothesis for clinical feasibility analysts. It has not been validated through empirical practitioner interviews or operational time-and-motion studies. Current development focuses on the open, multi-stakeholder access platform (Epic #40).
 
 # Proposed business use: registry-based competition screening
 
@@ -81,11 +81,11 @@ A low count is an observation about recorded study presence. It does not establi
 better recruitment prospects. A high count does not establish that a facility or
 region lacks capacity. The analysis provides no automatic pivot/proceed threshold.
 
-The optional weighted review-priority score provides a disclosed ordering of
-segments. Its predictive and operational usefulness is unvalidated; priority bands
-are not intervention or site-activation thresholds. The first use case can be
-evaluated through descriptive counts and inspectable evidence without relying on
-the score.
+The historical concept of an optional weighted review-priority score and
+priority bands has been retired under ADR 0077. Feasibility review is conducted
+through transparent, sortable raw metrics (recruiting trial counts, distinct sponsors,
+sponsor HHI, and site overlap) alongside inspectable registry evidence without
+relying on unvalidated composite scores.
 
 ## Implemented capabilities and proposed benefits
 

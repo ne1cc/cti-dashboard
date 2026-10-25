@@ -75,11 +75,6 @@ proxy_caption()
 
 st.subheader("Top registry segments by recruiting trials")
 queue = data.priority_queue(profile_id)
-queue["priority_explanation"] = (
-    queue["priority_explanation"]
-    .str.replace("data confidence", "legacy operational completeness adjustment", regex=False)
-    .str.replace("relative density", "relative trial count", regex=False)
-)
 preview_df = queue.head(10)[
     [
         "condition_group",
