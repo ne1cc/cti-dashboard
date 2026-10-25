@@ -55,7 +55,7 @@ The existing analytical foundation is already strong:
 | Quality | [Continuous integration](https://github.com/ne1cc/cti-dashboard/actions/workflows/ci.yml) checks pipeline behavior, warehouse grains, profile isolation and dashboard audits | Reproducible checks support data quality and calculation review |
 | History | Weekly snapshot history through `fct_trial_snapshot` | Enables time-series and change-detection features, far more valuable than static registry search |
 | Intelligence marts | Trial activity, recruiting competition, site overlap, geography trends, data reliability, feasibility priority queue | Covers the baseline feasibility workflow |
-| User experience | Priority Queue, Competition Landscape, Geography Trends, Site Overlap, Sponsor Landscape, Data Reliability, Trial Explorer, Trial Similarity | A coherent decision journey rather than disconnected charts |
+| User experience | Registry Segments, Competition Landscape, Geography Trends, Site Overlap, Sponsor Landscape, Data Reliability, Trial Explorer, Trial Similarity | A coherent decision journey rather than disconnected charts |
 | Deployment | Docker, Fly configuration, GitHub Actions auto-deploy, live demo | Makes the project interviewable and usable by others, not just locally runnable |
 
 ### What is already comparable
@@ -70,7 +70,7 @@ niche:
 | Competitive trial landscape | `mart_recruiting_competition` and Competition Landscape | Registry data will not represent every commercial intelligence signal |
 | Geographic trial activity | `mart_condition_geography_trends` and Geography Trends | Site location does not prove recruitment capacity or patient availability |
 | Study/site overlap | `mart_site_overlap` and Site Overlap | Co-location signals competition, not verified site performance |
-| Trial prioritization | `mart_feasibility_priority_queue` and Priority Queue | Ranking is an analytical hypothesis, not an operational recommendation |
+| Segment screening | `mart_feasibility_priority_queue` and Registry Segments | Transparent raw metrics provide screening signals, not operational recommendations |
 | Sponsor landscape | `dim_sponsor`, bridge table, Sponsor Landscape | Sponsor normalization is difficult with registry-entered organization names |
 | Data confidence | `mart_data_reliability` and Data Reliability | Reliability reflects registry completeness and timeliness, not scientific validity |
 
@@ -117,12 +117,12 @@ is context for that conversation, not a spec itself.
   transitions, enrollment changes, sites added or removed. The weekly
   snapshot history (`fct_trial_snapshot`) already makes this possible and
   nothing else in the free-tooling space does it well.
-- **Explainable Feasibility Scorecard.** The priority queue's score is
-  only as useful as its explanation. Surfacing each score component,
-  weight, and data-confidence flag per trial (using the existing
-  `feasibility_score_weights` seed) turns a ranking into an auditable
-  decision tool instead of a black box.
-- **Priority Queue filtering and export.** Add condition/phase/state/
+- **Transparent Registry Segment Scorecard.** The segment queue provides
+  transparent, observable registry metrics (active recruiting trials, sponsor HHI,
+  site overlap rate) with deterministic explanations per segment, turning
+  landscape screening into an auditable research tool instead of an unvalidated
+  black box (ADR 0077).
+- **Registry Segments filtering and export.** Add condition/phase/state/
   sponsor/freshness filters and a "download the filtered view" option —
   low effort, direct usability win for an analyst doing real research.
 

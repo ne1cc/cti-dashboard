@@ -648,18 +648,14 @@ models:
 
   - name: mart_feasibility_priority_queue
     description: >
-      Ranked segments for human feasibility review, one ranking per
-      indication profile. Grain: profile x condition_group x state x phase at
-      that profile's latest complete snapshot; every normalized component and
-      priority_rank is computed within one profile. Triage signal from
-      public registry listings; not a recruitment forecast.
+      Segments for human feasibility review, one listing per indication
+      profile. Grain: profile x condition_group x state x phase at that
+      profile's latest complete snapshot. Triage signal from public registry
+      listings with transparent raw sortable metrics; not a recruitment
+      forecast.
     contract:
       enforced: true
     columns:
-      - name: indication_profile_id
-        data_type: VARCHAR
-        description: Indication profile whose query scope produced this segment. Part of the model's grain.
-        tests: [not_null]
       - name: priority_queue_key
         data_type: VARCHAR
         description: >
@@ -667,108 +663,83 @@ models:
           state_normalized x phase_normalized x snapshot_date, so the same
           segment label under two profiles is two queue entries.
         tests: [not_null, unique]
-      - name: feasibility_review_priority_score
-        data_type: DOUBLE
-        tests: [not_null]
-      - name: priority_band
-        data_type: VARCHAR
-        tests:
-          - not_null
-          - accepted_values:
-              values: ['watch', 'review', 'priority_review']
-      - name: priority_explanation
-        data_type: VARCHAR
-        tests: [not_null]
       - name: snapshot_date
         data_type: DATE
+        description: Date of the underlying trial snapshot.
+      - name: latest_snapshot_date
+        data_type: DATE
+        description: Standardized alias of snapshot_date for readability across UI consumers.
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this segment. Part of the model's grain.
+        tests: [not_null]
       - name: condition_group
         data_type: VARCHAR
+        description: Clinical condition / indication taxonomy group.
       - name: state_normalized
         data_type: VARCHAR
+        description: Two-letter abbreviation of US state or jurisdiction.
       - name: phase_normalized
         data_type: VARCHAR
-      - name: priority_rank
-        data_type: BIGINT
+        description: Clinical trial phase (e.g. PHASE1, PHASE2, PHASE3).
       - name: recruiting_trial_count
         data_type: BIGINT
+        description: Raw count of actively recruiting interventional trials within the segment.
+      - name: active_recruiting_trials
+        data_type: BIGINT
+        description: Standardized alias of recruiting_trial_count for clarity in downstream consumers.
       - name: listed_site_count
         data_type: HUGEINT
+        description: Count of attributable clinical trial facility listings in this state for this segment.
       - name: new_recruiting_90d
         data_type: HUGEINT
+        description: Count of trials newly transitioning into recruiting status within the last 90 days.
       - name: newly_posted_90d_proxy
         data_type: BIGINT
+        description: Count of trials first posted on the registry within the last 90 days (fallback proxy).
       - name: has_multi_snapshot_history
         data_type: BOOLEAN
+        description: Flag indicating whether multi-snapshot history has accrued for this profile.
       - name: recent_growth_input
         data_type: HUGEINT
+        description: 90-day count of newly recruiting trials, or first-posted count when growth_uses_registry_proxy_flag.
       - name: growth_uses_registry_proxy_flag
         data_type: BOOLEAN
+        description: Flag indicating whether recent growth uses the first-posted registry date proxy.
       - name: sponsor_count
         data_type: BIGINT
+        description: Count of distinct lead sponsors in the segment.
+      - name: distinct_sponsors
+        data_type: BIGINT
+        description: Standardized alias of sponsor_count.
       - name: top_sponsor_share
         data_type: DOUBLE
+        description: Share of segment trials held by the leading sponsor.
       - name: sponsor_hhi
         data_type: DOUBLE
+        description: Herfindahl-Hirschman Index of lead sponsor concentration, bounded in [0, 1].
       - name: competition_signal_band
         data_type: VARCHAR
+        description: Descriptive competition signal tier derived from sponsor concentration.
       - name: site_overlap_share
         data_type: DOUBLE
+        description: Share of recruiting trials in the segment that share at least one trial facility with another competing trial in the same indication profile, bounded in [0, 1].
+      - name: site_overlap_rate
+        data_type: DOUBLE
+        description: Standardized alias of site_overlap_share (share of recruiting trials sharing facilities with another competing trial in the same indication profile).
       - name: record_quality_ok_share
         data_type: DOUBLE
+        description: Share of trials in this segment meeting baseline record quality criteria.
       - name: data_confidence_share
         data_type: DOUBLE
-      - name: normalized_recruiting_trial_count
-        data_type: DOUBLE
-      - name: normalized_recent_recruiting_growth
-        data_type: DOUBLE
-      - name: normalized_sponsor_concentration
-        data_type: DOUBLE
-      - name: normalized_site_overlap
-        data_type: DOUBLE
-      - name: normalized_data_confidence_adjustment
-        data_type: DOUBLE
+        description: Operational data completeness share (retained pending Issue #78).
+      - name: priority_explanation
+        data_type: VARCHAR
+        description: Plain-language summary of raw segment metrics for human review.
+        tests: [not_null]
       - name: interpretation_note
         data_type: VARCHAR
-      - name: weight_recruiting_trial_count
-        data_type: DOUBLE
-        description: Configured weight for the recruiting-density component (config/score_weights.yml).
-        tests: [not_null]
-      - name: weight_recent_recruiting_growth
-        data_type: DOUBLE
-        description: Configured weight for the recent-growth component.
-        tests: [not_null]
-      - name: weight_sponsor_concentration
-        data_type: DOUBLE
-        description: Configured weight for the sponsor-concentration component.
-        tests: [not_null]
-      - name: weight_site_overlap
-        data_type: DOUBLE
-        description: Configured weight for the site-overlap component.
-        tests: [not_null]
-      - name: weight_data_confidence_adjustment
-        data_type: DOUBLE
-        description: Configured weight for the data-confidence component.
-        tests: [not_null]
-      - name: weighted_recruiting_trial_count
-        data_type: DOUBLE
-        description: weight_recruiting_trial_count * normalized_recruiting_trial_count.
-        tests: [not_null]
-      - name: weighted_recent_recruiting_growth
-        data_type: DOUBLE
-        description: weight_recent_recruiting_growth * normalized_recent_recruiting_growth.
-        tests: [not_null]
-      - name: weighted_sponsor_concentration
-        data_type: DOUBLE
-        description: weight_sponsor_concentration * normalized_sponsor_concentration.
-        tests: [not_null]
-      - name: weighted_site_overlap
-        data_type: DOUBLE
-        description: weight_site_overlap * normalized_site_overlap.
-        tests: [not_null]
-      - name: weighted_data_confidence_adjustment
-        data_type: DOUBLE
-        description: weight_data_confidence_adjustment * normalized_data_confidence_adjustment.
-        tests: [not_null]
+        description: Mandatory guardrail notice that signals are public registry counts requiring human feasibility review.
 
   - name: mart_trial_similarity
     description: >

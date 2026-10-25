@@ -54,6 +54,9 @@ packages = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+    "benchmark: Query latency benchmark tests",
+]
 
 [tool.coverage.run]
 source = ["src", "dashboard"]

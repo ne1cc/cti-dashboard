@@ -218,7 +218,9 @@ def test_overview_reads_as_labels_not_codes(fixture_warehouse):
     assert "listed_site_count" in preview.columns
     assert preview["registry_search_url"].str.startswith("https://clinicaltrials.gov/search?").all()
     assert not preview["phase_normalized"].str.fullmatch(r"[A-Z0-9_/]+").any()
-    assert set(preview["priority_band"]) <= {"Priority review", "Review", "Watch"}
+    assert "active_recruiting_trials" in preview.columns
+    assert "sponsor_hhi" in preview.columns
+    assert (preview["active_recruiting_trials"] >= 0).all()
     assert not any("00:00:00" in c.value for c in at.caption)
     audit_labels = [e.label for e in at.expander if e.label.startswith("Audit:")]
     assert len(audit_labels) == len(set(audit_labels)) == 3
@@ -238,3 +240,47 @@ def test_phase_filter_offers_display_labels(fixture_warehouse):
     phase = next(w for w in at.sidebar.multiselect if w.label == "Phase")
     assert phase.options, "fixture should expose at least one phase"
     assert not any(option.isupper() for option in phase.options)
+
+
+def test_guidance_priority_queue_has_no_score_or_bands():
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    from components.guidance import PAGE_PLAYBOOKS
+
+    pq_guide = str(PAGE_PLAYBOOKS["priority_queue"]).lower()
+    for forbidden in ("score", "priority_review", "0.70", "0.45", "weighted"):
+        assert forbidden not in pq_guide, (
+            f"Found forbidden term '{forbidden}' in priority_queue guide"
+        )
+
+
+def test_audit_panel_derived_rules_has_no_score_or_bands():
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    from components.audit_panel import PRIORITY_DERIVED_RULES
+
+    rules_lower = PRIORITY_DERIVED_RULES.lower()
+    for forbidden in ("min-max", "weighted sum", "0.70", "0.45", "priority_review"):
+        assert forbidden not in rules_lower, (
+            f"Found forbidden term '{forbidden}' in PRIORITY_DERIVED_RULES"
+        )
+
+
+def test_pages_smoke_contain_no_priority_score_or_bands(fixture_warehouse):
+    from streamlit.testing.v1 import AppTest
+
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    for script in ("dashboard/overview.py", "dashboard/pages/1_Priority_Queue.py"):
+        at = AppTest.from_file(str(ROOT / script), default_timeout=60).run()
+        assert not at.exception, at.exception
+        page_text = " ".join(
+            [m.value for m in at.markdown]
+            + [c.value for c in at.caption]
+            + [t.value for t in at.title]
+            + [h.value for h in at.header]
+            + [s.value for s in at.subheader]
+        )
+        assert "Priority Review" not in page_text
+        assert "Watch" not in page_text
+        assert "priority score" not in page_text.lower()

@@ -19,7 +19,6 @@ profile:
   display_name: "Non-Small Cell Lung Cancer (NSCLC)"
   ingest_only: false
   taxonomy: config/condition_taxonomy_nsclc.yml   # path relative to project root
-  score_weights: config/score_weights.yml         # path relative to project root
 
 api:
   base_url: https://clinicaltrials.gov/api/v2

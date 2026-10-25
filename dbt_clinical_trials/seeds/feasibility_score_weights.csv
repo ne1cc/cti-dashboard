@@ -1,6 +1,0 @@
-component,weight,description
-normalized_recruiting_trial_count,0.35,Min-max normalized count of recruiting studies in eligible segments
-normalized_recent_recruiting_growth,0.20,Min-max normalized count of newly recruiting studies over 90 days
-normalized_sponsor_concentration,0.20,Normalized sponsor HHI in the segment
-normalized_site_overlap,0.15,Normalized share of listed sites participating in multiple active comparable trials
-normalized_data_confidence_adjustment,0.10,Reliability adjustment penalizing low location completeness or low-quality records

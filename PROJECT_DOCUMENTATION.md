@@ -21,7 +21,7 @@ Documentation snapshot: built and verified against the live warehouse of **2026-
 7. [Normalization design (silver)](#7-normalization-design-silver)
 8. [Warehouse design (gold — dbt on DuckDB)](#8-warehouse-design-gold--dbt-on-duckdb)
 9. [Dimensional data model](#9-dimensional-data-model)
-10. [The feasibility priority score](#10-the-feasibility-priority-score)
+10. [Registry segments and raw feasibility metrics](#10-registry-segments-and-raw-feasibility-metrics)
 11. [Delivery interfaces: analyst workbench and patient finder](#11-delivery-interfaces-analyst-workbench-and-patient-finder)
 12. [Data quality framework](#12-data-quality-framework)
 13. [Clinical interpretation guardrails](#13-clinical-interpretation-guardrails)
@@ -39,11 +39,11 @@ Documentation snapshot: built and verified against the live warehouse of **2026-
 
 | Property | Value |
 |---|---|
-| Domain | Public-registry landscape screening for preliminary feasibility research |
-| Proposed user | Clinical-operations analyst preparing an initial geographic feasibility review |
+| Domain | Open clinical trial access and public-registry landscape intelligence |
+| Target stakeholders | Patients & caregivers seeking trials (ADR 0061); researchers & exploratory analysts evaluating trial landscape (ADR 0082) |
 | Decision | Which condition–phase–geography segments, study records and evidence gaps should receive further investigation? |
 | Output and action | Inspectable landscape and audit export; the analyst prepares a research shortlist/memo for qualified review |
-| Validation status | Calculation and pipeline checks implemented; workflow usefulness and business benefits unvalidated |
+| Validation status | Pipeline checks, dbt contracts, and test suites implemented; commercial analyst persona and workflow unvalidated (ADR 0082) |
 | Scope & Statuses | ADRD scope is defined authoritatively in `config/profiles/adrd.yml` across all 8 overall statuses: `RECRUITING`, `ACTIVE_NOT_RECRUITING`, `NOT_YET_RECRUITING`, `COMPLETED`, `TERMINATED`, `WITHDRAWN`, `SUSPENDED`, `ENROLLING_BY_INVITATION`. Tracked trial totals span all 8 statuses, stopped studies feed why-stopped analytics, and the similarity pool spans the full 8-status landscape while competition and recruiting cards isolate confirmed `RECRUITING` studies. |
 | Therapeutic area | Config-driven indication profiles (`config/profiles/`: 12 refreshable indications across oncology and chronic disease, plus an ingest-only full catalog) |
 | Geography | United States (raw data keeps all countries; marts are U.S.-only) |
@@ -52,7 +52,7 @@ Documentation snapshot: built and verified against the live warehouse of **2026-
 | Delivery surfaces | Dual-frontend model ([ADR 0061](docs/decisions/0061-patient-frontend.md)): Public patient trial finder (FastAPI + Jinja server-rendered HTML) · Internal analyst workbench (Streamlit on port 8501) |
 | Architecture | Local-first medallion: bronze JSON → silver Parquet → gold dbt marts |
 | Automated tests | dbt data tests + pytest suite: the counts, their date and the commands that regenerate them are in §14 (one place, on purpose — a second copy is the drift this document has already been burned by) |
-| dbt resources | 32 models (8 staging views, 8 intermediate views, 16 mart tables) + 4 seeds + 4 analyses (same 2026-09-07 UTC parse) |
+| dbt resources | 32 models (8 staging views, 8 intermediate views, 16 mart tables) + 3 seeds + 4 analyses (same 2026-09-07 UTC parse) |
 
 Dashboard values depend on the selected indication profile and captured date;
 see [metric definitions](docs/metric_definitions.md) for grains and limitations.
@@ -88,9 +88,10 @@ them yet.
 The implemented product supplies distinct study counts, contributing NCT IDs,
 coverage and exclusions, source dates and an exportable audit. The analyst inspects
 this evidence and writes a scoped research shortlist/memo with follow-up questions
-for a qualified reviewer. The **Feasibility Review Priority Queue** offers optional
-ordering from disclosed weighted signals; its operational usefulness is unvalidated,
-and its bands are not intervention or site-activation thresholds.
+for a qualified reviewer. The **Registry Segments** view provides sortable raw registry
+metrics (recruiting trial volume, distinct sponsors, sponsor HHI, and site overlap)
+for human feasibility review without composite scoring, arbitrary weighting, or automated
+priority bands.
 
 ```mermaid
 flowchart LR
@@ -110,7 +111,7 @@ completeness of the evidence handoff and independent count reproduction, with us
 in recurring reviews as an adoption signal. Baselines and numerical targets are
 unmeasured. The actual captured [national case study](docs/feasibility_case_study.md)
 demonstrates descriptive evidence preparation; it does not establish workflow
-improvement. See the [business case](docs/business_case.md) for the full articulation,
+improvement. See the [archived business case](docs/archive/business_case.md) (ADR 0082) for the full articulation,
 alternatives and evaluation protocol, and the [project brief](docs/project_brief.md)
 for reporting requirements.
 
@@ -193,7 +194,6 @@ cti-dashboard/
 │   ├── shared_paths.yml          # shared silver, gold, and DuckDB paths across profiles
 │   ├── condition_taxonomy.yml    # ADRD condition-group mapping rules
 │   ├── geography_rules.yml       # US state normalization rules
-│   ├── score_weights.yml         # feasibility score weights + bands
 │   └── roi_assumptions.yml       # editable scenario-calculator assumptions
 │
 ├── src/
@@ -212,12 +212,12 @@ cti-dashboard/
 │   └── utils/                    # dates, hashing, logging, paths, text
 │
 ├── dbt_clinical_trials/
-│   ├── dbt_project.yml           # schemas + feasibility band vars
+│   ├── dbt_project.yml           # schemas + model configurations
 │   ├── profiles.yml              # DuckDB target
 │   ├── macros/                   # generate_surrogate_key, normalize_text,
 │   │                             # parse_partial_date, safe_divide
 │   ├── seeds/                    # status_mapping, phase_mapping,
-│   │                             # feasibility_score_weights
+│   │                             # similarity_score_weights
 │   ├── models/staging/           # 8 views over silver Parquet (+ sources, tests)
 │   ├── models/intermediate/      # 8 views (status history, concentration, ...)
 │   ├── models/marts/             # 5 dims, 2 facts, 2 bridges, 7 marts (+ tests)
@@ -438,8 +438,7 @@ flowchart LR
 
 Seeds (version-controlled mapping tables, `dbt_clinical_trials/seeds/`):
 `status_mapping` (status → is_active / is_recruiting flags), `phase_mapping`
-(registry phase → order), `feasibility_score_weights` (the feasibility score's
-weight vector — see §10) and `similarity_score_weights` (the trial-similarity
+(registry phase → order), and `similarity_score_weights` (the trial-similarity
 score's weight vector).
 
 Project macros (`dbt_clinical_trials/macros/`): `generate_surrogate_key` (MD5 of
@@ -512,9 +511,10 @@ erDiagram
         string state_normalized
         string phase_normalized
         date snapshot_date
-        double feasibility_review_priority_score "0..1"
-        string priority_band "watch|review|priority_review"
-        int priority_rank "within one profile"
+        bigint active_recruiting_trials "recruiting count"
+        bigint distinct_sponsors "unique sponsors"
+        double sponsor_hhi "0..1 concentration"
+        double site_overlap_rate "0..1 trials sharing a site"
         bool growth_uses_registry_proxy_flag
         string priority_explanation "deterministic"
         string interpretation_note "always present"
@@ -529,71 +529,30 @@ profile's status is never attributed to the other.
 
 ---
 
-## 10. The feasibility priority score
+## 10. Registry segments and raw feasibility metrics
 
-The centerpiece mart ranks every **condition group × U.S. state × phase** segment
-*within one indication profile*: normalization, banding and `priority_rank` are all
-computed per profile, because two registry queries have different denominators and
-additive ranks across them would be meaningless.
+Per ADR 0077, the composite "feasibility review priority score" and categorical priority bands were removed in favor of transparent, domain-interpretable raw metrics. Rather than compressing contradictory operational dimensions into an unvalidated scalar index, the platform provides direct, sortable access to observable registry metrics within each indication profile:
 
-**Formula** (all inputs min-max normalized to [0, 1] within the latest snapshot of
-one profile; degenerate spreads where max = min score 0):
+- **Active recruiting trials (`active_recruiting_trials`, `recruiting_trial_count`):** Number of distinct trials actively recruiting in the segment (`COUNT(DISTINCT nct_id)`).
+- **Recent recruiting growth (`recent_growth_input`):** New recruiting trials in 90 days (snapshot transitions when ≥2 snapshots exist, else registry `study_first_post_date` proxy).
+- **Sponsor concentration HHI (`sponsor_hhi`):** Herfindahl-Hirschman Index (Σ s_i²) across segment trial sponsors.
+- **Site overlap rate (`site_overlap_rate`, `site_overlap_share`):** Proportion of trials sharing a multi-trial participating facility.
+- **Data completeness adjustment (`data_confidence_share`):** 0.5 · record-quality-ok share + 0.5 · usable-location share.
 
-```
-score = 0.35 · norm(recruiting_trial_count)        -- competing-study density
-      + 0.20 · norm(recent_growth_input)           -- new studies entering
-      + 0.20 · norm(sponsor_HHI)                   -- sponsor concentration
-      + 0.15 · norm(site_overlap_share)            -- repeated facility listings
-      + 0.10 · norm(data_confidence_input)         -- record completeness
-```
+Raw metric definitions:
 
-```mermaid
-pie showData title Score component weights (sum = 1.00)
-    "Recruiting-trial density" : 0.35
-    "Recent recruiting growth" : 0.20
-    "Sponsor concentration (HHI)" : 0.20
-    "Site overlap share" : 0.15
-    "Data-confidence adjustment" : 0.10
-```
-
-Component definitions:
-
-| Component | Definition | Honesty mechanism |
+| Metric | Definition | Honesty mechanism |
 |---|---|---|
-| Density | `COUNT(DISTINCT nct_id)` recruiting in the segment, within one profile | never a per-capita claim (no population layer yet) |
+| Recruiting Trials | `COUNT(DISTINCT nct_id)` recruiting in the segment, within one profile | never a per-capita claim (no population layer yet) |
 | Growth | new recruiting trials in 90 days — **snapshot transitions** when ≥2 snapshots exist, else registry `study_first_post_date` proxy | `growth_uses_registry_proxy_flag` exposed per row; dashboard warns |
 | Sponsor HHI | Σ(lead-sponsor share)² over segment listings | labeled listing concentration, not market share |
 | Site overlap | share of segment trials listing a facility that appears on >1 recruiting trial | facility identity is best-effort name matching |
-| Data confidence | 0.5 · record-quality-ok share + 0.5 · usable-location share | *raises* priority of well-documented segments; never punishes patients/sites |
-
-**Banding** (thresholds are dbt vars, synchronized with `config/score_weights.yml`
-and the seed CSV — a pytest test fails if the three ever diverge):
-
-```mermaid
-flowchart LR
-    A["score ∈ [0, 0.45)"] --> W[watch]
-    B["score ∈ [0.45, 0.70)"] --> R[review]
-    C["score ∈ [0.70, 1.00]"] --> P[priority_review]
-    style P stroke-width:3px
-```
-
-Distribution in the dated 2026-07-24 snapshot above (single profile, ADRD):
-**449** segments → 374 `watch`, **75** `review`, 0 `priority_review` (expected on
-single-snapshot history: the growth component still uses the registry proxy, and
-top-band evidence is intentionally hard to reach). Regenerate it per profile with:
-
-```sql
--- the queue already holds one row per segment at its profile's latest snapshot
-select indication_profile_id, priority_band, count(*) as segments
-from mart_feasibility_priority_queue
-group by 1, 2
-order by 1, 2;
-```
+| Data completeness | 0.5 · record-quality-ok share + 0.5 · usable-location share | reflects reporting completeness; never punishes patients/sites |
 
 Every row also ships:
 
 - `priority_explanation` — a deterministic, template-generated sentence naming the
-  dominant components (no free-text generation);
+  dominant components;
 - `interpretation_note` — the fixed sentence *"Potential competition signal from
   public registry listings. Not a recruitment forecast; requires human feasibility
   review."*
@@ -622,7 +581,7 @@ denominators across two registry queries.
 ```mermaid
 flowchart TB
     APP["app.py — Overview<br/>KPIs + top-of-queue preview"]
-    P1["1 · Priority Queue<br/>ranked segments, score components<br/>stacked bar, proxy warning"]
+    P1["1 · Registry Segments<br/>segment metrics, recruiting volume<br/>bar chart, proxy warning"]
     P2["2 · Competition Landscape<br/>density vs. sponsor-HHI scatter"]
     P3["3 · Geography Trends<br/>US choropleth + monthly trend"]
     P4["4 · Site Overlap<br/>multi-trial facilities table"]
@@ -711,17 +670,17 @@ The project's language rules are mechanical, not aspirational:
 | "Patients are available in state Y" | no participant-level data exists | density metrics labeled *listing* counts |
 | "Sponsor Z is underperforming" | listings ≠ performance | sponsor mart shows listing counts only |
 | Any contact/investigator info | privacy by design | `stg_trial_contacts` is empty by construction; smoke test asserts no such columns render |
-| Predicted enrollment / ROI | would be invented | score is a *ranking*, scenario calculator uses only user-supplied assumptions |
+| Predicted enrollment / ROI | would be invented | raw metrics provide objective ordering without a composite ranking, scenario calculator uses only user-supplied assumptions |
 
-Every scored row carries `interpretation_note`; every dashboard page carries the
+Every segment row carries `interpretation_note`; every dashboard page carries the
 banner; every document (including this one) opens with the planning-signal rule.
 
 ## 14. Testing and verification
 
 | Suite | Count | Scope |
 |---|---|---|
-| dbt data tests | **138** (measured 2026-09-07 UTC: `uv run dbt parse --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials`, then count `resource_type == "test"` in `dbt_clinical_trials/target/manifest.json`) | grains, keys, referential integrity, accepted values, score bounds, current-record uniqueness, state validity, date sanity |
-| pytest | **308** (measured 2026-09-07 UTC: `uv run pytest --collect-only`) | HTTP client/retry, pagination, manifests, normalization, metric math (weights sync, min-max edge cases, HHI fixtures), ROI arithmetic + disclaimer, dashboard smoke (all 8 pages via Streamlit `AppTest`) |
+| dbt data tests | **148** (measured 2026-10-25 UTC: `uv run dbt parse --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials`, then count `resource_type == "test"` in `dbt_clinical_trials/target/manifest.json`) | grains, keys, referential integrity, accepted values, current-record uniqueness, state validity, date sanity |
+| pytest | **589** (measured 2026-10-25 UTC: `uv run pytest --collect-only`) | HTTP client/retry, pagination, manifests, normalization, metric math (HHI fixtures), ROI arithmetic + disclaimer, dashboard smoke (all 8 pages via Streamlit `AppTest`) |
 | ruff | clean | lint + format, line length 100 |
 
 These are the only places in this file that state those two counts *as measurements*,
@@ -808,10 +767,9 @@ status-transition counts (and `growth_uses_registry_proxy_flag` flips off).
 | `config/shared_paths.yml` | Shared silver, gold, and DuckDB paths across non-ingest-only profiles |
 | `config/condition_taxonomy.yml` | mapping of registry condition strings → ADRD condition groups, with confidence rules |
 | `config/geography_rules.yml` | state-name → USPS code normalization |
-| `config/score_weights.yml` | score weights, normalization method, band thresholds (mirrored in seed + dbt vars; sync enforced by pytest) |
 | `config/roi_assumptions.yml` | scenario-calculator assumptions and multipliers (with embedded disclaimer) |
 | `.env` | optional local overrides (`CTI_CONFIG_PATH`, `CTI_HTTP_TIMEOUT_SECONDS`, `CTI_MAX_RETRIES`) — no secrets required |
-| `dbt_clinical_trials/dbt_project.yml` | schema routing, seed types, feasibility band vars |
+| `dbt_clinical_trials/dbt_project.yml` | schema routing, seed types |
 
 ## 17. Known limitations
 
@@ -868,7 +826,6 @@ flowchart LR
 | **HHI** | Herfindahl–Hirschman Index of lead-sponsor listing shares within a segment |
 | **Proxy growth** | growth measured from registry first-post dates when snapshot history is insufficient (always flagged) |
 | **Quarantine** | storage for records rejected at transform time, with reason codes |
-| **Priority band** | `watch` / `review` / `priority_review` — a queueing label, not a verdict |
 
 ---
 

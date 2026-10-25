@@ -333,3 +333,20 @@ class ProblemDetail(BaseModel):
     invalid_params: list[InvalidParam] | None = Field(
         default=None, description="Optional field-level errors"
     )
+
+
+class ReadinessStatus(BaseModel):
+    """System and warehouse readiness status model for /readyz."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    status: str = Field(..., description="Readiness status ('ready' or 'degraded')")
+    backend: str = Field(..., description="Active backend: 'warehouse' or 'live'")
+    database_accessible: bool = Field(..., description="Whether warehouse database is accessible")
+    snapshot_id: str | None = Field(default=None, description="Active snapshot identifier")
+    snapshot_date: str | None = Field(default=None, description="Active snapshot date (YYYY-MM-DD)")
+    snapshot_timestamp_utc: str | None = Field(
+        default=None, description="Active snapshot timestamp (ISO UTC)"
+    )
+    trials_count: int | None = Field(default=None, description="Total trials loaded in warehouse")
+    timestamp: str = Field(..., description="ISO UTC timestamp of the readiness check")

@@ -3,7 +3,6 @@ profile:
   display_name: Prostate Cancer
   ingest_only: false
   taxonomy: config/condition_taxonomy_prostate.yml
-  score_weights: config/score_weights.yml
 api:
   base_url: https://clinicaltrials.gov/api/v2
   studies_endpoint: /studies
