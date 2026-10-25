@@ -71,7 +71,7 @@ SELECT
             'intervention_type': COALESCE(ti.intervention_type, 'UNKNOWN'),
             'intervention_name': COALESCE(ti.intervention_name, ''),
             'description': ti.intervention_description
-        } ORDER BY ti.intervention_name)
+        } ORDER BY ti.intervention_name, ti.intervention_type)
         FROM stg_trial_interventions ti
         WHERE ti.nct_id = st.nct_id
           AND ti.ingestion_run_id = st.ingestion_run_id

@@ -29,6 +29,7 @@ from src.api.models import ReadinessStatus, TrialDetail, TrialsListResponse
 from src.api.warehouse import (
     DuckDBConnectionPool,
     DuckDBWarehouseManager,
+    WarehousePoolTimeoutError,
     encode_keyset_cursor,
 )
 
@@ -86,7 +87,7 @@ def _init_fixture_database(db_path: Path) -> None:
         indication_profile_id VARCHAR,
         ingestion_run_id VARCHAR,
         snapshot_date DATE,
-        snapshot_timestamp_utc TIMESTAMPTZ,
+        snapshot_timestamp_utc TIMESTAMP,
         overall_status VARCHAR,
         previous_status VARCHAR,
         status_changed_from_previous_snapshot_flag BOOLEAN,
@@ -128,15 +129,15 @@ def _init_fixture_database(db_path: Path) -> None:
         lead_sponsor_normalized VARCHAR
     );
 
-    -- 2. Staging tables
+    -- 2. Staging tables (snapshot_timestamp_utc and retrieved_at_utc are naive TIMESTAMP in dbt)
     CREATE TABLE stg_trials (
         ingestion_run_id VARCHAR,
         snapshot_id VARCHAR,
-        retrieved_at_utc TIMESTAMPTZ,
+        retrieved_at_utc TIMESTAMP,
         raw_page_reference VARCHAR,
         raw_study_ordinal BIGINT,
         indication_profile_id VARCHAR,
-        snapshot_timestamp_utc TIMESTAMPTZ,
+        snapshot_timestamp_utc TIMESTAMP,
         snapshot_date DATE,
         nct_id VARCHAR,
         brief_title VARCHAR,
@@ -181,7 +182,7 @@ def _init_fixture_database(db_path: Path) -> None:
     CREATE TABLE stg_trial_locations (
         ingestion_run_id VARCHAR,
         snapshot_id VARCHAR,
-        retrieved_at_utc TIMESTAMPTZ,
+        retrieved_at_utc TIMESTAMP,
         raw_page_reference VARCHAR,
         raw_study_ordinal BIGINT,
         indication_profile_id VARCHAR,
@@ -512,7 +513,7 @@ def test_connection_pool_timeout_when_exhausted(warehouse_db: Path) -> None:
 
     conn = pool.acquire()
     try:
-        with pytest.raises(TimeoutError, match="Timed out after 0.2s"):
+        with pytest.raises(WarehousePoolTimeoutError, match="Timed out after 0.2s"):
             pool.acquire()
     finally:
         pool.release(conn)
@@ -831,7 +832,7 @@ def test_keyset_pagination_with_null_dates_across_all_date_sorts(tmp_path: Path)
     CREATE TABLE fct_trial_snapshot (
         nct_id VARCHAR,
         snapshot_date DATE,
-        snapshot_timestamp_utc TIMESTAMPTZ,
+        snapshot_timestamp_utc TIMESTAMP,
         current_record_flag BOOLEAN
     );
 
@@ -844,7 +845,7 @@ def test_keyset_pagination_with_null_dates_across_all_date_sorts(tmp_path: Path)
         nct_id VARCHAR,
         ingestion_run_id VARCHAR,
         snapshot_id VARCHAR,
-        snapshot_timestamp_utc TIMESTAMPTZ,
+        snapshot_timestamp_utc TIMESTAMP,
         snapshot_date DATE,
         last_update_post_date DATE
     );
@@ -1167,3 +1168,42 @@ def test_cors_credentials_false_when_wildcard(client_warehouse: TestClient) -> N
     )
     # With wildcard origins and allow_credentials=False, allow-credentials header is omitted
     assert resp.headers.get("access-control-allow-credentials") is None
+
+
+def test_warehouse_timestamps_consistent_under_non_utc_timezone(
+    warehouse_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test Finding N1: timestamps remain exact UTC instant with Z suffix regardless of host TZ."""
+    monkeypatch.setenv("TZ", "America/Los_Angeles")
+    if hasattr(time, "tzset"):
+        time.tzset()
+    try:
+        mgr = DuckDBWarehouseManager(warehouse_db)
+        # Verify connection pool initialized with UTC TimeZone setting
+        with mgr.pool.connection() as conn:
+            tz_val = conn.execute("SELECT current_setting('TimeZone');").fetchone()[0]
+            assert tz_val == "UTC"
+
+        container = APIContainer(warehouse=mgr)
+        with TestClient(create_app(container=container)) as client:
+            # 1. /readyz snapshot_timestamp_utc
+            resp_ready = client.get("/readyz")
+            assert resp_ready.status_code == 200
+            assert resp_ready.json()["snapshot_timestamp_utc"] == "2026-09-01T12:00:00Z"
+
+            # 2. Search Data-Updated header
+            resp_search = client.get("/v1/trials")
+            assert resp_search.status_code == 200
+            assert resp_search.headers.get("Data-Updated") == "2026-09-01T12:00:00Z"
+
+            # 3. Protocol detail provenance timestamps
+            resp_detail = client.get("/v1/trials/NCT00000001")
+            assert resp_detail.status_code == 200
+            prov = resp_detail.json()["provenance"]
+            assert prov["snapshot_timestamp_utc"] == "2026-09-01T12:00:00Z"
+            assert prov["retrieved_at_utc"] == "2026-09-01T12:00:00Z"
+    finally:
+        mgr.close()
+        monkeypatch.delenv("TZ", raising=False)
+        if hasattr(time, "tzset"):
+            time.tzset()

@@ -49,6 +49,7 @@ from src.api.models import (
 from src.api.warehouse import (
     DuckDBWarehouseManager,
     WarehouseNotReadyError,
+    WarehousePoolTimeoutError,
 )
 from src.config import ApiConfig, HttpConfig
 from src.ingest.ctg_client import CTGClient
@@ -348,16 +349,27 @@ def create_app(
 
     @app.exception_handler(TimeoutError)
     async def timeout_error_handler(request: Request, exc: TimeoutError) -> JSONResponse:
-        logger.warning("Service timeout encountered: %s", exc)
-        res = create_problem_response(
-            503,
-            "Service Unavailable",
-            "The service is temporarily saturated. Please retry after a brief pause.",
+        if isinstance(
+            exc, WarehousePoolTimeoutError
+        ) or "waiting for a DuckDB connection from pool" in str(exc):
+            logger.warning("Warehouse connection pool timeout encountered: %s", exc)
+            res = create_problem_response(
+                503,
+                "Service Unavailable",
+                "The warehouse is temporarily saturated. Please retry after a brief pause.",
+                str(request.url),
+                code="WAREHOUSE_BUSY",
+            )
+            res.headers["Retry-After"] = "5"
+            return res
+        logger.error("Service timeout encountered: %s", exc, exc_info=exc)
+        return create_problem_response(
+            504,
+            "Gateway Timeout",
+            "An upstream or background operation timed out.",
             str(request.url),
-            code="WAREHOUSE_BUSY",
+            code="GATEWAY_TIMEOUT",
         )
-        res.headers["Retry-After"] = "5"
-        return res
 
     @app.exception_handler(WarehouseNotReadyError)
     async def warehouse_not_ready_handler(

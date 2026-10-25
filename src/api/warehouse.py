@@ -63,6 +63,10 @@ class WarehouseNotReadyError(Exception):
     """Raised when warehouse database is missing, corrupted, or inaccessible."""
 
 
+class WarehousePoolTimeoutError(TimeoutError):
+    """Raised when acquiring a connection from the DuckDB pool times out."""
+
+
 def encode_keyset_cursor(payload: dict[str, Any]) -> str:
     """Encode pagination cursor token to URL-safe base64 string."""
     raw_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
@@ -109,6 +113,7 @@ class DuckDBConnectionPool:
             raise WarehouseNotReadyError(f"Warehouse database file not found: {self.database_path}")
         try:
             conn = duckdb.connect(str(self.database_path), read_only=True)
+            conn.execute("SET TimeZone = 'UTC';")
             # Add existing schemas to search_path so relations resolve transparently
             schemas = {
                 row[0]
@@ -147,7 +152,7 @@ class DuckDBConnectionPool:
         try:
             return self._pool.get(timeout=self.timeout)
         except queue.Empty as err:
-            raise TimeoutError(
+            raise WarehousePoolTimeoutError(
                 f"Timed out after {self.timeout}s waiting for a DuckDB connection from pool"
             ) from err
 

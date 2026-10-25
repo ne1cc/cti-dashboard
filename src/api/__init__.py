@@ -15,7 +15,11 @@ from src.api.models import (
     TrialsListResponse,
     TrialSummary,
 )
-from src.api.warehouse import DuckDBWarehouseManager, WarehouseNotReadyError
+from src.api.warehouse import (
+    DuckDBWarehouseManager,
+    WarehouseNotReadyError,
+    WarehousePoolTimeoutError,
+)
 
 __all__ = [
     "create_app",
@@ -25,6 +29,7 @@ __all__ = [
     "CircuitState",
     "DuckDBWarehouseManager",
     "WarehouseNotReadyError",
+    "WarehousePoolTimeoutError",
     "ReadinessStatus",
     "TrialSummary",
     "TrialsListResponse",
