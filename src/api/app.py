@@ -1,10 +1,12 @@
-"""Live ClinicalTrials.gov read API with privacy-safe caching and RFC 7807 errors."""
+"""Clinical Trial Read API service with privacy-safe caching, DuckDB, and RFC 7807 errors."""
 
 import hashlib
 import json
 import logging
 import os
 import re
+import time
+import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
@@ -15,6 +17,7 @@ from typing import Annotated, Any, Literal
 import requests
 from fastapi import Depends, FastAPI, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
@@ -38,9 +41,14 @@ from src.api.models import (
     InvalidParam,
     PaginationMetadata,
     ProblemDetail,
+    ReadinessStatus,
     TrialDetail,
     TrialsListResponse,
     TrialSummary,
+)
+from src.api.warehouse import (
+    DuckDBWarehouseManager,
+    WarehouseNotReadyError,
 )
 from src.config import ApiConfig, HttpConfig
 from src.ingest.ctg_client import CTGClient
@@ -100,7 +108,7 @@ def create_problem_response(
 
 
 class APIContainer:
-    """Shared interactive client, cache, and circuit breaker dependencies."""
+    """Shared interactive client, cache, circuit breaker, and warehouse dependencies."""
 
     def __init__(
         self,
@@ -108,6 +116,8 @@ class APIContainer:
         cache: SQLiteCache | None = None,
         circuit_breaker: CircuitBreaker | None = None,
         cache_path: str | Path | None = None,
+        warehouse: DuckDBWarehouseManager | None = None,
+        warehouse_path: str | Path | None = None,
     ) -> None:
         self.ctg_client = ctg_client or CTGClient(
             ApiConfig(
@@ -122,6 +132,17 @@ class APIContainer:
         )
         self.circuit_breaker = circuit_breaker or CircuitBreaker()
 
+        # Warehouse DuckDB configuration
+        resolved_wh_path = (
+            warehouse_path if warehouse_path is not None else os.environ.get("CTI_WAREHOUSE_PATH")
+        )
+        if warehouse is not None:
+            self.warehouse: DuckDBWarehouseManager | None = warehouse
+        elif resolved_wh_path is not None:
+            self.warehouse = DuckDBWarehouseManager(resolved_wh_path)
+        else:
+            self.warehouse = None
+
 
 def _sanitized_payload(data: dict[str, Any]) -> tuple[str, str]:
     payload = json.dumps(scrub_contact_pii(data), sort_keys=True, separators=(",", ":"))
@@ -130,24 +151,86 @@ def _sanitized_payload(data: dict[str, Any]) -> tuple[str, str]:
 
 
 def create_app(
-    container: APIContainer | None = None, cache_path: str | Path | None = None
+    container: APIContainer | None = None,
+    cache_path: str | Path | None = None,
+    warehouse: DuckDBWarehouseManager | None = None,
+    warehouse_path: str | Path | None = None,
 ) -> FastAPI:
     """Create an app explicitly; importing this module never opens a cache or client."""
-    state_container = container or APIContainer(cache_path=cache_path)
+    if container is None:
+        state_container = APIContainer(
+            cache_path=cache_path,
+            warehouse=warehouse,
+            warehouse_path=warehouse_path,
+        )
+    else:
+        state_container = container
 
     @asynccontextmanager
     async def lifespan(app_instance: FastAPI) -> AsyncGenerator[None, None]:
         yield
         state_container.cache.close()
         state_container.ctg_client.close()
+        if state_container.warehouse is not None:
+            state_container.warehouse.close()
 
     app = FastAPI(
-        title="Clinical Trial Read API",
+        title="Clinical Trial Intelligence Read API",
         version="0.1.0",
         lifespan=lifespan,
         responses={code: {"model": ProblemDetail} for code in (400, 404, 405, 422, 500, 503)},
     )
     app.state.container = state_container
+
+    # CORS configuration
+    cors_origins = [
+        o.strip() for o in os.environ.get("CTI_CORS_ORIGINS", "*").split(",") if o.strip()
+    ]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=[
+            "Data-Snapshot",
+            "Data-Updated",
+            "ETag",
+            "Cache-Control",
+            "X-Request-ID",
+            "X-Cache-Status",
+        ],
+    )
+
+    # Request ID and Structured Logging Middleware
+    @app.middleware("http")
+    async def request_correlation_and_logging_middleware(
+        request: Request, call_next: Any
+    ) -> Response:
+        request_id = request.headers.get("X-Request-ID")
+        if not request_id or not request_id.strip():
+            request_id = str(uuid.uuid4())
+        else:
+            request_id = request_id.strip()
+
+        request.state.request_id = request_id
+        start_time = time.perf_counter()
+
+        response: Response = await call_next(request)
+
+        duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+        response.headers["X-Request-ID"] = request_id
+
+        log_data = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": response.status_code,
+            "duration_ms": duration_ms,
+        }
+        logger.info(json.dumps(log_data))
+        return response
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(
@@ -174,7 +257,7 @@ def create_app(
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
         if exc.status_code >= 500:
-            logger.error("Live API HTTP error", exc_info=exc)
+            logger.error("API HTTP error", exc_info=exc)
         result = create_problem_response(
             exc.status_code,
             HTTPStatus(exc.status_code).phrase,
@@ -217,7 +300,7 @@ def create_app(
 
     @app.exception_handler(Exception)
     async def internal_error_handler(request: Request, exc: Exception) -> JSONResponse:
-        logger.error("Live API request failed", exc_info=exc)
+        logger.error("API request failed", exc_info=exc)
         return create_problem_response(
             500,
             "Internal Server Error",
@@ -231,7 +314,7 @@ def create_app(
 
     ContainerDep = Annotated[APIContainer, Depends(get_container)]
 
-    def set_response_headers(response: Response, entry: CacheEntry) -> None:
+    def set_live_response_headers(response: Response, entry: CacheEntry) -> None:
         response.headers["Data-Snapshot"] = "live-api"
         response.headers["Data-Updated"] = datetime.fromtimestamp(entry.created_at, UTC).strftime(
             "%Y-%m-%dT%H:%M:%SZ"
@@ -243,6 +326,69 @@ def create_app(
         response.headers["X-Cache-Status"] = entry.state.value
         if entry.state == CacheState.STALE:
             response.headers["Warning"] = '110 "Response is Stale"'
+
+    @app.get("/healthz", tags=["Diagnostics"])
+    def liveness_probe() -> dict[str, Any]:
+        """Process liveness probe."""
+        return {
+            "status": "ok",
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+
+    @app.get("/readyz", tags=["Diagnostics"], response_model=ReadinessStatus)
+    def readiness_probe(request: Request, deps: ContainerDep) -> Any:
+        """Readiness probe checking warehouse accessibility, schemas, and freshness."""
+        if deps.warehouse is not None:
+            try:
+                return deps.warehouse.check_readiness()
+            except WarehouseNotReadyError as err:
+                return create_problem_response(
+                    503,
+                    "Service Unavailable",
+                    f"Warehouse is not ready: {err}",
+                    str(request.url),
+                    code="WAREHOUSE_NOT_READY",
+                )
+        else:
+            metrics = deps.circuit_breaker.get_metrics()
+            if metrics["state"] == CircuitState.OPEN.value:
+                return create_problem_response(
+                    503,
+                    "Service Unavailable",
+                    "Circuit breaker is OPEN.",
+                    str(request.url),
+                    code="CIRCUIT_BREAKER_OPEN",
+                )
+            now_iso = datetime.now(UTC).isoformat()
+            return ReadinessStatus(
+                status="ready",
+                backend="live",
+                database_accessible=True,
+                snapshot_id="live-api",
+                snapshot_date=date.today().isoformat(),
+                snapshot_timestamp_utc=now_iso,
+                trials_count=None,
+                timestamp=now_iso,
+            )
+
+    @app.get("/health")
+    @app.get("/v1/metadata/status")
+    def health_check(deps: ContainerDep) -> dict[str, Any]:
+        metrics = deps.circuit_breaker.get_metrics()
+        status = "ok" if metrics["state"] == CircuitState.CLOSED.value else "degraded"
+        if deps.warehouse is not None:
+            try:
+                wh_status = deps.warehouse.check_readiness()
+                status = wh_status.status
+            except Exception:
+                status = "degraded"
+
+        return {
+            "status": status,
+            "cache": deps.cache.get_metrics(),
+            "circuit_breaker": metrics,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
 
     @app.get("/v1/trials", response_model=TrialsListResponse)
     def search_trials(
@@ -294,6 +440,62 @@ def create_app(
                     InvalidParam(name="sort", reason="Requires coordinates", value=sort)
                 ],
             )
+
+        # Warehouse backend path
+        if deps.warehouse is not None:
+            try:
+                result = deps.warehouse.search_trials(
+                    cond=cond,
+                    status=status_filter,
+                    phase=phase,
+                    lat=lat,
+                    lon=lon,
+                    radius_mi=radius_mi,
+                    min_age=min_age,
+                    max_age=max_age,
+                    sex=sex,
+                    healthy_volunteers=healthy_volunteers,
+                    std_age_group=std_age_group,
+                    intervention_type=intervention_type,
+                    sponsor_class=sponsor_class,
+                    updated_since=updated_since,
+                    cursor=cursor,
+                    limit=limit,
+                    sort=sort,
+                )
+            except ValueError as val_err:
+                return create_problem_response(
+                    400,
+                    "Invalid Query Parameters",
+                    str(val_err),
+                    str(request.url),
+                    code="INVALID_CURSOR",
+                )
+            except Exception as err:
+                logger.error("Warehouse search failed", exc_info=err)
+                return create_problem_response(
+                    500,
+                    "Internal Server Error",
+                    "Warehouse query failed.",
+                    str(request.url),
+                    code="WAREHOUSE_QUERY_ERROR",
+                )
+
+            snap_id, snap_ts = deps.warehouse.get_snapshot_metadata()
+            payload_str = json.dumps(result.model_dump(), sort_keys=True, separators=(",", ":"))
+            etag = f'W/"{hashlib.sha256(payload_str.encode("utf-8")).hexdigest()[:16]}"'
+
+            response.headers["Data-Snapshot"] = snap_id
+            response.headers["Data-Updated"] = snap_ts
+            response.headers["ETag"] = etag
+            response.headers["Cache-Control"] = "public, max-age=300"
+
+            if request.headers.get("if-none-match") == etag:
+                return Response(status_code=304, headers=dict(response.headers))
+
+            return result
+
+        # Live API backend path
         unsupported = [
             name
             for name, value in (
@@ -362,7 +564,7 @@ def create_app(
                 sponsor_class,
             )
         ) or len(summaries) != len(raw_studies)
-        set_response_headers(response, entry)
+        set_live_response_headers(response, entry)
         return TrialsListResponse(
             items=items,
             pagination=PaginationMetadata(
@@ -400,6 +602,45 @@ def create_app(
                 str(request.url),
                 code="INVALID_COORDINATES",
             )
+
+        # Warehouse backend path
+        if deps.warehouse is not None:
+            try:
+                detail = deps.warehouse.get_trial_detail(canonical_nct, lat=lat, lon=lon)
+            except Exception as err:
+                logger.error("Warehouse detail query failed", exc_info=err)
+                return create_problem_response(
+                    500,
+                    "Internal Server Error",
+                    "Warehouse detail query failed.",
+                    str(request.url),
+                    code="WAREHOUSE_QUERY_ERROR",
+                )
+
+            if detail is None:
+                return create_problem_response(
+                    404,
+                    "Not Found",
+                    f"Study {canonical_nct} was not found in the warehouse.",
+                    str(request.url),
+                    code="STUDY_NOT_FOUND",
+                )
+
+            snap_id, snap_ts = deps.warehouse.get_snapshot_metadata()
+            payload_str = json.dumps(detail.model_dump(), sort_keys=True, separators=(",", ":"))
+            etag = f'W/"{hashlib.sha256(payload_str.encode("utf-8")).hexdigest()[:16]}"'
+
+            response.headers["Data-Snapshot"] = snap_id
+            response.headers["Data-Updated"] = snap_ts
+            response.headers["ETag"] = etag
+            response.headers["Cache-Control"] = "public, max-age=300"
+
+            if request.headers.get("if-none-match") == etag:
+                return Response(status_code=304, headers=dict(response.headers))
+
+            return detail
+
+        # Live API backend path
         cache_key = canonical_cache_key("trial_detail", {"nct_id": canonical_nct})
 
         def fetch_upstream() -> tuple[str, str]:
@@ -421,18 +662,7 @@ def create_app(
                 str(request.url),
                 code="UPSTREAM_INVALID_STUDY",
             )
-        set_response_headers(response, entry)
+        set_live_response_headers(response, entry)
         return detail
-
-    @app.get("/health")
-    @app.get("/v1/metadata/status")
-    def health_check(deps: ContainerDep) -> dict[str, Any]:
-        metrics = deps.circuit_breaker.get_metrics()
-        return {
-            "status": "ok" if metrics["state"] == CircuitState.CLOSED.value else "degraded",
-            "cache": deps.cache.get_metrics(),
-            "circuit_breaker": metrics,
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
 
     return app

@@ -1,6 +1,6 @@
 """Public Read API package.
 
-Exposes FastAPI app, data models, cache, and live ClinicalTrials.gov normalizer.
+Exposes FastAPI app, data models, cache, live normalizer, and DuckDB warehouse backend.
 """
 
 from src.api.app import create_app
@@ -9,11 +9,13 @@ from src.api.models import (
     NearestSiteSummary,
     PaginationMetadata,
     ProblemDetail,
+    ReadinessStatus,
     StructuredEligibilitySummary,
     TrialDetail,
     TrialsListResponse,
     TrialSummary,
 )
+from src.api.warehouse import DuckDBWarehouseManager, WarehouseNotReadyError
 
 __all__ = [
     "create_app",
@@ -21,6 +23,9 @@ __all__ = [
     "CacheState",
     "CircuitBreaker",
     "CircuitState",
+    "DuckDBWarehouseManager",
+    "WarehouseNotReadyError",
+    "ReadinessStatus",
     "TrialSummary",
     "TrialsListResponse",
     "PaginationMetadata",

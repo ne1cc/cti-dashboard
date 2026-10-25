@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS base
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates make \
@@ -23,6 +23,13 @@ RUN uv run dbt deps --project-dir dbt_clinical_trials --profiles-dir dbt_clinica
 RUN test -f dbt_clinical_trials/profiles.yml || cp dbt_clinical_trials/profiles.yml.example dbt_clinical_trials/profiles.yml
 RUN uv run python -m src.cli init-data-dirs > /dev/null
 
+FROM base AS api
+EXPOSE 8000
+ENV CTI_API_HOST="0.0.0.0" \
+    CTI_API_PORT="8000"
+CMD ["uv", "run", "uvicorn", "src.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+
+FROM base AS dashboard
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [ "${1:-}" = "api" ]; then
+    exec /app/.venv/bin/uvicorn src.api.app:create_app --factory --host "${CTI_API_HOST:-0.0.0.0}" --port "${CTI_API_PORT:-8000}" "${@:2}"
+fi
+
 DATA_DIR="/app/data"
 WAREHOUSE="$DATA_DIR/warehouse/clinical_trials.duckdb"
 MARKER="$DATA_DIR/.last_pipeline_run"
