@@ -53,7 +53,7 @@ testpaths = ["tests"]
 addopts = "-q"
 
 [tool.coverage.run]
-source = ["src"]
+source = ["src", "dashboard"]
 
 [tool.coverage.report]
 show_missing = true
@@ -67,6 +67,16 @@ select = ["E", "F", "I", "W", "UP", "B"]
 
 [tool.mypy]
 python_version = "3.12"
-# src/transform deliberately excluded: pandas annotation churn (recorded known gap per spec).
-files = ["src/orchestration", "src/ingest", "src/utils", "src/quality"]
+files = ["src", "dashboard"]
+mypy_path = ["dashboard", "."]
 strict = true
+
+[[tool.mypy.overrides]]
+module = [
+    "pyarrow",
+    "pyarrow.*",
+    "plotly",
+    "plotly.*",
+]
+ignore_missing_imports = true
+disable_error_code = ["import-untyped"]

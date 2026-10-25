@@ -1,6 +1,7 @@
 """Parquet export for silver entities: data/silver/<entity>/run_id=<id>.parquet."""
 
 import os
+import types
 from pathlib import Path
 from typing import Any
 
@@ -203,7 +204,12 @@ class SilverRunWriter:
     def __enter__(self) -> "SilverRunWriter":
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: types.TracebackType | None,
+    ) -> None:
         if self._closed:
             return
         if exc_type is None:

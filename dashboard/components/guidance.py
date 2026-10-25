@@ -108,10 +108,7 @@ def render_indication_banner(profile_id: str | None = None) -> None:
 
                         reg = get_registry()
                         prof = reg.get(profile_id)
-                        desc = (
-                            prof.description
-                            or f"Clinical trials investigating {prof.display_name}."
-                        )
+                        desc = f"Clinical trials investigating {prof.display_name}."
                     except Exception:
                         pass
                 st.markdown(

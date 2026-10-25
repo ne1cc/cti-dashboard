@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import NamedTuple
 
 import streamlit as st
+from streamlit.navigation.page import StreamlitPage
 
 
 class PageSpec(NamedTuple):
@@ -69,7 +70,7 @@ SECTIONS: dict[str, tuple[PageSpec, ...]] = {
 }
 
 
-def build_navigation():
+def build_navigation() -> StreamlitPage:
     """Register every page with ``st.navigation`` and return the selected page."""
     return st.navigation(
         {
