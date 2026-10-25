@@ -259,7 +259,7 @@ class DataProvenance(BaseModel):
     snapshot_id: str = Field(..., description="Snapshot identifier")
     snapshot_date: str = Field(..., description="Snapshot date (YYYY-MM-DD)")
     snapshot_timestamp_utc: str = Field(..., description="Snapshot timestamp (ISO UTC)")
-    source_json_hash: str = Field(..., description="SHA-256 digest of unmodified study JSON")
+    source_json_hash: str = Field(..., description="SHA-256 digest of contact-scrubbed study JSON")
     record_quality_flag: str = Field(..., description="Quality gate classification (e.g. ok)")
     retrieved_at_utc: str | None = Field(default=None, description="Retrieval timestamp (ISO UTC)")
     indication_profile_id: str = Field(..., description="Indication profile ID")
@@ -333,7 +333,3 @@ class ProblemDetail(BaseModel):
     invalid_params: list[InvalidParam] | None = Field(
         default=None, description="Optional field-level errors"
     )
-
-
-# Alias for compatibility with openapi.yaml schema naming
-ProblemDetails = ProblemDetail

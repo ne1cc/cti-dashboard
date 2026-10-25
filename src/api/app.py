@@ -1,30 +1,32 @@
-"""FastAPI application for the Clinical Trial Read API.
-
-Serves live search and trial protocol detail endpoints, adhering to
-docs/api/openapi.yaml, ADR 0065 privacy guardrails, and RFC 7807 problem details.
-"""
+"""Live ClinicalTrials.gov read API with privacy-safe caching and RFC 7807 errors."""
 
 import hashlib
 import json
+import logging
+import os
 import re
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
-from typing import Annotated, Any
+from datetime import UTC, date, datetime
+from http import HTTPStatus
+from pathlib import Path
+from typing import Annotated, Any, Literal
 
 import requests
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
+from fastapi import Depends, FastAPI, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException
 
 from src.api.cache import (
+    CacheEntry,
     CacheState,
     CircuitBreaker,
     CircuitState,
     SQLiteCache,
-    UpstreamNotFoundError,
     UpstreamUnavailableError,
     canonical_cache_key,
+    scrub_contact_pii,
 )
 from src.api.live import (
     build_upstream_search_params,
@@ -40,11 +42,26 @@ from src.api.models import (
     TrialsListResponse,
     TrialSummary,
 )
-from src.config import ApiConfig
+from src.config import ApiConfig, HttpConfig
 from src.ingest.ctg_client import CTGClient
 
+logger = logging.getLogger(__name__)
 NCT_REGEX = re.compile(r"^NCT\d{8}$", re.IGNORECASE)
-ALLOWED_SORTS = {"distance", "updated", "-updated", "start_date", "-start_date"}
+StatusFilter = Literal[
+    "RECRUITING",
+    "ACTIVE_NOT_RECRUITING",
+    "ENROLLING_BY_INVITATION",
+    "NOT_YET_RECRUITING",
+    "COMPLETED",
+    "SUSPENDED",
+    "TERMINATED",
+    "WITHDRAWN",
+]
+PhaseFilter = Literal["EARLY_PHASE1", "PHASE1", "PHASE2", "PHASE3", "PHASE4", "NOT_APPLICABLE"]
+SexFilter = Literal["ALL", "FEMALE", "MALE"]
+AgeGroupFilter = Literal["CHILD", "ADULT", "OLDER_ADULT"]
+SponsorFilter = Literal["INDUSTRY", "NIH", "FED", "OTHER", "OTHER_GOV", "INDIV", "NETWORK"]
+SortOrder = Literal["distance", "updated", "-updated", "start_date", "-start_date"]
 
 
 def create_problem_response(
@@ -56,21 +73,18 @@ def create_problem_response(
     code: str | None = None,
     invalid_params: list[InvalidParam] | None = None,
 ) -> JSONResponse:
-    """Generate RFC 7807 compliant problem details response."""
-    default_type_map = {
-        400: "https://api.cti.example.org/errors/invalid-parameters",
-        404: "https://api.cti.example.org/errors/not-found",
-        422: "https://api.cti.example.org/errors/validation-error",
-        429: "https://api.cti.example.org/errors/rate-limit-exceeded",
-        500: "https://api.cti.example.org/errors/internal-error",
-        503: "https://api.cti.example.org/errors/service-unavailable",
+    """Generate RFC 7807 problem details without exception diagnostics."""
+    types = {
+        400: "invalid-parameters",
+        404: "not-found",
+        422: "validation-error",
+        429: "rate-limit-exceeded",
+        500: "internal-error",
+        503: "service-unavailable",
     }
-    ptype = error_type or default_type_map.get(
-        status_code, "https://api.cti.example.org/errors/general-error"
-    )
-
     problem = ProblemDetail(
-        type=ptype,
+        type=error_type
+        or f"https://api.cti.example.org/errors/{types.get(status_code, 'general-error')}",
         title=title,
         status=status_code,
         detail=detail,
@@ -86,24 +100,40 @@ def create_problem_response(
 
 
 class APIContainer:
-    """Holds shared client, cache, and circuit breaker dependencies."""
+    """Shared interactive client, cache, and circuit breaker dependencies."""
 
     def __init__(
         self,
         ctg_client: CTGClient | None = None,
         cache: SQLiteCache | None = None,
         circuit_breaker: CircuitBreaker | None = None,
+        cache_path: str | Path | None = None,
     ) -> None:
         self.ctg_client = ctg_client or CTGClient(
-            ApiConfig(base_url="https://clinicaltrials.gov/api/v2")
+            ApiConfig(
+                base_url="https://clinicaltrials.gov/api/v2",
+                http=HttpConfig(timeout_seconds=5.0, max_retries=2),
+            )
         )
-        self.cache = cache or SQLiteCache()
+        self.cache = cache or SQLiteCache(
+            cache_path
+            if cache_path is not None
+            else os.environ.get("CTI_CACHE_PATH", ".api_cache.db")
+        )
         self.circuit_breaker = circuit_breaker or CircuitBreaker()
 
 
-def create_app(container: APIContainer | None = None) -> FastAPI:
-    """FastAPI application factory."""
-    state_container = container or APIContainer()
+def _sanitized_payload(data: dict[str, Any]) -> tuple[str, str]:
+    payload = json.dumps(scrub_contact_pii(data), sort_keys=True, separators=(",", ":"))
+    etag = f'W/"{hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]}"'
+    return payload, etag
+
+
+def create_app(
+    container: APIContainer | None = None, cache_path: str | Path | None = None
+) -> FastAPI:
+    """Create an app explicitly; importing this module never opens a cache or client."""
+    state_container = container or APIContainer(cache_path=cache_path)
 
     @asynccontextmanager
     async def lifespan(app_instance: FastAPI) -> AsyncGenerator[None, None]:
@@ -114,456 +144,295 @@ def create_app(container: APIContainer | None = None) -> FastAPI:
     app = FastAPI(
         title="Clinical Trial Read API",
         version="0.1.0",
-        description="Public Read API over ClinicalTrials.gov with caching and circuit breaker.",
         lifespan=lifespan,
+        responses={code: {"model": ProblemDetail} for code in (400, 404, 405, 422, 500, 503)},
     )
     app.state.container = state_container
 
-    # RFC 7807 Exception Handlers
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
-        invalid_params: list[InvalidParam] = []
-        for err in exc.errors():
-            loc = err.get("loc", ())
-            param_name = str(loc[-1]) if loc else "unknown"
-            invalid_params.append(
+        errors = exc.errors()
+        coordinates = any(err.get("loc", ())[-1:] in (("lat",), ("lon",)) for err in errors)
+        return create_problem_response(
+            400 if coordinates else 422,
+            "Invalid Query Parameters",
+            "Request validation failed on one or more parameters.",
+            str(request.url),
+            code="INVALID_COORDINATES" if coordinates else "VALIDATION_FAILED",
+            invalid_params=[
                 InvalidParam(
-                    name=param_name,
+                    name=str(err["loc"][-1]),
                     reason=err.get("msg", "Invalid parameter"),
                     value=err.get("input"),
                 )
-            )
-
-        return create_problem_response(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            title="Unprocessable Query Combination",
-            detail="Request validation failed on one or more parameters.",
-            instance=str(request.url.path),
-            code="VALIDATION_FAILED",
-            invalid_params=invalid_params,
+                for err in errors
+            ],
         )
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
-        detail_msg = exc.detail if isinstance(exc.detail, str) else "HTTP Exception"
-        title_map = {
-            400: "Invalid Query Parameters",
-            404: "Resource Not Found",
-            422: "Unprocessable Query Combination",
-            503: "Service Unavailable",
-        }
+        if exc.status_code >= 500:
+            logger.error("Live API HTTP error", exc_info=exc)
+        result = create_problem_response(
+            exc.status_code,
+            HTTPStatus(exc.status_code).phrase,
+            "An unexpected internal error occurred."
+            if exc.status_code >= 500
+            else exc.detail
+            if isinstance(exc.detail, str)
+            else "Request failed.",
+            str(request.url),
+        )
+        if exc.headers:
+            result.headers.update(exc.headers)
+        return result
+
+    @app.exception_handler(requests.HTTPError)
+    async def upstream_client_error_handler(
+        request: Request, exc: requests.HTTPError
+    ) -> JSONResponse:
+        upstream_status = exc.response.status_code if exc.response is not None else 400
+        status_code = upstream_status if upstream_status in (400, 404, 422) else 400
         return create_problem_response(
-            status_code=exc.status_code,
-            title=title_map.get(exc.status_code, "Error"),
-            detail=detail_msg,
-            instance=str(request.url.path),
+            status_code,
+            HTTPStatus(status_code).phrase,
+            f"Study {request.path_params.get('nct_id', 'identifier')} was not found."
+            if status_code == 404
+            else "The registry rejected the query or cursor.",
+            str(request.url),
+            code="STUDY_NOT_FOUND" if status_code == 404 else "UPSTREAM_INVALID_QUERY",
+        )
+
+    @app.exception_handler(UpstreamUnavailableError)
+    async def unavailable_handler(request: Request, exc: UpstreamUnavailableError) -> JSONResponse:
+        return create_problem_response(
+            503,
+            "Service Unavailable",
+            "Upstream service is temporarily unavailable.",
+            str(request.url),
+            code="UPSTREAM_UNAVAILABLE",
+        )
+
+    @app.exception_handler(Exception)
+    async def internal_error_handler(request: Request, exc: Exception) -> JSONResponse:
+        logger.error("Live API request failed", exc_info=exc)
+        return create_problem_response(
+            500,
+            "Internal Server Error",
+            "An unexpected internal error occurred.",
+            str(request.url),
+            code="INTERNAL_ERROR",
         )
 
     def get_container() -> APIContainer:
-        return app.state.container  # type: ignore[no-any-return]
+        return state_container
 
     ContainerDep = Annotated[APIContainer, Depends(get_container)]
 
-    def set_response_headers(response: Response, cache_state: CacheState, etag: str) -> None:
-        now_utc = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    def set_response_headers(response: Response, entry: CacheEntry) -> None:
         response.headers["Data-Snapshot"] = "live-api"
-        response.headers["Data-Updated"] = now_utc
-        response.headers["ETag"] = etag
-        response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=3600"
-        response.headers["X-Cache-Status"] = cache_state.value
-        if cache_state == CacheState.STALE:
+        response.headers["Data-Updated"] = datetime.fromtimestamp(entry.created_at, UTC).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        response.headers["ETag"] = entry.etag
+        response.headers["Cache-Control"] = (
+            "no-cache" if entry.state == CacheState.STALE else "public, max-age=300"
+        )
+        response.headers["X-Cache-Status"] = entry.state.value
+        if entry.state == CacheState.STALE:
             response.headers["Warning"] = '110 "Response is Stale"'
 
-    @app.get(
-        "/v1/trials",
-        response_model=TrialsListResponse,
-        responses={
-            400: {"model": ProblemDetail, "description": "Invalid Query Parameters"},
-            422: {"model": ProblemDetail, "description": "Unprocessable Query Combination"},
-            503: {"model": ProblemDetail, "description": "Service Unavailable"},
-        },
-    )
+    @app.get("/v1/trials", response_model=TrialsListResponse)
     def search_trials(
         request: Request,
         response: Response,
         deps: ContainerDep,
-        cond: str | None = Query(default=None, description="Condition keyword"),
-        status_filter: str | None = Query(
-            default=None, alias="status", description="Recruitment status"
-        ),
-        phase: str | None = Query(default=None, description="Study phase"),
-        lat: float | None = Query(default=None, description="Latitude"),
-        lon: float | None = Query(default=None, description="Longitude"),
-        radius_mi: float = Query(default=50.0, description="Search radius in miles"),
-        min_age: int | None = Query(default=None, description="Minimum participant age"),
-        max_age: int | None = Query(default=None, description="Maximum participant age"),
-        sex: str | None = Query(default=None, description="Sex criteria: ALL, FEMALE, MALE"),
-        healthy_volunteers: bool | None = Query(
-            default=None, description="Healthy volunteer filter"
-        ),
-        std_age_group: str | None = Query(default=None, description="Standard age group"),
-        intervention_type: str | None = Query(default=None, description="Intervention type"),
-        sponsor_class: str | None = Query(default=None, description="Lead sponsor class"),
-        updated_since: str | None = Query(
-            default=None, description="Filter updated on or after date"
-        ),
-        cursor: str | None = Query(default=None, description="Pagination cursor"),
-        limit: int = Query(default=20, description="Items per page"),
-        sort: str = Query(default="-updated", description="Sort order"),
+        cond: str | None = Query(default=None),
+        status_filter: Annotated[StatusFilter | None, Query(alias="status")] = None,
+        phase: Annotated[PhaseFilter | None, Query()] = None,
+        lat: float | None = Query(default=None, ge=-90, le=90, allow_inf_nan=False),
+        lon: float | None = Query(default=None, ge=-180, le=180, allow_inf_nan=False),
+        radius_mi: float = Query(default=50.0, ge=1, le=500, allow_inf_nan=False),
+        min_age: int | None = Query(default=None, ge=0, le=130),
+        max_age: int | None = Query(default=None, ge=0, le=130),
+        sex: Annotated[SexFilter | None, Query()] = None,
+        healthy_volunteers: bool | None = Query(default=None),
+        std_age_group: Annotated[AgeGroupFilter | None, Query()] = None,
+        intervention_type: str | None = Query(default=None),
+        sponsor_class: Annotated[SponsorFilter | None, Query()] = None,
+        updated_since: Annotated[date | None, Query()] = None,
+        cursor: str | None = Query(default=None),
+        limit: int = Query(default=20, ge=1, le=100),
+        sort: Annotated[SortOrder, Query()] = "-updated",
     ) -> Any:
-        path = str(request.url.path)
-
-        # Coordinate pairing validation
-        if (lat is not None and lon is None) or (lat is None and lon is not None):
+        if (lat is None) != (lon is None):
             return create_problem_response(
-                status_code=400,
-                title="Invalid Query Parameters",
-                detail=(
-                    "Parameters 'lat' and 'lon' must both be provided "
-                    "for geographic distance filtering."
-                ),
-                instance=str(request.url),
+                400,
+                "Invalid Query Parameters",
+                "Supply both lat and lon.",
+                str(request.url),
                 code="INVALID_COORDINATES",
-                invalid_params=[
-                    InvalidParam(
-                        name="lat" if lat is None else "lon",
-                        reason="Coordinates must be supplied as a (lat, lon) pair",
-                        value=lat if lat is not None else lon,
-                    )
-                ],
-            )
-
-        # Coordinate range checks
-        if lat is not None and not (-90.0 <= lat <= 90.0):
-            return create_problem_response(
-                status_code=400,
-                title="Invalid Query Parameters",
-                detail=f"Latitude value {lat} is outside the valid range of -90.0 to 90.0.",
-                instance=str(request.url),
-                code="INVALID_COORDINATES",
-                invalid_params=[
-                    InvalidParam(
-                        name="lat",
-                        reason="Must be between -90.0 and 90.0",
-                        value=lat,
-                    )
-                ],
-            )
-
-        if lon is not None and not (-180.0 <= lon <= 180.0):
-            return create_problem_response(
-                status_code=400,
-                title="Invalid Query Parameters",
-                detail=f"Longitude value {lon} is outside the valid range of -180.0 to 180.0.",
-                instance=str(request.url),
-                code="INVALID_COORDINATES",
-                invalid_params=[
-                    InvalidParam(
-                        name="lon",
-                        reason="Must be between -180.0 and 180.0",
-                        value=lon,
-                    )
-                ],
-            )
-
-        # Radius range check
-        if radius_mi <= 0.0 or radius_mi > 500.0:
-            return create_problem_response(
-                status_code=400,
-                title="Invalid Query Parameters",
-                detail=f"Radius {radius_mi} is outside the allowable range of 1.0 to 500.0 miles.",
-                instance=str(request.url),
-                code="INVALID_RADIUS",
-                invalid_params=[
-                    InvalidParam(
-                        name="radius_mi",
-                        reason="Must be between 1.0 and 500.0",
-                        value=radius_mi,
-                    )
-                ],
-            )
-
-        # Age bounds semantic check
-        if min_age is not None and (min_age < 0 or min_age > 130):
-            return create_problem_response(
-                status_code=400,
-                title="Invalid Query Parameters",
-                detail=f"min_age {min_age} must be between 0 and 130.",
-                instance=str(request.url),
-                code="INVALID_AGE_RANGE",
-            )
-        if max_age is not None and (max_age < 0 or max_age > 130):
-            return create_problem_response(
-                status_code=400,
-                title="Invalid Query Parameters",
-                detail=f"max_age {max_age} must be between 0 and 130.",
-                instance=str(request.url),
-                code="INVALID_AGE_RANGE",
             )
         if min_age is not None and max_age is not None and min_age > max_age:
             return create_problem_response(
-                status_code=400,
-                title="Invalid Query Parameters",
-                detail=f"min_age ({min_age}) cannot exceed max_age ({max_age}).",
-                instance=str(request.url),
+                400,
+                "Invalid Query Parameters",
+                "min_age cannot exceed max_age.",
+                str(request.url),
                 code="INVALID_AGE_RANGE",
             )
-
-        # Limit check
-        if limit < 1 or limit > 100:
+        if sort == "distance" and lat is None:
             return create_problem_response(
-                status_code=400,
-                title="Invalid Query Parameters",
-                detail=f"limit {limit} must be between 1 and 100.",
-                instance=str(request.url),
-                code="INVALID_LIMIT",
-            )
-
-        # Sort checks
-        if sort not in ALLOWED_SORTS:
-            return create_problem_response(
-                status_code=400,
-                title="Invalid Query Parameters",
-                detail=(
-                    f"Sort parameter '{sort}' is not recognized. "
-                    f"Allowed values: {', '.join(sorted(ALLOWED_SORTS))}."
-                ),
-                instance=str(request.url),
-                code="INVALID_SORT",
-            )
-
-        if sort == "distance" and (lat is None or lon is None):
-            return create_problem_response(
-                status_code=422,
-                title="Unprocessable Query Combination",
-                detail=(
-                    "Parameter 'sort=distance' requires both 'lat' and 'lon' "
-                    "coordinates to be specified."
-                ),
-                instance=str(request.url),
+                422,
+                "Unprocessable Query Combination",
+                "Distance sort requires lat and lon.",
+                str(request.url),
                 code="MISSING_COORDINATES_FOR_SORT",
                 invalid_params=[
-                    InvalidParam(
-                        name="sort",
-                        reason="Cannot sort by distance without search coordinates",
-                        value="distance",
-                    )
+                    InvalidParam(name="sort", reason="Requires coordinates", value=sort)
                 ],
             )
-
-        # Build upstream parameters
+        unsupported = [
+            name
+            for name, value in (
+                ("intervention_type", intervention_type),
+                ("updated_since", updated_since),
+            )
+            if value is not None
+        ]
+        if unsupported:
+            return create_problem_response(
+                422,
+                "Unsupported Filter",
+                "These filters are not supported by the live backend.",
+                str(request.url),
+                code="UNSUPPORTED_FILTER",
+                invalid_params=[
+                    InvalidParam(name=name, reason="Unsupported filter") for name in unsupported
+                ],
+            )
         upstream_params = build_upstream_search_params(
             cond=cond,
             status=status_filter,
-            phase=phase,
             lat=lat,
             lon=lon,
             radius_mi=radius_mi,
             cursor=cursor,
             limit=limit,
-            count_total=True,
         )
-
         cache_key = canonical_cache_key("trials_search", upstream_params)
 
         def fetch_upstream() -> tuple[str, str]:
-            _, raw_text = deps.ctg_client.fetch_studies(upstream_params)
-            etag = f'W/"{hashlib.sha256(raw_text.encode("utf-8")).hexdigest()[:16]}"'
-            return raw_text, etag
+            data, _ = deps.ctg_client.fetch_studies(upstream_params)
+            if not isinstance(data, dict) or not isinstance(data.get("studies", []), list):
+                raise ValueError("Malformed upstream search response")
+            return _sanitized_payload(data)
 
-        try:
-            raw_payload, cache_state, etag = deps.cache.stale_while_revalidate(
-                cache_key,
-                fetch_upstream,
-                circuit_breaker=deps.circuit_breaker,
-            )
-        except UpstreamUnavailableError as e:
-            return create_problem_response(
-                status_code=503,
-                title="Service Unavailable",
-                detail=str(e),
-                instance=path,
-                code="UPSTREAM_UNAVAILABLE",
-            )
-        except Exception as e:
-            return create_problem_response(
-                status_code=500,
-                title="Internal Server Error",
-                detail=f"Unexpected error executing search: {e}",
-                instance=path,
-                code="INTERNAL_ERROR",
-            )
-
-        set_response_headers(response, cache_state, etag)
-
-        try:
-            data = json.loads(raw_payload)
-        except json.JSONDecodeError:
-            return create_problem_response(
-                status_code=500,
-                title="Internal Server Error",
-                detail="Failed to parse upstream response payload.",
-                instance=path,
-                code="UPSTREAM_DECODE_ERROR",
-            )
-
-        raw_studies = data.get("studies", [])
+        entry = deps.cache.stale_if_error(cache_key, fetch_upstream, deps.circuit_breaker)
+        data = json.loads(entry.payload)
         summaries: list[TrialSummary] = []
-        for s in raw_studies:
-            if isinstance(s, dict):
-                summary = normalize_study_summary(s, user_lat=lat, user_lon=lon)
-                summaries.append(summary)
-
-        # In-memory eligibility and sorting filter
-        filtered_summaries = filter_and_sort_summaries(
+        raw_studies = data.get("studies", [])
+        for study in raw_studies:
+            try:
+                summaries.append(normalize_study_summary(study, user_lat=lat, user_lon=lon))
+            except (ValueError, TypeError, AttributeError, KeyError):
+                logger.warning("Skipping malformed upstream study", exc_info=True)
+        items = filter_and_sort_summaries(
             summaries,
             min_age=min_age,
             max_age=max_age,
             sex=sex,
             healthy_volunteers=healthy_volunteers,
             phase=phase,
+            std_age_group=std_age_group,
+            sponsor_class=sponsor_class,
             sort=sort,
         )
-
-        next_page_token = data.get("nextPageToken")
-        total_count = data.get("totalCount")
-        has_more = bool(next_page_token)
-
-        pagination = PaginationMetadata(
-            next_cursor=next_page_token,
-            prev_cursor=None,
-            limit=limit,
-            total_count=total_count,
-            has_more=has_more,
+        post_filtered = any(
+            value is not None
+            for value in (
+                min_age,
+                max_age,
+                sex,
+                healthy_volunteers,
+                phase,
+                std_age_group,
+                sponsor_class,
+            )
+        ) or len(summaries) != len(raw_studies)
+        set_response_headers(response, entry)
+        return TrialsListResponse(
+            items=items,
+            pagination=PaginationMetadata(
+                next_cursor=data.get("nextPageToken"),
+                prev_cursor=None,
+                limit=limit,
+                total_count=None if post_filtered else data.get("totalCount"),
+                has_more=bool(data.get("nextPageToken")),
+            ),
         )
 
-        return TrialsListResponse(items=filtered_summaries, pagination=pagination)
-
-    @app.get(
-        "/v1/trials/{nct_id}",
-        response_model=TrialDetail,
-        responses={
-            400: {"model": ProblemDetail, "description": "Invalid NCT ID"},
-            404: {"model": ProblemDetail, "description": "Study Not Found"},
-            503: {"model": ProblemDetail, "description": "Service Unavailable"},
-        },
-    )
+    @app.get("/v1/trials/{nct_id}", response_model=TrialDetail)
     def get_trial_detail(
         nct_id: str,
         request: Request,
         response: Response,
         deps: ContainerDep,
-        lat: float | None = Query(default=None, description="Optional latitude for proximity"),
-        lon: float | None = Query(default=None, description="Optional longitude for proximity"),
+        lat: float | None = Query(default=None, ge=-90, le=90, allow_inf_nan=False),
+        lon: float | None = Query(default=None, ge=-180, le=180, allow_inf_nan=False),
     ) -> Any:
-        path = str(request.url.path)
         canonical_nct = nct_id.strip().upper()
-
-        if not NCT_REGEX.match(canonical_nct):
+        if not NCT_REGEX.fullmatch(canonical_nct):
             return create_problem_response(
-                status_code=400,
-                title="Invalid NCT ID",
-                detail=(
-                    f"NCT identifier '{nct_id}' is malformed. "
-                    "Must conform to pattern ^NCT\\d{8}$."
-                ),
-                instance=path,
+                400,
+                "Invalid NCT ID",
+                "Expected an NCT identifier followed by eight digits.",
+                str(request.url),
                 code="INVALID_NCT_ID",
             )
-
-        if (lat is not None and lon is None) or (lat is None and lon is not None):
+        if (lat is None) != (lon is None):
             return create_problem_response(
-                status_code=400,
-                title="Invalid Query Parameters",
-                detail=(
-                    "Parameters 'lat' and 'lon' must both be provided "
-                    "for geographic distance calculation."
-                ),
-                instance=str(request.url),
+                400,
+                "Invalid Query Parameters",
+                "Supply both lat and lon.",
+                str(request.url),
                 code="INVALID_COORDINATES",
             )
-
         cache_key = canonical_cache_key("trial_detail", {"nct_id": canonical_nct})
 
         def fetch_upstream() -> tuple[str, str]:
-            try:
-                study_dict, raw_text = deps.ctg_client.fetch_study(canonical_nct)
-                etag = f'W/"{hashlib.sha256(raw_text.encode("utf-8")).hexdigest()[:16]}"'
-                return raw_text, etag
-            except requests.HTTPError as http_err:
-                if http_err.response is not None and http_err.response.status_code == 404:
-                    raise UpstreamNotFoundError(f"Study {canonical_nct} not found") from http_err
-                raise
+            study, _ = deps.ctg_client.fetch_study(canonical_nct)
+            return _sanitized_payload(study)
 
+        entry = deps.cache.stale_if_error(cache_key, fetch_upstream, deps.circuit_breaker)
+        data = json.loads(entry.payload)
         try:
-            raw_payload, cache_state, etag = deps.cache.stale_while_revalidate(
-                cache_key,
-                fetch_upstream,
-                circuit_breaker=deps.circuit_breaker,
+            detail = normalize_study_detail(
+                data.get("study", data), user_lat=lat, user_lon=lon, retrieved_at=entry.created_at
             )
-        except UpstreamNotFoundError:
+        except (ValueError, TypeError, AttributeError, KeyError):
+            logger.warning("Malformed upstream study detail", exc_info=True)
             return create_problem_response(
-                status_code=404,
-                title="Resource Not Found",
-                detail=(
-                    f"Study identifier {canonical_nct} was not found "
-                    "in active or historical snapshots."
-                ),
-                instance=path,
-                code="STUDY_NOT_FOUND",
+                503,
+                "Service Unavailable",
+                "The registry study could not be normalized.",
+                str(request.url),
+                code="UPSTREAM_INVALID_STUDY",
             )
-        except UpstreamUnavailableError as e:
-            return create_problem_response(
-                status_code=503,
-                title="Service Unavailable",
-                detail=str(e),
-                instance=path,
-                code="UPSTREAM_UNAVAILABLE",
-            )
-        except Exception as e:
-            return create_problem_response(
-                status_code=500,
-                title="Internal Server Error",
-                detail=f"Unexpected error retrieving study {canonical_nct}: {e}",
-                instance=path,
-                code="INTERNAL_ERROR",
-            )
-
-        set_response_headers(response, cache_state, etag)
-
-        try:
-            data = json.loads(raw_payload)
-        except json.JSONDecodeError:
-            return create_problem_response(
-                status_code=500,
-                title="Internal Server Error",
-                detail="Failed to decode study JSON.",
-                instance=path,
-                code="UPSTREAM_DECODE_ERROR",
-            )
-
-        # Upstream study can either be a top-level study dictionary or wrapped in { "study": ... }
-        study_dict = data.get("study", data)
-        detail = normalize_study_detail(study_dict, user_lat=lat, user_lon=lon)
+        set_response_headers(response, entry)
         return detail
 
     @app.get("/health")
     @app.get("/v1/metadata/status")
     def health_check(deps: ContainerDep) -> dict[str, Any]:
-        """Health check, cache statistics, and circuit breaker status."""
-        cb_metrics = deps.circuit_breaker.get_metrics()
-        status_str = "ok" if cb_metrics["state"] == CircuitState.CLOSED.value else "degraded"
+        metrics = deps.circuit_breaker.get_metrics()
         return {
-            "status": status_str,
+            "status": "ok" if metrics["state"] == CircuitState.CLOSED.value else "degraded",
             "cache": deps.cache.get_metrics(),
-            "circuit_breaker": cb_metrics,
+            "circuit_breaker": metrics,
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
     return app
-
-
-# Default application instance
-app = create_app()

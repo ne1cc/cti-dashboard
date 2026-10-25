@@ -46,7 +46,12 @@ paths:
       description: |
         Search interventional clinical trials with multi-dimensional filtering across conditions,
         geographic proximity, structured eligibility, study phase, and overall status.
-        Supports opaque keyset cursor pagination.
+        Supports opaque upstream cursor pagination. In the M1-A live backend,
+        eligibility, phase, standard-age-group and sponsor filters and all sorts
+        apply to one upstream page only. Filtered pages can be empty with has_more=true;
+        total_count is null when in-memory filters or malformed-record omissions apply.
+        intervention_type and updated_since currently return 422 UNSUPPORTED_FILTER.
+        See live-backend.md for the supported subset and pagination limitations.
       operationId: listTrials
       parameters:
         - name: cond

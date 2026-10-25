@@ -1,177 +1,93 @@
-# Live-API Patient Search Backend & Offline Cache Architecture
+# Live API patient search backend
 
-This document specifies the architecture, query translation rules, caching mechanics, circuit breaker semantics, and observability metrics for the Live-API Patient Discovery backend ([Milestone M1-A](file:///docs/roadmap.md), Issue #60).
+Milestone M1-A ([roadmap](../roadmap.md), Issue #60) serves patient search from ClinicalTrials.gov API v2 without waiting for a registry-wide warehouse. The implemented endpoints are `GET /v1/trials`, `GET /v1/trials/{nct_id}`, `GET /health`, and `GET /v1/metadata/status`. The [OpenAPI contract](openapi.yaml) describes the response models.
 
----
+## Startup and interactive transport
 
-## 1. Background & Architecture Overview
+Run the application factory explicitly:
 
-The patient search service bridges prospective clinical trial participants with active, recruiting studies without waiting for the full-registry local warehouse build to complete. 
-
-It exposes FastAPI endpoints (`/v1/trials` and `/v1/trials/{nct_id}`) backed by the hardened `CTGClient` (`src/ingest/ctg_client.py`), normalized into the OpenAPI 3.1 schema contract (`docs/api/openapi.yaml`).
-
-```
-                              +---------------------------------------+
-                              |         Patient Discovery Client      |
-                              +---------------------------------------+
-                                                  |
-                                                  | GET /v1/trials?cond=...
-                                                  v
-                              +---------------------------------------+
-                              |         FastAPI Search Layer          |
-                              |   Parameter Validation & RFC 7807     |
-                              +---------------------------------------+
-                                        |                   ^
-                         Cache Lookup   |                   | Normalized Response
-                                        v                   |
-               +----------------------------------+         |
-               |       SQLite Response Cache      |         |
-               |  - Canonical SHA-256 Hashing     |         |
-               |  - Configurable TTL (default 6h) |         |
-               |  - In-flight Single-Flight Sync  |         |
-               +----------------------------------+         |
-                         | Cache Miss / Stale               |
-                         v                                  |
-               +----------------------------------+         |
-               |      Circuit Breaker Monitor     |         |
-               |  - CLOSED -> OPEN -> HALF-OPEN   |         |
-               +----------------------------------+         |
-                         | Allowed                          |
-                         v                                  |
-               +----------------------------------+         |
-               |   ClinicalTrials.gov API v2      |---------+
-               |   GET /api/v2/studies            |
-               +----------------------------------+
+```sh
+uv run uvicorn src.api.app:create_app --factory
 ```
 
----
+Importing the API package does not open a client or create a database. `CTI_CACHE_PATH` selects the SQLite path (default `.api_cache.db`); `create_app(cache_path=...)` overrides it. Interactive calls use a five-second HTTP timeout and at most two attempts, with one second of backoff. These are request connect/read timeouts, not a hard end-to-end deadline. Ingestion retains its existing transport settings.
 
-## 2. Parameter Translation & Upstream Query Mapping
+## Query mapping and validation
 
-User queries against `/v1/trials` are mapped to the upstream ClinicalTrials.gov REST API v2 parameters:
+| Read API parameter | Upstream parameter or behavior |
+|---|---|
+| `cond` | `query.cond` |
+| `status` | `filter.overallStatus`; defaults to `RECRUITING\|NOT_YET_RECRUITING\|ACTIVE_NOT_RECRUITING\|ENROLLING_BY_INVITATION` |
+| `lat`, `lon`, `radius_mi` | `filter.geo=distance(lat,lon,radius_mi)` with the radius unit appended, for example `distance(37.7749,-122.4194,50.0mi)` |
+| `limit` | `pageSize`; 1–100, default 20 |
+| `cursor` | Opaque upstream `pageToken` |
+| `min_age`, `max_age`, `sex`, `healthy_volunteers` | Filter the fetched page in memory; preserve unstated criteria |
+| `phase`, `std_age_group`, `sponsor_class` | Filter the fetched page in memory; phase matches a complete phase token, including multi-phase studies |
+| `intervention_type`, `updated_since` | Explicit HTTP 422 `UNSUPPORTED_FILTER` until implemented; invalid dates are rejected during validation |
+| `sort` | Sort the fetched page in memory |
+| Internal | `countTotal=true`, `format=json` |
 
-| Read API Query Param | Upstream CTG v2 Parameter | Format / Derivation Rule |
-|---|---|---|
-| `cond` | `query.cond` | Unquoted condition string, e.g. `"Alzheimer Disease"` |
-| `status` | `filter.overallStatus` | Pipe-separated enum string; defaults to `RECRUITING\|NOT_YET_RECRUITING\|ACTIVE_NOT_RECRUITING\|ENROLLING_BY_INVITATION` |
-| `lat`, `lon`, `radius_mi` | `filter.geo` | Great-circle proximity filter: `distance(lat,lon,radius_mi mi)`, e.g. `distance(37.7749,-122.4194,50.0mi)` |
-| `limit` | `pageSize` | Integer (1–100); default 20 |
-| `cursor` | `pageToken` | Keyset pagination token |
-| *(Internal)* | `countTotal` | Set to `"true"` on searches |
-| *(Internal)* | `format` | Set to `"json"` |
+Enums and numeric ranges follow the contract. Coordinates must be finite, within latitude/longitude bounds, and supplied together. The radius must be 1–500 miles, and ages must be 0–130 years. An inverted age range returns 400. `sort=distance` requires coordinates and otherwise returns 422. Invalid parameter types, enum values, and ranges return RFC 7807 400/422 problems before upstream dispatch.
 
-### Geographic Filter Syntax
-When both `lat` and `lon` are provided, the query builder constructs the `filter.geo` parameter:
+Age filters compare stated bounds with the requested range; missing bounds do not exclude a study (Issue #62). Sex and healthy-volunteer filters also retain unspecified eligibility. A standard-age-group filter retains trials without declared groups; it never infers groups from numeric ages. Sponsor class requires an explicit matching class.
+
+### Pagination and ordering limits
+
+**Eligibility, phase, standard-age-group and sponsor filters, and all sorts operate on one upstream page.** They do not produce a globally filtered or globally sorted cursor sequence. A page can contain fewer than `limit` items, including zero, while `has_more=true`. Continue using `next_cursor` to inspect later upstream pages; `has_more` means the registry supplied another cursor, not that a later page is guaranteed to contain an eligible result.
+
+`total_count` is `null` whenever an in-memory filter is requested or malformed studies were omitted. Otherwise it is the registry's total for the upstream condition/status/geography query. No approximation of a post-filtered total is claimed. A future index or upstream filtering implementation is needed for global eligibility pagination and ordering.
+
+Distance uses the nearest listed site with valid coordinates and the Haversine formula:
+
 ```text
-filter.geo=distance({lat},{lon},{radius_mi}mi)
-```
-If only one coordinate is provided, the API rejects the request with HTTP 400 Bad Request (`INVALID_COORDINATES`) using an RFC 7807 envelope.
-
-### Sorting & Proximity
-Sorting by `distance` requires valid coordinates. When `sort=distance` is requested without coordinates, the API returns HTTP 422 Unprocessable Entity (`MISSING_COORDINATES_FOR_SORT`). In-memory sorting calculates the great-circle distance to the nearest participating site for each study using the Haversine formula:
-$$d = 2 R \arcsin\left(\sqrt{\sin^2\left(\frac{\Delta \phi}{2}\right) + \cos(\phi_1)\cos(\phi_2)\sin^2\left(\frac{\Delta \lambda}{2}\right)}\right)$$
-where $R = 3958.8\text{ miles}$.
-
----
-
-## 3. SQLite Response Caching & Deduplication
-
-To minimize latency, avoid upstream rate limits, and provide offline resilience, query responses are cached in a thread-safe SQLite key-value store (`src/api/cache.py`).
-
-### Canonical Cache Hashing
-Cache keys are computed as a SHA-256 digest over the canonicalized JSON representation of the query parameters:
-1. Keys are sorted alphabetically.
-2. `None` and empty values are stripped.
-3. List-valued parameters are sorted.
-4. The serialized string `f"{namespace}:{json_str}"` is hashed to a 64-character hexadecimal digest.
-
-Parameter order differences (e.g. `?cond=AD&limit=20` vs `?limit=20&cond=AD`) produce identical cache keys.
-
-### Cache States & Stale-While-Revalidate
-- **`HIT`**: The entry exists in the database and `age <= ttl_seconds`. The cached payload is returned immediately with `X-Cache-Status: HIT`.
-- **`MISS`**: No entry exists. An upstream request is dispatched through the single-flight coalescer, cached, and returned with `X-Cache-Status: MISS`.
-- **`STALE`**: The entry exists but `age > ttl_seconds`.
-  - Under normal conditions, an upstream revalidation is attempted.
-  - If the revalidation succeeds, the cache is updated and the fresh payload is returned with `X-Cache-Status: HIT`.
-  - If upstream fails (timeout, 5xx, 429) or the circuit breaker is `OPEN`, the expired payload is returned with `X-Cache-Status: STALE` and a HTTP warning header:
-    ```http
-    Warning: 110 "Response is Stale"
-    ```
-
-### Single-Flight In-Progress Deduplication
-When multiple concurrent requests query the same cache key during a `MISS` or `STALE` revalidation, the single-flight manager ensures only one thread issues an upstream HTTP request. All other callers await the leader's completion via thread events and reuse the result, preventing thundering herds.
-
----
-
-## 4. Circuit Breaker Semantics
-
-The circuit breaker (`CircuitBreaker`) protects the system when ClinicalTrials.gov experiences outages or rate limits:
-
-```
-               +---------------------------------------+
-               |                CLOSED                 |
-               |           (Normal Operation)          |
-               +---------------------------------------+
-                    |                             ^
-       >= 5 Failures|                             | 2 Canary
-                    v                             | Successes
-               +------------------+        +------------------+
-               |       OPEN       |------->|    HALF-OPEN     |
-               | (Reject Upstream)| 30s    | (Canary Probing) |
-               +------------------+        +------------------+
-                                  Recovery
-                                  Timeout
+a = sin²(Δlatitude / 2)
+    + cos(latitude₁) × cos(latitude₂) × sin²(Δlongitude / 2)
+distance_miles = 2 × 3958.8 × atan2(√a, √(1 − a))
 ```
 
-- **`CLOSED`**: Requests pass upstream. Consecutive failures are tracked.
-- **`OPEN`**: Tripped when consecutive failures reach `failure_threshold` (default 5). Upstream calls are rejected. If cached data is available, stale responses are served; if no cache exists, HTTP 503 Service Unavailable (`UPSTREAM_UNAVAILABLE`) is returned.
-- **`HALF-OPEN`**: After `recovery_timeout` (default 30 seconds), a canary request is allowed to probe upstream health. If consecutive successes reach `success_threshold` (default 2), the circuit transitions back to `CLOSED`. If any failure occurs, it re-opens immediately.
+Angles are in radians. Sites without usable `geoPoint` values remain in detail responses with null coordinates/distance; they cannot supply the nearest-site distance. Missing distances sort last.
 
----
+## Privacy and normalization
 
-## 5. ADR 0065 Contact Privacy Guardrails
+Under [ADR 0065](../decisions/0065-contact-policy.md), upstream responses are recursively scrubbed **before serialization, ETag hashing, or SQLite writes**. Keys `centralContacts`, `overallOfficials`, and `contacts` are removed at every nesting level, including location arrays. Responsible-party investigator names/titles are also removed. SQLite writes repeat this check at the storage boundary. Tests inspect the on-disk `api_cache.payload` table after both endpoints and verify that the synthetic fixture names, email addresses, and phone numbers are absent.
 
-In strict adherence to [ADR 0065](file:///docs/decisions/0065-contact-policy.md):
-1. **Zero Personal Contact PII**:
-   - Upstream fields (`centralContacts`, `overallOfficials`, and location-level `contacts`) containing personal coordinator names, telephone numbers, and email addresses are **never** extracted, cached, or returned.
-2. **Authoritative Official Registry Link**:
-   - Prospective participants are directed to the canonical registry URL for study team inquiries:
-     ```json
-     {
-       "registry_url": "https://clinicaltrials.gov/study/NCT04245644",
-       "registry_contact_url": "https://clinicaltrials.gov/study/NCT04245644#contacts-and-locations"
-     }
-     ```
-3. **Geographic Facilities Only**:
-   - Facility listings include institution name, city, state, postal code, country, and calculated distance.
+The cache holds scrubbed registry JSON, never verbatim upstream response text. Cache schema version 1 invalidates the earlier unsanitized cache and vacuums/checkpoints its disposable contents on startup. Response models expose facility addresses and official `registry_url`/`registry_contact_url` links for inquiries.
 
----
+A missing or invalid NCT identifier causes the study to be logged and skipped from search, rather than assigned a synthetic ID. Other required strings use `UNKNOWN`; optional values stay null, and absent age groups remain empty. Invalid dates become null. Condition groups remain null until a taxonomy is applied. Provenance quality flags reuse the pipeline's quality checks, and detail retrieval timestamps come from the cache entry. A malformed search record cannot fail the entire page; malformed detail returns a clean 503 problem.
 
-## 6. Observability & Health
+## SQLite cache and single flight
 
-The system exposes operational metrics via `GET /health` and `GET /v1/metadata/status`:
+The six-hour TTL cache uses canonical SHA-256 query keys: keys are sorted, `None` values omitted, and lists sorted. It uses WAL mode, a short SQLite lock timeout, and a maximum of 10,000 rows, evicting the oldest writes. This bounds row count; payload sizes and concurrent distinct queries are not globally limited.
 
-```json
-{
-  "status": "ok",
-  "cache": {
-    "size_entries": 142,
-    "hits": 350,
-    "misses": 48,
-    "stale_hits": 12,
-    "total_lookups": 410,
-    "hit_ratio": 0.8829
-  },
-  "circuit_breaker": {
-    "state": "CLOSED",
-    "consecutive_failures": 0,
-    "consecutive_successes": 15,
-    "total_requests": 60,
-    "total_failures": 2,
-    "total_successes": 58,
-    "circuit_opened_count": 0,
-    "error_rate": 0.0333
-  },
-  "timestamp": "2026-10-25T03:55:00.000000Z"
-}
-```
+- `HIT`: return a fresh cached payload immediately.
+- `MISS`: fetch upstream and attempt to cache the sanitized response. A successful stale refresh is also reported as `MISS` and increments `refreshes`.
+- `STALE`: if refresh encounters a timeout, connection error, 429, or 5xx, or the breaker rejects admission, return the expired entry with a warning. With no entry, return 503.
+
+This is **synchronous stale-if-error**, not background stale-while-revalidate. A stale request waits for the bounded upstream attempt before fallback. Concurrent identical requests share a flight: only the leader obtains breaker admission, records the outcome, updates metrics, and writes the cache. Followers receive the same result or exception. The flight remains registered until the write completes.
+
+Unreadable/corrupt cache files fall back to an empty in-memory cache. Read errors or invalid JSON rows become misses; write errors do not fail a successful upstream response. Cache storage remains an optimization.
+
+## Breaker, errors, and freshness
+
+Five consecutive upstream outages open the breaker for 30 seconds. After that, `HALF-OPEN` admits **one probe at a time** across all keys. Two sequential successful probes close it; a failed probe reopens it. A client error releases the probe without incrementing successes or failures.
+
+Only timeouts, connection failures, 429, and 5xx count as outages. Other upstream 4xx responses propagate as safe RFC 7807 400/404/422 problems, including bad cursors, and never serve stale data or trip the breaker. Unexpected programming errors return a generic 500 detail and are logged internally. Starlette 404/405 errors also use `application/problem+json`; 405 retains its `Allow` header. Problem `instance` consistently contains the full request URI.
+
+Upstream 429 currently becomes 503 after bounded retries, with stale fallback when available. The live path does not yet honor the upstream `Retry-After` header; its backoff remains fixed by the shared retry policy.
+
+All successful search/detail responses include:
+
+| Header | Meaning |
+|---|---|
+| `Data-Snapshot: live-api` | Live registry source |
+| `Data-Updated` | UTC retrieval time of the cached source payload, including on stale responses |
+| `ETag` | Weak hash of the scrubbed registry payload |
+| `Cache-Control` | `public, max-age=300` for fresh responses; `no-cache` for stale responses |
+| `X-Cache-Status` | `HIT`, `MISS`, or `STALE` |
+| `Warning` | `110 "Response is Stale"` on stale fallback |
+
+Health endpoints expose cache hits/misses/stale hits/refreshes and breaker metrics. Breaker request counts include admitted upstream flights only, excluding fresh cache hits, followers, and rejected admissions. Client 4xx calls are admitted attempts but do not count as outage failures.
+
+## Verification scope
+
+Automated tests use mocked HTTP or recorded/synthetic fixtures and make no live network calls. The geo syntax is covered by fixture-based parameter tests; this fix round did not re-verify the current live registry, rate limits, or `fields` projection. Deployment configuration remains outside this milestone's review-fix scope. The current Starlette TestClient emits a dependency deprecation warning for `httpx`; migrating that dependency is deferred.

@@ -29,7 +29,7 @@ from src.api.models import (
     TrialSummary,
 )
 from src.transform.eligibility import parse_age_to_years
-from src.transform.flatten_studies import normalize_phases
+from src.transform.flatten_studies import normalize_phases, trial_quality_flags
 from src.utils.dates import parse_partial_date
 
 EARTH_RADIUS_MILES = 3958.8
@@ -65,7 +65,6 @@ def build_geo_filter(lat: float, lon: float, radius: float | int | str = 50.0) -
 def build_upstream_search_params(
     cond: str | None = None,
     status: str | None = None,
-    phase: str | None = None,
     lat: float | None = None,
     lon: float | None = None,
     radius_mi: float | int | None = 50.0,
@@ -105,13 +104,26 @@ def _extract_date_str(struct: Any) -> str | None:
     if not raw_date or not isinstance(raw_date, str):
         return None
     parsed = parse_partial_date(raw_date)
-    return parsed.isoformat() if parsed else raw_date
+    return parsed.isoformat() if parsed else None
 
 
 def _sha256_study(study: dict[str, Any]) -> str:
     """Compute deterministic SHA-256 hash of raw study dictionary."""
     encoded = json.dumps(study, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _normalize_eligibility(elig: dict[str, Any]) -> StructuredEligibilitySummary:
+    minimum = parse_age_to_years(elig.get("minimumAge"))
+    maximum = parse_age_to_years(elig.get("maximumAge"))
+    return StructuredEligibilitySummary(
+        minimum_age_years=minimum,
+        maximum_age_years=maximum,
+        age_not_stated=minimum is None and maximum is None,
+        sex=elig.get("sex") or "UNKNOWN",
+        accepts_healthy_volunteers=elig.get("healthyVolunteers"),
+        std_age_groups=elig.get("stdAges") or [],
+    )
 
 
 def normalize_study_summary(
@@ -132,16 +144,16 @@ def normalize_study_summary(
     elig = protocol.get("eligibilityModule", {})
     contacts_loc = protocol.get("contactsLocationsModule", {})
 
-    nct_id = ident.get("nctId", "NCT00000000")
-    brief_title = ident.get("briefTitle", "Untitled Study")
-    overall_status = status.get("overallStatus", "UNKNOWN")
-    study_type = design.get("studyType", "INTERVENTIONAL")
+    nct_id = ident.get("nctId")
+    brief_title = ident.get("briefTitle") or "UNKNOWN"
+    overall_status = status.get("overallStatus") or "UNKNOWN"
+    study_type = design.get("studyType") or "UNKNOWN"
 
     raw_phases = design.get("phases")
     _, phase_normalized = normalize_phases(raw_phases)
 
     lead_sponsor = sponsors.get("leadSponsor", {})
-    lead_sponsor_name = lead_sponsor.get("name", "Unknown Sponsor")
+    lead_sponsor_name = lead_sponsor.get("name") or "UNKNOWN"
     sponsor_class = lead_sponsor.get("class")
 
     start_date = _extract_date_str(status.get("startDateStruct"))
@@ -151,26 +163,7 @@ def normalize_study_summary(
         str(c) for c in conditions_mod.get("conditions", []) if isinstance(c, str)
     ]
 
-    # Structured eligibility
-    min_age_raw = elig.get("minimumAge")
-    max_age_raw = elig.get("maximumAge")
-    min_age_years = parse_age_to_years(min_age_raw) if min_age_raw else None
-    max_age_years = parse_age_to_years(max_age_raw) if max_age_raw else None
-    age_not_stated = min_age_years is None and max_age_years is None
-    sex = elig.get("sex", "ALL")
-    healthy_volunteers = elig.get("healthyVolunteers")
-    std_ages = elig.get("stdAges")
-    if not isinstance(std_ages, list):
-        std_ages = ["ADULT", "OLDER_ADULT"] if not age_not_stated else []
-
-    structured_eligibility = StructuredEligibilitySummary(
-        minimum_age_years=min_age_years,
-        maximum_age_years=max_age_years,
-        age_not_stated=age_not_stated,
-        sex=sex,
-        accepts_healthy_volunteers=healthy_volunteers,
-        std_age_groups=[str(g) for g in std_ages],
-    )
+    structured_eligibility = _normalize_eligibility(elig)
 
     # Nearest site calculation (ADR 0065 compliant: no personal contacts)
     nearest_site: NearestSiteSummary | None = None
@@ -187,13 +180,12 @@ def normalize_study_summary(
             geo = loc.get("geoPoint")
             if isinstance(geo, dict) and "lat" in geo and "lon" in geo:
                 try:
-                    site_lat = float(geo["lat"])
-                    site_lon = float(geo["lon"])
-                    dist = haversine_distance_miles(user_lat, user_lon, site_lat, site_lon)
+                    point = GeoPoint(lat=geo["lat"], lon=geo["lon"])
+                    dist = haversine_distance_miles(user_lat, user_lon, point.lat, point.lon)
                     if closest_distance is None or dist < closest_distance:
                         closest_distance = dist
-                        closest_facility = loc.get("facility") or "Listed Site"
-                        closest_city = loc.get("city") or ""
+                        closest_facility = loc.get("facility") or "UNKNOWN"
+                        closest_city = loc.get("city") or "UNKNOWN"
                         closest_state = loc.get("state")
                 except (ValueError, TypeError):
                     continue
@@ -229,6 +221,7 @@ def normalize_study_detail(
     study: dict[str, Any],
     user_lat: float | None = None,
     user_lon: float | None = None,
+    retrieved_at: float | None = None,
 ) -> TrialDetail:
     """Normalize raw ClinicalTrials.gov study object into complete TrialDetail.
 
@@ -245,13 +238,13 @@ def normalize_study_detail(
     elig = protocol.get("eligibilityModule", {})
     contacts_loc = protocol.get("contactsLocationsModule", {})
 
-    nct_id = ident.get("nctId", "NCT00000000")
-    brief_title = ident.get("briefTitle", "Untitled Study")
+    nct_id = ident.get("nctId")
+    brief_title = ident.get("briefTitle") or "UNKNOWN"
     official_title = ident.get("officialTitle")
-    overall_status = status.get("overallStatus", "UNKNOWN")
+    overall_status = status.get("overallStatus") or "UNKNOWN"
     last_known_status = status.get("lastKnownStatus")
     status_verified_date = status.get("statusVerifiedDate")
-    study_type = design.get("studyType", "INTERVENTIONAL")
+    study_type = design.get("studyType") or "UNKNOWN"
     expanded_access = bool(status.get("expandedAccessInfo", {}).get("hasExpandedAccess", False))
 
     raw_phases = design.get("phases")
@@ -288,7 +281,7 @@ def normalize_study_detail(
 
     lead_sponsor_dict = sponsors_mod.get("leadSponsor", {})
     lead_sponsor = SponsorDetail(
-        name=lead_sponsor_dict.get("name", "Unknown Sponsor"),
+        name=lead_sponsor_dict.get("name") or "UNKNOWN",
         sponsor_class=lead_sponsor_dict.get("class"),
     )
     collaborators: list[SponsorDetail] = []
@@ -314,7 +307,7 @@ def normalize_study_detail(
                 StudyCondition(
                     condition_raw=c_name,
                     condition_normalized=c_name.lower(),
-                    condition_group=c_name,
+                    condition_group=None,
                     mesh_id=None,
                     dementia_relevance_flag=None,
                 )
@@ -326,34 +319,18 @@ def normalize_study_detail(
         if isinstance(item, dict) and "name" in item:
             interventions.append(
                 StudyIntervention(
-                    intervention_type=str(item.get("type", "OTHER")).upper(),
+                    intervention_type=str(item.get("type") or "UNKNOWN").upper(),
                     intervention_name=str(item.get("name", "")),
                     description=item.get("description"),
                 )
             )
 
-    # Structured Eligibility
-    min_age_raw = elig.get("minimumAge")
-    max_age_raw = elig.get("maximumAge")
-    min_age_years = parse_age_to_years(min_age_raw) if min_age_raw else None
-    max_age_years = parse_age_to_years(max_age_raw) if max_age_raw else None
-    age_not_stated = min_age_years is None and max_age_years is None
-    sex = elig.get("sex", "ALL")
-    std_ages = elig.get("stdAges")
-    if not isinstance(std_ages, list):
-        std_ages = ["ADULT", "OLDER_ADULT"] if not age_not_stated else []
-
     eligibility = StructuredEligibility(
-        minimum_age_raw=min_age_raw,
-        maximum_age_raw=max_age_raw,
-        minimum_age_years=min_age_years,
-        maximum_age_years=max_age_years,
-        age_not_stated=age_not_stated,
-        sex=sex,
+        **_normalize_eligibility(elig).model_dump(),
+        minimum_age_raw=elig.get("minimumAge"),
+        maximum_age_raw=elig.get("maximumAge"),
         gender_based=elig.get("genderBased"),
         gender_description=elig.get("genderDescription"),
-        accepts_healthy_volunteers=elig.get("healthyVolunteers"),
-        std_age_groups=[str(g) for g in std_ages],
         criteria_text=elig.get("eligibilityCriteria"),
     )
 
@@ -362,11 +339,11 @@ def normalize_study_detail(
     for loc in contacts_loc.get("locations", []):
         if not isinstance(loc, dict):
             continue
-        facility = loc.get("facility") or "Unknown Facility"
-        city = loc.get("city") or "Unknown City"
+        facility = loc.get("facility") or "UNKNOWN"
+        city = loc.get("city") or "UNKNOWN"
         state = loc.get("state")
         zip_code = loc.get("zip")
-        country = loc.get("country") or "United States"
+        country = loc.get("country") or "UNKNOWN"
         loc_status = loc.get("status")
 
         coords: GeoPoint | None = None
@@ -400,14 +377,26 @@ def normalize_study_detail(
     registry_contact_url = f"https://clinicaltrials.gov/study/{nct_id}#contacts-and-locations"
 
     # Data Provenance
-    now = datetime.now(UTC)
+    now = (
+        datetime.fromtimestamp(retrieved_at, UTC) if retrieved_at is not None else datetime.now(UTC)
+    )
     provenance = DataProvenance(
         ingestion_run_id="live-api",
         snapshot_id="live-api",
         snapshot_date=now.strftime("%Y-%m-%d"),
         snapshot_timestamp_utc=now.isoformat(),
         source_json_hash=_sha256_study(study),
-        record_quality_flag="ok",
+        record_quality_flag=trial_quality_flags(
+            {
+                "overall_status": status.get("overallStatus"),
+                "study_type": design.get("studyType"),
+                "start_date": dates.start_date,
+                "completion_date": dates.completion_date,
+                "study_first_post_date": dates.study_first_post_date,
+                "results_first_post_date": dates.results_first_post_date,
+                "enrollment_count": enrollment.count,
+            }
+        ),
         retrieved_at_utc=now.isoformat(),
         indication_profile_id="live",
     )
@@ -442,6 +431,8 @@ def filter_and_sort_summaries(
     sex: str | None = None,
     healthy_volunteers: bool | None = None,
     phase: str | None = None,
+    std_age_group: str | None = None,
+    sponsor_class: str | None = None,
     sort: str | None = "-updated",
 ) -> list[TrialSummary]:
     """Filter and sort normalized summaries in-memory."""
@@ -475,8 +466,14 @@ def filter_and_sort_summaries(
         # Phase filter
         if phase is not None and phase.strip():
             target_phase = phase.strip().upper()
-            if target_phase not in item.phase.upper():
+            if target_phase not in item.phase.upper().split("/"):
                 continue
+
+        if std_age_group is not None and elig.std_age_groups:
+            if std_age_group not in elig.std_age_groups:
+                continue
+        if sponsor_class is not None and item.sponsor_class != sponsor_class:
+            continue
 
         result.append(item)
 

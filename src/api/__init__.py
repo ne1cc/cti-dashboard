@@ -3,13 +3,12 @@
 Exposes FastAPI app, data models, cache, and live ClinicalTrials.gov normalizer.
 """
 
-from src.api.app import app, create_app
+from src.api.app import create_app
 from src.api.cache import CacheState, CircuitBreaker, CircuitState, SQLiteCache
 from src.api.models import (
     NearestSiteSummary,
     PaginationMetadata,
     ProblemDetail,
-    ProblemDetails,
     StructuredEligibilitySummary,
     TrialDetail,
     TrialsListResponse,
@@ -17,7 +16,6 @@ from src.api.models import (
 )
 
 __all__ = [
-    "app",
     "create_app",
     "SQLiteCache",
     "CacheState",
@@ -30,5 +28,4 @@ __all__ = [
     "NearestSiteSummary",
     "TrialDetail",
     "ProblemDetail",
-    "ProblemDetails",
 ]

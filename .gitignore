@@ -28,10 +28,7 @@ htmlcov/
 .ruff_cache/
 
 # API cache
-*.db
-*.db-shm
-*.db-wal
-.api_cache.db
+.api_cache.db*
 
 # dbt
 dbt_clinical_trials/target/
@@ -53,4 +50,5 @@ logs/
 .worktrees/
 
 # Superpowers / agent planning artifacts
+.superpowers/
 docs/superpowers/
