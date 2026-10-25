@@ -25,7 +25,6 @@ profile:
   display_name: Test Indication
   ingest_only: true
   taxonomy: null
-  score_weights: null
 
 api:
   base_url: https://clinicaltrials.gov/api/v2
@@ -106,7 +105,6 @@ def test_load_profile_ingest_only(tmp_profiles_dir: Path, tmp_shared_paths: Path
     assert profile.display_name == "Test Indication"
     assert profile.ingest_only is True
     assert profile.taxonomy is None
-    assert profile.score_weights_path is None
 
 
 def test_load_profile_bronze_paths_are_profile_scoped(

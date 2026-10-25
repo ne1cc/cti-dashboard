@@ -34,12 +34,12 @@ The [national case study](feasibility_case_study.md) demonstrates this workflow.
 | Inspectable evidence | Contributing NCT IDs, definitions, exclusions, source dates and run/rule identity |
 | Research handoff | Analyst-authored shortlist/memo with observations, evidence references, limitations and explicit questions to investigate |
 | Next action | Choose records/segments for deeper research, confirm missing information and request qualified review |
-| Review ordering | Optional disclosed score; its usefulness is unvalidated, and bands are not intervention or activation thresholds |
+| Review ordering | Sortable raw segment metrics (recruiting trial counts, distinct sponsors, sponsor HHI, site overlap); no composite score or automated priority bands |
 | Collection cadence | Proposed weekly snapshots; inspect capture age and source age separately and agree tolerances before operational use |
 | Workflow evaluation | Compare preparation minutes, handoff completeness and count reproduction with matched manual tasks; observe use in recurring reviews |
 
 There is no enforced freshness SLA, and KPI baselines and numerical targets remain
-unmeasured. The [business case](business_case.md) defines the assumed current state,
+unmeasured. The [archived business case](archive/business_case.md) (ADR 0082) defines the exploratory assumed current state,
 alternative solutions, engineering rationale and evaluation protocol. The reporting
 criteria below verify the descriptive case-study artifact; they do not establish
 adoption or business improvement.
@@ -94,12 +94,12 @@ for its headline recruiting-cohort representation and national coverage.
 
 Counts establish reported study presence under stated screening rules. They do
 not measure patient availability, site capacity, recruitment speed, clinical
-validity or protocol equivalence. No state/site recommendation or unsupported
-feasibility score belongs in this descriptive case study.
+validity or protocol equivalence. No state/site recommendation or composite
+priority score belongs in this descriptive case study; analysts inspect and sort raw metrics.
 
 Follow-up requires protocol review, confirmation of current study information,
 relevant site capabilities and other evidence appropriate to the decision.
-See [business use](business_case.md) and
+See [exploratory business use](archive/business_case.md) (ADR 0082) and
 [interpretation guardrails](clinical_interpretation_guardrails.md).
 
 ## Reliability and evidence boundaries
