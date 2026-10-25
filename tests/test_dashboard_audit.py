@@ -159,6 +159,7 @@ def test_overview_queue_discloses_priority_rules_in_ui_and_export(warehouse, cap
         "site_overlap_rate",
         "share of recruiting trials",
         "divided by distinct recruiting segment trials",
+        "same indication profile",
         "0.5 segment record-quality-ok share + 0.5 latest successful-run",
     ]:
         assert phrase in rules

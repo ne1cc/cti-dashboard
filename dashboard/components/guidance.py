@@ -182,8 +182,8 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
             ),
             (
                 "**Site Overlap Rate:** Examine the share of recruiting trials sharing "
-                "facilities with competing studies in the same segment to assess institutional "
-                "fatigue and coordinator capacity."
+                "facilities with competing studies in the same indication profile to "
+                "assess institutional fatigue and coordinator capacity."
             ),
             (
                 "**Metric Inspection:** Click any row in the table to audit contributing NCT IDs "

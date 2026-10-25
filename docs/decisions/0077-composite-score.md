@@ -17,7 +17,7 @@ As configured in `config/score_weights.yml` (and replicated into the dbt seed `d
 1. `recruiting_trial_count`: 0.35 (count of recruiting trials in segment)
 2. `recent_recruiting_growth`: 0.20 (90-day recruiting entrants or first-posted proxy)
 3. `sponsor_concentration`: 0.20 (Herfindahl-Hirschman Index, HHI)
-4. `site_overlap`: 0.15 (share of recruiting trials sharing facilities with competing studies)
+4. `site_overlap`: 0.15 (share of recruiting trials sharing facilities with competing studies in the same indication profile)
 5. `data_confidence_adjustment`: 0.10 (operational completeness adjustment)
 
 Segments were partitioned into fixed priority bands based on absolute cutoffs:
@@ -64,7 +64,7 @@ Specifically:
      - `recruiting_trial_count` (standardized alias: `active_recruiting_trials`): Raw count of actively recruiting interventional trials.
      - `sponsor_count` (standardized alias: `distinct_sponsors`): Count of distinct lead sponsors operating in the segment.
      - `sponsor_hhi`: Herfindahl-Hirschman Index of sponsor concentration, bounded in the warehouse in the range [0, 1].
-     - `site_overlap_share` (standardized alias: `site_overlap_rate`): Share of recruiting trials in the segment that share at least one facility with another competing trial, bounded in [0, 1].
+     - `site_overlap_share` (standardized alias: `site_overlap_rate`): Share of recruiting trials in the segment that share at least one facility with another competing trial in the same indication profile, bounded in [0, 1].
      - `data_confidence_share`: Operational data completeness share (0.5 * `record_quality_ok_share` + 0.5 * `usable_location_share`), retained temporarily as an operational completeness signal without affecting sorting/ranking, pending Issue #78 ("Separate completeness from ranking").
      - `recent_growth_input`: Raw trial count or growth measure used for segment observation (90-day count of newly recruiting trials, or first-posted count when `growth_uses_registry_proxy_flag`).
      - `growth_uses_registry_proxy_flag`: Flag indicating whether first-posted date proxy is in use.
@@ -89,5 +89,5 @@ Specifically:
 ## Consequences
 
 - Analysts and stakeholders view transparent, empirical counts and concentration measures directly from ClinicalTrials.gov.
-- Pipeline logic is simpler with fewer dbt models, seeds, and tests to maintain; runtime impact is expected to be minor.
+- Pipeline logic is simpler with fewer seeds and tests to maintain; runtime impact is expected to be minor.
 - The platform adheres strictly to its clinical interpretation guardrails (ADR 0065, `docs/clinical_interpretation_guardrails.md`) by presenting objective registry evidence without making unvalidated prescriptive claims.

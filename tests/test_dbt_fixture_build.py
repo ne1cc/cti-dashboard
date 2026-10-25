@@ -16,6 +16,7 @@ breaks. No network, no real API, everything under tmp_path_factory.
 import json
 import os
 import re
+import sys
 from datetime import date
 from pathlib import Path
 
@@ -674,12 +675,42 @@ def test_registry_segments_raw_metrics_non_empty(
 
 def test_mart_feasibility_priority_queue_deterministic_tiebreaker(
     divergent_fixture_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Verify mart ordering and deterministic tiebreakers on ties.
 
     Both mart_feasibility_priority_queue and downstream consumers order by:
     active_recruiting_trials desc, distinct_sponsors desc, priority_queue_key asc.
     """
+    import streamlit as st
+
+    from src.config import get_config
+
+    dashboard_dir = Path(__file__).resolve().parents[1] / "dashboard"
+    if str(dashboard_dir) not in sys.path:
+        sys.path.insert(0, str(dashboard_dir))
+    from components import data
+
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(divergent_fixture_root))
+    get_config.cache_clear()
+    st.cache_data.clear()
+    st.cache_resource.clear()
+
+    df = data.priority_queue("adrd")
+    assert len(df) == 8
+
+    # Assert that the returned segment keys strictly follow the tuple order:
+    # (active_recruiting_trials desc, distinct_sponsors desc, priority_queue_key asc)
+    expected_keys = sorted(
+        df["priority_queue_key"].tolist(),
+        key=lambda key: (
+            -int(df.loc[df["priority_queue_key"] == key, "active_recruiting_trials"].iloc[0]),
+            -int(df.loc[df["priority_queue_key"] == key, "distinct_sponsors"].iloc[0]),
+            str(key),
+        ),
+    )
+    assert df["priority_queue_key"].tolist() == expected_keys
+
     rows = _rows(
         divergent_fixture_root,
         "select active_recruiting_trials, distinct_sponsors, priority_queue_key "

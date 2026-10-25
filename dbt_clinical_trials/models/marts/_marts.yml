@@ -723,10 +723,10 @@ models:
         description: Descriptive competition signal tier derived from sponsor concentration.
       - name: site_overlap_share
         data_type: DOUBLE
-        description: Share of recruiting trials in the segment that share at least one trial facility with another competing trial in the same segment, bounded in [0, 1].
+        description: Share of recruiting trials in the segment that share at least one trial facility with another competing trial in the same indication profile, bounded in [0, 1].
       - name: site_overlap_rate
         data_type: DOUBLE
-        description: Standardized alias of site_overlap_share (share of recruiting trials sharing facilities with another competing trial in the same segment).
+        description: Standardized alias of site_overlap_share (share of recruiting trials sharing facilities with another competing trial in the same indication profile).
       - name: record_quality_ok_share
         data_type: DOUBLE
         description: Share of trials in this segment meeting baseline record quality criteria.

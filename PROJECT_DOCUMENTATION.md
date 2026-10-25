@@ -514,7 +514,7 @@ erDiagram
         bigint active_recruiting_trials "recruiting count"
         bigint distinct_sponsors "unique sponsors"
         double sponsor_hhi "0..1 concentration"
-        double site_overlap_rate "0..1 shared sites"
+        double site_overlap_rate "0..1 trials sharing a site"
         bool growth_uses_registry_proxy_flag
         string priority_explanation "deterministic"
         string interpretation_note "always present"
@@ -679,8 +679,8 @@ banner; every document (including this one) opens with the planning-signal rule.
 
 | Suite | Count | Scope |
 |---|---|---|
-| dbt data tests | **138** (measured 2026-09-07 UTC: `uv run dbt parse --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials`, then count `resource_type == "test"` in `dbt_clinical_trials/target/manifest.json`) | grains, keys, referential integrity, accepted values, current-record uniqueness, state validity, date sanity |
-| pytest | **308** (measured 2026-09-07 UTC: `uv run pytest --collect-only`) | HTTP client/retry, pagination, manifests, normalization, metric math (HHI fixtures), ROI arithmetic + disclaimer, dashboard smoke (all 8 pages via Streamlit `AppTest`) |
+| dbt data tests | **148** (measured 2026-10-25 UTC: `uv run dbt parse --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials`, then count `resource_type == "test"` in `dbt_clinical_trials/target/manifest.json`) | grains, keys, referential integrity, accepted values, current-record uniqueness, state validity, date sanity |
+| pytest | **589** (measured 2026-10-25 UTC: `uv run pytest --collect-only`) | HTTP client/retry, pagination, manifests, normalization, metric math (HHI fixtures), ROI arithmetic + disclaimer, dashboard smoke (all 8 pages via Streamlit `AppTest`) |
 | ruff | clean | lint + format, line length 100 |
 
 These are the only places in this file that state those two counts *as measurements*,

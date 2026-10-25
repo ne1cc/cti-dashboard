@@ -89,7 +89,7 @@ queue_event = st.dataframe(
             width=110,
             help=(
                 "Share of recruiting trials sharing facilities with another competing "
-                "trial in this segment"
+                "trial in the same indication profile"
             ),
         ),
         "distinct_sponsors": st.column_config.NumberColumn(
