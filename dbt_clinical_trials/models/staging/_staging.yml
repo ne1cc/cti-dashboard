@@ -39,6 +39,33 @@ models:
                  ENROLLING_BY_INVITATION, SUSPENDED, TERMINATED, WITHDRAWN, UNKNOWN]
               config:
                 severity: warn
+      - name: healthy_volunteers
+        description: Whether the trial accepts healthy volunteers (null if unknown/unstated).
+      - name: minimum_age
+        description: Verbatim ClinicalTrials.gov minimum age string.
+      - name: minimum_age_raw
+        description: Preserved verbatim registry minimum age string.
+      - name: minimum_age_years
+        description: Minimum eligibility age parsed into fractional years; null if missing/unbounded/malformed.
+      - name: maximum_age
+        description: Verbatim ClinicalTrials.gov maximum age string.
+      - name: maximum_age_raw
+        description: Preserved verbatim registry maximum age string.
+      - name: maximum_age_years
+        description: Maximum eligibility age parsed into fractional years; null if missing/unbounded/malformed.
+      - name: sex
+        description: Verbatim ClinicalTrials.gov sex eligibility (ALL, FEMALE, MALE, or null).
+        tests:
+          - accepted_values:
+              values: [ALL, FEMALE, MALE]
+              config:
+                severity: warn
+      - name: gender_based
+        description: Whether eligibility is based on gender/sex criteria.
+      - name: gender_description
+        description: Registry explanation when gender_based is true.
+      - name: std_age_groups
+        description: List of standard age groups (CHILD, ADULT, OLDER_ADULT).
 
   - name: stg_trial_conditions
     columns:

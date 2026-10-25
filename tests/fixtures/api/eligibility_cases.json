@@ -1,0 +1,180 @@
+{
+  "single_age_cases": [
+    {"raw": null, "expected_years": null, "classification": "missing"},
+    {"raw": "", "expected_years": null, "classification": "missing"},
+    {"raw": "   ", "expected_years": null, "classification": "missing"},
+    {"raw": "N/A", "expected_years": null, "classification": "not_applicable"},
+    {"raw": "n/a", "expected_years": null, "classification": "not_applicable"},
+    {"raw": "NA", "expected_years": null, "classification": "not_applicable"},
+    {"raw": "Not Applicable", "expected_years": null, "classification": "not_applicable"},
+    {"raw": "18 Years", "expected_years": 18.0, "classification": "valid"},
+    {"raw": "1 Year", "expected_years": 1.0, "classification": "valid"},
+    {"raw": "65 years", "expected_years": 65.0, "classification": "valid"},
+    {"raw": "65.5 Years", "expected_years": 65.5, "classification": "valid"},
+    {"raw": "6 Months", "expected_years": 0.5, "classification": "valid"},
+    {"raw": "1 Month", "expected_years": 0.08333333333333333, "classification": "valid"},
+    {"raw": "12 Months", "expected_years": 1.0, "classification": "valid"},
+    {"raw": "26 Weeks", "expected_years": 0.5, "classification": "valid"},
+    {"raw": "1 Week", "expected_years": 0.019230769230769232, "classification": "valid"},
+    {"raw": "52 Weeks", "expected_years": 1.0, "classification": "valid"},
+    {"raw": "365 Days", "expected_years": 1.0, "classification": "valid"},
+    {"raw": "1 Day", "expected_years": 0.0027397260273972603, "classification": "valid"},
+    {"raw": "182.5 Days", "expected_years": 0.5, "classification": "valid"},
+    {"raw": "24 Hours", "expected_years": 0.0027397260273972603, "classification": "valid"},
+    {"raw": "60 Minutes", "expected_years": 0.00011415525114155251, "classification": "valid"},
+    {"raw": "18 lightyears", "expected_years": null, "classification": "malformed"},
+    {"raw": "invalid", "expected_years": null, "classification": "malformed"},
+    {"raw": "18", "expected_years": null, "classification": "malformed"},
+    {"raw": "Years", "expected_years": null, "classification": "malformed"},
+    {"raw": "-5 Years", "expected_years": null, "classification": "malformed"}
+  ],
+  "paired_bounds_cases": [
+    {
+      "name": "bounded_valid",
+      "min_raw": "18 Years",
+      "max_raw": "65 Years",
+      "min_years": 18.0,
+      "max_years": 65.0,
+      "is_valid": true,
+      "is_contradictory": false,
+      "has_unspecified_min_age": false,
+      "has_unspecified_max_age": false
+    },
+    {
+      "name": "unbounded",
+      "min_raw": null,
+      "max_raw": null,
+      "min_years": null,
+      "max_years": null,
+      "is_valid": true,
+      "is_contradictory": false,
+      "has_unspecified_min_age": true,
+      "has_unspecified_max_age": true
+    },
+    {
+      "name": "min_only",
+      "min_raw": "18 Years",
+      "max_raw": null,
+      "min_years": 18.0,
+      "max_years": null,
+      "is_valid": true,
+      "is_contradictory": false,
+      "has_unspecified_min_age": false,
+      "has_unspecified_max_age": true
+    },
+    {
+      "name": "max_only",
+      "min_raw": null,
+      "max_raw": "65 Years",
+      "min_years": null,
+      "max_years": 65.0,
+      "is_valid": true,
+      "is_contradictory": false,
+      "has_unspecified_min_age": true,
+      "has_unspecified_max_age": false
+    },
+    {
+      "name": "contradictory_min_greater_than_max",
+      "min_raw": "65 Years",
+      "max_raw": "18 Years",
+      "min_years": 65.0,
+      "max_years": 18.0,
+      "is_valid": false,
+      "is_contradictory": true,
+      "has_unspecified_min_age": false,
+      "has_unspecified_max_age": false
+    },
+    {
+      "name": "not_applicable_both",
+      "min_raw": "N/A",
+      "max_raw": "N/A",
+      "min_years": null,
+      "max_years": null,
+      "is_valid": true,
+      "is_contradictory": false,
+      "has_unspecified_min_age": true,
+      "has_unspecified_max_age": true
+    },
+    {
+      "name": "malformed_min",
+      "min_raw": "invalid",
+      "max_raw": "65 Years",
+      "min_years": null,
+      "max_years": 65.0,
+      "is_valid": false,
+      "is_contradictory": false,
+      "has_unspecified_min_age": true,
+      "has_unspecified_max_age": false
+    },
+    {
+      "name": "malformed_max",
+      "min_raw": "18 Years",
+      "max_raw": "junk",
+      "min_years": 18.0,
+      "max_years": null,
+      "is_valid": false,
+      "is_contradictory": false,
+      "has_unspecified_min_age": false,
+      "has_unspecified_max_age": true
+    },
+    {
+      "name": "months_fractional",
+      "min_raw": "6 Months",
+      "max_raw": "24 Months",
+      "min_years": 0.5,
+      "max_years": 2.0,
+      "is_valid": true,
+      "is_contradictory": false,
+      "has_unspecified_min_age": false,
+      "has_unspecified_max_age": false
+    },
+    {
+      "name": "equal_bounds",
+      "min_raw": "18 Years",
+      "max_raw": "18 Years",
+      "min_years": 18.0,
+      "max_years": 18.0,
+      "is_valid": true,
+      "is_contradictory": false,
+      "has_unspecified_min_age": false,
+      "has_unspecified_max_age": false
+    }
+  ],
+  "patient_age_filter_cases": [
+    {
+      "target_age": 67.0,
+      "min_raw": "18 Years",
+      "max_raw": "65 Years",
+      "expected_match": false,
+      "description": "Age 67 excluded by max-age-65 trial"
+    },
+    {
+      "target_age": 67.0,
+      "min_raw": "18 Years",
+      "max_raw": null,
+      "expected_match": true,
+      "description": "Age 67 retained by trial with min 18 and no upper limit"
+    },
+    {
+      "target_age": 67.0,
+      "min_raw": null,
+      "max_raw": null,
+      "expected_match": true,
+      "description": "Age 67 retained by trial with no stated limits"
+    },
+    {
+      "target_age": 16.0,
+      "min_raw": "18 Years",
+      "max_raw": "65 Years",
+      "expected_match": false,
+      "description": "Age 16 excluded by min-age-18 trial"
+    },
+    {
+      "target_age": 40.0,
+      "min_raw": "18 Years",
+      "max_raw": "65 Years",
+      "expected_match": true,
+      "description": "Age 40 included by 18-65 trial"
+    }
+  ]
+}
