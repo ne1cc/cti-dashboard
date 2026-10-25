@@ -44,6 +44,7 @@ Documentation snapshot: built and verified against the live warehouse of **2026-
 | Decision | Which condition–phase–geography segments, study records and evidence gaps should receive further investigation? |
 | Output and action | Inspectable landscape and audit export; the analyst prepares a research shortlist/memo for qualified review |
 | Validation status | Calculation and pipeline checks implemented; workflow usefulness and business benefits unvalidated |
+| Scope & Statuses | ADRD scope is defined authoritatively in `config/profiles/adrd.yml` across all 8 overall statuses: `RECRUITING`, `ACTIVE_NOT_RECRUITING`, `NOT_YET_RECRUITING`, `COMPLETED`, `TERMINATED`, `WITHDRAWN`, `SUSPENDED`, `ENROLLING_BY_INVITATION`. Tracked trial totals span all 8 statuses, stopped studies feed why-stopped analytics, and the similarity pool spans the full 8-status landscape while competition and recruiting cards isolate confirmed `RECRUITING` studies. |
 | Therapeutic area | Config-driven indication profiles (`config/profiles/`: 12 refreshable indications across oncology and chronic disease, plus an ingest-only full catalog) |
 | Geography | United States (raw data keeps all countries; marts are U.S.-only) |
 | Source | [ClinicalTrials.gov API v2](https://clinicaltrials.gov/data-api/api) (public, no key) |
@@ -321,9 +322,12 @@ Properties worth noting:
 - **Verifiable** — the manifest records the canonical `query_hash` and the API's
   `totalCount`, every silver row carries `source_json_hash` (SHA-256 of the study
   JSON), and both are later reconciled against silver and gold row counts (§12).
-- Last full pull recorded here: **26 pages, 2,592 studies** (the 2026-07-24
-  snapshot above), matching the API `totalCount` exactly. Later runs are recorded
-  with their own dates in [`docs/DEPLOY_FLY.md`](docs/DEPLOY_FLY.md).
+- Historical baseline pull recorded here: **26 pages, 2,592 studies** (the 2026-07-24
+  snapshot under the initial 4-status query), matching the API `totalCount` exactly.
+  Under the authoritative 8-status ADRD scope (`config/profiles/adrd.yml`), the warehouse
+  captures all 8 statuses (including terminated, withdrawn, suspended, and invitation-only
+  trials) with downstream implications for tracked trial totals and stopped-study analytics.
+  Later runs are recorded with their own dates in [`docs/DEPLOY_FLY.md`](docs/DEPLOY_FLY.md).
 
 ## 7. Normalization design (silver)
 
@@ -797,8 +801,9 @@ status-transition counts (and `growth_uses_registry_proxy_flag` flips off).
 
 | File | Controls |
 |---|---|
+| `config/project_config.yml` | Central runtime configuration; references `config/profiles/adrd.yml` via `default_profile: adrd` as the single source of truth for scope (all 8 statuses) while retaining transport, path, and retention settings |
 | `config/profiles/*.yml` | Indication profiles: API query, status/type filters, page size, bronze paths, taxonomy & score-weight references |
-| `config/profiles/adrd.yml` | ADRD indication profile (migrated from `project_config.yml`) |
+| `config/profiles/adrd.yml` | ADRD indication profile; authoritative single source of truth for ADRD scope (all 8 statuses) |
 | `config/profiles/full_catalog.yml` | Opt-in full registry profile (`ingest_only: true`) |
 | `config/shared_paths.yml` | Shared silver, gold, and DuckDB paths across non-ingest-only profiles |
 | `config/condition_taxonomy.yml` | mapping of registry condition strings → ADRD condition groups, with confidence rules |

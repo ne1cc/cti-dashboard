@@ -2,6 +2,11 @@
 
 Global rules:
 - Trial counts are always `COUNT(DISTINCT nct_id)`.
+- Scope authority: Ingestion and scope are authoritatively defined per indication profile (`config/profiles/adrd.yml` for default ADRD), capturing all 8 overall statuses: `RECRUITING`, `ACTIVE_NOT_RECRUITING`, `NOT_YET_RECRUITING`, `COMPLETED`, `TERMINATED`, `WITHDRAWN`, `SUSPENDED`, `ENROLLING_BY_INVITATION`.
+- Downstream implications:
+  - **Tracked trial totals**: Total trial counts (`dim_trial`, `trial_count`, warehouse trials) encompass the full 8-status landscape rather than only active/completed studies.
+  - **Stopped studies**: Studies with premature termination statuses (`TERMINATED`, `WITHDRAWN`, `SUSPENDED`) are retained to support why-stopped and feasibility risk analyses.
+  - **Similarity pool vs. recruiting competition**: The trial similarity candidate pool spans all 8 statuses for historical precedent matching, whereas active competition metrics (`recruiting_trial_count`, `new_recruiting_30d/90d`, `sponsor_hhi`, etc.) and the priority queue filter specifically for confirmed currently-recruiting listings (`overall_status = 'RECRUITING'`).
 - A **segment** is condition_group × state × phase (the shared grain from
   `int_condition_geography_activity`; only trials with ≥1 usable U.S.
   location appear).
