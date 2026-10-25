@@ -11,6 +11,7 @@ from components.formatting import (
 )
 from components.guardrails import guarded_footer, page_setup, proxy_caption
 from components.guidance import (
+    clinicaltrials_gov_search_url,
     format_condition_group,
     render_indication_banner,
     render_page_guide,
@@ -88,9 +89,16 @@ preview_df = queue.head(10)[
         "feasibility_review_priority_score",
         "priority_band",
         "recruiting_trial_count",
+        "listed_site_count",
         "priority_explanation",
     ]
 ].copy()
+preview_df["registry_search_url"] = [
+    clinicaltrials_gov_search_url(cg, state)
+    for cg, state in zip(
+        preview_df["condition_group"], preview_df["state_normalized"], strict=False
+    )
+]
 preview_df["condition_group"] = preview_df["condition_group"].apply(format_condition_group)
 preview_df["phase_normalized"] = preview_df["phase_normalized"].map(format_phase)
 preview_df["priority_band"] = preview_df["priority_band"].map(format_band)
@@ -115,6 +123,10 @@ st.dataframe(
         "priority_band": st.column_config.TextColumn("Band", width=110),
         "recruiting_trial_count": st.column_config.NumberColumn(
             "Recruiting Trials", format="%d", width=125
+        ),
+        "listed_site_count": st.column_config.NumberColumn("Listed Sites", format="%d"),
+        "registry_search_url": st.column_config.LinkColumn(
+            "Registry Search", display_text="Search ClinicalTrials.gov"
         ),
         "priority_explanation": st.column_config.TextColumn(
             "Explanation",

@@ -148,6 +148,55 @@ def priority_queue(profile_id: str) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=600)
+def trials_for_segment(
+    profile_id: str,
+    condition_group: str,
+    state_normalized: str,
+    phase_normalized: str,
+) -> pd.DataFrame:
+    """Fetch all recruiting clinical trials belonging to a specific segment.
+
+    Args:
+        profile_id: Indication profile id to scope the trials to.
+        condition_group: Condition group identifier (e.g. ``'alzheimers_disease'``).
+        state_normalized: Two-letter U.S. state abbreviation (e.g. ``'CA'``).
+        phase_normalized: Normalized trial phase (e.g. ``'PHASE3'``).
+
+    Returns:
+        pd.DataFrame: Trial records with NCT ID, brief title, overall status, phase,
+            lead sponsor, enrollment count, study first post date, and registry URL.
+    """
+    sql = """
+        select distinct
+            d.nct_id,
+            d.current_brief_title as brief_title,
+            d.current_overall_status as overall_status,
+            d.current_phase as phase,
+            d.current_lead_sponsor as lead_sponsor,
+            d.enrollment_count,
+            d.study_first_post_date,
+            d.registry_url
+        from main_marts.dim_trial d
+        inner join main_marts.bridge_trial_condition c on c.trial_key = d.trial_key
+        inner join main_marts.fct_trial_site s on s.trial_key = d.trial_key
+        where d.indication_profile_id = ?
+          and s.snapshot_date = (
+              select max(snapshot_date) from main_marts.fct_trial_site
+              where indication_profile_id = ?)
+          and c.condition_group = ?
+          and s.state_normalized = ?
+          and coalesce(d.current_phase, '') = coalesce(?, '')
+          and d.current_overall_status = 'RECRUITING'
+        order by d.enrollment_count desc nulls last, d.nct_id
+    """
+    return _materialize(
+        _connection()
+        .execute(sql, [profile_id, profile_id, condition_group, state_normalized, phase_normalized])
+        .df()
+    )
+
+
+@st.cache_data(ttl=600)
 def _table_exists(table_name: str, schema: str = "main_marts") -> bool:
     """Check whether a table or view exists in the warehouse schema.
 
