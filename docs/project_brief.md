@@ -39,7 +39,7 @@ The [national case study](feasibility_case_study.md) demonstrates this workflow.
 | Workflow evaluation | Compare preparation minutes, handoff completeness and count reproduction with matched manual tasks; observe use in recurring reviews |
 
 There is no enforced freshness SLA, and KPI baselines and numerical targets remain
-unmeasured. The [business case](business_case.md) defines the assumed current state,
+unmeasured. The [archived business case](archive/business_case.md) (ADR 0082) defines the exploratory assumed current state,
 alternative solutions, engineering rationale and evaluation protocol. The reporting
 criteria below verify the descriptive case-study artifact; they do not establish
 adoption or business improvement.
@@ -99,7 +99,7 @@ feasibility score belongs in this descriptive case study.
 
 Follow-up requires protocol review, confirmation of current study information,
 relevant site capabilities and other evidence appropriate to the decision.
-See [business use](business_case.md) and
+See [exploratory business use](archive/business_case.md) (ADR 0082) and
 [interpretation guardrails](clinical_interpretation_guardrails.md).
 
 ## Reliability and evidence boundaries

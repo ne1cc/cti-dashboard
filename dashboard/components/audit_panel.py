@@ -41,7 +41,6 @@ def active_rules(profile_id: str) -> dict[str, Any]:
     paths = {
         "taxonomy": profile["profile"]["taxonomy"],
         "geography": "config/geography_rules.yml",
-        "score_weights": profile["profile"]["score_weights"],
     }
     model_root = Path(__file__).resolve().parents[2] / "dbt_clinical_trials"
     model_paths = [

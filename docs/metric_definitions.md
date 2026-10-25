@@ -68,29 +68,17 @@ mean is the opposite case: a one-point mean is honest, so
 | usable_location_share | locations with `usable_geography_flag` / all locations |
 | low_confidence_condition_share | taxonomy fallback mappings / all condition rows |
 
-## Feasibility Review Priority Score (`mart_feasibility_priority_queue`)
-Purpose: **rank segments for human feasibility review.** Not a forecast.
+## Registry Segments and Raw Feasibility Metrics (`mart_feasibility_priority_queue`)
+Purpose: **provide transparent, sortable raw registry signals for human feasibility review.** Not a forecast.
 
-1. Component inputs at the latest complete snapshot:
-   - recruiting count: `recruiting_trial_count`
-   - recent growth: `new_recruiting_90d` if multi-snapshot history exists,
-     else `newly_posted_90d_proxy` (`growth_uses_registry_proxy_flag`
-     exposes which source was used)
-   - sponsor concentration: `sponsor_hhi`
-   - site overlap: share of segment trials listing ≥1 multi-trial facility
-   - legacy operational completeness: 0.5 × segment record-quality-ok share + 0.5 ×
-     run-level usable-location share
-2. Each input is min-max normalized to 0..1 across scored segments;
-   degenerate spread (max = min) normalizes to 0 — no signal, no penalty.
-3. Weighted sum (weights in the `feasibility_score_weights` seed, mirrored
-   in `config/score_weights.yml`; a unit test enforces sync):
-   0.35 recruiting count + 0.20 growth + 0.20 concentration + 0.15 overlap +
-   0.10 legacy operational completeness. Bounded [0, 1] by construction (singular test).
-4. Bands (dbt vars, synced with YAML): ≥ 0.70 `priority_review`,
-   ≥ 0.45 `review`, else `watch`.
-5. `priority_explanation` is assembled from fixed component phrases — the
-   same inputs always yield the same sentence. Every row carries an
-   `interpretation_note`.
+Per ADR 0077, the composite priority score and categorical priority bands were removed to eliminate arbitrary weighting and ambiguous ranking direction. Users sort directly by the raw observable metrics relevant to their inquiry:
+
+1. **Active Recruiting Trials (`active_recruiting_trials`, `recruiting_trial_count`):** Number of distinct trials actively recruiting in the segment (`COUNT(DISTINCT nct_id)`).
+2. **Recent Growth (`new_recruiting_90d`, `recent_growth_input`):** `new_recruiting_90d` if multi-snapshot history exists, else `newly_posted_90d_proxy` (`growth_uses_registry_proxy_flag` exposes which source was used).
+3. **Sponsor Concentration (`sponsor_hhi`):** Herfindahl-Hirschman Index (Σ s_i²) measuring market concentration across segment sponsors, bounded in [0, 1.0].
+4. **Site Overlap Rate (`site_overlap_rate`, `site_overlap_share`):** Share of segment trials listing ≥1 facility that hosts multiple recruiting trials in this indication profile.
+5. **Operational Completeness Adjustment (`data_confidence_share`):** 0.5 × segment record-quality-ok share + 0.5 × run-level usable-location share. Reflects reporting and location usability; not scientific confidence.
+6. `priority_explanation` is assembled from fixed component phrases — the same inputs always yield the same sentence. Every row carries an `interpretation_note`.
 
 ## Scenario values (`src/analysis/roi_scenarios.py`)
 Pure products of user-editable assumptions in `config/roi_assumptions.yml`
@@ -193,7 +181,7 @@ sum of squared shares; top share is their maximum. Percentiles are profile/snaps
 relative with 0.5/0.8 band cuts. Entrant counts require a previous non-null,
 non-recruiting status; 30/90-day windows include their lower boundary. A single
 captured date uses the explicitly labeled first-post ≥ snapshot minus 90 days proxy
-for the score's growth input. Site overlap share is distinct recruiting segment
+for the segment's growth input. Site overlap share is distinct recruiting segment
 trials listing any facility with >1 recruiting trial in the profile / distinct
 recruiting segment trials. The legacy operational completeness input is 0.5 ×
 segment record-quality-ok share + 0.5 × latest successful-run usable-location share;
@@ -213,12 +201,9 @@ with an inclusive lower bound and no upper bound; raw and parsed first-post date
 Eligible coverage and count-input contributors remain separate from event contributors.
 
 The panel audits count inputs and identifies growth/proxy contributing events, without
-recomputing unrelated HHI,
-percentiles or composite scores. Derived formulas, displayed values, source-rule
-hashes and relevant windows are exported. Min-max normalization is profile-wide,
-returns zero for no spread, and uses active weights; priority bands are fixed
-0.45/0.70 score thresholds. These derived values cannot be inferred merely from the
-union contributor count.
+recomputing unrelated HHI or percentiles. Derived formulas, displayed values, source-rule
+hashes and relevant windows are exported. These derived values cannot be inferred merely
+from the union contributor count.
 
 ## Export and rule identity
 
@@ -227,7 +212,7 @@ configuration/model SHA-256 identifiers, exact filters and sidebar scope, profil
 selected run IDs/dates, evaluation UTC, threshold, count status, contributing IDs,
 study decisions and overlapping flags, original locations, raw references/ordinals,
 content hashes, source clock precision, retrieval times, and enrollment categories.
-Active hashes identify current taxonomy/geography/score/model rules; historical
+Active hashes identify current taxonomy/geography/model rules; historical
 configuration identity was not recorded. Raw page references can stop resolving
 after configured bronze pruning. Export does not promise an indefinite archive.
 

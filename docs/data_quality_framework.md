@@ -44,7 +44,6 @@ command behind it — which is why this line carries both). Run them with
   | assert_trial_site_relationship_integrity | error | every site row joins dim_trial |
   | assert_valid_us_state | error | 2-letter state codes at the mart boundary |
   | assert_snapshot_completeness | warn | success runs reconcile with unique NCTs |
-  | assert_feasibility_score_within_bounds | error | score ∈ [0, 1] |
 - Privacy guardrail: `stg_trial_contacts` is structurally empty.
 
 ## 4. Cross-layer reconciliation (`src/quality/reconciliation.py`)
@@ -74,8 +73,8 @@ status, and the interpretation guardrails. The step is a gate as well as a
 print: it exits non-zero when a reconciliation check fails, which is what
 `make pipeline` ends on. Unit/integration suite: 383 pytest
 tests (measured 2026-10-03 UTC by `uv run pytest --collect-only`; regenerate
-with `make test`), including config-sync tests that fail if score weights or band
-thresholds diverge between YAML, the dbt seed, and dbt vars.
+with `make test`), including raw metric invariant tests verifying concentration bounds
+and data completeness rules (ADR 0077).
 
 ## Severity philosophy
 - **error** = structural contract broken → fix before shipping metrics.

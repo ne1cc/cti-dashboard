@@ -216,7 +216,9 @@ def test_overview_reads_as_labels_not_codes(fixture_warehouse):
     assert not at.exception, at.exception
     preview = at.dataframe[0].value
     assert not preview["phase_normalized"].str.fullmatch(r"[A-Z0-9_/]+").any()
-    assert set(preview["priority_band"]) <= {"Priority review", "Review", "Watch"}
+    assert "active_recruiting_trials" in preview.columns
+    assert "sponsor_hhi" in preview.columns
+    assert (preview["active_recruiting_trials"] >= 0).all()
     assert not any("00:00:00" in c.value for c in at.caption)
     audit_labels = [e.label for e in at.expander if e.label.startswith("Audit:")]
     assert len(audit_labels) == len(set(audit_labels)) == 3

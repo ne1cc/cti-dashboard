@@ -196,7 +196,6 @@ def prepare_fixture_root(
         (root / "config" / "project_config.yml").write_text(CONFIG_YAML, encoding="utf-8")
         for cfg_name in (
             "geography_rules.yml",
-            "score_weights.yml",
             "roi_assumptions.yml",
             "shared_paths.yml",
         ):

@@ -117,11 +117,11 @@ is context for that conversation, not a spec itself.
   transitions, enrollment changes, sites added or removed. The weekly
   snapshot history (`fct_trial_snapshot`) already makes this possible and
   nothing else in the free-tooling space does it well.
-- **Explainable Feasibility Scorecard.** The priority queue's score is
-  only as useful as its explanation. Surfacing each score component,
-  weight, and data-confidence flag per trial (using the existing
-  `feasibility_score_weights` seed) turns a ranking into an auditable
-  decision tool instead of a black box.
+- **Transparent Registry Segment Scorecard.** The segment queue provides
+  transparent, observable registry metrics (active recruiting trials, sponsor HHI,
+  site overlap rate) with deterministic explanations per segment, turning
+  landscape screening into an auditable research tool instead of an unvalidated
+  black box (ADR 0077).
 - **Priority Queue filtering and export.** Add condition/phase/state/
   sponsor/freshness filters and a "download the filtered view" option —
   low effort, direct usability win for an analyst doing real research.

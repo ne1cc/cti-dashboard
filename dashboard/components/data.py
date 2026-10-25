@@ -137,12 +137,12 @@ def priority_queue(profile_id: str) -> pd.DataFrame:
         profile_id: Indication profile id to scope the mart to.
 
     Returns:
-        pd.DataFrame: Feasibility queue records containing trial keys, priority
-            scores, and ranking factors, ordered by priority rank.
+        pd.DataFrame: Feasibility queue records containing trial keys and
+            raw ranking metrics, ordered by active recruiting trials.
     """
     return query(
         "select * from main_marts.mart_feasibility_priority_queue"
-        " where indication_profile_id = ? order by priority_rank",
+        " where indication_profile_id = ? order by active_recruiting_trials desc",
         [profile_id],
     )
 

@@ -22,6 +22,7 @@ NARRATIVE_FILES = frozenset(
     {
         Path("docs/DEPLOY_FLY.md"),
         Path("docs/development_log.md"),
+        Path("docs/archive/business_case.md"),
     }
 )
 
@@ -145,6 +146,7 @@ def test_the_archive_exemption_is_exactly_the_dated_narratives() -> None:
     exempt = {str(path) for path in _tracked_markdown() if _is_archive(path)}
     assert exempt == {
         "docs/DEPLOY_FLY.md",  # dated incident record
+        "docs/archive/business_case.md",  # exploratory hypothesis archive (ADR 0082)
         "docs/development_log.md",  # the archive the live docs point at
         "docs/platform_updates_2026-09-04.md",  # exempt by its filename date
     }

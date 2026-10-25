@@ -3,7 +3,6 @@ profile:
   display_name: Parkinson's Disease
   ingest_only: false
   taxonomy: config/condition_taxonomy_parkinsons.yml
-  score_weights: config/score_weights.yml
 api:
   base_url: https://clinicaltrials.gov/api/v2
   studies_endpoint: /studies

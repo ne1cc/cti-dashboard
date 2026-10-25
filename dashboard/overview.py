@@ -4,7 +4,6 @@ import streamlit as st
 from components import data
 from components.audit_panel import PRIORITY_DERIVED_RULES, render_metric_audit
 from components.formatting import (
-    format_band,
     format_phase,
     format_priority_explanation,
     format_snapshot_date,
@@ -19,7 +18,9 @@ from components.navigation import SECTIONS
 from components.profile import render_profile_selector
 
 SECTION_PURPOSE = {
-    "Compare": "Rank condition × state × phase segments and see where listings concentrate.",
+    "Compare": (
+        "Inspect condition × state × phase segments and see where recruiting trials concentrate."
+    ),
     "Inspect": "Open the facilities, sponsors and study records behind a segment.",
     "Verify": "Check capture runs, coverage and known limitations before sharing counts.",
 }
@@ -72,7 +73,7 @@ st.caption(
 )
 proxy_caption()
 
-st.subheader("Top of the feasibility review priority queue")
+st.subheader("Top registry segments by recruiting trials")
 queue = data.priority_queue(profile_id)
 queue["priority_explanation"] = (
     queue["priority_explanation"]
@@ -81,19 +82,18 @@ queue["priority_explanation"] = (
 )
 preview_df = queue.head(10)[
     [
-        "priority_rank",
         "condition_group",
         "state_normalized",
         "phase_normalized",
-        "feasibility_review_priority_score",
-        "priority_band",
-        "recruiting_trial_count",
+        "active_recruiting_trials",
+        "sponsor_hhi",
+        "site_overlap_rate",
+        "distinct_sponsors",
         "priority_explanation",
     ]
 ].copy()
 preview_df["condition_group"] = preview_df["condition_group"].apply(format_condition_group)
 preview_df["phase_normalized"] = preview_df["phase_normalized"].map(format_phase)
-preview_df["priority_band"] = preview_df["priority_band"].map(format_band)
 preview_df["priority_explanation"] = [
     format_priority_explanation(row) for _, row in queue.head(10).iterrows()
 ]
@@ -105,28 +105,43 @@ st.dataframe(
     hide_index=True,
     width="content",
     column_config={
-        "priority_rank": st.column_config.NumberColumn("Rank", format="%d", width=60),
-        "condition_group": st.column_config.TextColumn("Condition Group", width=240),
+        "condition_group": st.column_config.TextColumn("Condition Group", width=220),
         "state_normalized": st.column_config.TextColumn("State", width=70),
         "phase_normalized": st.column_config.TextColumn("Phase", width=110),
-        "feasibility_review_priority_score": st.column_config.ProgressColumn(
-            "Priority Score", format="%.3f", min_value=0.0, max_value=1.0, width=180
+        "active_recruiting_trials": st.column_config.NumberColumn(
+            "Recruiting Trials",
+            format="%d",
+            width=135,
+            help="Actively recruiting trials in this segment",
         ),
-        "priority_band": st.column_config.TextColumn("Band", width=110),
-        "recruiting_trial_count": st.column_config.NumberColumn(
-            "Recruiting Trials", format="%d", width=125
+        "sponsor_hhi": st.column_config.NumberColumn(
+            "Sponsor HHI",
+            format="%.3f",
+            width=110,
+            help="Herfindahl-Hirschman Index (0–1); higher means more concentrated",
+        ),
+        "site_overlap_rate": st.column_config.NumberColumn(
+            "Site Overlap",
+            format="percent",
+            width=110,
+            help="Share of listed facilities hosting multiple trials",
+        ),
+        "distinct_sponsors": st.column_config.NumberColumn(
+            "Sponsors",
+            format="%d",
+            width=90,
+            help="Distinct sponsors in this segment",
         ),
         "priority_explanation": st.column_config.TextColumn(
             "Explanation",
-            width=700,
-            help="HHI measures sponsor concentration from 0–1. Completeness reflects "
-            "record and location coverage, not scientific confidence.",
+            width=650,
+            help="Descriptive segment summary from public registry data.",
         ),
     },
 )
 st.page_link(
     "pages/1_Priority_Queue.py",
-    label="Open the full Priority Queue",
+    label="Open all Registry Segments",
     icon=":material/arrow_forward:",
 )
 

@@ -1,16 +1,10 @@
--- Feasibility Review Priority Queue.
+-- Feasibility Review Priority Queue (Registry Segments).
 -- Grain: indication profile x condition_group x state x phase at that
 -- profile's latest complete snapshot.
--- Ranks segments for HUMAN feasibility review using a weighted blend of
--- normalized public-registry signals. This is a triage aid — a potential
--- competition signal, NOT a recruitment forecast and NOT a measure of
--- patient availability. Weights live in the feasibility_score_weights seed
--- (mirrored in config/score_weights.yml); the seed is a global configuration
--- object shared by every profile by design, so `weights` stays uncrossed.
--- Every min()/max() below is partitioned by profile: unpartitioned, the
--- min-max normalization rescales one indication's segments against whatever
--- other profiles happen to be in the warehouse, silently moving every score
--- and every priority_band threshold.
+-- Provides transparent, sortable raw public-registry signals for human
+-- feasibility review. Potential competition signals from public registry
+-- listings, NOT a recruitment forecast and NOT a measure of patient
+-- availability. Ordered by active_recruiting_trials descending by default.
 with latest_snapshot as (
     select indication_profile_id, max(snapshot_date) as snapshot_date
     from {{ ref('fct_trial_snapshot') }}
@@ -23,21 +17,6 @@ history_depth as (
         count(distinct snapshot_date) > 1 as has_multi_snapshot_history
     from {{ ref('fct_trial_snapshot') }}
     group by 1
-),
-
-weights as (
-    select
-        max(case when component = 'normalized_recruiting_trial_count'
-            then weight end) as w_density,
-        max(case when component = 'normalized_recent_recruiting_growth'
-            then weight end) as w_growth,
-        max(case when component = 'normalized_sponsor_concentration'
-            then weight end) as w_concentration,
-        max(case when component = 'normalized_site_overlap'
-            then weight end) as w_overlap,
-        max(case when component = 'normalized_data_confidence_adjustment'
-            then weight end) as w_confidence
-    from {{ ref('feasibility_score_weights') }}
 ),
 
 -- Latest successful run *per profile*: mart_data_reliability is one row per
@@ -113,96 +92,34 @@ inputs as (
         c.state_normalized,
         c.phase_normalized,
         c.snapshot_date,
+        c.snapshot_date as latest_snapshot_date,
         c.recruiting_trial_count,
+        c.recruiting_trial_count as active_recruiting_trials,
         c.listed_site_count,
         c.new_recruiting_90d,
         c.newly_posted_90d_proxy,
         h.has_multi_snapshot_history,
-        -- Until multi-snapshot history accrues, transitions are all zero;
-        -- fall back to the registry first-post-date proxy (labeled below).
         case
             when h.has_multi_snapshot_history then c.new_recruiting_90d
             else c.newly_posted_90d_proxy
         end as recent_growth_input,
+        (not h.has_multi_snapshot_history) as growth_uses_registry_proxy_flag,
         c.sponsor_count,
+        c.sponsor_count as distinct_sponsors,
         c.top_sponsor_share,
         c.sponsor_hhi,
         c.competition_signal_band,
         s.site_overlap_share,
+        s.site_overlap_share as site_overlap_rate,
         s.record_quality_ok_share,
         0.5 * coalesce(s.record_quality_ok_share, 0)
             + 0.5 * coalesce(r.usable_location_share, 0)
-            as data_confidence_input
+            as data_confidence_share
     from competition c
     inner join segment_trials s
         using (indication_profile_id, condition_group, state_normalized, phase_normalized)
     inner join history_depth h using (indication_profile_id)
-    -- Left, not inner: run_reliability holds only profiles with a *successful*
-    -- run, so an inner join would silently delete the whole queue of a profile
-    -- that has snapshots but none. One row per profile, so nothing duplicates;
-    -- the coalesce above already prices a missing share as 0.
     left join run_reliability r using (indication_profile_id)
-),
-
-normalized as (
-    select
-        *,
-        coalesce({{ safe_divide(
-            'recruiting_trial_count - min(recruiting_trial_count) over (partition by indication_profile_id)',
-            'max(recruiting_trial_count) over (partition by indication_profile_id)'
-            ' - min(recruiting_trial_count) over (partition by indication_profile_id)',
-        ) }}, 0) as normalized_recruiting_trial_count,
-        coalesce({{ safe_divide(
-            'recent_growth_input - min(recent_growth_input) over (partition by indication_profile_id)',
-            'max(recent_growth_input) over (partition by indication_profile_id)'
-            ' - min(recent_growth_input) over (partition by indication_profile_id)',
-        ) }}, 0) as normalized_recent_recruiting_growth,
-        coalesce({{ safe_divide(
-            'sponsor_hhi - min(sponsor_hhi) over (partition by indication_profile_id)',
-            'max(sponsor_hhi) over (partition by indication_profile_id)'
-            ' - min(sponsor_hhi) over (partition by indication_profile_id)',
-        ) }}, 0) as normalized_sponsor_concentration,
-        coalesce({{ safe_divide(
-            'site_overlap_share - min(site_overlap_share) over (partition by indication_profile_id)',
-            'max(site_overlap_share) over (partition by indication_profile_id)'
-            ' - min(site_overlap_share) over (partition by indication_profile_id)',
-        ) }}, 0) as normalized_site_overlap,
-        coalesce({{ safe_divide(
-            'data_confidence_input - min(data_confidence_input) over (partition by indication_profile_id)',
-            'max(data_confidence_input) over (partition by indication_profile_id)'
-            ' - min(data_confidence_input) over (partition by indication_profile_id)',
-        ) }}, 0) as normalized_data_confidence_adjustment
-    from inputs
-),
-
-scored as (
-    select
-        n.*,
-        w.w_density as weight_recruiting_trial_count,
-        w.w_growth as weight_recent_recruiting_growth,
-        w.w_concentration as weight_sponsor_concentration,
-        w.w_overlap as weight_site_overlap,
-        w.w_confidence as weight_data_confidence_adjustment,
-        round(w.w_density * n.normalized_recruiting_trial_count, 4)
-            as weighted_recruiting_trial_count,
-        round(w.w_growth * n.normalized_recent_recruiting_growth, 4)
-            as weighted_recent_recruiting_growth,
-        round(w.w_concentration * n.normalized_sponsor_concentration, 4)
-            as weighted_sponsor_concentration,
-        round(w.w_overlap * n.normalized_site_overlap, 4)
-            as weighted_site_overlap,
-        round(w.w_confidence * n.normalized_data_confidence_adjustment, 4)
-            as weighted_data_confidence_adjustment,
-        round(
-            w.w_density * n.normalized_recruiting_trial_count
-            + w.w_growth * n.normalized_recent_recruiting_growth
-            + w.w_concentration * n.normalized_sponsor_concentration
-            + w.w_overlap * n.normalized_site_overlap
-            + w.w_confidence * n.normalized_data_confidence_adjustment,
-            4
-        ) as feasibility_review_priority_score
-    from normalized n
-    cross join weights w
 )
 
 select
@@ -211,65 +128,31 @@ select
         'phase_normalized', 'snapshot_date',
     ]) }} as priority_queue_key,
     snapshot_date,
+    latest_snapshot_date,
     indication_profile_id,
     condition_group,
     state_normalized,
     phase_normalized,
-    feasibility_review_priority_score,
-    case
-        when feasibility_review_priority_score
-            >= {{ var('feasibility_band_priority_threshold') }}
-            then 'priority_review'
-        when feasibility_review_priority_score
-            >= {{ var('feasibility_band_review_threshold') }}
-            then 'review'
-        else 'watch'
-    end as priority_band,
-    -- Ranked *within* an indication: rank 1 is the top segment to review for
-    -- that profile, so a second profile cannot push the first one's queue
-    -- past rank 1 and make it read as unimportant.
-    rank() over (
-        partition by indication_profile_id
-        order by feasibility_review_priority_score desc
-    ) as priority_rank,
     recruiting_trial_count,
+    active_recruiting_trials,
     listed_site_count,
     new_recruiting_90d,
     newly_posted_90d_proxy,
     has_multi_snapshot_history,
     recent_growth_input,
-    (not has_multi_snapshot_history) as growth_uses_registry_proxy_flag,
+    growth_uses_registry_proxy_flag,
     sponsor_count,
+    distinct_sponsors,
     top_sponsor_share,
     sponsor_hhi,
     competition_signal_band,
     site_overlap_share,
+    site_overlap_rate,
     record_quality_ok_share,
-    data_confidence_input as data_confidence_share,
-    normalized_recruiting_trial_count,
-    normalized_recent_recruiting_growth,
-    normalized_sponsor_concentration,
-    normalized_site_overlap,
-    normalized_data_confidence_adjustment,
-    weight_recruiting_trial_count,
-    weight_recent_recruiting_growth,
-    weight_sponsor_concentration,
-    weight_site_overlap,
-    weight_data_confidence_adjustment,
-    weighted_recruiting_trial_count,
-    weighted_recent_recruiting_growth,
-    weighted_sponsor_concentration,
-    weighted_site_overlap,
-    weighted_data_confidence_adjustment,
-    -- Deterministic explanation assembled from fixed component phrases.
+    data_confidence_share,
     concat_ws(
         '; ',
-        recruiting_trial_count || ' recruiting listing(s) in segment ('
-            || case
-                when normalized_recruiting_trial_count >= 0.7 then 'high'
-                when normalized_recruiting_trial_count >= 0.4 then 'moderate'
-                else 'low'
-            end || ' relative density)',
+        recruiting_trial_count || ' recruiting listing(s) in segment',
         case
             when growth_uses_registry_proxy_flag then
                 newly_posted_90d_proxy
@@ -287,4 +170,5 @@ select
     'Potential competition signal from public registry listings.'
         || ' Not a recruitment forecast; requires human feasibility review.'
         as interpretation_note
-from scored
+from inputs
+order by active_recruiting_trials desc
