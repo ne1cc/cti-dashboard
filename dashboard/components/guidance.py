@@ -130,7 +130,7 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         "how_to_analyze": (
             "Use this overview as an operational health check. Compare total trials against "
             "the 'Currently recruiting' count to gauge protocol turnover, and review the "
-            "top-ranked segments to spot immediate regional contention."
+            "top activity segments to spot immediate regional contention."
         ),
         "playbook": [
             (
@@ -181,9 +181,9 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
                 "indicating whether local investigative capacity is tied up."
             ),
             (
-                "**Site Overlap Rate:** Examine the proportion of investigative sites hosting "
-                "multiple competing trials to assess institutional fatigue and coordinator "
-                "capacity."
+                "**Site Overlap Rate:** Examine the share of recruiting trials sharing "
+                "facilities with competing studies in the same segment to assess institutional "
+                "fatigue and coordinator capacity."
             ),
             (
                 "**Metric Inspection:** Click any row in the table to audit contributing NCT IDs "

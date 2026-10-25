@@ -119,7 +119,7 @@ st.dataframe(
             "Site Overlap",
             format="percent",
             width=110,
-            help="Share of listed facilities hosting multiple trials",
+            help="Share of recruiting trials sharing facilities with competing studies",
         ),
         "distinct_sponsors": st.column_config.NumberColumn(
             "Sponsors",
@@ -189,7 +189,7 @@ render_metric_audit(
     profile_id,
     segments=queue.head(10),
     context={
-        "scope": "Queue preview row inputs; sidebar scope before derived rank filters.",
+        "scope": "Queue preview row inputs; sidebar scope before segment filters.",
         "derived_rules": PRIORITY_DERIVED_RULES,
     },
     key="overview_queue",

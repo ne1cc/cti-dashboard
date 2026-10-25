@@ -40,7 +40,7 @@ def format_snapshot_date(value: str | pd.Timestamp | datetime | date | None) -> 
 
 
 def format_priority_explanation(row: pd.Series) -> str:
-    """Summarize score inputs without presenting first-post proxies as recruiting events."""
+    """Summarize segment metrics without presenting first-post proxies as recruiting events."""
     growth = (
         "First posted (90d proxy)"
         if row["growth_uses_registry_proxy_flag"]

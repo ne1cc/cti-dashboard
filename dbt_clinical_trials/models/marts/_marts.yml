@@ -702,7 +702,7 @@ models:
         description: Flag indicating whether multi-snapshot history has accrued for this profile.
       - name: recent_growth_input
         data_type: HUGEINT
-        description: Raw trial count or growth measure used for segment observation.
+        description: 90-day count of newly recruiting trials, or first-posted count when growth_uses_registry_proxy_flag.
       - name: growth_uses_registry_proxy_flag
         data_type: BOOLEAN
         description: Flag indicating whether recent growth uses the first-posted registry date proxy.
@@ -723,10 +723,10 @@ models:
         description: Descriptive competition signal tier derived from sponsor concentration.
       - name: site_overlap_share
         data_type: DOUBLE
-        description: Share of trial sites hosting multiple trials in this segment, bounded in [0, 1].
+        description: Share of recruiting trials in the segment that share at least one trial facility with another competing trial in the same segment, bounded in [0, 1].
       - name: site_overlap_rate
         data_type: DOUBLE
-        description: Standardized alias of site_overlap_share.
+        description: Standardized alias of site_overlap_share (share of recruiting trials sharing facilities with another competing trial in the same segment).
       - name: record_quality_ok_share
         data_type: DOUBLE
         description: Share of trials in this segment meeting baseline record quality criteria.

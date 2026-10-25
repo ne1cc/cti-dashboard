@@ -87,7 +87,10 @@ queue_event = st.dataframe(
             "Site Overlap",
             format="percent",
             width=110,
-            help="Share of listed facilities hosting multiple trials in this profile",
+            help=(
+                "Share of recruiting trials sharing facilities with another competing "
+                "trial in this segment"
+            ),
         ),
         "distinct_sponsors": st.column_config.NumberColumn(
             "Sponsors",
@@ -171,7 +174,7 @@ if selected_rows:
         ("Sponsor count", f"{int(segment['distinct_sponsors'])} distinct sponsor(s)"),
         ("Sponsor concentration HHI", f"{segment['sponsor_hhi']:.3f}"),
         ("Top sponsor share", f"{segment['top_sponsor_share'] * 100:.1f}%"),
-        ("Site overlap rate", f"{segment['site_overlap_rate'] * 100:.1f}% of facilities"),
+        ("Site overlap rate", f"{segment['site_overlap_rate'] * 100:.1f}% of trials"),
         ("Listed site affiliations", f"{int(segment['listed_site_count'])} sites"),
         ("Operational completeness", f"{segment['data_confidence_share'] * 100:.1f}%"),
     ]

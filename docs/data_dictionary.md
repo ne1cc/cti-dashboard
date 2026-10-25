@@ -170,7 +170,7 @@ Python (`src/transform/eligibility.py`) and dbt (`dbt_clinical_trials/macros/par
 | mart_site_overlap | snapshot × facility | multi-trial facilities, phase_mix |
 | mart_condition_geography_trends | month × condition_group × state | 3-month rolling baseline |
 | mart_data_reliability | ingestion run | reconciliation + usability shares |
-| mart_feasibility_priority_queue | segment @ latest snapshot | score, band, rank, deterministic explanation, `interpretation_note` |
+| mart_feasibility_priority_queue | segment @ latest snapshot | segment-level recruiting trial counts, distinct sponsors, sponsor HHI, site overlap, and deterministic interpretation note |
 
 Full column-level metric semantics: `docs/metric_definitions.md`.
 

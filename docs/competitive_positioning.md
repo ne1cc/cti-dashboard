@@ -55,7 +55,7 @@ The existing analytical foundation is already strong:
 | Quality | [Continuous integration](https://github.com/ne1cc/cti-dashboard/actions/workflows/ci.yml) checks pipeline behavior, warehouse grains, profile isolation and dashboard audits | Reproducible checks support data quality and calculation review |
 | History | Weekly snapshot history through `fct_trial_snapshot` | Enables time-series and change-detection features, far more valuable than static registry search |
 | Intelligence marts | Trial activity, recruiting competition, site overlap, geography trends, data reliability, feasibility priority queue | Covers the baseline feasibility workflow |
-| User experience | Priority Queue, Competition Landscape, Geography Trends, Site Overlap, Sponsor Landscape, Data Reliability, Trial Explorer, Trial Similarity | A coherent decision journey rather than disconnected charts |
+| User experience | Registry Segments, Competition Landscape, Geography Trends, Site Overlap, Sponsor Landscape, Data Reliability, Trial Explorer, Trial Similarity | A coherent decision journey rather than disconnected charts |
 | Deployment | Docker, Fly configuration, GitHub Actions auto-deploy, live demo | Makes the project interviewable and usable by others, not just locally runnable |
 
 ### What is already comparable
