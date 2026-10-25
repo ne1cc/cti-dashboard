@@ -54,6 +54,9 @@ from src.config import ApiConfig, HttpConfig
 from src.ingest.ctg_client import CTGClient
 
 logger = logging.getLogger(__name__)
+if not logging.getLogger().handlers and not logger.handlers:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
 NCT_REGEX = re.compile(r"^NCT\d{8}$", re.IGNORECASE)
 StatusFilter = Literal[
     "RECRUITING",
@@ -150,6 +153,49 @@ def _sanitized_payload(data: dict[str, Any]) -> tuple[str, str]:
     return payload, etag
 
 
+def check_etag_match(client_header: str | None, current_etag: str) -> bool:
+    """Check if client's If-None-Match header matches the current ETag.
+
+    Handles '*', comma-separated lists, and weak/strong comparisons (RFC 7232).
+    """
+    if not client_header:
+        return False
+    header_val = client_header.strip()
+    if header_val == "*":
+        return True
+
+    def normalize_tag(tag: str) -> str:
+        t = tag.strip()
+        if t.startswith("W/"):
+            t = t[2:]
+        return t.strip('"')
+
+    target = normalize_tag(current_etag)
+    candidates = [normalize_tag(part) for part in header_val.split(",")]
+    return target in candidates
+
+
+def apply_cache_headers_and_check_etag(
+    request: Request,
+    response: Response,
+    payload_dict: dict[str, Any],
+    snap_id: str,
+    snap_ts: str,
+) -> Response | None:
+    """Compute ETag, set response headers, and return 304 Response if client cache is fresh."""
+    payload_str = json.dumps(payload_dict, sort_keys=True, separators=(",", ":"))
+    etag = f'W/"{hashlib.sha256(payload_str.encode("utf-8")).hexdigest()[:16]}"'
+
+    response.headers["Data-Snapshot"] = snap_id
+    response.headers["Data-Updated"] = snap_ts
+    response.headers["ETag"] = etag
+    response.headers["Cache-Control"] = "public, max-age=300"
+
+    if check_etag_match(request.headers.get("if-none-match"), etag):
+        return Response(status_code=304, headers=dict(response.headers))
+    return None
+
+
 def create_app(
     container: APIContainer | None = None,
     cache_path: str | Path | None = None,
@@ -182,14 +228,15 @@ def create_app(
     )
     app.state.container = state_container
 
-    # CORS configuration
+    # CORS configuration (drop allow_credentials when wildcard)
     cors_origins = [
         o.strip() for o in os.environ.get("CTI_CORS_ORIGINS", "*").split(",") if o.strip()
     ]
+    allow_credentials = cors_origins != ["*"]
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
-        allow_credentials=True,
+        allow_credentials=allow_credentials,
         allow_methods=["*"],
         allow_headers=["*"],
         expose_headers=[
@@ -207,11 +254,12 @@ def create_app(
     async def request_correlation_and_logging_middleware(
         request: Request, call_next: Any
     ) -> Response:
-        request_id = request.headers.get("X-Request-ID")
-        if not request_id or not request_id.strip():
+        raw_req_id = request.headers.get("X-Request-ID")
+        if not raw_req_id or not raw_req_id.strip():
             request_id = str(uuid.uuid4())
         else:
-            request_id = request_id.strip()
+            # Cap request ID length to 128 characters
+            request_id = raw_req_id.strip()[:128]
 
         request.state.request_id = request_id
         start_time = time.perf_counter()
@@ -298,6 +346,34 @@ def create_app(
             code="UPSTREAM_UNAVAILABLE",
         )
 
+    @app.exception_handler(TimeoutError)
+    async def timeout_error_handler(request: Request, exc: TimeoutError) -> JSONResponse:
+        logger.warning("Service timeout encountered: %s", exc)
+        res = create_problem_response(
+            503,
+            "Service Unavailable",
+            "The service is temporarily saturated. Please retry after a brief pause.",
+            str(request.url),
+            code="WAREHOUSE_BUSY",
+        )
+        res.headers["Retry-After"] = "5"
+        return res
+
+    @app.exception_handler(WarehouseNotReadyError)
+    async def warehouse_not_ready_handler(
+        request: Request, exc: WarehouseNotReadyError
+    ) -> JSONResponse:
+        logger.warning("Warehouse not ready: %s", exc)
+        res = create_problem_response(
+            503,
+            "Service Unavailable",
+            f"Warehouse is not ready: {exc}",
+            str(request.url),
+            code="WAREHOUSE_NOT_READY",
+        )
+        res.headers["Retry-After"] = "5"
+        return res
+
     @app.exception_handler(Exception)
     async def internal_error_handler(request: Request, exc: Exception) -> JSONResponse:
         logger.error("API request failed", exc_info=exc)
@@ -332,7 +408,7 @@ def create_app(
         """Process liveness probe."""
         return {
             "status": "ok",
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
 
     @app.get("/readyz", tags=["Diagnostics"], response_model=ReadinessStatus)
@@ -340,7 +416,16 @@ def create_app(
         """Readiness probe checking warehouse accessibility, schemas, and freshness."""
         if deps.warehouse is not None:
             try:
-                return deps.warehouse.check_readiness()
+                status = deps.warehouse.check_readiness()
+                if status.status != "ready":
+                    return create_problem_response(
+                        503,
+                        "Service Unavailable",
+                        "Warehouse is not ready.",
+                        str(request.url),
+                        code="WAREHOUSE_NOT_READY",
+                    )
+                return status
             except WarehouseNotReadyError as err:
                 return create_problem_response(
                     503,
@@ -359,7 +444,7 @@ def create_app(
                     str(request.url),
                     code="CIRCUIT_BREAKER_OPEN",
                 )
-            now_iso = datetime.now(UTC).isoformat()
+            now_iso = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
             return ReadinessStatus(
                 status="ready",
                 backend="live",
@@ -387,7 +472,7 @@ def create_app(
             "status": status,
             "cache": deps.cache.get_metrics(),
             "circuit_breaker": metrics,
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
 
     @app.get("/v1/trials", response_model=TrialsListResponse)
@@ -463,6 +548,7 @@ def create_app(
                     limit=limit,
                     sort=sort,
                 )
+                snap_id, snap_ts = deps.warehouse.get_snapshot_metadata()
             except ValueError as val_err:
                 return create_problem_response(
                     400,
@@ -471,6 +557,28 @@ def create_app(
                     str(request.url),
                     code="INVALID_CURSOR",
                 )
+            except TimeoutError as timeout_err:
+                logger.warning("Warehouse connection pool timed out", exc_info=timeout_err)
+                res = create_problem_response(
+                    503,
+                    "Service Unavailable",
+                    "The warehouse is temporarily saturated. Please retry after a brief pause.",
+                    str(request.url),
+                    code="WAREHOUSE_BUSY",
+                )
+                res.headers["Retry-After"] = "5"
+                return res
+            except WarehouseNotReadyError as not_ready_err:
+                logger.warning("Warehouse not ready during search", exc_info=not_ready_err)
+                res = create_problem_response(
+                    503,
+                    "Service Unavailable",
+                    f"Warehouse is not ready: {not_ready_err}",
+                    str(request.url),
+                    code="WAREHOUSE_NOT_READY",
+                )
+                res.headers["Retry-After"] = "5"
+                return res
             except Exception as err:
                 logger.error("Warehouse search failed", exc_info=err)
                 return create_problem_response(
@@ -481,17 +589,11 @@ def create_app(
                     code="WAREHOUSE_QUERY_ERROR",
                 )
 
-            snap_id, snap_ts = deps.warehouse.get_snapshot_metadata()
-            payload_str = json.dumps(result.model_dump(), sort_keys=True, separators=(",", ":"))
-            etag = f'W/"{hashlib.sha256(payload_str.encode("utf-8")).hexdigest()[:16]}"'
-
-            response.headers["Data-Snapshot"] = snap_id
-            response.headers["Data-Updated"] = snap_ts
-            response.headers["ETag"] = etag
-            response.headers["Cache-Control"] = "public, max-age=300"
-
-            if request.headers.get("if-none-match") == etag:
-                return Response(status_code=304, headers=dict(response.headers))
+            not_modified_resp = apply_cache_headers_and_check_etag(
+                request, response, result.model_dump(), snap_id, snap_ts
+            )
+            if not_modified_resp is not None:
+                return not_modified_resp
 
             return result
 
@@ -607,6 +709,29 @@ def create_app(
         if deps.warehouse is not None:
             try:
                 detail = deps.warehouse.get_trial_detail(canonical_nct, lat=lat, lon=lon)
+                snap_id, snap_ts = deps.warehouse.get_snapshot_metadata()
+            except TimeoutError as timeout_err:
+                logger.warning("Warehouse connection pool timed out", exc_info=timeout_err)
+                res = create_problem_response(
+                    503,
+                    "Service Unavailable",
+                    "The warehouse is temporarily saturated. Please retry after a brief pause.",
+                    str(request.url),
+                    code="WAREHOUSE_BUSY",
+                )
+                res.headers["Retry-After"] = "5"
+                return res
+            except WarehouseNotReadyError as not_ready_err:
+                logger.warning("Warehouse not ready during detail query", exc_info=not_ready_err)
+                res = create_problem_response(
+                    503,
+                    "Service Unavailable",
+                    f"Warehouse is not ready: {not_ready_err}",
+                    str(request.url),
+                    code="WAREHOUSE_NOT_READY",
+                )
+                res.headers["Retry-After"] = "5"
+                return res
             except Exception as err:
                 logger.error("Warehouse detail query failed", exc_info=err)
                 return create_problem_response(
@@ -626,17 +751,11 @@ def create_app(
                     code="STUDY_NOT_FOUND",
                 )
 
-            snap_id, snap_ts = deps.warehouse.get_snapshot_metadata()
-            payload_str = json.dumps(detail.model_dump(), sort_keys=True, separators=(",", ":"))
-            etag = f'W/"{hashlib.sha256(payload_str.encode("utf-8")).hexdigest()[:16]}"'
-
-            response.headers["Data-Snapshot"] = snap_id
-            response.headers["Data-Updated"] = snap_ts
-            response.headers["ETag"] = etag
-            response.headers["Cache-Control"] = "public, max-age=300"
-
-            if request.headers.get("if-none-match") == etag:
-                return Response(status_code=304, headers=dict(response.headers))
+            not_modified_resp = apply_cache_headers_and_check_etag(
+                request, response, detail.model_dump(), snap_id, snap_ts
+            )
+            if not_modified_resp is not None:
+                return not_modified_resp
 
             return detail
 

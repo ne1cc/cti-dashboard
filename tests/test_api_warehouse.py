@@ -4,7 +4,7 @@ Tests:
 1. DuckDBConnectionPool concurrency, thread safety, bounded capacity, timeout, read-only mode.
 2. Parameterized SQL query execution over all filters (cond, status, phase, age, sex, volunteers,
    std_age_group, sponsor_class, intervention_type, updated_since, lat/lon/radius).
-3. Keyset cursor pagination over stable primary sort keys and tie-breaker.
+3. Keyset cursor pagination over sort keys and tie-breaker (including NULL sort keys).
 4. Detail endpoint (/v1/trials/{nct_id}) with site distances and study designs.
 5. Strict ADR 0065 compliance: zero investigator/coordinator contact PII.
 6. Liveness (/healthz) and readiness (/readyz) diagnostic endpoints.
@@ -14,6 +14,7 @@ Tests:
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 from collections.abc import Generator
@@ -33,11 +34,11 @@ from src.api.warehouse import (
 
 
 def _init_fixture_database(db_path: Path) -> None:
-    """Create sample warehouse database schema and populate with representative trial records."""
+    """Create sample warehouse database schema strictly matching real dbt models."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(db_path))
 
-    # Create tables in main schema
+    # 1. Marts tables
     con.execute("""
     CREATE TABLE dim_trial (
         trial_key VARCHAR,
@@ -75,12 +76,59 @@ def _init_fixture_database(db_path: Path) -> None:
         has_unspecified_min_age BOOLEAN,
         has_unspecified_max_age BOOLEAN,
         healthy_volunteers_unknown_flag BOOLEAN,
-        sex_eligibility_unknown_flag BOOLEAN,
-        snapshot_id VARCHAR,
-        snapshot_date DATE,
-        snapshot_timestamp_utc TIMESTAMP
+        sex_eligibility_unknown_flag BOOLEAN
     );
 
+    CREATE TABLE fct_trial_snapshot (
+        snapshot_key VARCHAR,
+        trial_key VARCHAR,
+        nct_id VARCHAR,
+        indication_profile_id VARCHAR,
+        ingestion_run_id VARCHAR,
+        snapshot_date DATE,
+        snapshot_timestamp_utc TIMESTAMPTZ,
+        overall_status VARCHAR,
+        previous_status VARCHAR,
+        status_changed_from_previous_snapshot_flag BOOLEAN,
+        entered_recruiting_flag BOOLEAN,
+        left_recruiting_flag BOOLEAN,
+        phase_normalized VARCHAR,
+        study_type VARCHAR,
+        enrollment_count INTEGER,
+        lead_sponsor_name VARCHAR,
+        lead_sponsor_normalized VARCHAR,
+        has_results_flag BOOLEAN,
+        study_first_post_date DATE,
+        record_quality_flag VARCHAR,
+        first_seen_snapshot_date DATE,
+        days_since_first_seen INTEGER,
+        condition_group_count INTEGER,
+        site_count_us INTEGER,
+        record_hash VARCHAR,
+        current_record_flag BOOLEAN
+    );
+
+    CREATE TABLE fct_trial_site (
+        trial_site_key VARCHAR,
+        trial_key VARCHAR,
+        site_key VARCHAR,
+        nct_id VARCHAR,
+        indication_profile_id VARCHAR,
+        ingestion_run_id VARCHAR,
+        snapshot_date DATE,
+        facility_name VARCHAR,
+        facility_normalized VARCHAR,
+        city VARCHAR,
+        city_normalized VARCHAR,
+        state_normalized VARCHAR,
+        zip_code VARCHAR,
+        location_status VARCHAR,
+        trial_overall_status VARCHAR,
+        phase_normalized VARCHAR,
+        lead_sponsor_normalized VARCHAR
+    );
+
+    -- 2. Staging tables
     CREATE TABLE stg_trials (
         ingestion_run_id VARCHAR,
         snapshot_id VARCHAR,
@@ -191,7 +239,7 @@ def _init_fixture_database(db_path: Path) -> None:
     );
     """)
 
-    # Populate Sample Trials
+    # Populate Sample Trials in dim_trial (strictly matching real dbt schema)
     con.execute("""
     INSERT INTO dim_trial VALUES
     (
@@ -201,8 +249,7 @@ def _init_fixture_database(db_path: Path) -> None:
         'NeuroPharm Inc', 'neuropharm inc', '2024-01-10', '2027-01-10', '2027-06-10', '2024-01-01',
         350, 'ESTIMATED', false, 'ok', '2026-09-01', '2026-09-01', true,
         '55 Years', '85 Years', 55.0, 85.0, ['ADULT', 'OLDER_ADULT'], 'ALL',
-        false, null, false, true, false, false, false, false, false,
-        'snap_20260901', '2026-09-01', '2026-09-01 12:00:00'
+        false, null, false, true, false, false, false, false, false
     ),
     (
         'key2', 'NCT00000002', 'adrd', 'https://clinicaltrials.gov/study/NCT00000002',
@@ -212,8 +259,7 @@ def _init_fixture_database(db_path: Path) -> None:
         '2023-06-01', '2026-12-01', '2027-01-01', '2023-05-15',
         120, 'ACTUAL', false, 'ok', '2026-09-01', '2026-09-01', true,
         '60 Years', null, 60.0, null, ['OLDER_ADULT'], 'FEMALE',
-        false, null, true, true, false, false, true, false, false,
-        'snap_20260901', '2026-09-01', '2026-09-01 12:00:00'
+        false, null, true, true, false, false, true, false, false
     ),
     (
         'key3', 'NCT00000003', 'oncology_nsclc', 'https://clinicaltrials.gov/study/NCT00000003',
@@ -223,8 +269,7 @@ def _init_fixture_database(db_path: Path) -> None:
         '2022-03-15', '2025-03-15', '2025-06-15', '2022-03-01',
         500, 'ACTUAL', true, 'ok', '2026-09-01', '2026-09-01', true,
         null, null, null, null, ['ADULT', 'OLDER_ADULT'], 'ALL',
-        false, null, false, true, false, true, true, false, false,
-        'snap_20260901', '2026-09-01', '2026-09-01 12:00:00'
+        false, null, false, true, false, true, true, false, false
     ),
     (
         'key4', 'NCT00000004', 'adrd', 'https://clinicaltrials.gov/study/NCT00000004',
@@ -234,11 +279,55 @@ def _init_fixture_database(db_path: Path) -> None:
         '2025-01-01', '2026-08-01', '2026-10-01', '2024-12-15',
         40, 'ESTIMATED', false, 'ok', '2026-09-01', '2026-09-01', true,
         '18 Years', '50 Years', 18.0, 50.0, ['ADULT'], 'MALE',
-        false, null, true, true, false, false, false, false, false,
-        'snap_20260901', '2026-09-01', '2026-09-01 12:00:00'
+        false, null, true, true, false, false, false, false, false
     );
     """)
 
+    # Populate fct_trial_snapshot
+    con.execute("""
+    INSERT INTO fct_trial_snapshot VALUES
+    ('snap_k1', 'key1', 'NCT00000001', 'adrd', 'run_01', '2026-09-01', '2026-09-01 12:00:00Z',
+     'RECRUITING', null, false, true, false, 'PHASE3', 'INTERVENTIONAL', 350,
+     'NeuroPharm Inc', 'neuropharm inc', false, '2024-01-01', 'ok', '2026-09-01',
+     0, 1, 1, 'h1', true),
+    ('snap_k2', 'key2', 'NCT00000002', 'adrd', 'run_01', '2026-09-01', '2026-09-01 12:00:00Z',
+     'ACTIVE_NOT_RECRUITING', null, false, false, false, 'PHASE2', 'INTERVENTIONAL', 120,
+     'Cedar Cognitive Institute', 'cedar cognitive institute', false,
+     '2023-05-15', 'ok', '2026-09-01',
+     0, 1, 1, 'h2', true),
+    ('snap_k3', 'key3', 'NCT00000003', 'oncology_nsclc', 'run_01',
+     '2026-09-01', '2026-09-01 12:00:00Z',
+     'COMPLETED', null, false, false, false, 'PHASE3', 'INTERVENTIONAL', 500,
+     'OncoTarget Corp', 'oncotarget corp', true, '2022-03-01', 'ok', '2026-09-01',
+     0, 1, 0, 'h3', true),
+    ('snap_k4', 'key4', 'NCT00000004', 'adrd', 'run_01', '2026-09-01', '2026-09-01 12:00:00Z',
+     'RECRUITING', null, false, true, false, 'PHASE1', 'INTERVENTIONAL', 40,
+     'BioGenix Labs', 'biogenix labs', false, '2024-12-15', 'ok', '2026-09-01',
+     0, 1, 1, 'h4', true);
+    """)
+
+    # Populate fct_trial_site
+    con.execute("""
+    INSERT INTO fct_trial_site VALUES
+    ('site_k1', 'key1', 'site1', 'NCT00000001', 'adrd', 'run_01', '2026-09-01',
+     'UCSF Memory and Aging Center', 'ucsf memory and aging center',
+     'San Francisco', 'san francisco', 'CA', '94143', 'RECRUITING',
+     'RECRUITING', 'PHASE3', 'neuropharm inc'),
+    ('site_k2', 'key1', 'site2', 'NCT00000001', 'adrd', 'run_01', '2026-09-01',
+     'Mass General Hospital', 'mass general hospital',
+     'Boston', 'boston', 'MA', '02114', 'RECRUITING',
+     'RECRUITING', 'PHASE3', 'neuropharm inc'),
+    ('site_k3', 'key2', 'site3', 'NCT00000002', 'adrd', 'run_01', '2026-09-01',
+     'Duke Health Clinic', 'duke health clinic',
+     'Durham', 'durham', 'NC', '27710', 'ACTIVE_NOT_RECRUITING',
+     'ACTIVE_NOT_RECRUITING', 'PHASE2', 'cedar cognitive institute'),
+    ('site_k4', 'key4', 'site4', 'NCT00000004', 'adrd', 'run_01', '2026-09-01',
+     'UCLA Health Center', 'ucla health center',
+     'Los Angeles', 'los angeles', 'CA', '90095', 'RECRUITING',
+     'RECRUITING', 'PHASE1', 'biogenix labs');
+    """)
+
+    # Populate stg_trials
     con.execute("""
     INSERT INTO stg_trials VALUES
     (
@@ -488,6 +577,8 @@ def test_readiness_readyz_success(client_warehouse: TestClient) -> None:
     assert status.database_accessible is True
     assert status.snapshot_id == "snap_20260901"
     assert status.trials_count == 4
+    # RFC 3339 UTC assertion
+    assert re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$", status.snapshot_timestamp_utc)
 
 
 def test_readiness_readyz_missing_database(tmp_path: Path) -> None:
@@ -499,6 +590,22 @@ def test_readiness_readyz_missing_database(tmp_path: Path) -> None:
         assert resp.headers["content-type"].startswith("application/problem+json")
         body = resp.json()
         assert body["code"] == "WAREHOUSE_NOT_READY"
+
+
+def test_readiness_readyz_missing_required_table(tmp_path: Path) -> None:
+    db_file = tmp_path / "incomplete.duckdb"
+    con = duckdb.connect(str(db_file))
+    con.execute("CREATE TABLE dim_trial (nct_id VARCHAR);")
+    con.close()
+
+    container = APIContainer(warehouse_path=db_file)
+    with TestClient(create_app(container=container)) as client:
+        resp = client.get("/readyz")
+        assert resp.status_code == 503
+        assert resp.headers["content-type"].startswith("application/problem+json")
+        body = resp.json()
+        assert body["code"] == "WAREHOUSE_NOT_READY"
+        assert "missing required tables" in body["detail"]
 
 
 # --- 3. Parameterized Search Tests ---
@@ -513,9 +620,10 @@ def test_warehouse_search_all_trials(client_warehouse: TestClient) -> None:
     assert list_resp.pagination.total_count == 4
     assert list_resp.pagination.has_more is False
 
-    # Check response headers
+    # Check response headers and RFC 3339 format
     assert resp.headers["Data-Snapshot"] == "snap_20260901"
     assert "Data-Updated" in resp.headers
+    assert re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$", resp.headers["Data-Updated"])
     assert "ETag" in resp.headers
     assert resp.headers["Cache-Control"] == "public, max-age=300"
 
@@ -668,7 +776,7 @@ def test_missing_coordinates_for_distance_sort(client_warehouse: TestClient) -> 
     assert body["code"] == "MISSING_COORDINATES_FOR_SORT"
 
 
-# --- 5. Keyset Cursor Pagination Tests ---
+# --- 5. Keyset Cursor Pagination Tests (Including NULL-safe Pagination) ---
 
 
 def test_warehouse_keyset_cursor_pagination_updated(client_warehouse: TestClient) -> None:
@@ -697,6 +805,156 @@ def test_warehouse_keyset_cursor_pagination_updated(client_warehouse: TestClient
     assert len(page1_ids + page2_ids) == 4
 
 
+def test_keyset_pagination_with_null_dates_across_all_date_sorts(tmp_path: Path) -> None:
+    """Test Critical C2: Pagination walking pages where sort dates are NULL across boundaries."""
+    db_file = tmp_path / "null_dates_pagination.duckdb"
+    con = duckdb.connect(str(db_file))
+
+    con.execute("""
+    CREATE TABLE dim_trial (
+        nct_id VARCHAR,
+        current_brief_title VARCHAR,
+        current_overall_status VARCHAR,
+        current_phase VARCHAR,
+        current_study_type VARCHAR,
+        current_lead_sponsor VARCHAR,
+        start_date DATE,
+        min_age_years DOUBLE,
+        max_age_years DOUBLE,
+        sex_eligibility VARCHAR,
+        accepts_healthy_volunteers BOOLEAN,
+        std_age_groups VARCHAR[],
+        registry_url VARCHAR,
+        latest_seen_snapshot_date DATE
+    );
+
+    CREATE TABLE fct_trial_snapshot (
+        nct_id VARCHAR,
+        snapshot_date DATE,
+        snapshot_timestamp_utc TIMESTAMPTZ,
+        current_record_flag BOOLEAN
+    );
+
+    CREATE TABLE fct_trial_site (
+        nct_id VARCHAR,
+        facility_name VARCHAR
+    );
+
+    CREATE TABLE stg_trials (
+        nct_id VARCHAR,
+        ingestion_run_id VARCHAR,
+        snapshot_id VARCHAR,
+        snapshot_timestamp_utc TIMESTAMPTZ,
+        snapshot_date DATE,
+        last_update_post_date DATE
+    );
+
+    CREATE TABLE stg_trial_locations (
+        nct_id VARCHAR,
+        ingestion_run_id VARCHAR,
+        facility_name VARCHAR,
+        city VARCHAR,
+        state_raw VARCHAR,
+        state_normalized VARCHAR,
+        latitude DOUBLE,
+        longitude DOUBLE
+    );
+
+    CREATE TABLE stg_trial_conditions (
+        nct_id VARCHAR,
+        ingestion_run_id VARCHAR,
+        condition_raw VARCHAR,
+        condition_group VARCHAR,
+        condition_normalized VARCHAR
+    );
+
+    CREATE TABLE stg_trial_sponsors (
+        nct_id VARCHAR,
+        ingestion_run_id VARCHAR,
+        sponsor_name VARCHAR,
+        sponsor_role VARCHAR,
+        sponsor_class VARCHAR
+    );
+
+    CREATE TABLE stg_trial_interventions (
+        nct_id VARCHAR,
+        ingestion_run_id VARCHAR,
+        intervention_name VARCHAR,
+        intervention_type VARCHAR
+    );
+    """)
+
+    # 5 trials: 2 with dates, 3 with NULL dates
+    trials_meta = [
+        ("NCT00000001", "2024-01-01", "2024-06-01"),
+        ("NCT00000002", "2023-01-01", "2023-06-01"),
+        ("NCT00000003", None, None),
+        ("NCT00000004", None, None),
+        ("NCT00000005", None, None),
+    ]
+
+    for nct, s_date, u_date in trials_meta:
+        s_date_sql = f"'{s_date}'" if s_date else "NULL"
+        u_date_sql = f"'{u_date}'" if u_date else "NULL"
+        con.execute(f"""
+        INSERT INTO dim_trial (
+            nct_id, current_brief_title, current_overall_status, current_phase,
+            current_study_type, current_lead_sponsor, start_date, registry_url,
+            latest_seen_snapshot_date
+        ) VALUES (
+            '{nct}', 'Title {nct}', 'RECRUITING', 'PHASE3',
+            'INTERVENTIONAL', 'Sponsor', {s_date_sql}, 'https://url', '2026-09-01'
+        );
+
+        INSERT INTO fct_trial_snapshot VALUES ('{nct}', '2026-09-01', '2026-09-01 12:00:00Z', true);
+
+        INSERT INTO stg_trials (
+            nct_id, ingestion_run_id, snapshot_id, snapshot_timestamp_utc,
+            snapshot_date, last_update_post_date
+        ) VALUES (
+            '{nct}', 'run_01', 'snap_01', '2026-09-01 12:00:00Z',
+            '2026-09-01', {u_date_sql}
+        );
+        """)
+
+    con.close()
+
+    mgr = DuckDBWarehouseManager(db_file)
+    container = APIContainer(warehouse=mgr)
+    app = create_app(container=container)
+
+    with TestClient(app) as client:
+        # Test all 4 date sorts across page boundaries with limit=2
+        for sort_key in ("-updated", "updated", "-start_date", "start_date"):
+            collected_ids: list[str] = []
+            cursor: str | None = None
+            for _ in range(10):  # At most 10 iterations to walk 5 items
+                url = f"/v1/trials?limit=2&sort={sort_key}"
+                if cursor:
+                    url += f"&cursor={cursor}"
+                resp = client.get(url)
+                assert resp.status_code == 200, f"Sort {sort_key} failed on url {url}"
+                data = resp.json()
+                page_ids = [item["nct_id"] for item in data["items"]]
+                collected_ids.extend(page_ids)
+                cursor = data["pagination"]["next_cursor"]
+                if not data["pagination"]["has_more"]:
+                    break
+
+            expected_ids = {
+                "NCT00000001",
+                "NCT00000002",
+                "NCT00000003",
+                "NCT00000004",
+                "NCT00000005",
+            }
+            assert len(collected_ids) == 5, f"Sort {sort_key} dropped rows: {collected_ids}"
+            assert set(collected_ids) == expected_ids, f"Sort {sort_key} missing rows"
+            assert len(set(collected_ids)) == 5, f"Sort {sort_key} contained duplicates"
+
+    mgr.close()
+
+
 def test_invalid_cursor_handling(client_warehouse: TestClient) -> None:
     resp = client_warehouse.get("/v1/trials?cursor=invalid_not_base64_json")
     assert resp.status_code == 400
@@ -713,6 +971,16 @@ def test_cursor_sort_mismatch_handling(client_warehouse: TestClient) -> None:
     body = resp.json()
     assert body["code"] == "INVALID_CURSOR"
     assert "Cursor sort order" in body["detail"]
+
+
+def test_cursor_malformed_types_handling(client_warehouse: TestClient) -> None:
+    """Test Minor 6: crafted cursor with unexpected types does not raise 500."""
+    bad_dist = encode_keyset_cursor(
+        {"sort": "-updated", "v": "2024-01-01", "dist": "not_a_float", "id": "NCT00000001"}
+    )
+    resp = client_warehouse.get(f"/v1/trials?sort=-updated&cursor={bad_dist}")
+    assert resp.status_code == 400
+    assert resp.json()["code"] == "INVALID_CURSOR"
 
 
 # --- 6. Protocol Detail & Privacy Tests ---
@@ -764,6 +1032,58 @@ def test_warehouse_trial_detail_invalid_nct_id(client_warehouse: TestClient) -> 
     assert body["code"] == "INVALID_NCT_ID"
 
 
+def test_multi_ingestion_runs_child_records_not_duplicated(warehouse_db: Path) -> None:
+    """Test Important I2: Child table joins must be scoped to active ingestion run."""
+    con = duckdb.connect(str(warehouse_db))
+    # Insert older run_00 child rows for NCT00000001
+    con.execute("""
+    INSERT INTO stg_trial_locations VALUES
+    ('run_00', 'snap_20260801', '2026-08-01 12:00:00Z', 'page=00001.json', 1, 'adrd',
+     'NCT00000001', 99, 'Old Duplicate Facility', 'old duplicate facility', 'Old City',
+     'old city', 'CA', 'CA', '90000', 'United States', 'US', 37.0, -122.0,
+     'RECRUITING', true, true, 'h_old');
+
+    INSERT INTO stg_trial_conditions VALUES
+    ('run_00', 'adrd', 'NCT00000001', 'Old Duplicate Condition',
+     'old duplicate condition', 'Old Group', true, 1.0, 'hc_old');
+
+    INSERT INTO stg_trial_sponsors VALUES
+    ('run_00', 'adrd', 'NCT00000001', 'Old Sponsor Corp',
+     'collaborator', 'INDUSTRY', 'old sponsor corp', 'hs_old');
+
+    INSERT INTO stg_trial_interventions VALUES
+    ('run_00', 'adrd', 'NCT00000001', 'Old Drug', 'DRUG',
+     'Old description', 'old drug', 'hi_old');
+    """)
+    con.close()
+
+    mgr = DuckDBWarehouseManager(warehouse_db)
+    container = APIContainer(warehouse=mgr)
+    with TestClient(create_app(container=container)) as client:
+        resp = client.get("/v1/trials/NCT00000001")
+        assert resp.status_code == 200
+        detail = resp.json()
+
+        # Sites: only run_01's 2 sites, not 3
+        assert len(detail["sites"]) == 2
+        assert not any("Old Duplicate Facility" in s["facility_name"] for s in detail["sites"])
+
+        # Conditions: only run_01's 2 conditions, not 3
+        assert len(detail["conditions"]) == 2
+        assert not any(
+            c["condition_raw"] == "Old Duplicate Condition" for c in detail["conditions"]
+        )
+
+        # Collaborators: only run_01's 1 collaborator, not 2
+        assert len(detail["sponsors"]["collaborators"]) == 1
+        assert not any(c["name"] == "Old Sponsor Corp" for c in detail["sponsors"]["collaborators"])
+
+        # Interventions: only run_01's 1 intervention, not 2
+        assert len(detail["interventions"]) == 1
+        assert not any(i["intervention_name"] == "Old Drug" for i in detail["interventions"])
+    mgr.close()
+
+
 # --- 7. Caching Headers & ETag Validation (HTTP 304) ---
 
 
@@ -773,15 +1093,77 @@ def test_etag_and_conditional_if_none_match(client_warehouse: TestClient) -> Non
     etag = resp1.headers.get("ETag")
     assert etag is not None
 
-    # Second request with If-None-Match header
+    # Exact match
     resp2 = client_warehouse.get("/v1/trials", headers={"If-None-Match": etag})
     assert resp2.status_code == 304
     assert resp2.headers.get("ETag") == etag
     assert not resp2.content
 
+    # Wildcard match
+    resp_wildcard = client_warehouse.get("/v1/trials", headers={"If-None-Match": "*"})
+    assert resp_wildcard.status_code == 304
 
-def test_custom_request_id_preserved(client_warehouse: TestClient) -> None:
+    # Comma-separated match
+    resp_comma = client_warehouse.get(
+        "/v1/trials", headers={"If-None-Match": f'W/"mismatch", {etag}'}
+    )
+    assert resp_comma.status_code == 304
+
+
+def test_etag_deterministic_stability(client_warehouse: TestClient) -> None:
+    """Test Important I1: ETag must be completely deterministic across repeated calls."""
+    etags: list[str] = []
+    for _ in range(25):
+        resp = client_warehouse.get("/v1/trials")
+        assert resp.status_code == 200
+        etags.append(resp.headers["ETag"])
+    assert len(set(etags)) == 1, f"ETags differed across runs: {set(etags)}"
+
+
+def test_warehouse_pool_saturation_returns_503_busy(warehouse_db: Path) -> None:
+    """Test Important I4: Pool saturation returns 503 WAREHOUSE_BUSY with Retry-After."""
+    mgr = DuckDBWarehouseManager(warehouse_db, max_connections=1, timeout=0.1)
+    conn = mgr.pool.acquire()
+    try:
+        container = APIContainer(warehouse=mgr)
+        with TestClient(create_app(container=container)) as client:
+            # Search endpoint
+            resp_search = client.get("/v1/trials")
+            assert resp_search.status_code == 503
+            assert resp_search.json()["code"] == "WAREHOUSE_BUSY"
+            assert resp_search.headers.get("Retry-After") == "5"
+
+            # Detail endpoint
+            resp_detail = client.get("/v1/trials/NCT00000001")
+            assert resp_detail.status_code == 503
+            assert resp_detail.json()["code"] == "WAREHOUSE_BUSY"
+            assert resp_detail.headers.get("Retry-After") == "5"
+    finally:
+        mgr.pool.release(conn)
+        mgr.close()
+
+
+def test_custom_request_id_preserved_and_capped(client_warehouse: TestClient) -> None:
     custom_req_id = "test-corr-id-12345"
     resp = client_warehouse.get("/v1/trials", headers={"X-Request-ID": custom_req_id})
     assert resp.status_code == 200
     assert resp.headers.get("X-Request-ID") == custom_req_id
+
+    # Test capped at 128 characters
+    long_id = "a" * 200
+    resp_long = client_warehouse.get("/v1/trials", headers={"X-Request-ID": long_id})
+    assert resp_long.status_code == 200
+    assert resp_long.headers.get("X-Request-ID") == long_id[:128]
+
+
+def test_cors_credentials_false_when_wildcard(client_warehouse: TestClient) -> None:
+    """Test Minor 3: allow_credentials is false when origins is wildcard."""
+    resp = client_warehouse.options(
+        "/v1/trials",
+        headers={
+            "Origin": "https://example.com",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    # With wildcard origins and allow_credentials=False, allow-credentials header is omitted
+    assert resp.headers.get("access-control-allow-credentials") is None

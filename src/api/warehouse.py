@@ -47,6 +47,17 @@ SQL_DIR = Path(__file__).resolve().parent / "sql"
 SEARCH_SQL_PATH = SQL_DIR / "search.sql"
 DETAIL_SQL_PATH = SQL_DIR / "detail.sql"
 
+REQUIRED_TABLES = (
+    "dim_trial",
+    "fct_trial_snapshot",
+    "fct_trial_site",
+    "stg_trials",
+    "stg_trial_locations",
+    "stg_trial_sponsors",
+    "stg_trial_conditions",
+    "stg_trial_interventions",
+)
+
 
 class WarehouseNotReadyError(Exception):
     """Raised when warehouse database is missing, corrupted, or inaccessible."""
@@ -204,7 +215,7 @@ class DuckDBWarehouseManager:
 
     def check_readiness(self) -> ReadinessStatus:
         """Execute readiness diagnostic verifying database access, schema, and freshness."""
-        now_iso = datetime.now(UTC).isoformat()
+        now_iso = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         if not self.database_path.exists():
             raise WarehouseNotReadyError(
                 f"Warehouse database file does not exist at {self.database_path}"
@@ -212,65 +223,69 @@ class DuckDBWarehouseManager:
 
         try:
             with self.pool.connection() as conn:
-                # 1. Verify schema tables
+                # 1. Verify all required schema tables exist
                 tables_res = conn.execute(
-                    "SELECT table_name FROM information_schema.tables "
-                    "WHERE table_name IN ('dim_trial', 'stg_trials');"
+                    "SELECT DISTINCT lower(table_name) FROM information_schema.tables;"
                 ).fetchall()
                 found_tables = {row[0] for row in tables_res}
-                if "dim_trial" not in found_tables and "stg_trials" not in found_tables:
+                missing_tables = [t for t in REQUIRED_TABLES if t not in found_tables]
+                if missing_tables:
                     raise WarehouseNotReadyError(
-                        "Warehouse missing required relations: dim_trial or stg_trials"
+                        f"Warehouse missing required tables: {', '.join(sorted(missing_tables))}"
                     )
 
-                # 2. Extract snapshot metadata and trials count
-                row = None
-                try:
-                    row = conn.execute(
-                        "SELECT "
-                        "  COALESCE(snapshot_id, 'initial') AS snapshot_id, "
-                        "  CAST(COALESCE(snapshot_date, current_date) AS VARCHAR) "
-                        "    AS snapshot_date, "
-                        "  CAST(COALESCE(snapshot_timestamp_utc, now()) AS VARCHAR) "
-                        "    AS snapshot_timestamp_utc, "
-                        "  COUNT(*) AS trial_count "
-                        "FROM dim_trial "
-                        "GROUP BY 1, 2, 3 "
-                        "ORDER BY 3 DESC "
-                        "LIMIT 1;"
-                    ).fetchone()
-                except Exception:
-                    row = None
-
-                if row is None:
-                    try:
-                        cnt_row = conn.execute("SELECT COUNT(*) FROM dim_trial;").fetchone()
-                        cnt = cnt_row[0] if cnt_row else 0
-                    except Exception:
-                        cnt = 0
-                    return ReadinessStatus(
-                        status="ready",
-                        backend="warehouse",
-                        database_accessible=True,
-                        snapshot_id="empty",
-                        snapshot_date=date.today().isoformat(),
-                        snapshot_timestamp_utc=now_iso,
-                        trials_count=cnt,
-                        timestamp=now_iso,
-                    )
+                # 2. Extract snapshot metadata and trials count strictly from real schema
+                meta_query = """
+                SELECT
+                    st.snapshot_id,
+                    CAST(COALESCE(st.snapshot_date, dt.max_date) AS VARCHAR) AS snapshot_date,
+                    strftime(
+                        timezone('UTC', st.snapshot_timestamp_utc),
+                        '%Y-%m-%dT%H:%M:%SZ'
+                    ) AS snapshot_timestamp_utc,
+                    dt.trial_count
+                FROM (
+                    SELECT
+                        COUNT(DISTINCT nct_id) AS trial_count,
+                        MAX(latest_seen_snapshot_date) AS max_date
+                    FROM dim_trial
+                ) dt
+                CROSS JOIN (
+                    SELECT
+                        snapshot_id,
+                        snapshot_date,
+                        snapshot_timestamp_utc
+                    FROM stg_trials
+                    WHERE snapshot_timestamp_utc IS NOT NULL
+                    ORDER BY snapshot_timestamp_utc DESC, ingestion_run_id DESC
+                    LIMIT 1
+                ) st;
+                """
+                row = conn.execute(meta_query).fetchone()
+                if row is None or not row[0]:
+                    raise WarehouseNotReadyError("No snapshot metadata found in warehouse tables")
 
                 snap_id, snap_date, snap_ts, count = row
-                self._cached_snapshot_meta = (str(snap_id), str(snap_ts))
+                if isinstance(snap_ts, datetime):
+                    if snap_ts.tzinfo is None:
+                        snap_ts = snap_ts.replace(tzinfo=UTC)
+                    snap_ts_str = snap_ts.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+                else:
+                    snap_ts_str = str(snap_ts)
+
+                self._cached_snapshot_meta = (str(snap_id), snap_ts_str)
                 return ReadinessStatus(
                     status="ready",
                     backend="warehouse",
                     database_accessible=True,
                     snapshot_id=str(snap_id),
                     snapshot_date=str(snap_date),
-                    snapshot_timestamp_utc=str(snap_ts),
+                    snapshot_timestamp_utc=snap_ts_str,
                     trials_count=int(count),
                     timestamp=now_iso,
                 )
+        except WarehouseNotReadyError:
+            raise
         except Exception as err:
             logger.error("Warehouse readiness check failed", exc_info=err)
             raise WarehouseNotReadyError(f"Warehouse check failed: {err}") from err
@@ -280,17 +295,10 @@ class DuckDBWarehouseManager:
         if self._cached_snapshot_meta is not None:
             return self._cached_snapshot_meta
 
-        try:
-            status = self.check_readiness()
-            meta = (
-                status.snapshot_id or "warehouse",
-                status.snapshot_timestamp_utc or datetime.now(UTC).isoformat(),
-            )
-            self._cached_snapshot_meta = meta
-            return meta
-        except Exception:
-            fallback = ("warehouse", datetime.now(UTC).isoformat())
-            return fallback
+        status = self.check_readiness()
+        if not status.snapshot_id or not status.snapshot_timestamp_utc:
+            raise WarehouseNotReadyError("Warehouse snapshot metadata is incomplete")
+        return (status.snapshot_id, status.snapshot_timestamp_utc)
 
     def search_trials(
         self,
@@ -328,8 +336,22 @@ class DuckDBWarehouseManager:
                 )
             has_cursor = True
             cursor_val = cursor_data.get("v")
-            cursor_dist = cursor_data.get("dist")
-            cursor_id = cursor_data.get("id")
+            if cursor_val is not None and not isinstance(cursor_val, str):
+                raise ValueError("Cursor value 'v' must be a string or null")
+
+            raw_dist = cursor_data.get("dist")
+            if raw_dist is not None:
+                try:
+                    cursor_dist = float(raw_dist)
+                except (ValueError, TypeError) as err:
+                    raise ValueError(f"Cursor distance must be a valid float: {err}") from err
+            else:
+                cursor_dist = None
+
+            cursor_id_val = cursor_data.get("id")
+            if cursor_id_val is not None and not isinstance(cursor_id_val, str):
+                raise ValueError("Cursor 'id' must be a string")
+            cursor_id = cursor_id_val
 
         params: dict[str, Any] = {
             "cond": cond.strip() if cond else None,
@@ -584,7 +606,8 @@ class DuckDBWarehouseManager:
             ingestion_run_id=r.get("ingestion_run_id") or "warehouse",
             snapshot_id=r.get("snapshot_id") or "warehouse",
             snapshot_date=r.get("snapshot_date") or date.today().isoformat(),
-            snapshot_timestamp_utc=r.get("snapshot_timestamp_utc") or datetime.now(UTC).isoformat(),
+            snapshot_timestamp_utc=r.get("snapshot_timestamp_utc")
+            or datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             source_json_hash=r.get("source_json_hash") or "",
             record_quality_flag=r.get("record_quality_flag") or "ok",
             retrieved_at_utc=r.get("retrieved_at_utc"),

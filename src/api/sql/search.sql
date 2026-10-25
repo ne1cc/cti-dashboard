@@ -1,23 +1,47 @@
 -- Search trials across warehouse marts and staging tables with full parameterization.
 -- Strictly complies with ADR 0065: zero coordinator/investigator contact PII.
 
-WITH distinct_trials AS (
+WITH latest_trial_run AS (
     SELECT
         nct_id,
-        current_brief_title AS brief_title,
-        current_overall_status AS overall_status,
-        current_phase AS phase,
-        current_study_type AS study_type,
-        current_lead_sponsor AS lead_sponsor,
-        CAST(start_date AS VARCHAR) AS start_date,
-        min_age_years,
-        max_age_years,
-        sex_eligibility,
-        accepts_healthy_volunteers,
-        std_age_groups,
-        registry_url,
-        ROW_NUMBER() OVER (PARTITION BY nct_id ORDER BY latest_seen_snapshot_date DESC) AS trial_rn
-    FROM dim_trial
+        ingestion_run_id,
+        last_update_post_date,
+        ROW_NUMBER() OVER (
+            PARTITION BY nct_id 
+            ORDER BY snapshot_timestamp_utc DESC, ingestion_run_id DESC
+        ) AS run_rn
+    FROM stg_trials
+),
+
+active_trial_runs AS (
+    SELECT
+        nct_id,
+        ingestion_run_id,
+        CAST(last_update_post_date AS VARCHAR) AS last_update_post_date
+    FROM latest_trial_run
+    WHERE run_rn = 1
+),
+
+distinct_trials AS (
+    SELECT
+        dt.nct_id,
+        dt.current_brief_title AS brief_title,
+        dt.current_overall_status AS overall_status,
+        dt.current_phase AS phase,
+        dt.current_study_type AS study_type,
+        dt.current_lead_sponsor AS lead_sponsor,
+        CAST(dt.start_date AS VARCHAR) AS start_date,
+        dt.min_age_years,
+        dt.max_age_years,
+        dt.sex_eligibility,
+        dt.accepts_healthy_volunteers,
+        dt.std_age_groups,
+        dt.registry_url,
+        atr.ingestion_run_id,
+        atr.last_update_post_date,
+        ROW_NUMBER() OVER (PARTITION BY dt.nct_id ORDER BY dt.latest_seen_snapshot_date DESC) AS trial_rn
+    FROM dim_trial dt
+    LEFT JOIN active_trial_runs atr ON dt.nct_id = atr.nct_id
 ),
 
 nearest_sites AS (
@@ -30,23 +54,25 @@ nearest_sites AS (
         ROW_NUMBER() OVER (PARTITION BY nct_id ORDER BY distance_miles ASC) AS site_rn
     FROM (
         SELECT
-            nct_id,
-            facility_name,
-            city,
-            COALESCE(state_raw, state_normalized) AS state,
+            loc.nct_id,
+            loc.facility_name,
+            loc.city,
+            COALESCE(loc.state_raw, loc.state_normalized) AS state,
             CASE
-                WHEN $lat IS NOT NULL AND $lon IS NOT NULL AND latitude IS NOT NULL AND longitude IS NOT NULL THEN
+                WHEN $lat IS NOT NULL AND $lon IS NOT NULL AND loc.latitude IS NOT NULL AND loc.longitude IS NOT NULL THEN
                     2 * 3958.8 * asin(sqrt(
                         greatest(0.0, least(1.0,
-                            power(sin(radians(latitude - $lat) / 2.0), 2) +
-                            cos(radians($lat)) * cos(radians(latitude)) *
-                            power(sin(radians(longitude - $lon) / 2.0), 2)
+                            power(sin(radians(loc.latitude - $lat) / 2.0), 2) +
+                            cos(radians($lat)) * cos(radians(loc.latitude)) *
+                            power(sin(radians(loc.longitude - $lon) / 2.0), 2)
                         ))
                     ))
                 ELSE NULL
             END AS distance_miles
-        FROM stg_trial_locations
-        WHERE ($lat IS NULL OR (latitude IS NOT NULL AND longitude IS NOT NULL))
+        FROM stg_trial_locations loc
+        INNER JOIN active_trial_runs atr
+            ON loc.nct_id = atr.nct_id AND loc.ingestion_run_id = atr.ingestion_run_id
+        WHERE ($lat IS NULL OR (loc.latitude IS NOT NULL AND loc.longitude IS NOT NULL))
     )
 ),
 
@@ -61,18 +87,17 @@ matched_candidates AS (
         (
             SELECT min(ts.sponsor_class)
             FROM stg_trial_sponsors ts
-            WHERE ts.nct_id = dt.nct_id AND ts.sponsor_role = 'lead_sponsor'
+            WHERE ts.nct_id = dt.nct_id
+              AND (dt.ingestion_run_id IS NULL OR ts.ingestion_run_id = dt.ingestion_run_id)
+              AND ts.sponsor_role = 'lead_sponsor'
         ) AS sponsor_class,
         dt.start_date,
+        dt.last_update_post_date,
         (
-            SELECT max(CAST(st.last_update_post_date AS VARCHAR))
-            FROM stg_trials st
-            WHERE st.nct_id = dt.nct_id
-        ) AS last_update_post_date,
-        (
-            SELECT list(DISTINCT tc.condition_raw)
+            SELECT list(DISTINCT tc.condition_raw ORDER BY tc.condition_raw)
             FROM stg_trial_conditions tc
             WHERE tc.nct_id = dt.nct_id
+              AND (dt.ingestion_run_id IS NULL OR tc.ingestion_run_id = dt.ingestion_run_id)
         ) AS conditions,
         dt.min_age_years,
         dt.max_age_years,
@@ -120,14 +145,18 @@ matched_candidates AS (
           $sponsor_class IS NULL OR
           EXISTS (
               SELECT 1 FROM stg_trial_sponsors ts
-              WHERE ts.nct_id = dt.nct_id AND ts.sponsor_class = $sponsor_class
+              WHERE ts.nct_id = dt.nct_id
+                AND (dt.ingestion_run_id IS NULL OR ts.ingestion_run_id = dt.ingestion_run_id)
+                AND ts.sponsor_class = $sponsor_class
           )
       )
       AND (
           $intervention_type IS NULL OR
           EXISTS (
               SELECT 1 FROM stg_trial_interventions ti
-              WHERE ti.nct_id = dt.nct_id AND upper(ti.intervention_type) = upper($intervention_type)
+              WHERE ti.nct_id = dt.nct_id
+                AND (dt.ingestion_run_id IS NULL OR ti.ingestion_run_id = dt.ingestion_run_id)
+                AND upper(ti.intervention_type) = upper($intervention_type)
           )
       )
       AND (
@@ -136,6 +165,7 @@ matched_candidates AS (
           EXISTS (
               SELECT 1 FROM stg_trial_conditions tc
               WHERE tc.nct_id = dt.nct_id
+                AND (dt.ingestion_run_id IS NULL OR tc.ingestion_run_id = dt.ingestion_run_id)
                 AND (
                     lower(tc.condition_raw) LIKE '%' || lower($cond) || '%' OR
                     lower(tc.condition_group) LIKE '%' || lower($cond) || '%' OR
@@ -168,28 +198,54 @@ FROM matched_with_totals
 WHERE (
     $has_cursor IS FALSE OR
     ($sort = '-updated' AND (
-        (last_update_post_date < $cursor_val) OR
-        (last_update_post_date = $cursor_val AND nct_id < $cursor_id) OR
-        ($cursor_val IS NOT NULL AND last_update_post_date IS NULL)
+        ($cursor_val IS NOT NULL AND (
+            (last_update_post_date < $cursor_val) OR
+            (last_update_post_date = $cursor_val AND nct_id < $cursor_id) OR
+            (last_update_post_date IS NULL)
+        )) OR
+        ($cursor_val IS NULL AND (
+            last_update_post_date IS NULL AND nct_id < $cursor_id
+        ))
     )) OR
     ($sort = 'updated' AND (
-        (last_update_post_date > $cursor_val) OR
-        (last_update_post_date = $cursor_val AND nct_id > $cursor_id) OR
-        ($cursor_val IS NULL AND last_update_post_date IS NOT NULL)
+        ($cursor_val IS NOT NULL AND (
+            (last_update_post_date > $cursor_val) OR
+            (last_update_post_date = $cursor_val AND nct_id > $cursor_id) OR
+            (last_update_post_date IS NULL)
+        )) OR
+        ($cursor_val IS NULL AND (
+            last_update_post_date IS NULL AND nct_id > $cursor_id
+        ))
     )) OR
     ($sort = '-start_date' AND (
-        (start_date < $cursor_val) OR
-        (start_date = $cursor_val AND nct_id < $cursor_id) OR
-        ($cursor_val IS NOT NULL AND start_date IS NULL)
+        ($cursor_val IS NOT NULL AND (
+            (start_date < $cursor_val) OR
+            (start_date = $cursor_val AND nct_id < $cursor_id) OR
+            (start_date IS NULL)
+        )) OR
+        ($cursor_val IS NULL AND (
+            start_date IS NULL AND nct_id < $cursor_id
+        ))
     )) OR
     ($sort = 'start_date' AND (
-        (start_date > $cursor_val) OR
-        (start_date = $cursor_val AND nct_id > $cursor_id) OR
-        ($cursor_val IS NULL AND start_date IS NOT NULL)
+        ($cursor_val IS NOT NULL AND (
+            (start_date > $cursor_val) OR
+            (start_date = $cursor_val AND nct_id > $cursor_id) OR
+            (start_date IS NULL)
+        )) OR
+        ($cursor_val IS NULL AND (
+            start_date IS NULL AND nct_id > $cursor_id
+        ))
     )) OR
     ($sort = 'distance' AND (
-        (raw_distance_miles > $cursor_dist) OR
-        (raw_distance_miles = $cursor_dist AND nct_id > $cursor_id)
+        ($cursor_dist IS NOT NULL AND (
+            (raw_distance_miles > $cursor_dist) OR
+            (raw_distance_miles = $cursor_dist AND nct_id > $cursor_id) OR
+            (raw_distance_miles IS NULL)
+        )) OR
+        ($cursor_dist IS NULL AND (
+            raw_distance_miles IS NULL AND nct_id > $cursor_id
+        ))
     ))
 )
 ORDER BY

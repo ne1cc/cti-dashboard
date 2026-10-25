@@ -5,7 +5,7 @@ description = "Clinical Trial Access & Recruitment Competition Intelligence — 
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "Alexander" } ]
+authors = [{ name = "Alexander" }]
 dependencies = [
     "requests>=2.32",
     "tenacity>=8.3",
@@ -76,3 +76,13 @@ python_version = "3.12"
 files = ["src", "dashboard"]
 mypy_path = ["dashboard", "."]
 strict = true
+
+[[tool.mypy.overrides]]
+module = [
+    "pyarrow",
+    "pyarrow.*",
+    "plotly",
+    "plotly.*",
+]
+ignore_missing_imports = true
+disable_error_code = ["import-untyped"]
