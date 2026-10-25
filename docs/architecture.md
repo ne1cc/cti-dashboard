@@ -47,7 +47,7 @@ flowchart TB
     subgraph OUT["Delivery (Dual-Frontend Model — ADR 0061)"]
         APP["Analyst Workbench<br/>Streamlit dashboard (port 8501)<br/>(reads Gold only)"]
         PATIENT["Patient & Caregiver Finder<br/>FastAPI + Jinja server-rendered HTML<br/>with progressive enhancement (/)"]
-        API["Public Read API<br/>FastAPI (/api/v1)"]
+        API["Public Read API (OpenAPI 3.1)<br/>FastAPI (/api/v1) · RFC 7807"]
         MEMODOC["Executive memo template"]
     end
 
@@ -66,6 +66,7 @@ flowchart TB
     MARTS --> PATIENT
     MARTS --> API
     MARTS --> MEMODOC
+    API --> PATIENT
 ```
 
 ## 2. Layer contracts
@@ -96,6 +97,22 @@ flowchart TB
   the source API only serves current records.
 - Delivery surfaces (analyst Streamlit workbench and patient FastAPI/Jinja views per [ADR 0061](decisions/0061-patient-frontend.md)) read Gold marts only; no client-side business logic.
 
+### Delivery — dual surfaces & read API (OpenAPI 3.1)
+- Contract formalized in `docs/api/openapi.yaml`, companion examples in `docs/api/examples.md`,
+  and field traceability in `docs/api/source-field-map.md`.
+- **Dual delivery surfaces (ADR 0061)**: Serves both the server-rendered patient discovery
+  interface with progressive enhancement and the analytical workbench over shared Gold marts.
+- **Privacy guardrail (ADR 0065)**: Strictly excludes personal investigator and facility contact
+  PII from all endpoints; provides deep link `registry_contact_url` pointing to official
+  ClinicalTrials.gov record.
+- **Structured eligibility (Issue #62)**: Exposes `minimum_age_years`, `maximum_age_years`,
+  `age_not_stated`, `sex`, `accepts_healthy_volunteers`, and `std_age_groups`; preserves unstated
+  bounds without silent dropping.
+- **Standard error model (RFC 7807)**: All 4xx and 5xx responses return `application/problem+json`
+  Problem Details payloads.
+- **Provenance & caching headers**: Every response carries `Data-Snapshot`, `Data-Updated`,
+  `ETag`, and `Cache-Control`.
+
 ## 3. Snapshot-history design
 
 ```mermaid
@@ -124,7 +141,7 @@ collection. This is documented, not hidden.
 | Modeling | dbt-duckdb | Tested, documented, grain-safe SQL layers |
 | Analyst Workbench | Streamlit + Plotly | Fast decision-ready delivery from Gold marts for internal feasibility analysts |
 | Patient Frontend | FastAPI + Jinja2 | Server-rendered HTML with progressive enhancement; instant FCP, mobile 360px layout, deep linking, zero npm build step ([ADR 0061](decisions/0061-patient-frontend.md)) |
-| Read API | FastAPI | Typed Pydantic schemas, OpenAPI documentation, high-concurrency read endpoints |
+| Read API contract | FastAPI + OpenAPI 3.1 + RFC 7807 | Versioned, typed REST contract and high-concurrency read endpoints |
 | CI | GitHub Actions | Lint, unit tests, dbt build on synthetic fixtures |
 
 ## 5. Reproducibility and operations
