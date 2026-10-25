@@ -48,6 +48,13 @@ per repository (see data quality framework).
 | enrollment_count / enrollment_type | int/text | planned or actual per registry |
 | start_date, primary_completion_date, completion_date, study_first_post_date, results_first_post_date (+ `*_raw`) | date/text | partial dates parsed leniently (YYYY, YYYY-MM, YYYY-MM-DD) |
 | lead_sponsor_name / lead_sponsor_normalized | text | lead sponsor |
+| healthy_volunteers | bool | registry `healthyVolunteers` (true, false, null if unstated) |
+| minimum_age / maximum_age | text | verbatim registry age bounds (e.g. "18 Years", "6 Months", "N/A") |
+| sex | text | registry sex eligibility (`ALL`, `FEMALE`, `MALE`, or null) |
+| gender_based | bool | registry `genderBased` |
+| gender_description | text | registry `genderDescription` |
+| std_age_groups | list[text] | registry `stdAges` (`CHILD`, `ADULT`, `OLDER_ADULT`) |
+| eligibility_criteria_text | text | free-text inclusion/exclusion criteria |
 | has_results_flag | bool | registry `hasResults` |
 | record_quality_flag | text | `ok` or first failed check (see quality framework) |
 | source_json_hash | text | SHA-256 of the study JSON |
@@ -98,6 +105,41 @@ fact, bridge and analytical mart.
 | int_trial_site_activity | NCT × facility × snapshot | listing signal |
 | int_condition_geography_activity | NCT × condition_group × state × snapshot | shared segment grain |
 | int_sponsor_concentration | segment × snapshot | top_sponsor_share, sponsor_hhi |
+
+## Eligibility semantics and age conversions
+
+### Unit conversions
+Registry age strings are parsed into double-precision fractional years across supported units:
+- Years / Year: `1.0`
+- Months / Month: `1.0 / 12.0`
+- Weeks / Week: `1.0 / 52.0`
+- Days / Day: `1.0 / 365.0`
+- Hours / Hour: `1.0 / 8760.0`
+- Minutes / Minute: `1.0 / 525600.0`
+
+Python (`src/transform/eligibility.py`) and dbt (`dbt_clinical_trials/macros/parse_age_years.sql`) share identical conversion rules.
+
+### Unknown and unstated handling
+- Missing, empty, or `N/A` bounds represent **unstated bounds**, never converted to zero.
+- In patient filters, unstated bounds are permissive: a trial with no stated upper limit is not excluded for older participants (e.g., age 67 excludes a trial with maximum 65 Years, but retains trials with no stated upper bound).
+- Bound classification:
+  - `missing`: bound is null or whitespace
+  - `not_applicable`: registry explicitly recorded `N/A` or `NA`
+  - `valid`: successfully parsed numeric unit
+  - `malformed`: unparseable string or unsupported unit
+  - `contradictory`: min age and max age both parsed, but `minimum_age_years > maximum_age_years`
+
+### Gold eligibility fields in `dim_trial`
+- `minimum_age_raw`, `maximum_age_raw` (VARCHAR): verbatim source age strings.
+- `min_age_years`, `max_age_years` (DOUBLE): parsed fractional years (null if missing/unbounded/malformed).
+- `std_age_groups` (VARCHAR[]): standard age groups (`CHILD`, `ADULT`, `OLDER_ADULT`).
+- `sex_eligibility` (VARCHAR): `ALL`, `FEMALE`, `MALE`, or null.
+- `gender_based` (BOOLEAN), `gender_description` (VARCHAR): gender criteria details.
+- `accepts_healthy_volunteers` (BOOLEAN): nullable boolean.
+- `age_bounds_valid_flag` (BOOLEAN): true if neither bound is malformed and min <= max.
+- `age_bounds_contradictory_flag` (BOOLEAN): true if both bounds are present and min > max.
+- `has_unspecified_min_age`, `has_unspecified_max_age` (BOOLEAN): explicit unknown bound flags.
+- `healthy_volunteers_unknown_flag`, `sex_eligibility_unknown_flag` (BOOLEAN): explicit unknown flags for patient matching.
 
 ## Gold: marts (`main_marts`, tables)
 
