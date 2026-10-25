@@ -298,3 +298,64 @@ def test_examples_payload_schema_conformity(openapi_doc: dict[str, Any]) -> None
                 f"Example '{example_key}' failed schema validation against "
                 f"'{schema_name}': {err.message}"
             )
+
+
+def test_warehouse_endpoint_responses_conform_to_openapi(
+    openapi_doc: dict[str, Any], tmp_path: Path
+) -> None:
+    """Validate that responses from the DuckDB warehouse service conform to OpenAPI schemas."""
+    from fastapi.testclient import TestClient
+
+    from src.api.app import APIContainer, create_app
+    from tests.test_api_warehouse import _init_fixture_database
+
+    db_path = tmp_path / "contract_warehouse.duckdb"
+    _init_fixture_database(db_path)
+
+    container = APIContainer(warehouse_path=db_path)
+    client = TestClient(create_app(container=container))
+
+    schemas = openapi_doc.get("components", {}).get("schemas", {})
+    trials_schema = _dereference_schema(openapi_doc, schemas["TrialsListResponse"])
+    detail_schema = _dereference_schema(openapi_doc, schemas["TrialDetail"])
+    problem_schema = _dereference_schema(openapi_doc, schemas["ProblemDetails"])
+
+    # 1. GET /v1/trials conforms to TrialsListResponse schema
+    resp = client.get("/v1/trials")
+    assert resp.status_code == 200
+    assert resp.headers.get("Data-Snapshot") is not None
+    assert resp.headers.get("Data-Updated") is not None
+    assert resp.headers.get("ETag") is not None
+    assert resp.headers.get("Cache-Control") is not None
+    jsonschema.validate(instance=resp.json(), schema=trials_schema)
+
+    # 2. GET /v1/trials/{nct_id} conforms to TrialDetail schema
+    resp = client.get("/v1/trials/NCT00000001")
+    assert resp.status_code == 200
+    assert resp.headers.get("Data-Snapshot") is not None
+    assert resp.headers.get("ETag") is not None
+    detail_data = resp.json()
+    jsonschema.validate(instance=detail_data, schema=detail_schema)
+    assert (
+        detail_data.get("registry_contact_url")
+        == "https://clinicaltrials.gov/study/NCT00000001#contacts-locations"
+    )
+
+    # ADR 0065 privacy check on actual response
+    sites = detail_data.get("sites", [])
+    assert len(sites) > 0
+    for site in sites:
+        for pii in ("investigator_name", "contact_name", "email", "phone"):
+            assert pii not in site
+
+    # 3. 404 Problem Details conforms to ProblemDetails schema
+    resp_404 = client.get("/v1/trials/NCT99999999")
+    assert resp_404.status_code == 404
+    assert resp_404.headers["content-type"].startswith("application/problem+json")
+    jsonschema.validate(instance=resp_404.json(), schema=problem_schema)
+
+    # 4. 400 Problem Details conforms to ProblemDetails schema
+    resp_400 = client.get("/v1/trials?min_age=90&max_age=10")
+    assert resp_400.status_code == 400
+    assert resp_400.headers["content-type"].startswith("application/problem+json")
+    jsonschema.validate(instance=resp_400.json(), schema=problem_schema)
