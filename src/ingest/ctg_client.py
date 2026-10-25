@@ -57,6 +57,37 @@ class CTGClient:
         response = self._retryer(_request)
         return response.json(), response.text
 
+    def fetch_studies(self, params: dict[str, Any]) -> tuple[dict[str, Any], str]:
+        """Fetch studies with arbitrary parameters; returns (parsed payload, raw text)."""
+        query: dict[str, str] = {}
+        for k, v in params.items():
+            if v is not None:
+                query[k] = "|".join(str(item) for item in v) if isinstance(v, list) else str(v)
+
+        def _request() -> requests.Response:
+            response = self._client.get(self._url, params=query, timeout=self._http.timeout_seconds)
+            if response.status_code in self._http.retry_on_status:
+                raise RetryableHTTPStatusError(response.status_code, self._url)
+            response.raise_for_status()
+            return response
+
+        response = self._retryer(_request)
+        return response.json(), response.text
+
+    def fetch_study(self, nct_id: str) -> tuple[dict[str, Any], str]:
+        """Fetch single study protocol by NCT ID; returns (parsed payload, raw text)."""
+        url = f"{self._url.rstrip('/')}/{nct_id}"
+
+        def _request() -> requests.Response:
+            response = self._client.get(url, timeout=self._http.timeout_seconds)
+            if response.status_code in self._http.retry_on_status:
+                raise RetryableHTTPStatusError(response.status_code, url)
+            response.raise_for_status()
+            return response
+
+        response = self._retryer(_request)
+        return response.json(), response.text
+
     def close(self) -> None:
         self._client.close()
 
