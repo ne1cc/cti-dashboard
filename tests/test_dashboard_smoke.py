@@ -32,7 +32,7 @@ PAGES = [
 # "adrd"`) and keep every widget assertion here green — the widget still holds the
 # pick, the page just shows one fixed indication. These are the numbers it shows
 # instead. Pages left out render the *same* row count for both profiles (site
-# overlap 0, sponsor 2, reliability 1, explorer 10, similarity 9), so a count
+# overlap 0, sponsor 2, reliability 1, explorer 10), so a count
 # cannot discriminate them: the table below covers the ones that name their own
 # scope in a column, and the rest are guarded in source by
 # tests/test_dashboard_profile_scope.py.
@@ -48,7 +48,6 @@ PROFILE_SCOPED_FIRST_DATAFRAME_ROWS = {
 PROFILE_SCOPED_FIRST_DATAFRAME_COLUMN = {
     "dashboard/pages/5_Sponsor_Landscape.py": "indication_profile_id",
     "dashboard/pages/7_Trial_Explorer.py": "indication_profile_id",
-    "dashboard/pages/8_Trial_Similarity.py": "indication_profile_id",
 }
 
 
@@ -240,6 +239,35 @@ def test_phase_filter_offers_display_labels(fixture_warehouse):
     phase = next(w for w in at.sidebar.multiselect if w.label == "Phase")
     assert phase.options, "fixture should expose at least one phase"
     assert not any(option.isupper() for option in phase.options)
+
+
+def test_similarity_page_shows_only_the_selected_profile(
+    similarity_equivalence_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Page 8's scope check, on the dense fixture: the base one's default index
+    trials have no neighbours, so the page would render no table to inspect."""
+    from streamlit.testing.v1 import AppTest
+
+    from src.config import get_config
+
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(similarity_equivalence_root))
+    get_config.cache_clear()
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    for profile_id in ("adrd", "oncology_nsclc"):
+        at = AppTest.from_file(
+            str(ROOT / "dashboard/pages/8_Trial_Similarity.py"), default_timeout=60
+        )
+        at.run()
+        next(w for w in at.sidebar.selectbox if w.key == "indication_profile_selector").set_value(
+            profile_id
+        )
+        at.text_input[0].input("NCT00000001")
+        at.run()
+        assert not at.exception, f"as {profile_id}: {at.exception}"
+        assert at.dataframe, f"rendered no dataframe as {profile_id}"
+        frame = at.dataframe[0].value
+        assert {str(v) for v in frame["indication_profile_id"]} == {profile_id}
 
 
 def test_guidance_priority_queue_has_no_score_or_bands():

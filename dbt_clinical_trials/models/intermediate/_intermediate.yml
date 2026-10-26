@@ -4,7 +4,7 @@ models:
   - name: int_similarity_candidates
     description: >
       Bounded candidate pairs for mart_trial_similarity: pairs within a
-      profile that share at least one condition-group token whose per-profile
+      profile that share at least one (condition group, phase) token whose per-profile
       trial frequency is below var('similarity_max_token_df'), emitted in both
       orientations. Replaces the unbounded pairwise self-join that measured
       28 GB of DuckDB temporary storage at twelve profiles
