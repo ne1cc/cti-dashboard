@@ -15,10 +15,12 @@
 
 default:
   condition_group: other_thoracic_oncology
+  display_name: Other Thoracic Oncology
   dementia_relevance: false
 
 groups:
   - condition_group: nsclc_adenocarcinoma
+    display_name: NSCLC Adenocarcinoma
     dementia_relevance: false
     exact:
       - lung adenocarcinoma
@@ -28,6 +30,7 @@ groups:
       - adenocarcinoma
 
   - condition_group: nsclc_squamous
+    display_name: NSCLC Squamous Cell Carcinoma
     dementia_relevance: false
     exact:
       - squamous cell lung carcinoma
@@ -36,6 +39,7 @@ groups:
       - squamous
 
   - condition_group: nsclc_large_cell
+    display_name: NSCLC Large Cell Carcinoma
     dementia_relevance: false
     exact:
       - large cell lung carcinoma
@@ -43,6 +47,7 @@ groups:
       - large cell
 
   - condition_group: nsclc_biomarker_targeted
+    display_name: Biomarker-Targeted NSCLC
     dementia_relevance: false
     exact: []
     substrings:
@@ -57,6 +62,7 @@ groups:
       - ret fusion
 
   - condition_group: nsclc_metastatic_advanced
+    display_name: Metastatic / Advanced NSCLC
     dementia_relevance: false
     exact:
       - metastatic non-small cell lung cancer
@@ -67,6 +73,7 @@ groups:
       - advanced non small cell
 
   - condition_group: nsclc_unspecified
+    display_name: NSCLC (Unspecified)
     dementia_relevance: false
     exact:
       - non-small cell lung cancer

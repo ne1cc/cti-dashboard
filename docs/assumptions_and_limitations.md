@@ -30,29 +30,24 @@
    `mart_recruiting_competition` use relative percentile cuts of sponsor concentration;
    they are descriptive sorting aids, not validated operational risk tiers.
 
-## Scenario-model assumptions
-10. Every ROI figure is arithmetic over user-editable assumptions in
-    `config/roi_assumptions.yml` (costs, shares, cycle sizes). Nothing is
-    observed; the disclaimer is embedded in every output object.
-
 ## Operational limitations
-11. Profile-scoped indications (ADRD and NSCLC); additional
-    areas require configuration changes and taxonomy review.
-12. Weekly cadence is recommended, not enforced; gaps widen transition
+10. Profile-scoped indications; additional areas require configuration changes
+    and taxonomy review.
+11. Weekly cadence is recommended, not enforced; gaps widen transition
     windows.
-13. Local-first DuckDB warehouse; multi-user concurrency and cloud
+12. Local-first DuckDB warehouse; multi-user concurrency and cloud
     orchestration are roadmap items.
-14. **Portfolio demonstration.** Real feasibility decisions require
+13. **Portfolio demonstration.** Real feasibility decisions require
     qualified clinical-operations review and additional data sources.
 
 ## Audit interpretation and retention
 
-15. Snapshot IDs identify captured successful ingestion runs, not historic registry
+14. Snapshot IDs identify captured successful ingestion runs, not historic registry
     versions before collection began. Daily metrics choose the latest per-study/date
     observation; the audit records the actual contributing runs, including several
     runs on one date. Active rule hashes do not establish unrecorded historical
     taxonomy/geography configuration identity.
-16. Pipeline age, public posted-update age, and verification month age answer
+15. Pipeline age, public posted-update age, and verification month age answer
     different questions. They do not establish present recruitment activity. Legacy
     page retrieval times remain unknown; month/year text does not imply a day.
     The configurable project-defined warning (default >180 days) retains records

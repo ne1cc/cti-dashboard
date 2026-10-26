@@ -1,9 +1,11 @@
 version: 1
 default:
   condition_group: other_breast_conditions
+  display_name: Other Breast Conditions
   dementia_relevance: false
 groups:
 - condition_group: breast_cancer_subtype
+  display_name: Breast Cancer Subtypes
   dementia_relevance: false
   exact:
   - triple negative breast cancer
@@ -13,6 +15,7 @@ groups:
   - triple negative
   - her2 positive
 - condition_group: breast_cancer
+  display_name: Breast Cancer
   dementia_relevance: false
   exact:
   - breast cancer

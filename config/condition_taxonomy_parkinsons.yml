@@ -1,9 +1,11 @@
 version: 1
 default:
   condition_group: other_parkinsonian_conditions
+  display_name: Other Parkinsonian Conditions
   dementia_relevance: false
 groups:
 - condition_group: parkinsons_disease
+  display_name: Parkinson's Disease
   dementia_relevance: false
   exact:
   - parkinson disease

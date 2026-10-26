@@ -1,6 +1,6 @@
-"""Config-driven ADRD condition taxonomy mapping.
+"""Config-driven condition taxonomy mapping.
 
-Deterministic, version-controlled YAML rules (config/condition_taxonomy.yml).
+Deterministic, version-controlled YAML rules (config/condition_taxonomy*.yml).
 No runtime LLM classification. Groups are evaluated in order; first match wins.
 """
 
@@ -30,6 +30,11 @@ class TaxonomyGroup:
     dementia_relevance: bool
     exact: tuple[str, ...]
     substrings: tuple[str, ...]
+    display_name: str | None = None
+
+    @property
+    def label(self) -> str:
+        return self.display_name or self.condition_group
 
 
 @dataclass(frozen=True)
@@ -37,6 +42,23 @@ class ConditionTaxonomy:
     groups: tuple[TaxonomyGroup, ...]
     default_group: str
     default_dementia_relevance: bool
+    default_display_name: str | None = None
+
+    @property
+    def default_label(self) -> str:
+        return self.default_display_name or self.default_group
+
+    def get_group_label(self, group_key: str) -> str:
+        """Resolve a condition group identifier to its human-readable display label.
+
+        Falls back cleanly to the group key if no display label metadata exists.
+        """
+        for group in self.groups:
+            if group.condition_group == group_key:
+                return group.display_name or group.condition_group
+        if group_key == self.default_group:
+            return self.default_display_name or self.default_group
+        return group_key
 
     def map_condition(self, condition_raw: object) -> ConditionMapping:
         cleaned = normalize_text(condition_raw)
@@ -66,13 +88,16 @@ def load_taxonomy(path: str | Path | None = None) -> ConditionTaxonomy:
             dementia_relevance=bool(entry["dementia_relevance"]),
             exact=tuple(entry.get("exact") or []),
             substrings=tuple(entry.get("substrings") or []),
+            display_name=entry.get("display_name") or entry.get("label"),
         )
         for entry in raw["groups"]
     )
+    default_entry = raw.get("default", {})
     return ConditionTaxonomy(
         groups=groups,
-        default_group=raw["default"]["condition_group"],
-        default_dementia_relevance=bool(raw["default"]["dementia_relevance"]),
+        default_group=default_entry["condition_group"],
+        default_dementia_relevance=bool(default_entry["dementia_relevance"]),
+        default_display_name=default_entry.get("display_name") or default_entry.get("label"),
     )
 
 

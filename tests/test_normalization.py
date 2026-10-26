@@ -56,6 +56,50 @@ def test_unrelated_condition_gets_default_low_confidence():
     assert mapping.mapping_confidence == "low"
 
 
+def test_taxonomy_display_labels_and_fallback(tmp_path):
+    from src.transform.normalize_conditions import load_taxonomy
+
+    # 1. Loaded labels on default taxonomy
+    assert TAXONOMY.get_group_label("alzheimers_disease") == "Alzheimer's Disease"
+    assert TAXONOMY.get_group_label("mild_cognitive_impairment") == (
+        "Mild Cognitive Impairment (MCI)"
+    )
+    assert TAXONOMY.get_group_label("non_dementia_other") == "Other Conditions"
+    assert TAXONOMY.default_label == "Other Conditions"
+
+    # 2. Unknown group falls back cleanly to group key
+    assert TAXONOMY.get_group_label("completely_unknown_group") == "completely_unknown_group"
+
+    # 3. Custom taxonomy without display_name metadata falls back to condition_group
+    custom_yaml = tmp_path / "custom_taxonomy.yml"
+    custom_yaml.write_text(
+        """
+version: 1
+default:
+  condition_group: other_custom
+  dementia_relevance: false
+groups:
+  - condition_group: custom_group_a
+    dementia_relevance: false
+    exact:
+      - test condition
+    substrings: []
+  - condition_group: custom_group_b
+    display_name: "Custom Label B"
+    dementia_relevance: false
+    exact: []
+    substrings: []
+""",
+        encoding="utf-8",
+    )
+    custom_tax = load_taxonomy(custom_yaml)
+    assert custom_tax.get_group_label("custom_group_a") == "custom_group_a"
+    assert custom_tax.get_group_label("custom_group_b") == "Custom Label B"
+    assert custom_tax.get_group_label("other_custom") == "other_custom"
+    assert custom_tax.groups[0].label == "custom_group_a"
+    assert custom_tax.groups[1].label == "Custom Label B"
+
+
 # --- geography ---------------------------------------------------------------
 
 

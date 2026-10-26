@@ -157,12 +157,12 @@ reliability. Preparation time and reviewer rework are the proposed operational
 outcomes. Both matter: technically correct evidence can still fail if it does not
 fit the reviewer handoff, takes too much interpretation or duplicates existing tools.
 
-## Scenario costs and benefit status
+## Operational outcomes and benefit status
 
-The existing [scenario calculator](../metric_definitions.md) uses editable assumptions
-in `config/roi_assumptions.yml`. Its arithmetic is hypothetical and does not show
-observed savings, delay avoidance or financial return. Organization-specific
-assumptions and a measured workflow evaluation would be needed for such claims.
+This platform focuses strictly on transparent, reproducible registry indicators.
+It avoids speculative financial calculators or hypothetical cost savings models.
+Organization-specific ROI or workflow efficiency gains require empirical evaluation
+of clinical operations workflows and reviewer turnaround times rather than speculative arithmetic.
 
 ## Interpretation and reproducibility
 

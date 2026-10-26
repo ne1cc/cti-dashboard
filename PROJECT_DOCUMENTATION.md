@@ -194,7 +194,6 @@ cti-dashboard/
 │   ├── shared_paths.yml          # shared silver, gold, and DuckDB paths across profiles
 │   ├── condition_taxonomy.yml    # ADRD condition-group mapping rules
 │   ├── geography_rules.yml       # US state normalization rules
-│   └── roi_assumptions.yml       # editable scenario-calculator assumptions
 │
 ├── src/
 │   ├── cli.py                    # python -m src.cli {ingest,transform,quality-report,orchestrate}
@@ -208,7 +207,6 @@ cti-dashboard/
 │   │                             # build_silver_entities (orchestrator)
 │   ├── quality/                  # profiling, schema_drift, reconciliation,
 │   │                             # data_quality_report
-│   ├── analysis/roi_scenarios.py # pure-arithmetic scenario calculator
 │   └── utils/                    # dates, hashing, logging, paths, text
 │
 ├── dbt_clinical_trials/
@@ -586,7 +584,7 @@ flowchart TB
     P3["3 · Geography Trends<br/>US choropleth + monthly trend"]
     P4["4 · Site Overlap<br/>multi-trial facilities table"]
     P5["5 · Sponsor Landscape<br/>top lead sponsors by listings"]
-    P6["6 · Data Reliability<br/>run health + scenario explorer"]
+    P6["6 · Data Reliability<br/>run health + data quality checks"]
     P7["7 · Trial Explorer<br/>per-trial records with<br/>ClinicalTrials.gov links"]
     P8["8 · Trial Similarity<br/>top comparable pairs<br/>within one profile"]
     APP --- P1 --- P2 --- P3 --- P4 --- P5 --- P6 --- P7 --- P8
@@ -598,13 +596,7 @@ flowchart TB
 | Growth-proxy warning | shown whenever any displayed row has `growth_uses_registry_proxy_flag` |
 | Read-only warehouse | `duckdb.connect(..., read_only=True)` behind `st.cache_resource` |
 | Query caching | `st.cache_data(ttl=600)` |
-| Scenario explorer never writes | sliders adjust session-only copies of `config/roi_assumptions.yml` |
 | Trial links | `registry_url` column rendered with `st.column_config.LinkColumn` — opens the authoritative public record |
-
-The page-6 **scenario explorer** replaces fake ROI claims: users plug in *their own*
-cost assumptions (review cost, deprioritized-share, activation cost, influence share)
-under conservative/base/optimistic multipliers; the arithmetic is pure
-multiplication, and the disclaimer renders above every result.
 
 The analyst workbench deliberately retains stability workarounds (`_materialize()` in `dashboard/components/data.py` to prevent DuckDB/Arrow SIGSEGV crashes, `pyarrow<22` in `pyproject.toml`, and `dashboard/components/scroll_fix.py` for iframe layout management). These workarounds remain isolated to the internal analyst tool and do not affect the public patient application.
 
@@ -670,7 +662,7 @@ The project's language rules are mechanical, not aspirational:
 | "Patients are available in state Y" | no participant-level data exists | density metrics labeled *listing* counts |
 | "Sponsor Z is underperforming" | listings ≠ performance | sponsor mart shows listing counts only |
 | Any contact/investigator info | privacy by design | `stg_trial_contacts` is empty by construction; smoke test asserts no such columns render |
-| Predicted enrollment / ROI | would be invented | raw metrics provide objective ordering without a composite ranking, scenario calculator uses only user-supplied assumptions |
+| Predicted enrollment / ROI | would be invented | No outcome or financial-return model is provided. |
 
 Every segment row carries `interpretation_note`; every dashboard page carries the
 banner; every document (including this one) opens with the planning-signal rule.
@@ -680,7 +672,7 @@ banner; every document (including this one) opens with the planning-signal rule.
 | Suite | Count | Scope |
 |---|---|---|
 | dbt data tests | **148** (measured 2026-10-25 UTC: `uv run dbt parse --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials`, then count `resource_type == "test"` in `dbt_clinical_trials/target/manifest.json`) | grains, keys, referential integrity, accepted values, current-record uniqueness, state validity, date sanity |
-| pytest | **589** (measured 2026-10-25 UTC: `uv run pytest --collect-only`) | HTTP client/retry, pagination, manifests, normalization, metric math (HHI fixtures), ROI arithmetic + disclaimer, dashboard smoke (all 8 pages via Streamlit `AppTest`) |
+| pytest | **607** (597 passed, 10 skipped; verified 2026-10-25 UTC with coverage) | HTTP client/retry, pagination, manifests, normalization, raw metric math (HHI fixtures), dashboard smoke (all 8 pages via Streamlit `AppTest`) |
 | ruff | clean | lint + format, line length 100 |
 
 These are the only places in this file that state those two counts *as measurements*,
@@ -767,7 +759,6 @@ status-transition counts (and `growth_uses_registry_proxy_flag` flips off).
 | `config/shared_paths.yml` | Shared silver, gold, and DuckDB paths across non-ingest-only profiles |
 | `config/condition_taxonomy.yml` | mapping of registry condition strings → ADRD condition groups, with confidence rules |
 | `config/geography_rules.yml` | state-name → USPS code normalization |
-| `config/roi_assumptions.yml` | scenario-calculator assumptions and multipliers (with embedded disclaimer) |
 | `.env` | optional local overrides (`CTI_CONFIG_PATH`, `CTI_HTTP_TIMEOUT_SECONDS`, `CTI_MAX_RETRIES`) — no secrets required |
 | `dbt_clinical_trials/dbt_project.yml` | schema routing, seed types |
 

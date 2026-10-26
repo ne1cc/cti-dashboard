@@ -80,11 +80,6 @@ Per ADR 0077, the composite priority score and categorical priority bands were r
 5. **Operational Completeness Adjustment (`data_confidence_share`):** 0.5 × segment record-quality-ok share + 0.5 × run-level usable-location share. Reflects reporting and location usability; not scientific confidence.
 6. `priority_explanation` is assembled from fixed component phrases — the same inputs always yield the same sentence. Every row carries an `interpretation_note`.
 
-## Scenario values (`src/analysis/roi_scenarios.py`)
-Pure products of user-editable assumptions in `config/roi_assumptions.yml`
-(reviews_per_cycle × deprioritized share × unit cost, etc.). Outputs embed
-the disclaimer; **no observed outcomes are ever used or implied**.
-
 ## Audit definitions and scope
 
 **Data coverage and caveats** appears on Overview, Registry Segments, Competition

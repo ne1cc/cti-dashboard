@@ -202,13 +202,18 @@ def _build_fixture_root(
 ) -> Path:
     """Bronze->silver->gold for `runs`, then one `dbt build`; returns the scratch root."""
     root = tmp_path_factory.mktemp(name)
-    build_fixture_warehouse(
-        root,
-        runs=runs,
-        session_timezone=session_timezone,
-        dbt_vars=dbt_vars,
-    )
-    return root
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(root))
+    try:
+        build_fixture_warehouse(
+            root,
+            runs=runs,
+            session_timezone=session_timezone,
+            dbt_vars=dbt_vars,
+        )
+        return root
+    finally:
+        monkeypatch.undo()
 
 
 def _base_adrd_run() -> FixtureRun:

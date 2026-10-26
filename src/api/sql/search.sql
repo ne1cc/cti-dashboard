@@ -7,7 +7,7 @@ WITH latest_trial_run AS (
         ingestion_run_id,
         last_update_post_date,
         ROW_NUMBER() OVER (
-            PARTITION BY nct_id 
+            PARTITION BY nct_id
             ORDER BY snapshot_timestamp_utc DESC, ingestion_run_id DESC
         ) AS run_rn
     FROM stg_trials

@@ -29,13 +29,14 @@ a *human feasibility review* is worth doing first.
 1. Predictions of enrollment success, failure, or timelines.
 2. Judgments of any named site, sponsor, investigator, or population.
 3. Claims about healthcare quality or access for patients.
-4. ROI, savings, or outcome claims presented as observed results.
+4. Speculative ROI, cost savings, or outcome claims presented as observed results or operational models.
 5. Clinical interpretations of outcome measures text.
 6. Any collection, storage, or display of personal contact or investigator
    details (names, emails, phone numbers). Per ADR 0065 (Contact Policy),
    the platform enforces an official registry link plus site list policy;
    zero personal contact details are stored or exposed, and `stg_trial_contacts`
    is intentionally empty (`where 1 = 0`).
+7. Action-prescribing operational directives, playbooks, or speculative financial recommendations derived from registry counts.
 
 ## Mechanical enforcement
 - `mart_feasibility_priority_queue.interpretation_note` travels with every
@@ -44,8 +45,6 @@ a *human feasibility review* is worth doing first.
   review."*
 - Every dashboard page renders the disclaimer banner via one shared
   `page_setup()`; a test asserts each page uses it.
-- Scenario outputs embed their disclaimer in the result object, so they
-  cannot be rendered without it.
 - Competition bands (`low/moderate/elevated`) are relative percentile cuts
   and must always be described as such. The former composite priority score and
   priority bands were removed under ADR 0077 in favor of transparent raw metrics.

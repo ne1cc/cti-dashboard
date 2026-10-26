@@ -312,3 +312,25 @@ def test_pages_smoke_contain_no_priority_score_or_bands(fixture_warehouse):
         assert "Priority Review" not in page_text
         assert "Watch" not in page_text
         assert "priority score" not in page_text.lower()
+
+
+def test_data_reliability_page_no_calculator(fixture_warehouse):
+    from streamlit.testing.v1 import AppTest
+
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    for profile_id in ("adrd", "oncology_nsclc"):
+        at = AppTest.from_file(
+            str(ROOT / "dashboard/pages/6_Data_Reliability.py"), default_timeout=60
+        ).run()
+        selector = next(w for w in at.sidebar.selectbox if w.key == "indication_profile_selector")
+        selector.set_value(profile_id)
+        at.run()
+        assert not at.exception, at.exception
+        # Confirm scenario explorer and currency inputs are gone
+        assert not any("scenario explorer" in str(h.value).lower() for h in at.subheader)
+        assert not any("feasibility review" in str(n.label).lower() for n in at.number_input)
+        assert not any("site activation" in str(n.label).lower() for n in at.number_input)
+        assert not any("reviews per cycle" in str(n.label).lower() for n in at.number_input)
+        # Confirm ingestion diagnostics and reconciliation remain
+        assert any("Ingestion runs" in str(h.value) for h in at.subheader)
