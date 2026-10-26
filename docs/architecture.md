@@ -44,8 +44,10 @@ flowchart TB
         DBTTEST["dbt tests"]
     end
 
-    subgraph OUT["Delivery"]
-        APP["Streamlit dashboard<br/>(reads Gold only)"]
+    subgraph OUT["Delivery (Dual-Frontend Model — ADR 0061)"]
+        APP["Analyst Workbench<br/>Streamlit dashboard (port 8501)<br/>(reads Gold only)"]
+        PATIENT["Patient & Caregiver Finder<br/>FastAPI + Jinja server-rendered HTML<br/>with progressive enhancement (/)"]
+        API["Public Read API (OpenAPI 3.1)<br/>FastAPI (/api/v1) · RFC 7807"]
         MEMODOC["Executive memo template"]
     end
 
@@ -61,7 +63,10 @@ flowchart TB
     ENTITIES --> PROF
     MARTS --> DBTTEST
     MARTS --> APP
+    MARTS --> PATIENT
+    MARTS --> API
     MARTS --> MEMODOC
+    API --> PATIENT
 ```
 
 ## 2. Layer contracts
@@ -90,7 +95,23 @@ flowchart TB
 - Staging → intermediate → marts; each layer documents and tests its grain.
 - Snapshot facts turn repeated ingestion runs into longitudinal status history —
   the source API only serves current records.
-- The dashboard reads Gold marts only; no dashboard-side business logic.
+- Delivery surfaces (analyst Streamlit workbench and patient FastAPI/Jinja views per [ADR 0061](decisions/0061-patient-frontend.md)) read Gold marts only; no client-side business logic.
+
+### Delivery — dual surfaces & read API (OpenAPI 3.1)
+- Contract formalized in `docs/api/openapi.yaml`, companion examples in `docs/api/examples.md`,
+  and field traceability in `docs/api/source-field-map.md`.
+- **Dual delivery surfaces (ADR 0061)**: Serves both the server-rendered patient discovery
+  interface with progressive enhancement and the analytical workbench over shared Gold marts.
+- **Privacy guardrail (ADR 0065)**: Strictly excludes personal investigator and facility contact
+  PII from all endpoints; provides deep link `registry_contact_url` pointing to official
+  ClinicalTrials.gov record.
+- **Structured eligibility (Issue #62)**: Exposes `minimum_age_years`, `maximum_age_years`,
+  `age_not_stated`, `sex`, `accepts_healthy_volunteers`, and `std_age_groups`; preserves unstated
+  bounds without silent dropping.
+- **Standard error model (RFC 7807)**: All 4xx and 5xx responses return `application/problem+json`
+  Problem Details payloads.
+- **Provenance & caching headers**: Every response carries `Data-Snapshot`, `Data-Updated`,
+  `ETag`, and `Cache-Control`.
 
 ## 3. Snapshot-history design
 
@@ -118,7 +139,9 @@ collection. This is documented, not hidden.
 | Validation | pydantic v2 | Envelope/schema validation with clear errors |
 | Storage | Parquet + DuckDB | Local-first, columnar, zero-ops warehouse |
 | Modeling | dbt-duckdb | Tested, documented, grain-safe SQL layers |
-| Dashboard | Streamlit + Plotly | Fast decision-ready delivery from Gold marts |
+| Analyst Workbench | Streamlit + Plotly | Fast decision-ready delivery from Gold marts for internal feasibility analysts |
+| Patient Frontend | FastAPI + Jinja2 | Server-rendered HTML with progressive enhancement; instant FCP, mobile 360px layout, deep linking, zero npm build step ([ADR 0061](decisions/0061-patient-frontend.md)) |
+| Read API contract | FastAPI + OpenAPI 3.1 + RFC 7807 | Versioned, typed REST contract and high-concurrency read endpoints |
 | CI | GitHub Actions | Lint, unit tests, dbt build on synthetic fixtures |
 
 ## 5. Reproducibility and operations
@@ -170,6 +193,14 @@ collection. This is documented, not hidden.
   (`data/silver/`, from `config/shared_paths.yml`); gold, dbt, and the dashboard
   read that root, so a profile reaches the warehouse only once it has a taxonomy
   and is no longer `ingest_only`.
+- **Dual-frontend delivery model ([ADR 0061](decisions/0061-patient-frontend.md)).** The
+  platform decouples the public consumer search experience from the internal analyst
+  workbench. Public patient/caregiver search and trial detail pages are server-rendered
+  via FastAPI + Jinja templates with lightweight progressive enhancement (vanilla JS/CSS),
+  ensuring instant FCP, mobile responsiveness down to 360px, canonical deep links, and
+  WCAG 2.1 AA accessibility. The internal analyst workbench remains on Streamlit
+  (`dashboard/app.py`), retaining existing stability workarounds (`_materialize()`,
+  `pyarrow<22`, `scroll_fix.py`).
 - Extending `condition_taxonomy.yml` and `geography_rules.yml` beyond their
   current ADRD/US-only scope (planned): the prerequisite before full-catalog
   silver data is meaningful in the marts.

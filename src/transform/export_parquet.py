@@ -1,6 +1,7 @@
 """Parquet export for silver entities: data/silver/<entity>/run_id=<id>.parquet."""
 
 import os
+import types
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +49,9 @@ ENTITY_COLUMNS: dict[str, list[str]] = {
         "minimum_age",
         "maximum_age",
         "sex",
+        "gender_based",
+        "gender_description",
+        "std_age_groups",
         "eligibility_criteria_text",
         "has_results_flag",
         "source_json_hash",
@@ -152,6 +156,8 @@ _NON_STRING_ARROW_TYPES: dict[str, pa.DataType] = {
     "location_ordinal": pa.int64(),
     "expanded_access_info": pa.bool_(),
     "healthy_volunteers": pa.bool_(),
+    "gender_based": pa.bool_(),
+    "std_age_groups": pa.list_(pa.string()),
     "has_results_flag": pa.bool_(),
     "dementia_relevance_flag": pa.bool_(),
     "us_location_flag": pa.bool_(),
@@ -198,7 +204,12 @@ class SilverRunWriter:
     def __enter__(self) -> "SilverRunWriter":
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: types.TracebackType | None,
+    ) -> None:
         if self._closed:
             return
         if exc_type is None:

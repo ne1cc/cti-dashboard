@@ -68,7 +68,11 @@ def build_silver_for_run(
             f"Profile '{profile.profile_id}' has no condition_taxonomy and cannot be "
             "transformed; it is ingest_only (see its config/profiles/*.yml)."
         )
-    taxonomy = profile.taxonomy if profile is not None else get_taxonomy()
+    if profile is not None:
+        assert profile.taxonomy is not None
+        taxonomy = profile.taxonomy
+    else:
+        taxonomy = get_taxonomy()
     geography = get_geography_rules()
     profile_id = profile.profile_id if profile else "adrd"
     snapshot_ts = manifest.started_at_utc.isoformat()

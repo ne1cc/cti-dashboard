@@ -1,0 +1,99 @@
+{
+  "edge_case_studies": [
+    {
+      "protocolSection": {
+        "identificationModule": {
+          "nctId": "NCT05123456",
+          "briefTitle": "Observational Biomarker Study in Early Cognitive Impairment",
+          "officialTitle": "A Multi-Center Observational Biomarker Study"
+        },
+        "statusModule": {
+          "overallStatus": "RECRUITING",
+          "statusVerifiedDate": "2026-01",
+          "startDateStruct": {
+            "date": "2026-02-01"
+          },
+          "lastUpdatePostDateStruct": {
+            "date": "2026-03-15"
+          }
+        },
+        "sponsorCollaboratorsModule": {
+          "leadSponsor": {
+            "name": "Academic Research Foundation",
+            "class": "OTHER"
+          }
+        },
+        "designModule": {
+          "studyType": "OBSERVATIONAL",
+          "phases": ["NA"]
+        },
+        "conditionsModule": {
+          "conditions": ["Mild Cognitive Impairment"]
+        },
+        "eligibilityModule": {
+          "minimumAge": null,
+          "maximumAge": "N/A",
+          "sex": "ALL",
+          "genderBased": false,
+          "healthyVolunteers": true,
+          "eligibilityCriteria": "Open to all adult and elderly participants regardless of age."
+        },
+        "contactsLocationsModule": {
+          "locations": [
+            {
+              "facility": "Community Health Center",
+              "city": "Boise",
+              "state": "ID",
+              "zip": "83702",
+              "country": "United States",
+              "status": "RECRUITING"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "protocolSection": {
+        "identificationModule": {
+          "nctId": "NCT06999999",
+          "briefTitle": "Phase 1/2 Targeted Evaluation in Postmenopausal Women",
+          "officialTitle": "A Phase 1/Phase 2 Study of Endocrine Disruption"
+        },
+        "statusModule": {
+          "overallStatus": "NOT_YET_RECRUITING",
+          "startDateStruct": {
+            "date": "2027-01-01"
+          },
+          "lastUpdatePostDateStruct": {
+            "date": "2026-08-01"
+          }
+        },
+        "sponsorCollaboratorsModule": {
+          "leadSponsor": {
+            "name": "Women's Health Therapeutics",
+            "class": "INDUSTRY"
+          }
+        },
+        "designModule": {
+          "studyType": "INTERVENTIONAL",
+          "phases": ["PHASE1", "PHASE2"]
+        },
+        "conditionsModule": {
+          "conditions": ["Postmenopausal Osteoporosis"]
+        },
+        "eligibilityModule": {
+          "minimumAge": "50 Years",
+          "maximumAge": "80 Years",
+          "sex": "FEMALE",
+          "genderBased": true,
+          "genderDescription": "Biological females with confirmed postmenopausal status.",
+          "healthyVolunteers": false,
+          "stdAges": ["ADULT", "OLDER_ADULT"]
+        },
+        "contactsLocationsModule": {
+          "locations": []
+        }
+      }
+    }
+  ]
+}

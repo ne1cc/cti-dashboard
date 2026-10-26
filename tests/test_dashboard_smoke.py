@@ -32,7 +32,7 @@ PAGES = [
 # "adrd"`) and keep every widget assertion here green — the widget still holds the
 # pick, the page just shows one fixed indication. These are the numbers it shows
 # instead. Pages left out render the *same* row count for both profiles (site
-# overlap 0, sponsor 2, reliability 1, explorer 10, similarity 9), so a count
+# overlap 0, sponsor 2, reliability 1, explorer 10), so a count
 # cannot discriminate them: the table below covers the ones that name their own
 # scope in a column, and the rest are guarded in source by
 # tests/test_dashboard_profile_scope.py.
@@ -48,7 +48,6 @@ PROFILE_SCOPED_FIRST_DATAFRAME_ROWS = {
 PROFILE_SCOPED_FIRST_DATAFRAME_COLUMN = {
     "dashboard/pages/5_Sponsor_Landscape.py": "indication_profile_id",
     "dashboard/pages/7_Trial_Explorer.py": "indication_profile_id",
-    "dashboard/pages/8_Trial_Similarity.py": "indication_profile_id",
 }
 
 
@@ -215,8 +214,12 @@ def test_overview_reads_as_labels_not_codes(fixture_warehouse):
     at = AppTest.from_file(str(ROOT / "dashboard/overview.py"), default_timeout=60).run()
     assert not at.exception, at.exception
     preview = at.dataframe[0].value
+    assert "listed_site_count" in preview.columns
+    assert preview["registry_search_url"].str.startswith("https://clinicaltrials.gov/search?").all()
     assert not preview["phase_normalized"].str.fullmatch(r"[A-Z0-9_/]+").any()
-    assert set(preview["priority_band"]) <= {"Priority review", "Review", "Watch"}
+    assert "active_recruiting_trials" in preview.columns
+    assert "sponsor_hhi" in preview.columns
+    assert (preview["active_recruiting_trials"] >= 0).all()
     assert not any("00:00:00" in c.value for c in at.caption)
     audit_labels = [e.label for e in at.expander if e.label.startswith("Audit:")]
     assert len(audit_labels) == len(set(audit_labels)) == 3
@@ -236,6 +239,79 @@ def test_phase_filter_offers_display_labels(fixture_warehouse):
     phase = next(w for w in at.sidebar.multiselect if w.label == "Phase")
     assert phase.options, "fixture should expose at least one phase"
     assert not any(option.isupper() for option in phase.options)
+
+
+def test_similarity_page_shows_only_the_selected_profile(
+    similarity_equivalence_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Page 8's scope check, on the dense fixture: the base one's default index
+    trials have no neighbours, so the page would render no table to inspect."""
+    from streamlit.testing.v1 import AppTest
+
+    from src.config import get_config
+
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(similarity_equivalence_root))
+    get_config.cache_clear()
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    for profile_id in ("adrd", "oncology_nsclc"):
+        at = AppTest.from_file(
+            str(ROOT / "dashboard/pages/8_Trial_Similarity.py"), default_timeout=60
+        )
+        at.run()
+        next(w for w in at.sidebar.selectbox if w.key == "indication_profile_selector").set_value(
+            profile_id
+        )
+        at.text_input[0].input("NCT00000001")
+        at.run()
+        assert not at.exception, f"as {profile_id}: {at.exception}"
+        assert at.dataframe, f"rendered no dataframe as {profile_id}"
+        frame = at.dataframe[0].value
+        assert {str(v) for v in frame["indication_profile_id"]} == {profile_id}
+
+
+def test_guidance_priority_queue_has_no_score_or_bands():
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    from components.guidance import PAGE_PLAYBOOKS
+
+    pq_guide = str(PAGE_PLAYBOOKS["priority_queue"]).lower()
+    for forbidden in ("score", "priority_review", "0.70", "0.45", "weighted"):
+        assert forbidden not in pq_guide, (
+            f"Found forbidden term '{forbidden}' in priority_queue guide"
+        )
+
+
+def test_audit_panel_derived_rules_has_no_score_or_bands():
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    from components.audit_panel import PRIORITY_DERIVED_RULES
+
+    rules_lower = PRIORITY_DERIVED_RULES.lower()
+    for forbidden in ("min-max", "weighted sum", "0.70", "0.45", "priority_review"):
+        assert forbidden not in rules_lower, (
+            f"Found forbidden term '{forbidden}' in PRIORITY_DERIVED_RULES"
+        )
+
+
+def test_pages_smoke_contain_no_priority_score_or_bands(fixture_warehouse):
+    from streamlit.testing.v1 import AppTest
+
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    for script in ("dashboard/overview.py", "dashboard/pages/1_Priority_Queue.py"):
+        at = AppTest.from_file(str(ROOT / script), default_timeout=60).run()
+        assert not at.exception, at.exception
+        page_text = " ".join(
+            [m.value for m in at.markdown]
+            + [c.value for c in at.caption]
+            + [t.value for t in at.title]
+            + [h.value for h in at.header]
+            + [s.value for s in at.subheader]
+        )
+        assert "Priority Review" not in page_text
+        assert "Watch" not in page_text
+        assert "priority score" not in page_text.lower()
 
 
 def test_data_reliability_page_no_calculator(fixture_warehouse):

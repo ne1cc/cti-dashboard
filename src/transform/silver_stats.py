@@ -10,7 +10,7 @@ them from the Parquet.
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from src.config import ProjectConfig
 from src.utils.paths import ensure_dir
@@ -50,7 +50,8 @@ def load_transform_stats(cfg: ProjectConfig, run_id: str) -> dict[str, Any] | No
     if not path.exists():
         return None
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return cast(dict[str, Any], data) if isinstance(data, dict) else None
     except (OSError, ValueError):
         return None
 

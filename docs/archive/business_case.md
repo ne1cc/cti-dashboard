@@ -1,3 +1,7 @@
+> [!NOTE]
+> **Archived Exploratory Hypothesis (ADR 0082)**
+> This document details an exploratory business case and persona hypothesis for clinical feasibility analysts. It has not been validated through empirical practitioner interviews or operational time-and-motion studies. Current development focuses on the open, multi-stakeholder access platform (Epic #40).
+
 # Proposed business use: registry-based competition screening
 
 ## Executive summary
@@ -17,7 +21,7 @@ time, evidence completeness and count reproducibility against a measured baselin
 
 Calculation and pipeline checks are implemented. The proposed workflow has not been
 validated through stakeholder interviews, and no operational improvement has been
-measured. The [national case study](feasibility_case_study.md) demonstrates a
+measured. The [national case study](../feasibility_case_study.md) demonstrates a
 descriptive workflow with actual captured records.
 
 ## Business-problem definition
@@ -70,28 +74,28 @@ and memo. A usable handoff contains condition/phase/geography filters, captured
 dates and run IDs, metric definitions, contributing NCT IDs, coverage and exclusions,
 source-date caveats and explicit follow-up questions. These fields let the reviewer
 check an observation and decide what evidence to request next. See the
-[project brief](project_brief.md) for reporting requirements and the
-[memo template](executive_memo_template.md) for preparing the handoff.
+[project brief](../project_brief.md) for reporting requirements and the
+[memo template](../executive_memo_template.md) for preparing the handoff.
 
 A low count is an observation about recorded study presence. It does not establish
 better recruitment prospects. A high count does not establish that a facility or
 region lacks capacity. The analysis provides no automatic pivot/proceed threshold.
 
-The optional weighted review-priority score provides a disclosed ordering of
-segments. Its predictive and operational usefulness is unvalidated; priority bands
-are not intervention or site-activation thresholds. The first use case can be
-evaluated through descriptive counts and inspectable evidence without relying on
-the score.
+The historical concept of an optional weighted review-priority score and
+priority bands has been retired under ADR 0077. Feasibility review is conducted
+through transparent, sortable raw metrics (recruiting trial counts, distinct sponsors,
+sponsor HHI, and site overlap) alongside inspectable registry evidence without
+relying on unvalidated composite scores.
 
 ## Implemented capabilities and proposed benefits
 
-| Implemented capability | Evidence | Proposed benefit requiring evaluation |
-|---|---|---|
-| Distinct recruiting-study counts by condition, phase and state | dbt marts, metric dictionary and contributor audits | Organize an initial landscape review |
-| Repeated captured snapshots | Project-created status history and explicit time windows | Identify reported changes that need investigation |
-| Coverage and caveats | Eligible denominators, exclusions and separate freshness clocks | Make incomplete reporting visible during interpretation |
-| Record-level traceability | NCT IDs, raw references, hashes and exported rules/filters | Help an analyst inspect how a result was produced |
-| Preliminary review-priority signal | Disclosed component formulas, weights and proxy limitations | Organize review effort; predictive or operational usefulness remains unvalidated |
+| Implemented capability | Evidence | Proposed benefit requiring evaluation |\
+|---|---|---|\
+| Distinct recruiting-study counts by condition, phase and state | dbt marts, metric dictionary and contributor audits | Organize an initial landscape review |\
+| Repeated captured snapshots | Project-created status history and explicit time windows | Identify reported changes that need investigation |\
+| Coverage and caveats | Eligible denominators, exclusions and separate freshness clocks | Make incomplete reporting visible during interpretation |\
+| Record-level traceability | NCT IDs, raw references, hashes and exported rules/filters | Help an analyst inspect how a result was produced |\
+| Preliminary review-priority signal | Disclosed component formulas, weights and proxy limitations | Organize review effort; predictive or operational usefulness remains unvalidated |\
 
 Weekly collection is proposed for recurring reviews; it is not an enforced
 freshness SLA. A reviewer must agree an acceptable capture age and how to handle
@@ -99,17 +103,17 @@ older source records. Refreshes capture publicly available records on the config
 cadence. Pipeline age, posted-update age and verification age answer different
 questions. Registry updates and operations can differ, and the data is not a
 real-time view of recruitment.
-The national [case study](feasibility_case_study.md) demonstrates a descriptive
+The national [case study](../feasibility_case_study.md) demonstrates a descriptive
 workflow with actual captured records; it does not validate a score or recommend regions.
 
 ## Alternatives and the need for reliable engineering
 
-| Alternative | When it may be sufficient | What would justify the proposed product |
-|---|---|---|
-| Manual registry search and spreadsheet | An isolated question with a small cohort and an acceptable existing review process | Observed recurring scope reconciliation, contributor checking or evidence rework |
-| One-off analysis or static report | A fixed captured dataset and a single handoff | Repeated comparisons requiring explicit collection history and consistent rules |
-| Existing organizational tooling | The team already has trusted evidence and a suitable review workflow | A demonstrated gap that this project can address without duplicating that workflow |
-| Continue the current process | Review friction is minor or proposed outputs do not improve the task | Measured pain and stakeholder willingness to use the output |
+| Alternative | When it may be sufficient | What would justify the proposed product |\
+|---|---|---|\
+| Manual registry search and spreadsheet | An isolated question with a small cohort and an acceptable existing review process | Observed recurring scope reconciliation, contributor checking or evidence rework |\
+| One-off analysis or static report | A fixed captured dataset and a single handoff | Repeated comparisons requiring explicit collection history and consistent rules |\
+| Existing organizational tooling | The team already has trusted evidence and a suitable review workflow | A demonstrated gap that this project can address without duplicating that workflow |\
+| Continue the current process | Review friction is minor or proposed outputs do not improve the task | Measured pain and stakeholder willingness to use the output |\
 
 Reliable engineering becomes useful when the same review recurs. Ingestion manifests
 identify complete captures; snapshots retain observed changes; documented taxonomy,
@@ -136,12 +140,12 @@ scope. Compare the same deliverable using the product, accounting for task order
 and familiarity. Include evidence checking and memo preparation in both tasks;
 a faster dashboard lookup alone does not establish a faster review.
 
-| Measure | Definition and evaluation method | Baseline and target |
-|---|---|---|
-| Review preparation time | Minutes from receiving the agreed scope to delivering a reviewer-acceptable evidence memo; compare matched manual and product-assisted tasks | Unmeasured; establish baseline, then agree a meaningful reduction with the metric owner |
-| Evidence completeness | Required applicable handoff fields present / required applicable fields, using the same checklist and reviewer in both tasks | Unmeasured; agree an acceptable level before evaluation |
-| Count reproducibility | Sampled published counts independently reproduced with matching scope and NCT contributors / sampled published counts | Workflow baseline unmeasured; agree the acceptance level before evaluation |
-| Use in recurring reviews | Eligible review tasks that use an exported audit or resulting evidence memo / eligible review tasks during an agreed observation period | Adoption unmeasured; define eligible tasks and target with the workflow owner |
+| Measure | Definition and evaluation method | Baseline and target |\
+|---|---|---|\
+| Review preparation time | Minutes from receiving the agreed scope to delivering a reviewer-acceptable evidence memo; compare matched manual and product-assisted tasks | Unmeasured; establish baseline, then agree a meaningful reduction with the metric owner |\
+| Evidence completeness | Required applicable handoff fields present / required applicable fields, using the same checklist and reviewer in both tasks | Unmeasured; agree an acceptable level before evaluation |\
+| Count reproducibility | Sampled published counts independently reproduced with matching scope and NCT contributors / sampled published counts | Workflow baseline unmeasured; agree the acceptance level before evaluation |\
+| Use in recurring reviews | Eligible review tasks that use an exported audit or resulting evidence memo / eligible review tasks during an agreed observation period | Adoption unmeasured; define eligible tasks and target with the workflow owner |\
 
 Ask analysts to locate contributors, explain the denominator and identify missing
 evidence. Record reviewer correction requests, participant feedback and unsuccessful
@@ -165,6 +169,6 @@ of clinical operations workflows and reviewer turnaround times rather than specu
 Records are public registry listings, not patient-level data. Results support
 preliminary feasibility review and do not establish scientific validity or
 site-level recruitment performance. Counts reflect captured records and displayed
-inclusion rules. See the [project brief](project_brief.md),
-[metric definitions](metric_definitions.md) and
-[limitations](assumptions_and_limitations.md) for scope and retention boundaries.
+inclusion rules. See the [project brief](../project_brief.md),
+[metric definitions](../metric_definitions.md) and
+[limitations](../assumptions_and_limitations.md) for scope and retention boundaries.

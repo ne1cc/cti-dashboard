@@ -10,7 +10,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "dashboard"))
 
 from components.formatting import (  # noqa: E402
-    format_band,
     format_phase,
     format_priority_explanation,
     format_snapshot_date,
@@ -27,13 +26,6 @@ def test_unmapped_and_missing_phases_degrade_readably():
     assert format_phase("SOME_NEW_PHASE") == "Some New Phase"
     assert format_phase(None) == ""
     assert format_phase(float("nan")) == ""
-
-
-def test_band_labels():
-    assert format_band("priority_review") == "Priority review"
-    assert format_band("review") == "Review"
-    assert format_band("watch") == "Watch"
-    assert format_band("unexpected") == "unexpected"
 
 
 def test_snapshot_date_drops_the_midnight_time():

@@ -23,12 +23,12 @@
    and does not observe actual enrollment competition.
 7. **Segment grain.** Trials without a usable U.S. location are excluded
    from segment marts (U.S.-scope MVP); original rows remain inspectable in audit marts; bronze availability follows retention.
-8. **Score normalization.** Min-max within the scored population makes the
-   score *relative to the current snapshot's segments*; scores are not
-   comparable across projects or absolute over time.
-9. **Bands.** Competition low/moderate/elevated bands use relative
-   percentile cuts; priority watch/review/priority_review bands use fixed
-   score thresholds. Neither is a validated risk tier.
+8. **Raw sortable metrics (ADR 0077).** Composite feasibility priority scores
+   and priority bands were removed in favor of transparent, unweighted raw metrics
+   (recruiting trial counts, distinct sponsors, sponsor HHI, and site overlap).
+9. **Descriptive competition bands.** Competition low/moderate/elevated bands in
+   `mart_recruiting_competition` use relative percentile cuts of sponsor concentration;
+   they are descriptive sorting aids, not validated operational risk tiers.
 
 ## Operational limitations
 10. Profile-scoped indications; additional areas require configuration changes
@@ -52,6 +52,26 @@
     page retrieval times remain unknown; month/year text does not imply a day.
     The configurable project-defined warning (default >180 days) retains records
     and is not a validity cutoff.
-16. State geography uses reported country/state, not coordinates or a radius. An
-    organization evaluating regional site proximity should supplement state-level
-    listings with postal coordinates or driving distance.
+17. State geography uses reported country/state, not coordinates or a radius. An
+    unresolved location means undetermined region membership unless another location
+    supplies a selected-state match; it is not evidence of membership in that state.
+    Coverage denominators retain these omissions before geography exclusion and
+    measure captured-record inclusion, not total competitive-market coverage.
+18. Estimated enrollment is a study target; reported actual enrollment is a distinct
+    category. Missing values and unknown types remain separate. No enrollment is
+    allocated among locations; repeated locations/history do not multiply totals.
+19. Normalized facility/city/state text can merge different facilities or split one
+    facility. Recorded-location ordinals distinguish rows only. Study segment counts
+    overlap and must not be summed into a unique-study total. Derived metrics, sponsor
+    concentration, percentiles and growth remain warehouse calculations; the panel
+    enumerates count inputs and qualifying growth/proxy events with predecessor/source
+    evidence, and discloses formulas, windows and displayed values.
+20. Raw pages are immutable while retained. Configured pruning can remove them;
+    exported references do not guarantee future resolution or indefinite bronze
+    retention. Rebuild historical silver from retained bronze to expose new provenance
+    fields, then rebuild dbt; this does not invent absent historical receipt timestamps.
+    Missing audit marts produce rebuild guidance rather than a substitute audit.
+21. The isolated UTC-boundary fixture pins DuckDB dbt sessions to
+    `America/Los_Angeles` and asserts explicit UTC alignment.
+
+Registry-derived signals support preliminary feasibility review. They do not measure site-level recruitment performance or establish scientific validity. Counts reflect captured public records and the displayed inclusion rules.

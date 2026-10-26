@@ -49,6 +49,19 @@ def format_condition_group(group: str | Any, profile_id: str | None = None) -> s
     return group.replace("_", " ").title()
 
 
+def clinicaltrials_gov_search_url(
+    condition_group: str, state_normalized: str, profile_id: str | None = None
+) -> str:
+    """Generate a ClinicalTrials.gov search link from the active profile taxonomy."""
+    from urllib.parse import quote_plus
+
+    cond_term = quote_plus(format_condition_group(condition_group, profile_id))
+    return (
+        f"https://clinicaltrials.gov/search?cond={cond_term}"
+        f"&locStr={state_normalized}&country=United%20States"
+    )
+
+
 def render_indication_banner(profile_id: str | None = None) -> None:
     """Render the active indication scope banner.
 
@@ -123,32 +136,24 @@ PAGE_GUIDANCE: dict[str, dict[str, Any]] = {
         ),
     },
     "priority_queue": {
-        "title": "Priority Queue: Feasibility Review Prioritization",
+        "title": "Registry Segments: Raw Metric Inspection",
         "what": (
-            "Ranks condition × state × phase segments using a multi-factor "
-            "feasibility review priority score (0.0 to 1.0). Each segment summarizes "
-            "recruiting trial volume, recent growth momentum, sponsor concentration "
-            "(HHI), site overlap, and the legacy operational completeness adjustment."
+            "Condition, state, and phase segments with the counts, sponsor concentration, "
+            "site overlap, and completeness measures calculated from registry listings."
         ),
         "why": (
-            "Computed as a weighted composite: 0.35 recruiting count + 0.20 growth "
-            "momentum + 0.20 sponsor concentration + 0.15 site overlap + 0.10 legacy "
-            "operational completeness. Bands are defined by fixed score thresholds: "
-            "Priority Review (≥ 0.70), Review (0.45 to 0.70), and Watch (< 0.45)."
+            "The table groups captured trials by normalized condition, state, and phase. "
+            "Sponsor concentration and site overlap summarize those underlying records."
         ),
         "how_to_verify": (
-            "The score is a relative ranking index of registry activity to organize "
-            "workflow review, not a predictive forecast of recruitment velocity or "
-            "trial success. Inspect component values and verify site availability "
-            "directly with prospective investigators."
+            "Inspect contributing trial records and compare them with ClinicalTrials.gov. "
+            "These measures describe captured listings, not site capacity or recruitment forecasts."
         ),
         "what_it_shows": (
-            "Ranks condition × state × phase segments using a multi-factor "
-            "feasibility review priority score (0.0 to 1.0)."
+            "Condition, state, and phase segments with raw registry counts and measures."
         ),
         "how_to_analyze": (
-            "Computed as a weighted composite of recruiting count, growth momentum, "
-            "sponsor concentration, site overlap, and operational completeness."
+            "Review the underlying values directly and use criteria relevant to the study."
         ),
     },
     "competition_landscape": {

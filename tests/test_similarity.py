@@ -47,3 +47,12 @@ def test_similarity_models_reference_indication_profile_id():
     assert "a.indication_profile_id = b.indication_profile_id" in candidates_sql
     assert "c.indication_profile_id = a.indication_profile_id" in mart_sql
     assert "c.indication_profile_id = b.indication_profile_id" in mart_sql
+
+
+def test_comparability_features_references_eligibility_fields():
+    int_path = ROOT / "dbt_clinical_trials/models/intermediate/int_trial_comparability_features.sql"
+    int_sql = int_path.read_text()
+    assert "minimum_age_years" in int_sql
+    assert "maximum_age_years" in int_sql
+    assert "healthy_volunteers" in int_sql
+    assert "sex" in int_sql

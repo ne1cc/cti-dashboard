@@ -204,7 +204,6 @@ def test_dynamic_condition_group_formatting_fallback_and_mutation(monkeypatch: p
             retention=RetentionConfig(),
         ),
         taxonomy=mock_tax,
-        score_weights_path=None,
         shared=SharedPaths(silver=Path("/tmp"), gold=Path("/tmp"), duckdb=Path("/tmp")),
     )
 
@@ -241,7 +240,6 @@ def test_dynamic_condition_group_formatting_fallback_and_mutation(monkeypatch: p
         ingest_only=False,
         config=mock_profile.config,
         taxonomy=mutated_tax,
-        score_weights_path=None,
         shared=mock_profile.shared,
     )
 

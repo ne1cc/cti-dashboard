@@ -100,4 +100,7 @@ select
         case when enrollment_band_match = 1 then 'similar enrollment size (' || a_enrollment_band || ')' end
     ) as similarity_explanation
 from scored
-qualify similarity_rank <= 25
+-- The oracle's one deviation from the old model: the test fixture raises this
+-- cut so the reference keeps every scored pair. Restricting a top-25 list to
+-- candidates is not the candidates' top 25 once discovery actually narrows.
+qualify similarity_rank <= {{ var('similarity_reference_top_n', 25) }}

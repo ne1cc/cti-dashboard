@@ -246,3 +246,41 @@ def test_provenance_schema_survives_null_then_present_chunks(tmp_path):
         if entity == "silver_trial_locations":
             assert table.schema.field("location_ordinal").type == pa.int64()
             assert rows[1]["location_ordinal"] == 2
+
+
+def test_writer_eligibility_schema_and_types(tmp_path: Path):
+    rows = [
+        {
+            "ingestion_run_id": "r1",
+            "nct_id": "NCT00000001",
+            "std_age_groups": ["ADULT", "OLDER_ADULT"],
+            "gender_based": True,
+            "gender_description": "Female only",
+            "healthy_volunteers": False,
+        },
+        {
+            "ingestion_run_id": "r1",
+            "nct_id": "NCT00000002",
+            "std_age_groups": None,
+            "gender_based": None,
+            "gender_description": None,
+            "healthy_volunteers": True,
+        },
+    ]
+    with SilverRunWriter("r1", tmp_path) as writer:
+        writer.add_rows({"silver_trials": rows})
+
+    path = tmp_path / "silver_trials" / "run_id=r1.parquet"
+    schema = pq.read_schema(path)
+    assert schema.field("std_age_groups").type == pa.list_(pa.string())
+    assert schema.field("gender_based").type == pa.bool_()
+    assert schema.field("gender_description").type == pa.string()
+
+    table = pq.read_table(path)
+    data = table.to_pylist()
+    assert data[0]["std_age_groups"] == ["ADULT", "OLDER_ADULT"]
+    assert data[0]["gender_based"] is True
+    assert data[0]["gender_description"] == "Female only"
+    assert data[1]["std_age_groups"] is None
+    assert data[1]["gender_based"] is None
+    assert data[1]["gender_description"] is None
