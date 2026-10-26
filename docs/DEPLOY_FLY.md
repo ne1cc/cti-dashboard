@@ -28,6 +28,54 @@ shape.
   and `tests/test_fly_config.py` pins that relation. The earlier 90s was set
   from a 59s *one-profile* cold run and would have force-killed a
   two-profile refresh mid-write.
+- `.github/workflows/ci.yml` — unified CI/CD workflow: gates production
+  deployment on the `lint-and-test` job passing on pushes to `main`.
+- `.github/scripts/deploy_fly.sh` — automated deployment script with pre-rollout
+  release image capture, post-deployment smoke check against `/_stcore/health`,
+  and automated rollback on rollout or smoke failure.
+
+## Automated deployment (GitHub Actions)
+
+Production deployments are automated and gated by CI in `.github/workflows/ci.yml`.
+The uncoordinated standalone `.github/workflows/fly-deploy.yml` has been removed
+so broken code can never deploy to production if tests fail.
+
+### Unified Pipeline & CI Gating
+The `deploy` job runs strictly downstream of `lint-and-test` (`needs: lint-and-test`).
+If code fails linting, code formatting, type checking, or unit test coverage gates,
+the deployment job does not execute.
+
+- **Trigger:** Gated strictly to pushes on `main` (`github.event_name == 'push' && github.ref == 'refs/heads/main'`).
+  Pull requests and manual `workflow_dispatch` invocations run the full verification
+  suite without triggering a deploy.
+- **GitHub Environment:** The deploy job runs in the GitHub environment `production`,
+  restricting `FLY_API_TOKEN` secret exposure to the deploy step. This allows
+  repository administrators to configure protection rules (such as required reviewers)
+  without impacting CI test execution.
+- **Concurrency:** Uses concurrency group `deploy-production` with `cancel-in-progress: false`.
+  This serializes production rollouts so overlapping runs cannot clobber each other
+  or deploy out of order, while ensuring an active in-flight rollout is never terminated
+  mid-run.
+
+### Deployment Script & Health Verification
+Rollouts are executed by `.github/scripts/deploy_fly.sh`:
+1. **Pre-rollout image capture:** Inspects current releases using
+   `flyctl releases --image --json -a cti-dashboard` to capture the Docker image
+   reference of the active release before deploying new code.
+2. **Rollout execution:** Runs `flyctl deploy --remote-only --app cti-dashboard`.
+3. **Smoke check:** Polls `/_stcore/health` with bounded retries (12 attempts,
+   10-second intervals, 5-second request timeout; matching the ~2-minute initial boot budget).
+   HTTP 200 signals a healthy deployment.
+
+### Automated Rollback
+If either the deployment command or the post-deployment smoke check fails:
+- The script automatically initiates a rollback by redeploying the previously captured
+  image reference: `flyctl deploy --image "$PREV_IMAGE" --app cti-dashboard`.
+- It performs a follow-up health check against `/_stcore/health` to confirm recovery.
+- Regardless of whether rollback restores service, the script **always exits with a non-zero exit code**,
+  ensuring GitHub Actions marks the workflow failed and surfaces the failure immediately.
+- If no previous image exists (e.g. first deployment), rollback is skipped and failure is
+  reported directly.
 
 ## One-time setup (you run these — they provision billed Fly resources)
 
@@ -80,14 +128,93 @@ fly launch --no-deploy
 # monthly trend series; see "What to expect" for that mechanism and number.
 fly volumes create cti_data --region iad --size 1
 
-# Deploy.
+# Deploy manually if needed.
 fly deploy
 ```
 
-## No secrets required
+## Adding indication profiles
 
-ClinicalTrials.gov's API v2 is public and unauthenticated — there is
-nothing to pass via `fly secrets set`.
+`make pipeline` refreshes every non-ingest-only profile found in
+`config/profiles/`. The 1 GB volume measurements above cover only ADRD and
+NSCLC. Adding condition profiles increases raw bronze, retained silver snapshots,
+warehouse size, and refresh time; the existing measurements do not establish
+capacity for a larger profile set. Before deploying added profiles, run complete
+profile snapshots in a measured environment, record peak and steady data size
+and pipeline duration, then set a volume size and retention horizon with safe
+headroom. A first deployment of new profiles also rebuilds the shared warehouse.
+
+Local measurement on 2026-10-04 for complete snapshots of ten added profiles:
+50,795 studies produced 1.4 GB of bronze and 161 MB of silver. The warehouse
+models other than trial similarity occupied 272 MB. Building
+`mart_trial_similarity` over all twelve profiles used 28 GB of temporary DuckDB
+storage after about 14 minutes without completing; the run was stopped and its
+temporary files were removed. This run does not establish a final warehouse
+size or refresh time. The 1 GB Fly volume cannot hold even the ten new raw
+snapshots, before retaining the existing profiles, silver data, or the
+warehouse. Do not deploy the expanded profile set until storage has been sized
+from a completed full build and the similarity mart's runtime and peak storage
+have been addressed.
+
+### 2026-10-07 outage: the precondition above was not met, and production went down
+
+Release v26 (2026-10-05) deployed the twelve-profile set onto the 2 GB volume.
+The set's own bronze exceeded the volume's steady budget, the volume reached
+100%, and the machine entered a crash loop: `entrypoint.sh`'s `log()` helper
+failed its first append with ENOSPC and `set -euo pipefail` killed the
+container within seconds of boot, before anything could be logged. With
+`auto_start_machines` off, the stopped machine stayed dark until 2026-10-15.
+Remediation in PR `fix/production-volume-and-profile-scope`:
+
+- `fly.toml` sets `CTI_REFRESHABLE_PROFILES = 'adrd,oncology_nsclc'`; the
+  deployed refresh is the measured-passing two-profile configuration again.
+  `src/profiles.py` `refreshable()` enforces the variable and fails loudly on
+  unknown names. Remove the variable only after the paragraph above is
+  satisfied: the similarity mart bounded, and storage sized from a completed
+  local full build.
+  Update 2026-10-15: the first half is now done — `mart_trial_similarity`
+  discovers pairs through `int_similarity_candidates` (shared condition-group
+  tokens, capped by `var('similarity_max_token_df')`) instead of an unbounded
+  pairwise self-join, and `tests/test_similarity_candidates.py` pins the new
+  output to the old logic restricted to candidates. Trials sharing no
+  surviving token now get zero neighbors instead of 25 minimum-score rows.
+  The sizing half still stands: no production re-expansion until a completed
+  twelve-profile local build has recorded pairs, temp peak, warehouse size,
+  and refresh duration.
+  Update 2026-10-19: that build is done. It first found that
+  `int_similarity_candidates` never joined on the token, so every trial with
+  any surviving token paired with every other one, and that group-only tokens
+  gave oncology_colorectal and type2_diabetes zero pairs (2 of 72
+  reconciliation checks failed). Tokens are now (condition group, phase) and
+  the join requires a shared token. Measured in this image (Docker 29.4.0,
+  linux/arm64, `--memory=1g --cpus=1`, empty named volume, real pulls):
+  - Ingest + transform, 12 profiles, 60,134 studies: ~260 s; 1.7 GB bronze,
+    195 MB silver.
+  - DuckDB defaults (80% of RAM, 4 threads): `dbt-run` OOM-killed (exit 137).
+  - With `threads: 1`, `memory_limit: '500MB'`, `preserve_insertion_order:
+    false`: prune + dbt-run + dbt-test + quality-report in 332 s
+    (`mart_trial_similarity` 196 s), 35 models, 162 tests and 72/72
+    reconciliation checks pass; 38.2 M candidate rows; warehouse 1.3 GB.
+  - Peak `/app/data` 8.0 GB (DuckDB spill), steady 3.2 GB; a weekly refresh
+    also holds the previous bronze run until prune, so budget ~10 GB peak.
+  - Similarity coverage: every trial has neighbours in 9 profiles;
+    oncology_breast 49%, type2_diabetes 56%, heart_failure 76% (their
+    catch-all groups still exceed the cap within one phase).
+  Sizing for twelve profiles on any host: >= 2 GB RAM (or 1 GB with the DuckDB
+  settings above), >= 15 GB disk, and a ~10-minute weekly refresh outage,
+  which exceeds Fly's 300 s `kill_timeout` ceiling. `CTI_REFRESHABLE_PROFILES`
+  stays set here; hosting is moving off Fly.
+- The volume was extended 2 GB → 5 GB (`fly volumes extend cti_data --size 5`).
+  The stale ten-profile bronze (~1.4 GB) is retained by `prune_all`, which
+  intentionally prunes `registry.all()` at `bronze_runs_to_keep: 1`.
+- `entrypoint.sh` logging is non-fatal; `auto_start_machines` is on so a
+  stopped machine wakes on traffic.
+
+## Secrets and CI environment
+
+- ClinicalTrials.gov's API v2 is public and unauthenticated — there is nothing
+  to pass via `fly secrets set` on the running Fly machine.
+- GitHub Actions automated deployment requires a `FLY_API_TOKEN` configured in
+  repository secrets or within the `production` GitHub Environment settings.
 
 ## What to expect
 
@@ -155,7 +282,7 @@ nothing to pass via `fly secrets set`.
   that profile), so **one retained bronze run per profile = 331.9 MB** (the whole
   bronze directory walks 332.0 MB — the 0.1 MB is per-directory rounding);
   34.9 MB of silver per additional retained snapshot across both profiles; DuckDB
-  walked at 44.6 MB for one snapshot and 63.2 MB for three — no steady walk
+  walked at 44.6 MB for one snapshot and 63.2 MB at three — no steady walk
   isolated the 2-snapshot value, so between them it follows the fit's ~9.3
   MB/snapshot; and `data/gold` at 0.0 MB at every walk with no `data/quarantine`
   directory present at all — the mart bytes live in the warehouse file, the term

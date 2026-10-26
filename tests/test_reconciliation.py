@@ -442,7 +442,11 @@ def test_report_drift_section_names_its_profile(project_root_tmp, monkeypatch):
         write_bronze_page(profile_cfg.paths.bronze_api_responses / f"run_id={run_id}", 1, [study])
         profile_cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
         write_manifest(profile_cfg.paths.bronze_manifests, make_manifest(run_id, record_count=1))
-        baseline_paths = sorted([*observed, sentinel]) if index == 1 else observed
+        baseline_paths = (
+            sorted([*observed, sentinel])
+            if indication_profile.profile_id == "oncology_nsclc"
+            else observed
+        )
         (profile_cfg.paths.bronze_api_responses.parent / BASELINE_FILENAME).write_text(
             json.dumps(
                 {

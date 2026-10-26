@@ -1,12 +1,17 @@
-import json
 import shutil
 import subprocess
-import sys
-from dataclasses import dataclass, field, replace
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+
+from tests.fixture_warehouse import (
+    AddedStudy,
+    FixtureRun,
+    build_fixture_warehouse,
+    variant_page,
+)
 
 CONFIG_YAML = """
 api:
@@ -76,99 +81,7 @@ ADRD_CONDITION = "Alzheimer Disease"
 NSCLC_CONDITION = "Non-Small Cell Lung Cancer"
 
 
-@dataclass(frozen=True)
-class AddedStudy:
-    """One extra study on a *variant* bronze page, cloned from a study that
-    already exists on the base page.
-
-    The divergent fixture needs its second ADRD run to differ from its first in
-    something the models can see: an identical page two weeks later only proves
-    that `lag()` returns null again. Cloning keeps every field the transform
-    reads (dates, eligibility, interventions) valid without hand-writing a
-    second 10-study JSON fixture.
-    """
-
-    nct_id: str
-    clone_of: str
-    overall_status: str
-    phase: str | None = None
-    condition: str | None = None
-    sponsor: str | None = None
-    location: tuple[str, str, str] | None = None  # facility, city, state
-
-
-@dataclass(frozen=True)
-class FixtureRun:
-    """One bronze→silver→manifest cycle inside a fixture warehouse."""
-
-    profile: str  # registry profile_id: stamps silver and selects the bronze dir
-    run_id: str
-    started_at: datetime
-    condition: str
-    fixture_dir: str
-    page: str = "page=00001.json"
-    manifest_profile: str | None = None  # None -> same as `profile`
-    status_overrides: dict[str, str] = field(default_factory=dict)  # nct_id -> status
-    added: tuple[AddedStudy, ...] = ()
-
-    @property
-    def effective_manifest_profile(self) -> str:
-        return self.manifest_profile or self.profile
-
-
-def _variant_page(
-    src: Path,
-    *,
-    status_overrides: dict[str, str],
-    added: tuple[AddedStudy, ...],
-) -> dict:
-    """The bronze page at `src` with `status_overrides` applied and `added` cloned in.
-
-    Returns the document; the caller writes it. Nothing here is guessed: an
-    unknown nct_id in either collection raises rather than silently producing a
-    page that is the same as the base one (which would make the divergent
-    fixture divergent in date only, and quietly).
-    """
-    doc = json.loads(src.read_text(encoding="utf-8"))
-    by_id = {s["protocolSection"]["identificationModule"]["nctId"]: s for s in doc["studies"]}
-    for nct_id, status in status_overrides.items():
-        study = by_id.get(nct_id)
-        if study is None:
-            raise KeyError(f"{src} has no {nct_id} to re-status")
-        study["protocolSection"]["statusModule"]["overallStatus"] = status
-        study["protocolSection"]["statusModule"]["lastKnownStatus"] = status
-    for spec in added:
-        template = by_id.get(spec.clone_of)
-        if template is None:
-            raise KeyError(f"{src} has no {spec.clone_of} to clone")
-        clone = json.loads(json.dumps(template))
-        section = clone["protocolSection"]
-        ids = section["identificationModule"]
-        ids["nctId"] = spec.nct_id
-        ids["briefTitle"] = f"{ids.get('briefTitle', 'Fixture study')} [variant {spec.nct_id}]"
-        status = section["statusModule"]
-        status["overallStatus"] = spec.overall_status
-        status["lastKnownStatus"] = spec.overall_status
-        if spec.phase is not None:
-            section["designModule"]["phases"] = [spec.phase]
-        if spec.condition is not None:
-            section["conditionsModule"]["conditions"] = [spec.condition]
-        if spec.sponsor is not None:
-            section["sponsorCollaboratorsModule"]["leadSponsor"]["name"] = spec.sponsor
-        if spec.location is not None:
-            facility, city, state = spec.location
-            section["contactsLocationsModule"]["locations"] = [
-                {
-                    "facility": facility,
-                    "city": city,
-                    "state": state,
-                    "zip": "00000",
-                    "country": "United States",
-                    "status": spec.overall_status,
-                }
-            ]
-        doc["studies"].append(clone)
-    return doc
+_variant_page = variant_page
 
 
 @pytest.fixture
@@ -283,137 +196,19 @@ def _build_fixture_root(
     tmp_path_factory: pytest.TempPathFactory,
     name: str,
     runs: list[FixtureRun],
+    *,
+    session_timezone: str | None = None,
+    dbt_vars: dict[str, object] | None = None,
 ) -> Path:
-    """Bronze→silver→gold for `runs`, then one `dbt build`; returns the scratch root.
-
-    Shared by every warehouse fixture in this module. dbt runs in a subprocess:
-    dbt's in-process adapter keeps the DuckDB file open, which would block the
-    read-only connections the assertions use. The project dir is the repo's real
-    `dbt_clinical_trials/`, so the models under test are the committed ones; only
-    the data, the profiles.yml and the target dir are per-root (A22: nothing here
-    may write under the repo's own `data/`).
-    """
+    """Bronze->silver->gold for `runs`, then one `dbt build`; returns the scratch root."""
     root = tmp_path_factory.mktemp(name)
-    mp = pytest.MonkeyPatch()
-    mp.setenv("CTI_PROJECT_ROOT", str(root))
-    try:
-        (root / "config").mkdir()
-        (root / "config" / "project_config.yml").write_text(CONFIG_YAML, encoding="utf-8")
-        for cfg_name in (
-            "condition_taxonomy.yml",
-            "condition_taxonomy_nsclc.yml",
-            "geography_rules.yml",
-            "score_weights.yml",
-            "roi_assumptions.yml",
-            "shared_paths.yml",
-        ):
-            shutil.copy(REPO_ROOT / "config" / cfg_name, root / "config" / cfg_name)
-        shutil.copytree(REPO_ROOT / "config" / "profiles", root / "config" / "profiles")
-
-        from src.config import load_config
-        from src.ingest.snapshot_manifest import (
-            IngestionManifest,
-            write_manifest,
-            write_summary,
-        )
-        from src.profiles import load_profile, load_shared_paths
-        from src.transform.build_silver_entities import run_transform
-
-        cfg = load_config()
-        shared = load_shared_paths(root / "config" / "shared_paths.yml")
-        profiles = {
-            "adrd": load_profile(root / "config/profiles/adrd.yml", shared=shared),
-            "oncology_nsclc": load_profile(
-                root / "config/profiles/oncology_nsclc.yml", shared=shared
-            ),
-        }
-
-        for index, run in enumerate(runs):
-            profile_cfg = profiles[run.profile].config
-            run_dir = profile_cfg.paths.bronze_api_responses / f"run_id={run.run_id}"
-            run_dir.mkdir(parents=True)
-            page_src = Path(__file__).parent / "fixtures" / run.fixture_dir / run.page
-            page_dst = run_dir / run.page
-            if run.status_overrides or run.added:
-                doc = _variant_page(
-                    page_src,
-                    status_overrides=run.status_overrides,
-                    added=run.added,
-                )
-                page_dst.write_text(json.dumps(doc), encoding="utf-8")
-            else:
-                shutil.copy(page_src, page_dst)
-                doc = json.loads(page_src.read_text(encoding="utf-8"))
-            record_count = len(doc["studies"])
-            manifest = IngestionManifest(
-                ingestion_run_id=run.run_id,
-                # Unique per run: two runs of one profile must not share a query
-                # hash, which is what the incremental reuser matches on.
-                query_hash=f"fixturequeryhash{index:02d}",
-                endpoint="https://clinicaltrials.gov/api/v2/studies",
-                condition=run.condition,
-                params={"query.cond": run.condition},
-                mode="incremental",
-                # Mirrors src/ingest/extract_studies.py, which stamps the manifest
-                # with profile.profile_id. The bronze glob in _sources.yml and the
-                # `profile as indication_profile_id` alias in stg_trial_snapshots
-                # read exactly this field, so a fixture that left it at the
-                # "default" fallback would make the reliability mart's per-profile
-                # grain unprovable.
-                #
-                # `UNSTAMPED_NSCLC_RUN_ID` deliberately *does* leave it there: that
-                # run exists to reproduce a manifest written before profile
-                # stamping landed, so mart_data_reliability's coalesce ordering
-                # (silver first) is the only thing keeping its profile correct.
-                profile=run.effective_manifest_profile,
-                status="success",
-                started_at_utc=run.started_at,
-                ended_at_utc=run.started_at + timedelta(minutes=30),
-                page_count=1,
-                record_count=record_count,
-                total_count_reported=record_count,
-            )
-            write_manifest(profile_cfg.paths.bronze_manifests, manifest)
-            write_summary(profile_cfg.paths.bronze_manifests, manifest)
-            assert run_transform(profile=profiles[run.profile]) == [run.run_id]
-        assert cfg.paths.silver == profiles["adrd"].config.paths.silver  # one silver tree
-
-        (root / "profiles.yml").write_text(
-            """clinical_trials:
-  target: dev
-  outputs:
-    dev:
-      type: duckdb
-      path: data/warehouse/clinical_trials.duckdb
-      threads: 4
-""",
-            encoding="utf-8",
-        )
-        (root / "data/warehouse").mkdir(parents=True, exist_ok=True)
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "dbt.cli.main",
-                "build",
-                "--project-dir",
-                str(REPO_ROOT / "dbt_clinical_trials"),
-                "--profiles-dir",
-                str(root),
-                "--target-path",
-                str(root / "dbt_target"),
-            ],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-        assert result.returncode == 0, (
-            f"dbt build failed:\n{result.stdout[-3000:]}\n{result.stderr[-1000:]}"
-        )
-        return root
-    finally:
-        mp.undo()
+    build_fixture_warehouse(
+        root,
+        runs=runs,
+        session_timezone=session_timezone,
+        dbt_vars=dbt_vars,
+    )
+    return root
 
 
 def _base_adrd_run() -> FixtureRun:
@@ -534,6 +329,95 @@ UNSTAMPED_NSCLC_RUN = FixtureRun(
 )
 
 
+# The similarity-mart fixtures (tests/test_similarity_candidates.py). The ADRD
+# run is the dense one: 52 cloned listings sharing "Alzheimer Disease",
+# alternating PHASE2/PHASE3, put 26 trials in the (alzheimers_disease, PHASE2)
+# token and 28 in (alzheimers_disease, PHASE3), so a trial's candidate set
+# outnumbers the top-25 cap and the qualify actually binds inside the
+# candidates -- the same
+# reason _filler_studies exists for the divergent fixture. Two Lewy Body
+# Dementia clones give a second, small token group, which is what the
+# similarity_max_token_df override drops the dominant token against: at df 4
+# both alzheimers tokens leave discovery while the lewy token (3) survives.
+# Both roots enable mart_trial_similarity_reference (the unbounded pre-2026-10
+# self-join, var-gated because it is the 28 GB run at registry scale) as the
+# equivalence oracle.
+SIMILARITY_RUN_ID = "20261012T090000Z_fixture06"
+SIMILARITY_STARTED_AT = datetime(2026, 10, 12, 9, tzinfo=UTC)
+
+
+def _similarity_adrd_run() -> FixtureRun:
+    return FixtureRun(
+        profile="adrd",
+        run_id=SIMILARITY_RUN_ID,
+        started_at=SIMILARITY_STARTED_AT,
+        condition=ADRD_CONDITION,
+        fixture_dir="bronze_snapshot",
+        added=(
+            *_filler_studies(20, 24),  # NCT00000020..NCT00000043, Alzheimer Disease
+            *_filler_studies(46, 28),  # NCT00000046..NCT00000073, past the Lewy clones
+            AddedStudy(
+                nct_id="NCT00000044",
+                clone_of="NCT00000006",
+                overall_status="RECRUITING",
+                condition="Lewy Body Dementia",
+            ),
+            AddedStudy(
+                nct_id="NCT00000045",
+                clone_of="NCT00000006",
+                overall_status="COMPLETED",
+                condition="Lewy Body Dementia",
+            ),
+        ),
+    )
+
+
+def _similarity_nsclc_run() -> FixtureRun:
+    # The base page's ten studies share no (condition group, phase) token, so
+    # NSCLC has no similarity rows without these two PHASE3 clones of NCT00000001.
+    return replace(
+        _base_nsclc_run(),
+        added=tuple(
+            AddedStudy(nct_id=nct_id, clone_of="NCT00000001", overall_status="COMPLETED")
+            for nct_id in ("NCT00000090", "NCT00000091")
+        ),
+    )
+
+
+@pytest.fixture(scope="session")
+def similarity_equivalence_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Default candidate cap; the reference self-join built alongside."""
+    return _build_fixture_root(
+        tmp_path_factory,
+        "similarity_equivalence",
+        [_similarity_adrd_run(), _similarity_nsclc_run()],
+        dbt_vars={"build_similarity_reference": True, "similarity_reference_top_n": 1000},
+    )
+
+
+@pytest.fixture(scope="session")
+def similarity_cap_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """similarity_max_token_df: 4 drops the dominant alzheimers token."""
+    return _build_fixture_root(
+        tmp_path_factory,
+        "similarity_cap",
+        [_similarity_adrd_run(), _base_nsclc_run()],
+        dbt_vars={"build_similarity_reference": True, "similarity_max_token_df": 4},
+    )
+
+
+@pytest.fixture(scope="session")
+def similarity_phase_split_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """similarity_max_token_df: 27 sits between the alzheimers PHASE2 token
+    (df 26) and the PHASE3 token (df 28)."""
+    return _build_fixture_root(
+        tmp_path_factory,
+        "similarity_phase_split",
+        [_similarity_adrd_run(), _base_nsclc_run()],
+        dbt_vars={"similarity_max_token_df": 27},
+    )
+
+
 @pytest.fixture(scope="session")
 def fixture_project_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """The original two-profile, one-snapshot-date warehouse. See its header note."""
@@ -613,3 +497,143 @@ def solo_fixture_roots(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Pa
             tmp_path_factory, "fixture_solo_nsclc", [_base_nsclc_run()]
         ),
     }
+
+
+AUDIT_RUN2_ID = "20260901T130000Z_audit02"
+AUDIT_FAILED_RUN_ID = "20260902T100000Z_auditfailed"
+
+
+def _audit_run() -> FixtureRun:
+    """Keep legacy base fixtures unchanged; adversarial audit data is isolated."""
+    locations = [
+        {
+            "facility": "Repeated site",
+            "city": "Durham",
+            "state": "NC",
+            "country": "United States",
+            "status": "COMPLETED",
+        },
+        {
+            "facility": "Repeated site",
+            "city": "Durham",
+            "state": "NC",
+            "country": "United States",
+            "status": "RECRUITING",
+        },
+        {"city": "Boston", "state": "MA", "country": "United States"},
+    ]
+    return replace(
+        _base_adrd_run(),
+        retrieved_at="2026-09-01T10:01:00+00:00",
+        study_overrides={
+            "NCT00000001": {
+                "statusModule": {
+                    "statusVerifiedDate": "2026-03",
+                    "lastUpdatePostDateStruct": {"date": "2026-03-05"},
+                },
+                "contactsLocationsModule": {"locations": locations},
+                "designModule": {"enrollmentInfo": {"count": 101, "type": "ESTIMATED"}},
+            },
+            "NCT00000002": {
+                "statusModule": {
+                    "overallStatus": "UNKNOWN",
+                    "statusVerifiedDate": "bad",
+                    "lastUpdatePostDateStruct": {"date": "2026-03-04"},
+                },
+                "contactsLocationsModule": {"locations": []},
+                "designModule": {"enrollmentInfo": {"count": 202, "type": "ACTUAL"}},
+            },
+            "NCT00000003": {
+                "statusModule": {"lastUpdatePostDateStruct": {}, "statusVerifiedDate": None},
+                "contactsLocationsModule": {"locations": [{"country": "United States"}]},
+                "designModule": {"enrollmentInfo": {}},
+            },
+            "NCT00000004": {
+                "contactsLocationsModule": {
+                    "locations": [{"state": "Ontario", "country": "Canada"}]
+                },
+                "designModule": {"enrollmentInfo": {"count": 303}},
+            },
+            "NCT00000005": {
+                "statusModule": {
+                    "statusVerifiedDate": "2026",
+                    "lastUpdatePostDateStruct": {"date": "2026-03"},
+                },
+                "designModule": {"studyType": None},
+            },
+            "NCT00000006": {
+                "statusModule": {
+                    "statusVerifiedDate": "2026-02-30",
+                    "lastUpdatePostDateStruct": {"date": "invalid"},
+                },
+            },
+            "NCT00000007": {
+                "designModule": {"enrollmentInfo": {"count": 404, "type": "UNRECOGNIZED"}},
+            },
+            "NCT00000009": {
+                "contactsLocationsModule": {"locations": []},
+            },
+            "NCT00000010": {
+                "contactsLocationsModule": {
+                    "locations": [{"state": "Atlantis", "country": "United States"}]
+                },
+            },
+        },
+    )
+
+
+@pytest.fixture(scope="session")
+def audit_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    run = _audit_run()
+    return _build_fixture_root(
+        tmp_path_factory,
+        "fixture_audit",
+        [
+            run,
+            replace(
+                run,
+                run_id=AUDIT_RUN2_ID,
+                started_at=datetime(2026, 9, 1, 0, 15, tzinfo=UTC),
+                retrieved_at=None,
+            ),
+            _base_nsclc_run(),
+            replace(
+                run,
+                run_id=AUDIT_FAILED_RUN_ID,
+                started_at=run.started_at + timedelta(days=1),
+                final_status="failed",
+            ),
+        ],
+        session_timezone="America/Los_Angeles",
+    )
+
+
+@pytest.fixture(scope="session")
+def audit_event_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    base = _base_adrd_run()
+    return _build_fixture_root(
+        tmp_path_factory,
+        "fixture_audit_events",
+        [
+            replace(
+                base,
+                run_id="20260101T001500Z_event_before",
+                started_at=datetime(2026, 1, 1, 0, 15, tzinfo=UTC),
+            ),
+            replace(
+                base,
+                run_id="20260901T001500Z_event_current",
+                started_at=datetime(2026, 9, 1, 0, 15, tzinfo=UTC),
+                status_overrides={"NCT00000002": "RECRUITING"},
+                study_overrides={
+                    "NCT00000001": {
+                        "statusModule": {"studyFirstPostDateStruct": {"date": "2026-06-03"}}
+                    },
+                    "NCT00000002": {
+                        "statusModule": {"studyFirstPostDateStruct": {"date": "2026-06-02"}}
+                    },
+                },
+            ),
+        ],
+        session_timezone="America/Los_Angeles",
+    )

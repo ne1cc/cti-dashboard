@@ -1,0 +1,20 @@
+version: 1
+default:
+  condition_group: other_prostate_conditions
+  dementia_relevance: false
+groups:
+- condition_group: prostate_cancer_advanced
+  dementia_relevance: false
+  exact:
+  - metastatic prostate cancer
+  substrings:
+  - metastatic prostate cancer
+  - castration resistant prostate
+- condition_group: prostate_cancer
+  dementia_relevance: false
+  exact:
+  - prostate cancer
+  - prostatic carcinoma
+  substrings:
+  - prostate cancer
+  - prostatic carcinoma

@@ -1,0 +1,144 @@
+{
+  "protocolSection": {
+    "identificationModule": {
+      "nctId": "NCT04245644",
+      "briefTitle": "Phase 3 Evaluation of Novel Tau-Targeted Therapy in Early Alzheimer Disease",
+      "officialTitle": "A Randomized, Double-Blind, Placebo-Controlled Study of BIIB080 in Participants With Early Alzheimer Disease"
+    },
+    "statusModule": {
+      "overallStatus": "RECRUITING",
+      "lastKnownStatus": null,
+      "statusVerifiedDate": "2026-06",
+      "startDateStruct": {
+        "date": "2020-04-15"
+      },
+      "primaryCompletionDateStruct": {
+        "date": "2027-02-28"
+      },
+      "completionDateStruct": {
+        "date": "2027-06-30"
+      },
+      "studyFirstPostDateStruct": {
+        "date": "2020-01-24"
+      },
+      "resultsFirstPostDateStruct": null,
+      "lastUpdatePostDateStruct": {
+        "date": "2026-06-12"
+      },
+      "expandedAccessInfo": {
+        "hasExpandedAccess": false
+      }
+    },
+    "sponsorCollaboratorsModule": {
+      "leadSponsor": {
+        "name": "Biogen Inc.",
+        "class": "INDUSTRY"
+      },
+      "collaborators": [
+        {
+          "name": "Ionis Pharmaceuticals, Inc.",
+          "class": "INDUSTRY"
+        }
+      ],
+      "responsibleParty": {
+        "type": "SPONSOR"
+      },
+      "centralContacts": [
+        {
+          "name": "Dr. Lead Coordinator",
+          "role": "Central Recruiter",
+          "phone": "800-555-0199",
+          "email": "inquiries-pii@biogen.example.com"
+        }
+      ],
+      "overallOfficials": [
+        {
+          "name": "Dr. Principal Investigator",
+          "affiliation": "Biogen",
+          "role": "STUDY_DIRECTOR"
+        }
+      ]
+    },
+    "designModule": {
+      "studyType": "INTERVENTIONAL",
+      "phases": ["PHASE3"],
+      "designInfo": {
+        "allocation": "RANDOMIZED",
+        "primaryPurpose": "TREATMENT",
+        "interventionModel": "PARALLEL",
+        "maskingInfo": {
+          "masking": "QUADRUPLE"
+        }
+      },
+      "enrollmentInfo": {
+        "count": 450,
+        "type": "ESTIMATED"
+      }
+    },
+    "conditionsModule": {
+      "conditions": [
+        "Alzheimer Disease",
+        "Mild Cognitive Impairment"
+      ]
+    },
+    "armsInterventionsModule": {
+      "interventions": [
+        {
+          "type": "DRUG",
+          "name": "BIIB080",
+          "description": "Antisense oligonucleotide targeting tau synthesis administered intrathecally"
+        },
+        {
+          "type": "DRUG",
+          "name": "Placebo",
+          "description": "Matching placebo administered intrathecally"
+        }
+      ]
+    },
+    "eligibilityModule": {
+      "minimumAge": "55 Years",
+      "maximumAge": "85 Years",
+      "sex": "ALL",
+      "genderBased": false,
+      "healthyVolunteers": false,
+      "stdAges": ["ADULT", "OLDER_ADULT"],
+      "eligibilityCriteria": "Inclusion Criteria:\n1. Age 55 to 85 years at screening.\n2. Meets NIA-AA criteria for probable Alzheimer disease.\n\nExclusion Criteria:\n1. Non-Alzheimer neurodegenerative disorder."
+    },
+    "contactsLocationsModule": {
+      "locations": [
+        {
+          "facility": "UCSF Memory and Aging Center",
+          "city": "San Francisco",
+          "state": "CA",
+          "zip": "94143",
+          "country": "United States",
+          "status": "RECRUITING",
+          "geoPoint": {
+            "lat": 37.7631,
+            "lon": -122.4578
+          },
+          "contacts": [
+            {
+              "name": "Local Site Coordinator",
+              "role": "Site Contact",
+              "phone": "415-555-0123",
+              "email": "site-pii@ucsf.example.edu"
+            }
+          ]
+        },
+        {
+          "facility": "Stanford Center for Memory Disorders",
+          "city": "Palo Alto",
+          "state": "CA",
+          "zip": "94304",
+          "country": "United States",
+          "status": "RECRUITING",
+          "geoPoint": {
+            "lat": 37.4358,
+            "lon": -122.1762
+          }
+        }
+      ]
+    }
+  }
+}

@@ -31,20 +31,28 @@ a *human feasibility review* is worth doing first.
 3. Claims about healthcare quality or access for patients.
 4. ROI, savings, or outcome claims presented as observed results.
 5. Clinical interpretations of outcome measures text.
-6. Any use or display of contact/investigator information (none is
-   collected; `stg_trial_contacts` is intentionally empty).
+6. Any collection, storage, or display of personal contact or investigator
+   details (names, emails, phone numbers). Per ADR 0065 (Contact Policy),
+   the platform enforces an official registry link plus site list policy;
+   zero personal contact details are stored or exposed, and `stg_trial_contacts`
+   is intentionally empty (`where 1 = 0`).
 
 ## Mechanical enforcement
 - `mart_feasibility_priority_queue.interpretation_note` travels with every
-  scored row: *"Potential competition signal from public registry
+  segment row: *"Potential competition signal from public registry
   listings. Not a recruitment forecast; requires human feasibility
   review."*
 - Every dashboard page renders the disclaimer banner via one shared
   `page_setup()`; a test asserts each page uses it.
 - Scenario outputs embed their disclaimer in the result object, so they
   cannot be rendered without it.
-- Bands (`low/moderate/elevated`, `watch/review/priority_review`) are
-  relative percentile/threshold cuts and must always be described as such.
+- Competition bands (`low/moderate/elevated`) are relative percentile cuts
+  and must always be described as such. The former composite priority score and
+  priority bands were removed under ADR 0077 in favor of transparent raw metrics.
+- Contact privacy enforcement: `stg_trial_contacts` is verified empty
+  (`where 1 = 0`), `flatten_studies.py` drops all contact modules, and
+  regression tests in `tests/test_contact_policy.py` mechanically assert zero
+  contact leakage into Parquet exports or warehouse models per ADR 0065.
 
 ## Escalation rule
 If an analysis appears to support a stronger claim than these guardrails

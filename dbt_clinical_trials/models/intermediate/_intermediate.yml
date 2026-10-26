@@ -1,0 +1,27 @@
+version: 2
+
+models:
+  - name: int_similarity_candidates
+    description: >
+      Bounded candidate pairs for mart_trial_similarity: pairs within a
+      profile that share at least one (condition group, phase) token whose per-profile
+      trial frequency is below var('similarity_max_token_df'), emitted in both
+      orientations. Replaces the unbounded pairwise self-join that measured
+      28 GB of DuckDB temporary storage at twelve profiles
+      (docs/DEPLOY_FLY.md, 2026-10-04). A trial with no surviving shared
+      token gets no pairs here, so mart_trial_similarity emits no rows for it.
+    columns:
+      - name: candidate_pair_key
+        description: >
+          Surrogate key over indication_profile_id x nct_id_a x nct_id_b;
+          orientation-sensitive, so both directions of a pair have keys.
+        tests: [not_null, unique]
+      - name: indication_profile_id
+        description: Profile whose query scope produced the pair.
+        tests: [not_null]
+      - name: nct_id_a
+        description: One side of the pair (alphabetically first of the unordered pair in the second orientation's mirror rows).
+        tests: [not_null]
+      - name: nct_id_b
+        description: The other side of the pair.
+        tests: [not_null]

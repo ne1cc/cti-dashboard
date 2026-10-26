@@ -219,3 +219,68 @@ def test_flatten_emits_exactly_entity_columns():
         assert rows, f"fixture must produce at least one {entity} row"
         for row in rows:
             assert set(row.keys()) == set(ENTITY_COLUMNS[entity]), entity
+
+
+def test_provenance_schema_survives_null_then_present_chunks(tmp_path):
+    provenance = {
+        "snapshot_id": "r1",
+        "retrieved_at_utc": "2026-10-02T10:01:00+00:00",
+        "raw_page_reference": "run_id=r1/page=00001.json",
+        "raw_study_ordinal": 1,
+    }
+    with SilverRunWriter("r1", tmp_path, flush_rows=1) as writer:
+        writer.add_rows({"silver_trials": [{}], "silver_trial_locations": [{}]})
+        writer.add_rows(
+            {
+                "silver_trials": [provenance],
+                "silver_trial_locations": [{**provenance, "location_ordinal": 2}],
+            }
+        )
+    for entity in ("silver_trials", "silver_trial_locations"):
+        table = pq.ParquetFile(tmp_path / entity / "run_id=r1.parquet").read()
+        assert table.schema.field("raw_study_ordinal").type == pa.int64()
+        rows = table.to_pylist()
+        for key, value in provenance.items():
+            assert rows[0][key] is None
+            assert rows[1][key] == value
+        if entity == "silver_trial_locations":
+            assert table.schema.field("location_ordinal").type == pa.int64()
+            assert rows[1]["location_ordinal"] == 2
+
+
+def test_writer_eligibility_schema_and_types(tmp_path: Path):
+    rows = [
+        {
+            "ingestion_run_id": "r1",
+            "nct_id": "NCT00000001",
+            "std_age_groups": ["ADULT", "OLDER_ADULT"],
+            "gender_based": True,
+            "gender_description": "Female only",
+            "healthy_volunteers": False,
+        },
+        {
+            "ingestion_run_id": "r1",
+            "nct_id": "NCT00000002",
+            "std_age_groups": None,
+            "gender_based": None,
+            "gender_description": None,
+            "healthy_volunteers": True,
+        },
+    ]
+    with SilverRunWriter("r1", tmp_path) as writer:
+        writer.add_rows({"silver_trials": rows})
+
+    path = tmp_path / "silver_trials" / "run_id=r1.parquet"
+    schema = pq.read_schema(path)
+    assert schema.field("std_age_groups").type == pa.list_(pa.string())
+    assert schema.field("gender_based").type == pa.bool_()
+    assert schema.field("gender_description").type == pa.string()
+
+    table = pq.read_table(path)
+    data = table.to_pylist()
+    assert data[0]["std_age_groups"] == ["ADULT", "OLDER_ADULT"]
+    assert data[0]["gender_based"] is True
+    assert data[0]["gender_description"] == "Female only"
+    assert data[1]["std_age_groups"] is None
+    assert data[1]["gender_based"] is None
+    assert data[1]["gender_description"] is None

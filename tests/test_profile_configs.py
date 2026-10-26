@@ -18,7 +18,22 @@ def registry() -> ProfileRegistry:
 
 def test_registry_discovers_all_shipped_profiles(registry: ProfileRegistry) -> None:
     ids = {p.profile_id for p in registry.all()}
-    assert {"adrd", "full_catalog", "oncology_nsclc"} <= ids
+    expected = {
+        "adrd",
+        "full_catalog",
+        "oncology_nsclc",
+        "oncology_breast",
+        "oncology_colorectal",
+        "oncology_prostate",
+        "oncology_melanoma",
+        "oncology_ovarian",
+        "type2_diabetes",
+        "heart_failure",
+        "parkinsons",
+        "rheumatoid_arthritis",
+        "multiple_sclerosis",
+    }
+    assert expected <= ids
 
 
 def test_status_filter_matches_scope_statuses(registry: ProfileRegistry) -> None:
@@ -48,10 +63,71 @@ def test_condition_scoped_profiles_include_full_status_filter(
         "SUSPENDED",
         "ENROLLING_BY_INVITATION",
     }
-    for profile_id in ("adrd", "oncology_nsclc"):
+    for profile_id in ("adrd", "oncology_nsclc", *NEW_PROFILE_IDS):
         profile = registry.get(profile_id)
         api_statuses = set(profile.config.api.query_params["filter.overallStatus"])
         assert api_statuses == expected, profile_id
+
+
+NEW_PROFILE_IDS = (
+    "oncology_breast",
+    "oncology_colorectal",
+    "oncology_prostate",
+    "oncology_melanoma",
+    "oncology_ovarian",
+    "type2_diabetes",
+    "heart_failure",
+    "parkinsons",
+    "rheumatoid_arthritis",
+    "multiple_sclerosis",
+)
+
+
+EXPECTED_QUERIES = {
+    "oncology_breast": "Breast Cancer",
+    "oncology_colorectal": "Colorectal Cancer",
+    "oncology_prostate": "Prostate Cancer",
+    "oncology_melanoma": "Melanoma",
+    "oncology_ovarian": "Ovarian Cancer",
+    "type2_diabetes": "Diabetes Mellitus, Type 2",
+    "heart_failure": "Heart Failure",
+    "parkinsons": "Parkinson Disease",
+    "rheumatoid_arthritis": "Rheumatoid Arthritis",
+    "multiple_sclerosis": "Multiple Sclerosis",
+}
+
+
+def test_new_profiles_are_refreshable_and_condition_scoped(registry: ProfileRegistry) -> None:
+    refreshable = {profile.profile_id: profile for profile in registry.refreshable()}
+    for profile_id in NEW_PROFILE_IDS:
+        profile = refreshable[profile_id]
+        assert profile.taxonomy is not None
+        assert profile.config.api.query_params.get("query.cond") == EXPECTED_QUERIES[profile_id]
+        assert profile.config.api.query_params["filter.advanced"] == (
+            "AREA[StudyType]INTERVENTIONAL"
+        )
+        assert profile_id in str(profile.config.paths.bronze_api_responses)
+        assert profile_id in str(profile.config.paths.bronze_manifests)
+
+
+def test_new_profile_taxonomies_map_primary_conditions(registry: ProfileRegistry) -> None:
+    cases = {
+        "oncology_breast": ("Breast Cancer", "breast_cancer"),
+        "oncology_colorectal": ("Colorectal Cancer", "colorectal_cancer"),
+        "oncology_prostate": ("Prostate Cancer", "prostate_cancer"),
+        "oncology_melanoma": ("Melanoma", "melanoma"),
+        "oncology_ovarian": ("Ovarian Cancer", "ovarian_cancer"),
+        "type2_diabetes": ("Diabetes Mellitus, Type 2", "type2_diabetes"),
+        "heart_failure": ("Heart Failure", "heart_failure"),
+        "parkinsons": ("Parkinson Disease", "parkinsons_disease"),
+        "rheumatoid_arthritis": ("Rheumatoid Arthritis", "rheumatoid_arthritis"),
+        "multiple_sclerosis": ("Multiple Sclerosis", "multiple_sclerosis"),
+    }
+    for profile_id, (condition, expected_group) in cases.items():
+        taxonomy = registry.get(profile_id).taxonomy
+        assert taxonomy is not None
+        assert taxonomy.map_condition(condition).condition_group == expected_group
+        assert taxonomy.map_condition("Unrelated condition").condition_group.startswith("other_")
 
 
 def test_ingest_only_profiles_have_no_taxonomy(registry: ProfileRegistry) -> None:

@@ -11,8 +11,11 @@ once from config/shared_paths.yml and injected into every profile's config.
 Backward compatibility
 ─────────────────────
 get_config() and get_taxonomy() in src/config.py and
-src/transform/normalize_conditions.py continue to work unchanged; they load
-the ADRD profile's config/taxonomy directly from the original YAML files.
+src/transform/normalize_conditions.py continue to work unchanged.
+config/project_config.yml references config/profiles/adrd.yml as its single
+source of truth via `default_profile: adrd`, dynamically resolving ADRD query
+parameters and scope (all 8 overall statuses) while preserving standalone
+config semantics when default_profile is omitted.
 ProfileRegistry supplements — it does not replace — those singletons.
 
 Adding a new indication
@@ -27,6 +30,7 @@ No Python changes required.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -106,7 +110,6 @@ class IndicationProfile:
                             API query parameters, with shared silver/gold/duckdb
                             paths injected from config/shared_paths.yml.
         taxonomy:           Loaded ConditionTaxonomy, or None for ingest_only profiles.
-        score_weights_path: Absolute path to the score-weights YAML, or None.
         shared:             Shared medallion paths (silver, gold, duckdb).
     """
 
@@ -115,7 +118,6 @@ class IndicationProfile:
     ingest_only: bool
     config: ProjectConfig
     taxonomy: ConditionTaxonomy | None
-    score_weights_path: Path | None
     shared: SharedPaths
 
 
@@ -180,18 +182,12 @@ def load_profile(
     if taxonomy_rel and not ingest_only:
         taxonomy = load_taxonomy(project_root() / taxonomy_rel)
 
-    score_weights_path: Path | None = None
-    sw_rel: str | None = pmeta.get("score_weights")
-    if sw_rel:
-        score_weights_path = project_root() / sw_rel
-
     return IndicationProfile(
         profile_id=profile_id,
         display_name=str(pmeta.get("display_name", profile_id)),
         ingest_only=ingest_only,
         config=cfg,
         taxonomy=taxonomy,
-        score_weights_path=score_weights_path,
         shared=resolved_shared,
     )
 
@@ -244,8 +240,35 @@ class ProfileRegistry:
         `ingest_only` profiles (full_catalog) keep their bronze but never reach
         silver or the warehouse, so they are excluded here — `orchestrate` and
         the dashboard must not be able to pick one up.
+
+        When `CTI_REFRESHABLE_PROFILES` is set (comma-separated profile ids),
+        the returned set is narrowed to it. The Fly deployment sets this
+        because the deployed volume and VM cannot run every refreshable
+        profile — docs/DEPLOY_FLY.md, "Adding indication profiles", requires
+        storage to be sized from a completed full build before a profile set
+        is deployed. A name the registry does not know fails loudly here
+        rather than silently shrinking the refresh.
         """
-        return [p for p in self.all() if not p.ingest_only]
+        profiles = [profile for profile in self.all() if not profile.ingest_only]
+        scope = os.environ.get("CTI_REFRESHABLE_PROFILES")
+        if scope is None:
+            return profiles
+        requested = {
+            normalize_profile_id(name.strip()) for name in scope.split(",") if name.strip()
+        }
+        known = {profile.profile_id for profile in profiles}
+        unknown = sorted(requested - known)
+        if unknown:
+            raise ValueError(
+                f"CTI_REFRESHABLE_PROFILES names unknown refreshable profile(s) {unknown}; "
+                f"known refreshable profiles: {sorted(known)}"
+            )
+        if not requested:
+            raise ValueError(
+                "CTI_REFRESHABLE_PROFILES is set but names no refreshable profile; "
+                "refusing to refresh nothing."
+            )
+        return [profile for profile in profiles if profile.profile_id in requested]
 
     def get(self, profile_id: str) -> IndicationProfile:
         """Return the named profile, raising KeyError if not found."""

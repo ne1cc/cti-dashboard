@@ -7,6 +7,8 @@ hasResults. Location contact/investigator fields are deliberately not extracted.
 """
 
 import json
+from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 from src.transform.normalize_conditions import ConditionTaxonomy
@@ -25,8 +27,9 @@ def dig(obj: Any, *keys: str) -> Any:
     return current
 
 
-def _struct_date(status_module: dict, key: str) -> str | None:
-    return dig(status_module, key, "date")
+def _struct_date(status_module: dict[str, Any], key: str) -> str | None:
+    val = dig(status_module, key, "date")
+    return str(val) if isinstance(val, str) else None
 
 
 def normalize_phases(phases: list[str] | None) -> tuple[str | None, str]:
@@ -67,6 +70,9 @@ def flatten_study(
     taxonomy: ConditionTaxonomy,
     geography: GeographyRules,
     indication_profile_id: str = "adrd",
+    retrieved_at_utc: str | None = None,
+    raw_page_reference: str | None = None,
+    raw_study_ordinal: int | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     """One study → rows for each silver entity.
 
@@ -90,10 +96,15 @@ def flatten_study(
         "indication_profile_id": indication_profile_id,
         "nct_id": nct_id,
         "source_json_hash": source_json_hash,
+        "snapshot_id": ingestion_run_id,
+        "retrieved_at_utc": retrieved_at_utc,
+        "raw_page_reference": raw_page_reference,
+        "raw_study_ordinal": raw_study_ordinal,
     }
 
     phase_raw, phase_normalized = normalize_phases(design.get("phases"))
     trial = {
+        **base,
         "ingestion_run_id": ingestion_run_id,
         "indication_profile_id": indication_profile_id,
         "snapshot_timestamp_utc": snapshot_timestamp_utc,
@@ -123,6 +134,9 @@ def flatten_study(
         "minimum_age": eligibility.get("minimumAge"),
         "maximum_age": eligibility.get("maximumAge"),
         "sex": eligibility.get("sex"),
+        "gender_based": eligibility.get("genderBased"),
+        "gender_description": eligibility.get("genderDescription"),
+        "std_age_groups": eligibility.get("stdAges"),
         "eligibility_criteria_text": eligibility.get("eligibilityCriteria"),
         "has_results_flag": bool(study.get("hasResults", False)),
         "source_json_hash": source_json_hash,
@@ -180,13 +194,16 @@ def flatten_study(
             )
 
     locations = []
-    for loc in dig(protocol, "contactsLocationsModule", "locations") or []:
+    for location_ordinal, loc in enumerate(
+        dig(protocol, "contactsLocationsModule", "locations") or []
+    ):
         norm = geography.normalize_location(
             loc.get("facility"), loc.get("city"), loc.get("state"), loc.get("country")
         )
         locations.append(
             {
                 **base,
+                "location_ordinal": location_ordinal,
                 "facility_name": loc.get("facility"),
                 "facility_normalized": normalize_text(loc.get("facility")),
                 "city": loc.get("city"),
@@ -232,8 +249,31 @@ def flatten_study(
     }
 
 
-def iter_bronze_studies(run_dir) -> Any:
+def iter_bronze_studies(run_dir: Path) -> Iterator[dict[str, Any]]:
     """Yield study dicts from every page file of a bronze run, in page order."""
     for page_path in sorted(run_dir.glob("page=*.json")):
         payload = json.loads(page_path.read_text(encoding="utf-8"))
         yield from payload.get("studies", [])
+
+
+def iter_bronze_study_records(run_dir: Path) -> Iterator[tuple[dict[str, Any], dict[str, Any]]]:
+    """Yield (study, provenance) in source order; ordinals are zero-based.
+
+    Raw page references resolve relative to the configured bronze response root.
+    Historical pages without sidecars retain unknown retrieval times.
+    """
+    for page_path in sorted(run_dir.glob("page=*.json")):
+        payload = json.loads(page_path.read_text(encoding="utf-8"))
+        metadata_path = run_dir / "_page_metadata" / page_path.name
+        metadata = (
+            json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path.exists() else {}
+        )
+        for ordinal, study in enumerate(payload.get("studies", [])):
+            yield (
+                study,
+                {
+                    "retrieved_at_utc": metadata.get("retrieved_at_utc"),
+                    "raw_page_reference": f"{run_dir.name}/{page_path.name}",
+                    "raw_study_ordinal": ordinal,
+                },
+            )

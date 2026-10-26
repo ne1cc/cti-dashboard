@@ -137,13 +137,64 @@ def priority_queue(profile_id: str) -> pd.DataFrame:
         profile_id: Indication profile id to scope the mart to.
 
     Returns:
-        pd.DataFrame: Feasibility queue records containing trial keys, priority
-            scores, and ranking factors, ordered by priority rank.
+        pd.DataFrame: Feasibility queue records containing trial keys and
+            raw segment metrics, ordered by active recruiting trials,
+            distinct sponsors, and priority queue key.
     """
     return query(
         "select * from main_marts.mart_feasibility_priority_queue"
-        " where indication_profile_id = ? order by priority_rank",
+        " where indication_profile_id = ?"
+        " order by active_recruiting_trials desc, distinct_sponsors desc, priority_queue_key asc",
         [profile_id],
+    )
+
+
+@st.cache_data(ttl=600)
+def trials_for_segment(
+    profile_id: str,
+    condition_group: str,
+    state_normalized: str,
+    phase_normalized: str,
+) -> pd.DataFrame:
+    """Fetch all recruiting clinical trials belonging to a specific segment.
+
+    Args:
+        profile_id: Indication profile id to scope the trials to.
+        condition_group: Condition group identifier (e.g. ``'alzheimers_disease'``).
+        state_normalized: Two-letter U.S. state abbreviation (e.g. ``'CA'``).
+        phase_normalized: Normalized trial phase (e.g. ``'PHASE3'``).
+
+    Returns:
+        pd.DataFrame: Trial records with NCT ID, brief title, overall status, phase,
+            lead sponsor, enrollment count, study first post date, and registry URL.
+    """
+    sql = """
+        select distinct
+            d.nct_id,
+            d.current_brief_title as brief_title,
+            d.current_overall_status as overall_status,
+            d.current_phase as phase,
+            d.current_lead_sponsor as lead_sponsor,
+            d.enrollment_count,
+            d.study_first_post_date,
+            d.registry_url
+        from main_marts.dim_trial d
+        inner join main_marts.bridge_trial_condition c on c.trial_key = d.trial_key
+        inner join main_marts.fct_trial_site s on s.trial_key = d.trial_key
+        where d.indication_profile_id = ?
+          and s.snapshot_date = (
+              select max(snapshot_date) from main_marts.fct_trial_site
+              where indication_profile_id = ?)
+          and c.condition_group = ?
+          and s.state_normalized = ?
+          and coalesce(d.current_phase, '') = coalesce(?, '')
+          and d.current_overall_status = 'RECRUITING'
+        order by d.enrollment_count desc nulls last, d.nct_id
+    """
+    return _materialize(
+        _connection()
+        .execute(sql, [profile_id, profile_id, condition_group, state_normalized, phase_normalized])
+        .df()
     )
 
 
@@ -220,6 +271,13 @@ def trial_similarity(profile_id: str, nct_id: str | None = None) -> pd.DataFrame
         profile_id = "adrd"
     if not _table_exists("mart_trial_similarity"):
         return pd.DataFrame()
+    required_columns = ("indication_profile_id", "nct_id_a", "nct_id_b", "similarity_rank")
+    if not all(_has_column("mart_trial_similarity", column) for column in required_columns):
+        st.error(
+            "Trial Similarity is unavailable because the warehouse has an outdated "
+            "similarity mart. Rebuild it with `make pipeline`."
+        )
+        return pd.DataFrame()
     return query(
         "select * from main_marts.mart_trial_similarity"
         " where indication_profile_id = ? and nct_id_a = ? order by similarity_rank",
@@ -268,7 +326,7 @@ def condition_geography_trends(profile_id: str) -> pd.DataFrame:
 
 
 def site_overlap(profile_id: str) -> pd.DataFrame:
-    """Fetch trial site overlap metrics for one profile's latest snapshot date.
+    """Fetch trial site overlap metrics for one profile's latest captured date.
 
     Queries ``main_marts.mart_site_overlap`` for facility co-location and trial
     congestion, ordered by recruiting trial count and listed trial count descending.
@@ -277,13 +335,14 @@ def site_overlap(profile_id: str) -> pd.DataFrame:
         profile_id: Indication profile id to scope the overlap to.
 
     Returns:
-        pd.DataFrame: Facility site overlap records for that profile's latest snapshot.
+        pd.DataFrame: Facility rows at the profile's latest ``fct_trial_snapshot`` date;
+            empty when that capture has no attributable facilities.
     """
     return query(
         "select * from main_marts.mart_site_overlap"
         " where indication_profile_id = ?"
         "   and snapshot_date = ("
-        "     select max(snapshot_date) from main_marts.mart_site_overlap"
+        "     select max(snapshot_date) from main_marts.fct_trial_snapshot"
         "     where indication_profile_id = ?)"
         " order by recruiting_trial_count desc, listed_trial_count desc",
         [profile_id, profile_id],
@@ -456,12 +515,14 @@ def overview_metrics(profile_id: str) -> dict[str, Any]:
 
     Returns:
         dict: Mapping of metric keys to counts/dates:
-            - ``total_trials``: Total number of trials in this profile.
-            - ``recruiting_trials``: Number of trials currently in 'RECRUITING' status.
-            - ``states_with_sites``: Geographic rows in ``dim_geography`` for this profile.
-            - ``listed_facilities``: Facility locations tracked in ``mart_site_overlap``.
-            - ``latest_snapshot``: Date of this profile's most recent snapshot.
-            - ``snapshot_count``: Number of unique snapshot runs for this profile.
+            - ``total_trials``: One latest-observed row per trial across retained captures.
+            - ``recruiting_trials``: Latest-observed trial status exactly 'RECRUITING'.
+            - ``states_with_sites``: Distinct profile/state rows across retained locations.
+            - ``listed_facilities``: Best-effort normalized name/city/state identities in
+              ``mart_site_overlap`` at the profile's latest ``fct_trial_snapshot`` date;
+              zero when that capture has no attributable facilities.
+            - ``latest_snapshot``: Date of this profile's most recent captured snapshot.
+            - ``snapshot_count``: Number of distinct captured dates for this profile.
     """
     row = query(
         """
@@ -474,15 +535,105 @@ def overview_metrics(profile_id: str) -> dict[str, Any]:
             (select count(*) from main_marts.dim_geography
              where indication_profile_id = ?) as states_with_sites,
             (select count(*) from main_marts.mart_site_overlap
-             where indication_profile_id = ?) as listed_facilities,
+             where indication_profile_id = ?
+               and snapshot_date = (select max(snapshot_date) from main_marts.fct_trial_snapshot
+                                    where indication_profile_id = ?)) as listed_facilities,
             (select max(snapshot_date) from main_marts.fct_trial_snapshot
              where indication_profile_id = ?) as latest_snapshot,
             (select count(distinct snapshot_date)
              from main_marts.fct_trial_snapshot
              where indication_profile_id = ?) as snapshot_count
         """,
-        [profile_id] * 6,
+        [profile_id] * 7,
     ).iloc[0]
     res = {str(k): v for k, v in row.to_dict().items()}
     res["warehouse_runs"] = res.get("snapshot_count")
     return res
+
+
+def _audit_unavailable() -> pd.DataFrame:
+    frame = pd.DataFrame()
+    frame.attrs["audit_unavailable"] = (
+        "Audit marts unavailable; rebuild the warehouse with the current pipeline and dbt models."
+    )
+    return frame
+
+
+def audit_studies(profile_id: str, snapshot_ids: list[str]) -> pd.DataFrame:
+    """Read captured studies for explicit run IDs; an empty selection means no rows."""
+    if not _table_exists("mart_study_snapshot_audit"):
+        return _audit_unavailable()
+    return query(
+        "select * from main_marts.mart_study_snapshot_audit "
+        "where indication_profile_id = ? and snapshot_id in (select unnest(?)) "
+        "order by snapshot_date, snapshot_id, nct_id",
+        [profile_id, snapshot_ids],
+    )
+
+
+def audit_locations(profile_id: str, snapshot_ids: list[str]) -> pd.DataFrame:
+    """Read original recorded-location rows, retaining their ordinal and provenance."""
+    if not _table_exists("mart_location_snapshot_audit"):
+        return _audit_unavailable()
+    return query(
+        "select * from main_marts.mart_location_snapshot_audit "
+        "where indication_profile_id = ? and snapshot_id in (select unnest(?)) "
+        "order by snapshot_id, nct_id, location_ordinal",
+        [profile_id, snapshot_ids],
+    )
+
+
+def audit_condition_mapping(profile_id: str) -> pd.DataFrame:
+    """Load mappings before geographic exclusions, keyed by captured run and study."""
+    if not _table_exists("int_trial_condition_mapping", "main_intermediate"):
+        return _audit_unavailable()
+    return query(
+        "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, condition_group "
+        "from main_intermediate.int_trial_condition_mapping where indication_profile_id = ?",
+        [profile_id],
+    )
+
+
+def metric_audit_observations(profile_id: str, metric: str = "competition") -> pd.DataFrame:
+    """Return actual per-study observations before status/geographic exclusions.
+
+    Competition uses its mart's latest date; facility uses the profile's latest
+    fct_trial_snapshot date, even without facility rows. History keeps daily
+    observations, and latest_study follows the latest-observed per-study status dimension.
+    Callers may further select dates/months, without inventing a newest run.
+    """
+    if not _table_exists("mart_study_snapshot_audit"):
+        return _audit_unavailable()
+    if metric == "latest_study":
+        return query(
+            "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, snapshot_date "
+            "from main_intermediate.int_current_trial_status where indication_profile_id = ?",
+            [profile_id],
+        )
+    if metric in {"history", "recent_recruiting"}:
+        return query(
+            "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, snapshot_date, "
+            "previous_status, lag(ingestion_run_id) over trial_window as predecessor_snapshot_id, "
+            "lag(snapshot_date) over trial_window as predecessor_snapshot_date "
+            "from main_intermediate.int_trial_status_history where indication_profile_id = ? "
+            "window trial_window as (partition by indication_profile_id, "
+            "nct_id order by snapshot_date)",
+            [profile_id],
+        )
+    if metric in {"competition", "first_post_proxy"}:
+        return query(
+            "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, snapshot_date "
+            "from main_intermediate.int_trial_status_history where indication_profile_id = ? "
+            "and snapshot_date = (select max(snapshot_date) from main_marts."
+            "mart_recruiting_competition where indication_profile_id = ?)",
+            [profile_id, profile_id],
+        )
+    if metric == "facility":
+        return query(
+            "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, snapshot_date "
+            "from main_intermediate.int_trial_status_history where indication_profile_id = ? "
+            "and snapshot_date = (select max(snapshot_date) from main_marts."
+            "fct_trial_snapshot where indication_profile_id = ?)",
+            [profile_id, profile_id],
+        )
+    raise ValueError(f"Unknown audit metric: {metric}")

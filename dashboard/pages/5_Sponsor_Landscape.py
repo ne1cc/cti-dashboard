@@ -3,6 +3,8 @@
 import plotly.express as px
 import streamlit as st
 from components import data
+from components.audit_panel import render_metric_audit
+from components.formatting import format_phase
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import render_page_guide
 from components.profile import render_profile_selector
@@ -11,7 +13,7 @@ page_setup("Sponsor Landscape")
 profile_id = render_profile_selector()
 data.require_warehouse(profile_id)
 
-render_page_guide("sponsor_landscape")
+render_page_guide("sponsor_landscape", profile_id)
 
 sponsors = data.sponsor_landscape(profile_id)
 
@@ -48,12 +50,26 @@ fig.update_layout(yaxis=dict(autorange="reversed"), height=560)
 st.plotly_chart(fig, width="stretch")
 
 st.subheader("All lead sponsors")
+display_sponsors = sponsors.copy()
+display_sponsors["phase_mix"] = display_sponsors["phase_mix"].map(
+    lambda value: (
+        " · ".join(format_phase(phase.strip()) for phase in value.split("|"))
+        if isinstance(value, str)
+        else value
+    )
+)
+display_sponsors["sponsor_class"] = (
+    display_sponsors["sponsor_class"].str.replace("_", " ").str.title()
+)
 st.dataframe(
-    sponsors,
+    display_sponsors,
+    column_order=["lead_sponsor", "sponsor_class", "recruiting_trial_count", "phase_mix"],
     hide_index=True,
-    width="stretch",
+    width="content",
     column_config={
-        "lead_sponsor": st.column_config.TextColumn("Lead Sponsor"),
+        "lead_sponsor": st.column_config.TextColumn("Lead sponsor", width="large"),
+        "indication_profile_id": None,
+        "phase_mix": st.column_config.TextColumn("Recruiting study phases"),
         "recruiting_trial_count": st.column_config.NumberColumn(
             "Recruiting Trials", format="%d", help="Actively recruiting protocols"
         ),
@@ -67,6 +83,10 @@ st.dataframe(
 st.caption(
     "Counts of registry listings by lead sponsor — not market share, "
     "spend, or enrollment performance."
+)
+
+render_metric_audit(
+    profile_id, metric="latest_study", sponsors=sponsors["lead_sponsor"].tolist(), key="sponsors"
 )
 
 guarded_footer()

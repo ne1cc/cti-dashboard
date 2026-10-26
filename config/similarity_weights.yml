@@ -10,7 +10,7 @@
 similarity:
   # Each factor is a deterministic 0/1 match (not min-max normalized --
   # pairwise comparability is inherently "same or different," unlike
-  # the feasibility score's continuous inputs). Weights must sum to 1.0.
+  # continuous input distributions). Weights must sum to 1.0.
   weights:
     same_condition: 0.15
     same_phase: 0.20

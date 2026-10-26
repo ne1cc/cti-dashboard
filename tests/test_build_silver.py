@@ -251,3 +251,45 @@ def test_profile_run_records_an_absent_manifest_instead_of_nothing_to_do(tmp_pat
 
 def pq_num_row_groups(path: Path) -> int:
     return pq.ParquetFile(path).metadata.num_row_groups
+
+
+@pytest.mark.parametrize("with_metadata", [True, False])
+def test_build_silver_preserves_exact_page_record_provenance(tmp_path, with_metadata):
+    import hashlib
+
+    from src.transform.flatten_studies import iter_bronze_studies
+
+    cfg = make_config(tmp_path)
+    run_id = "r_provenance"
+    run_dir = cfg.paths.bronze_api_responses / f"run_id={run_id}"
+    first = make_study("NCT00000001")
+    second = make_study("NCT00000002")
+    write_bronze_page(run_dir, 1, [first, second])
+    # Duplicate ID in another page must keep its original page/index.
+    write_bronze_page(run_dir, 2, [second])
+    if with_metadata:
+        metadata_dir = run_dir / "_page_metadata"
+        metadata_dir.mkdir()
+        (metadata_dir / "page=00001.json").write_text(
+            json.dumps({"retrieved_at_utc": "2026-10-02T10:01:00+00:00"})
+        )
+    assert list(iter_bronze_studies(run_dir)) == [first, second, second]
+    build_silver_for_run(make_manifest(run_id, 3), cfg)
+    rows = (
+        pq.ParquetFile(cfg.paths.silver / "silver_trials" / f"run_id={run_id}.parquet")
+        .read()
+        .to_pylist()
+    )
+    assert [row["raw_study_ordinal"] for row in rows] == [0, 1]
+    for row, study in zip(rows, [first, second], strict=True):
+        assert row["snapshot_id"] == run_id
+        assert row["raw_page_reference"] == "run_id=r_provenance/page=00001.json"
+        assert row["retrieved_at_utc"] == ("2026-10-02T10:01:00+00:00" if with_metadata else None)
+        expected_hash = hashlib.sha256(
+            json.dumps(study, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+        ).hexdigest()
+        assert row["source_json_hash"] == expected_hash
+        original_page = json.loads(
+            (cfg.paths.bronze_api_responses / row["raw_page_reference"]).read_text()
+        )
+        assert original_page["studies"][row["raw_study_ordinal"]] == study

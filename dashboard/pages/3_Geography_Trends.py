@@ -3,6 +3,7 @@
 import plotly.express as px
 import streamlit as st
 from components import data
+from components.audit_panel import render_metric_audit
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import format_condition_group, render_page_guide
 from components.profile import render_profile_selector
@@ -11,7 +12,7 @@ page_setup("Geography Trends")
 profile_id = render_profile_selector()
 data.require_warehouse(profile_id)
 
-render_page_guide("geography_trends")
+render_page_guide("geography_trends", profile_id)
 
 trends = data.condition_geography_trends(profile_id)
 
@@ -54,15 +55,17 @@ st.dataframe(
     latest.sort_values("recruiting_trial_count", ascending=False)[
         [
             "state_normalized",
-            "trial_count",
             "recruiting_trial_count",
+            "trial_count",
             "sponsor_count",
             "newly_posted_in_month_proxy",
             "recruiting_growth_3m",
         ]
-    ].head(20),
+    ]
+    .head(20)
+    .assign(recruiting_growth_3m=lambda frame: frame.recruiting_growth_3m * 100),
     hide_index=True,
-    width="stretch",
+    width="content",
     column_config={
         "state_normalized": st.column_config.TextColumn("State"),
         "trial_count": st.column_config.NumberColumn("Total Trials", format="%d"),
@@ -72,7 +75,9 @@ st.dataframe(
             "Newly Posted (Month Proxy)", format="%d"
         ),
         "recruiting_growth_3m": st.column_config.NumberColumn(
-            "3-Month Growth", format="%+d", help="Change in recruiting trials over 3 months"
+            "3-Month Growth",
+            format="%+.1f%%",
+            help="Relative change from the earliest recruiting count in the three-month window",
         ),
     },
 )
@@ -93,5 +98,26 @@ else:
         f"accrued {months} snapshot month so far. Re-run `make pipeline` "
         "over time to build the series."
     )
+
+render_metric_audit(
+    profile_id,
+    filters={"conditions": [condition] if condition else []},
+    metric="history",
+    months=scoped["activity_month"],
+    states=scoped["state_normalized"].tolist(),
+    context={
+        "growth_window": (
+            "Monthly counts are distinct NCT IDs across daily observations per "
+            "profile/condition/state/month; recruiting requires RECRUITING on an "
+            "observation. Sponsor count is distinct normalized lead sponsors. "
+            "Posting proxy requires first-post month equal to snapshot month. "
+            "Growth = (current monthly recruiting count - earliest recruiting count "
+            "in the inclusive preceding three-calendar-month range)/earliest count; "
+            "null with fewer than two months or zero baseline. State sums may repeat "
+            "studies. This panel audits window counts; deltas remain warehouse calculations."
+        )
+    },
+    key="geography",
+)
 
 guarded_footer()

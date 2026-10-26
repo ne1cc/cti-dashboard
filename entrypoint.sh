@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [ "${1:-}" = "api" ]; then
+    exec /app/.venv/bin/uvicorn src.api.app:create_app --factory --host "${CTI_API_HOST:-0.0.0.0}" --port "${CTI_API_PORT:-8000}" "${@:2}"
+fi
+
 DATA_DIR="/app/data"
 WAREHOUSE="$DATA_DIR/warehouse/clinical_trials.duckdb"
 MARKER="$DATA_DIR/.last_pipeline_run"
@@ -14,7 +18,11 @@ DASHBOARD_PID=""
 SHUTDOWN=0
 SINCE_CHECK=0
 
-log() { echo "[entrypoint] $(date -u +%FT%TZ) $*" >> "$LOG_DIR/pipeline.log"; }
+# The append must not be fatal: on 2026-10-07 a full data volume made this very
+# echo fail with ENOSPC, `set -euo pipefail` killed the machine within seconds
+# of boot, and the crash loop could not log its own cause. Losing a log line on
+# a full disk is acceptable; losing the boot is not.
+log() { echo "[entrypoint] $(date -u +%FT%TZ) $*" >> "$LOG_DIR/pipeline.log" 2>/dev/null || true; }
 
 # DuckDB does not create parent directories for a new database file (verified:
 # duckdb.connect() raises IOException on a missing directory), and a Fly Volume
@@ -58,6 +66,42 @@ run_pipeline() {
     return 1
 }
 
+run_similarity_rebuild() {
+    log "starting scoped Trial Similarity dbt build"
+    mkdir -p "$DATA_DIR/tmp/dbt"
+    if make dbt-seed >> "$LOG_DIR/pipeline.log" 2>&1 \
+        && uv run dbt build --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials/startup_profile --select +mart_trial_similarity --resource-type model --threads 1 >> "$LOG_DIR/pipeline.log" 2>&1; then
+        log "Trial Similarity schema rebuild succeeded"
+        return 0
+    fi
+    log "Trial Similarity schema rebuild FAILED"
+    return 1
+}
+
+similarity_mart_is_current() {
+    [ -f "$WAREHOUSE" ] || return 1
+    /app/.venv/bin/python - "$WAREHOUSE" <<'PY'
+import duckdb
+import sys
+
+try:
+    connection = duckdb.connect(sys.argv[1], read_only=True)
+    columns = {
+        row[0]
+        for row in connection.execute(
+            "select column_name from information_schema.columns "
+            "where table_schema = 'main_marts' and table_name = 'mart_trial_similarity'"
+        ).fetchall()
+    }
+    connection.close()
+except Exception:
+    raise SystemExit(1)
+
+required = {"indication_profile_id", "nct_id_a", "nct_id_b", "similarity_rank"}
+raise SystemExit(0 if required <= columns else 1)
+PY
+}
+
 refresh_if_due() {
     local now last elapsed
     now=$(date +%s)
@@ -84,6 +128,9 @@ refresh_if_due() {
 if [ ! -f "$WAREHOUSE" ]; then
     log "no warehouse found, running first-boot pipeline"
     run_pipeline || log "first-boot pipeline failed; dashboard will show 'warehouse not found' until the next successful refresh"
+elif ! similarity_mart_is_current; then
+    log "trial similarity mart schema is outdated; rebuilding its dbt dependency graph before serving"
+    run_similarity_rebuild || log "schema rebuild failed; dashboard will show a rebuild message for Trial Similarity"
 fi
 
 start_dashboard

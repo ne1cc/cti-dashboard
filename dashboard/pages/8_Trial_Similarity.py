@@ -24,7 +24,7 @@ profile_id = render_profile_selector()
 data.require_warehouse(profile_id)
 
 render_indication_banner(profile_id)
-render_page_guide("trial_similarity")
+render_page_guide("trial_similarity", profile_id)
 
 st.info(
     "This page scores **structural trial-design comparability** — "
@@ -69,9 +69,11 @@ def _format_option(row: Any) -> str:
     return f"{row.nct_id} — {row.brief_title}{ind_tag}"
 
 
-options = {_format_option(row): row.nct_id for row in candidates.head(50).itertuples()}
+options: dict[str, str] = {
+    _format_option(row): str(row.nct_id) for row in candidates.head(50).itertuples()
+}
 selected_label = st.selectbox("Select the index trial", list(options))
-selected_nct_id = options[selected_label]
+selected_nct_id = str(options[selected_label])
 
 sim_df = data.trial_similarity(profile_id, selected_nct_id)
 if sim_df.empty or "nct_id_b" not in sim_df.columns:
@@ -101,50 +103,52 @@ st.subheader(f"Top comparable trials for {selected_nct_id}")
 st.caption("Click a row to see its full factor breakdown below.")
 match_columns = [
     "similarity_rank",
+    "brief_title",
+    "similarity_score",
+    "similarity_explanation",
     "nct_id_b",
 ]
 if "indication_profile_id" in matches.columns:
     match_columns.append("indication_profile_id")
-match_columns.extend(
-    [
-        "brief_title",
-        "registry_url",
-        "similarity_score",
-        "similarity_explanation",
-    ]
-)
+match_columns.append("registry_url")
 
-col_cfg: dict = {
+col_cfg: dict[str, Any] = {
+    "similarity_rank": st.column_config.NumberColumn("Rank", format="%d"),
+    "similarity_explanation": st.column_config.TextColumn("Why comparable", width="large"),
     "nct_id_b": st.column_config.TextColumn("NCT ID"),
     "brief_title": st.column_config.TextColumn("Brief title", width="large"),
     "registry_url": st.column_config.LinkColumn(
         "Registry record",
         help="Opens the public ClinicalTrials.gov record",
-        display_text="View on ClinicalTrials.gov",
+        display_text="Open registry",
     ),
-    "similarity_score": st.column_config.NumberColumn(format="%.4f"),
+    "similarity_score": st.column_config.NumberColumn(
+        "Comparability score", format="%.4f", help="Structural comparability on a 0–1 scale"
+    ),
 }
 if "indication_profile_id" in match_columns:
-    col_cfg["indication_profile_id"] = st.column_config.TextColumn("Indication")
+    col_cfg["indication_profile_id"] = None
 
 match_event = st.dataframe(
     matches[match_columns],
     hide_index=True,
-    width="stretch",
+    width="content",
     column_config=col_cfg,
     on_select="rerun",
     selection_mode="single-row",
 )
 
-selected_rows = match_event.selection.rows if match_event.selection else []
+selected_rows = (
+    match_event.get("selection", {}).get("rows", []) if isinstance(match_event, dict) else []
+)
 if selected_rows:
     m = matches.iloc[selected_rows[0]]
-    st.subheader(f"Factor breakdown — {selected_nct_id} vs {m['nct_id_b']}")
+    st.subheader(f"Factor breakdown — {selected_nct_id} vs {str(m['nct_id_b'])}")
     breakdown = pd.DataFrame(
         [
             {
                 "Factor": label,
-                "Match (1=yes)": m[factor] if factor in m else 0,
+                "Matches": m[factor] == 1 if factor in m else False,
                 "Weight": m[f"weight_{factor}"] if f"weight_{factor}" in m else 0.0,
                 "Weighted contribution": (
                     m[f"weighted_{factor}"] if f"weighted_{factor}" in m else 0.0
@@ -153,7 +157,18 @@ if selected_rows:
             for factor, label in FACTOR_LABELS.items()
         ]
     )
-    st.dataframe(breakdown, hide_index=True, width="stretch")
+    st.dataframe(
+        breakdown,
+        hide_index=True,
+        width="content",
+        column_config={
+            "Matches": st.column_config.CheckboxColumn("Matches"),
+            "Weight": st.column_config.NumberColumn("Weight", format="percent"),
+            "Weighted contribution": st.column_config.NumberColumn(
+                "Score contribution", format="%.4f"
+            ),
+        },
+    )
     sim_score = (
         m["similarity_score"]
         if "similarity_score" in m and pd.notna(m["similarity_score"])

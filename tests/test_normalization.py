@@ -230,3 +230,44 @@ def test_flatten_study_produces_all_entities():
         ("primary", 0),
         ("secondary", 0),
     ]
+
+
+def test_flatten_preserves_duplicate_location_ordinals_and_partial_dates():
+    import copy
+
+    study = copy.deepcopy(FIXTURE_STUDY)
+    locations = study["protocolSection"]["contactsLocationsModule"]["locations"]
+    locations.append(copy.deepcopy(locations[0]))
+    original = copy.deepcopy(study)
+    rows = flatten_study(study, "run1", "2026-10-02T00:00:00+00:00", TAXONOMY, GEOGRAPHY)
+    assert [row["location_ordinal"] for row in rows["silver_trial_locations"]] == [0, 1, 2]
+    assert rows["silver_trials"][0]["status_verified_date"] == "2026-01"
+    assert rows["silver_trials"][0]["start_date"] == "2025-03"
+    assert study == original
+    assert rows["silver_trials"][0]["retrieved_at_utc"] is None
+
+
+def test_flatten_extracts_eligibility_std_ages_and_gender_based():
+    import copy
+
+    study = copy.deepcopy(FIXTURE_STUDY)
+    study["protocolSection"]["eligibilityModule"].update(
+        {
+            "stdAges": ["ADULT", "OLDER_ADULT"],
+            "genderBased": True,
+            "genderDescription": "Female participants only based on study design",
+        }
+    )
+    rows = flatten_study(study, "run1", "2026-10-02T00:00:00+00:00", TAXONOMY, GEOGRAPHY)
+    trial = rows["silver_trials"][0]
+    assert trial["std_age_groups"] == ["ADULT", "OLDER_ADULT"]
+    assert trial["gender_based"] is True
+    assert trial["gender_description"] == "Female participants only based on study design"
+
+
+def test_flatten_preserves_absent_std_ages_and_gender_based():
+    rows = flatten_study(FIXTURE_STUDY, "run1", "2026-10-02T00:00:00+00:00", TAXONOMY, GEOGRAPHY)
+    trial = rows["silver_trials"][0]
+    assert trial["std_age_groups"] is None
+    assert trial["gender_based"] is None
+    assert trial["gender_description"] is None

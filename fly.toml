@@ -19,6 +19,17 @@ primary_region = 'iad'
 kill_signal = 'SIGTERM'
 kill_timeout = '270s'
 
+# Production refreshes only the profiles the deployed envelope can hold.
+# docs/DEPLOY_FLY.md ("Adding indication profiles") measured the twelve-profile
+# set at 1.4 GB of bronze for the ten added profiles alone and 28 GB of DuckDB
+# temporary storage for mart_trial_similarity without completing; the 2026-10-07
+# outage was that set filling the volume, then entrypoint.sh dying on its first
+# log append. adrd + oncology_nsclc is the measured-passing configuration
+# (~130 s, 32 models, 137 tests). Re-expand only after the similarity mart is
+# bounded and storage is sized from a completed local full build.
+[env]
+  CTI_REFRESHABLE_PROFILES = 'adrd,oncology_nsclc'
+
 [build]
 [[mounts]]
   source = 'cti_data'
@@ -28,7 +39,11 @@ kill_timeout = '270s'
   internal_port = 8501
   force_https = true
   auto_stop_machines = false
-  auto_start_machines = false
+  # A machine that ends up stopped (crash-loop exhaustion, host migration,
+  # manual stop) must wake on traffic instead of staying dark, which is how the
+  # 2026-10-07 outage persisted for a week with no signal. auto_stop stays off:
+  # the background refresh loop requires the machine always running.
+  auto_start_machines = true
   min_machines_running = 1
 
   [[http_service.checks]]

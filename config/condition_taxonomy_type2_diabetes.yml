@@ -1,0 +1,14 @@
+version: 1
+default:
+  condition_group: other_diabetes_conditions
+  dementia_relevance: false
+groups:
+- condition_group: type2_diabetes
+  dementia_relevance: false
+  exact:
+  - diabetes mellitus type 2
+  - type 2 diabetes mellitus
+  - type 2 diabetes
+  substrings:
+  - type 2 diabetes
+  - type ii diabetes

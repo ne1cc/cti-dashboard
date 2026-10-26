@@ -1,0 +1,13 @@
+version: 1
+default:
+  condition_group: other_neurologic_conditions
+  dementia_relevance: false
+groups:
+- condition_group: multiple_sclerosis
+  dementia_relevance: false
+  exact:
+  - multiple sclerosis
+  substrings:
+  - multiple sclerosis
+  - relapsing remitting ms
+  - progressive multiple sclerosis

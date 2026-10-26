@@ -22,7 +22,7 @@ Five layers of automated checks; nothing is silently dropped or fixed.
   per run (`data/silver/_profiles/`).
 
 ## 3. Warehouse tests (dbt)
-The suite is 138 dbt tests (measured 2026-09-07 UTC with `uv run dbt parse
+The suite is 157 dbt tests (measured 2026-10-03 UTC with `uv run dbt parse
 --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials` plus
 a `resource_type` counter over `dbt_clinical_trials/target/manifest.json` — the same
 manifest `tests/test_docs_describe_current_paths.py` reads; that guard fails the build
@@ -33,7 +33,7 @@ command behind it — which is why this line carries both). Run them with
 [`docs/DEPLOY_FLY.md`](docs/DEPLOY_FLY.md).
 - Schema tests: `not_null`, `unique`, `accepted_values`, `relationships`
   on every key and grain, staging through marts.
-- Singular tests (`dbt_clinical_trials/tests/` holds the full set of 13 SQL
+- Singular tests (`dbt_clinical_trials/tests/` holds the full set of 14 SQL
   assertion files; the six below are the ones this document names, and their
   severity is the point — four fail the build at dbt's default `error` and two are
   deliberately `warn`, set in the test file itself):
@@ -44,7 +44,6 @@ command behind it — which is why this line carries both). Run them with
   | assert_trial_site_relationship_integrity | error | every site row joins dim_trial |
   | assert_valid_us_state | error | 2-letter state codes at the mart boundary |
   | assert_snapshot_completeness | warn | success runs reconcile with unique NCTs |
-  | assert_feasibility_score_within_bounds | error | score ∈ [0, 1] |
 - Privacy guardrail: `stg_trial_contacts` is structurally empty.
 
 ## 4. Cross-layer reconciliation (`src/quality/reconciliation.py`)
@@ -60,17 +59,51 @@ repeated here). Drift produces a report
 with added/removed paths; the baseline changes only via explicit
 `--update-schema-baseline`. Drift is surfaced, never auto-accepted.
 
+## 6. Continuous integration quality contract (`.github/workflows/ci.yml`)
+CI enforces automated verification on every push and pull request before deployment:
+- **Linting & Formatting**: `ruff check` and `ruff format --check` across `src`, `tests`, and `dashboard`.
+- **Strict Typing**: Strict `mypy` type check across `src` and `dashboard` with zero errors.
+- **Coverage Gate**: Combined test coverage across `src` and `dashboard` enforced at >= 71% (`--cov=src --cov=dashboard --cov-report=term-missing --cov-fail-under=71`).
+- **Independent dbt CI Execution**: In addition to fixture tests in pytest, CI prepares a multi-profile warehouse fixture under `RUNNER_TEMP` via `python -m tests.fixture_warehouse --prepare-only` and runs independent `dbt parse` and `dbt build` steps with isolated target and log directories. Execution results are published to the job step summary, and failure artifacts are captured automatically.
+
 ## Reporting
 `make quality-report` → `reports/data_quality_report.md`: run reliability
 table (from `mart_data_reliability`), reconciliation results, drift
 status, and the interpretation guardrails. The step is a gate as well as a
 print: it exits non-zero when a reconciliation check fails, which is what
-`make pipeline` ends on. Unit/integration suite: 308 pytest
-tests (measured 2026-09-07 UTC by `uv run pytest --collect-only`; regenerate
-with `make test`), including config-sync tests that fail if score weights or band
-thresholds diverge between YAML, the dbt seed, and dbt vars.
+`make pipeline` ends on. Unit/integration suite: 383 pytest
+tests (measured 2026-10-03 UTC by `uv run pytest --collect-only`; regenerate
+with `make test`), including raw metric invariant tests verifying concentration bounds
+and data completeness rules (ADR 0077).
 
 ## Severity philosophy
 - **error** = structural contract broken → fix before shipping metrics.
 - **warn** = real-world registry messiness → investigate, document, and
   disclose in `mart_data_reliability` rather than block the pipeline.
+
+## Competition audit checks and caveats
+
+Isolated fixture builds execute the real dbt build without refreshing the registry
+or production warehouse. Enforced audit contracts check study/location key uniqueness,
+non-null identities, and parent relationships. `assert_audit_exclusion_reconciliation`
+checks base inclusion plus exclusive exclusions; `assert_audit_enrollment_join_invariance`
+checks that usable-location joins do not multiply study-level enrollment totals.
+Python checks cover filter-specific denominators, overlapping flags, exact contributor
+IDs, snapshot/profile scope, null denominators, legacy receipt nulls, and JSON exports.
+Dashboard AppTest checks actual filter reruns and downloaded export bytes against
+independent fixture SQL contributors. Structural checks do not validate registry
+claims clinically or measure market completeness.
+
+The audit panel shows source omissions before geography exclusion, separately from
+known outside-state records and undetermined membership. Older posted updates warn
+strictly after the selected project-defined threshold (default 180 days) and remain
+included; missing/unparseable dates are explicit.
+The legacy operational completeness adjustment is disclosed with its formula, not
+presented as a scientific-confidence percentage. Missing source fields are not
+assumed to be extraction failures: immutable pages, ordinals, hashes and extraction
+fixtures support the mapping review while retained bronze is available.
+
+The isolated audit fixture pins the dbt DuckDB session to `America/Los_Angeles`.
+Its UTC-boundary assertion proves 00:15Z is the previous local day while audit and
+staging timestamps/dates retain explicit UTC alignment, protecting against regression
+to session-dependent casts. Production explicitly uses `timezone('UTC', ...)`.

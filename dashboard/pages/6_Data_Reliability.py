@@ -2,6 +2,7 @@
 
 import streamlit as st
 from components import data
+from components.audit_panel import render_metric_audit
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import render_page_guide
 from components.profile import render_profile_selector
@@ -12,7 +13,7 @@ page_setup("Data Reliability & Assumptions")
 profile_id = render_profile_selector()
 data.require_warehouse(profile_id)
 
-render_page_guide("data_reliability")
+render_page_guide("data_reliability", profile_id)
 
 reliability = data.data_reliability(profile_id)
 
@@ -20,7 +21,6 @@ st.subheader("Ingestion runs")
 st.dataframe(
     reliability[
         [
-            "ingestion_run_id",
             "snapshot_date",
             "status",
             "page_count",
@@ -32,26 +32,29 @@ st.dataframe(
             "flagged_record_share",
             "usable_location_share",
             "low_confidence_condition_share",
+            "ingestion_run_id",
         ]
     ],
     hide_index=True,
-    width="stretch",
+    width="content",
     column_config={
         "ingestion_run_id": st.column_config.TextColumn("Run ID"),
-        "snapshot_date": st.column_config.DateColumn("Snapshot Date"),
+        "snapshot_date": st.column_config.DateColumn("Captured on", format="MMM D, YYYY"),
         "status": st.column_config.TextColumn("Status"),
         "page_count": st.column_config.NumberColumn("Pages", format="%d"),
-        "manifest_record_count": st.column_config.NumberColumn("Manifest Records", format="%d"),
-        "trial_row_count": st.column_config.NumberColumn("Trial Rows", format="%d"),
-        "manifest_reconciled_flag": st.column_config.CheckboxColumn("Reconciled"),
-        "unique_nct_flag": st.column_config.CheckboxColumn("Unique NCTs"),
-        "quarantined_record_count": st.column_config.NumberColumn("Quarantined", format="%d"),
-        "flagged_record_share": st.column_config.NumberColumn("Flagged Share", format="%.1%"),
+        "manifest_record_count": st.column_config.NumberColumn("Captured records", format="%d"),
+        "trial_row_count": st.column_config.NumberColumn("Study records", format="%d"),
+        "manifest_reconciled_flag": st.column_config.CheckboxColumn("Record counts match"),
+        "unique_nct_flag": st.column_config.CheckboxColumn("No duplicate studies"),
+        "quarantined_record_count": st.column_config.NumberColumn("Rejected records", format="%d"),
+        "flagged_record_share": st.column_config.NumberColumn(
+            "Records flagged for review", format="percent"
+        ),
         "usable_location_share": st.column_config.NumberColumn(
-            "Usable US Locations", format="%.1%"
+            "Usable US Locations", format="percent"
         ),
         "low_confidence_condition_share": st.column_config.NumberColumn(
-            "Low Confidence Condition", format="%.1%"
+            "Uncertain condition mapping", format="percent"
         ),
     },
 )
@@ -148,11 +151,30 @@ st.dataframe(
         for r in results
     ],
     hide_index=True,
-    width="stretch",
+    width="content",
+    column_config={
+        "Reviews deprioritized (assumed)": st.column_config.NumberColumn(format="%.1f"),
+        "Activations influenced (assumed)": st.column_config.NumberColumn(format="%.1f"),
+        "Review-effort value (USD)": st.column_config.NumberColumn(format="dollar"),
+        "Activation value (USD)": st.column_config.NumberColumn(format="dollar"),
+        "Total, illustrative (USD)": st.column_config.NumberColumn(format="dollar"),
+    },
 )
 st.caption(
     "Every figure above is the product of the editable assumptions in "
     "config/roi_assumptions.yml — no observed outcomes are used."
+)
+
+render_metric_audit(
+    profile_id,
+    metric="latest_study",
+    context={
+        "scope": (
+            "Current studies; ingestion run diagnostics and scenario "
+            "assumptions above have separate denominators."
+        )
+    },
+    key="reliability",
 )
 
 guarded_footer()

@@ -39,13 +39,41 @@ def format_condition_group(group: str | Any) -> str:
     return ADRD_CONDITION_LABELS.get(group, group.replace("_", " ").title())
 
 
+def clinicaltrials_gov_search_url(condition_group: str, state_normalized: str) -> str:
+    """Generate a ClinicalTrials.gov web search URL for a condition and state.
+
+    Args:
+        condition_group: Internal condition group key.
+        state_normalized: 2-letter U.S. state postal abbreviation.
+
+    Returns:
+        str: Clickable ClinicalTrials.gov search URL.
+    """
+    term_map = {
+        "alzheimers_disease": "Alzheimer Disease",
+        "mild_cognitive_impairment": "Mild Cognitive Impairment",
+        "frontotemporal_dementia": "Frontotemporal Dementia",
+        "lewy_body_dementia": "Lewy Body Dementia",
+        "vascular_dementia": "Vascular Dementia",
+        "parkinsons_disease_dementia": "Parkinson Disease Dementia",
+        "dementia_unspecified": "Dementia",
+    }
+    cond_term = term_map.get(condition_group, format_condition_group(condition_group)).replace(
+        " ", "+"
+    )
+    return (
+        f"https://clinicaltrials.gov/search?cond={cond_term}"
+        f"&locStr={state_normalized}&country=United%20States"
+    )
+
+
 def render_indication_banner(profile_id: str | None = None) -> None:
     """Render the active indication scope banner.
 
     Provides transparent visibility into the therapeutic area scope, included
     diagnostic sub-groups, and unique operational realities of clinical trials.
     """
-    display_title = "🧠 Alzheimer's Disease & Related Dementias (ADRD)"
+    display_title = "Alzheimer's Disease & Related Dementias (ADRD)"
     is_adrd = profile_id is None or profile_id == "adrd"
 
     if not is_adrd and profile_id:
@@ -54,52 +82,17 @@ def render_indication_banner(profile_id: str | None = None) -> None:
 
             reg = get_registry()
             prof = reg.get(profile_id)
-            display_title = f"🔬 {prof.display_name}"
+            display_title = prof.display_name
         except Exception:
-            display_title = f"🔬 {profile_id.replace('_', ' ').title()}"
+            display_title = profile_id.replace("_", " ").title()
 
     with st.container():
         st.markdown(
-            f"""
-            <div style="
-                border: 1px solid rgba(59, 130, 246, 0.25);
-                border-radius: 8px;
-                padding: 12px 16px;
-                margin-bottom: 16px;
-                background-color: rgba(59, 130, 246, 0.05);
-            ">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <span style="
-                            font-size: 0.75rem;
-                            font-weight: 700;
-                            text-transform: uppercase;
-                            letter-spacing: 0.05em;
-                            color: #3b82f6;
-                        ">Active Indication Profile</span>
-                        <h4 style="margin: 2px 0 0 0; font-size: 1.05rem;">
-                            {display_title}
-                        </h4>
-                    </div>
-                    <div style="text-align: right;">
-                        <span style="
-                            font-size: 0.75rem;
-                            background: rgba(59, 130, 246, 0.15);
-                            color: #2563eb;
-                            padding: 3px 8px;
-                            border-radius: 12px;
-                            font-weight: 600;
-                        ">Interventional U.S. Trials</span>
-                    </div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
+            f":gray[Active indication profile] &nbsp; **{display_title}** &nbsp; "
+            ":blue-badge[Interventional U.S. trials]"
         )
 
-        with st.expander(
-            "🔍 Indication Scope, Taxonomy & Clinical Validity Details", expanded=False
-        ):
+        with st.expander("Indication scope, taxonomy & clinical validity"):
             if is_adrd:
                 st.markdown(
                     "**Scope & Diagnostic Boundaries:**\n"
@@ -143,10 +136,7 @@ def render_indication_banner(profile_id: str | None = None) -> None:
 
                         reg = get_registry()
                         prof = reg.get(profile_id)
-                        desc = (
-                            prof.description
-                            or f"Clinical trials investigating {prof.display_name}."
-                        )
+                        desc = f"Clinical trials investigating {prof.display_name}."
                     except Exception:
                         pass
                 st.markdown(
@@ -159,7 +149,7 @@ def render_indication_banner(profile_id: str | None = None) -> None:
 # Comprehensive decision playbooks for each dashboard page
 PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
     "overview": {
-        "title": "📖 Executive Overview: 3-Step Feasibility Framework",
+        "title": "Executive Overview: 3-Step Feasibility Framework",
         "what_it_shows": (
             "Aggregated metrics and high-level priority segments across all tracked "
             "interventional ADRD trials in the United States. Identifies total active studies, "
@@ -168,11 +158,11 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         "how_to_analyze": (
             "Use this overview as an operational health check. Compare total trials against "
             "the 'Currently recruiting' count to gauge protocol turnover, and review the "
-            "top-ranked segments to spot immediate regional contention."
+            "top activity segments to spot immediate regional contention."
         ),
         "playbook": [
             (
-                "**Step 1: Identify Opportunity & Risk (Priority Queue):** Filter by target "
+                "**Step 1: Check Registry Segments:** Filter by target "
                 "phase and disease sub-group to pinpoint states where high trial density "
                 "or rapid growth warrants thorough protocol differentiation."
             ),
@@ -194,40 +184,38 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         ),
     },
     "priority_queue": {
-        "title": "📖 Priority Queue Playbook: Eliminating Feasibility Guesswork",
+        "title": "Registry Segments Playbook: Inspecting Clinical Trial Segments",
         "what_it_shows": (
-            "Ranks condition × state × phase segments using a transparent, multi-factor "
-            "feasibility review priority score (0.0 to 1.0). Each segment summarizes recruiting "
-            "trial volume, recent growth momentum, sponsor concentration (HHI), site overlap, "
-            "and data confidence."
+            "Displays condition × state × phase segments with transparent, sortable "
+            "raw registry metrics. Each segment summarizes active recruiting trial "
+            "volume, distinct sponsors, sponsor concentration (HHI), site overlap, "
+            "and operational data completeness."
         ),
         "how_to_analyze": (
-            "The priority score is a relative ranking index, not an enrollment prediction. "
-            "Segments in the **Priority Review** band (top 20th percentile) exhibit elevated trial "
-            "density or rapid growth; segments in **Review** (50th–80th percentile) represent "
-            "moderate activity; segments in **Watch** (bottom 50th percentile) "
-            "represent low density."
+            "Evaluate segments by sorting directly on raw operational metrics according "
+            "to your study's specific criteria. Inspect active recruiting trials to assess "
+            "overall protocol density, distinct sponsors and sponsor HHI to gauge market "
+            "competition, and site overlap to identify potential institutional bottlenecks."
         ),
         "playbook": [
             (
-                "**Priority Review Segments (Top 20%):** Do NOT automatically eliminate these "
-                "regions; instead, conduct deep-dive feasibility. Check if competing trials "
-                "share identical biomarker entry criteria (e.g. early AD MMSE 22–30 vs mild-to-"
-                "moderate MMSE 16–26)."
+                "**Active Recruiting Trials:** Sort by trial count to identify regions with "
+                "proven trial activity and established patient pipelines, or locate low-density "
+                "regions for uncontested expansion."
             ),
             (
-                "**Review Segments (Moderate):** Often the most productive expansion targets—"
-                "sufficient patient population and clinical infrastructure with manageable overlap."
+                "**Sponsor Concentration (HHI):** Evaluate whether a segment is dominated by a "
+                "single lead sponsor (high HHI) or distributed across multiple competitors, "
+                "indicating whether local investigative capacity is tied up."
             ),
             (
-                "**Watch Segments (Emerging / Low-Density):** Ideal for expanding geographic "
-                "diversity and recruiting treatment-naive subjects through regional community "
-                "neurology networks, provided adequate diagnostic infrastructure is accessible."
+                "**Site Overlap Rate:** Examine the share of recruiting trials sharing "
+                "facilities with competing studies in the same indication profile to "
+                "assess institutional fatigue and coordinator capacity."
             ),
             (
-                "**Component Inspection:** Click any row in the table to inspect unweighted "
-                "and weighted factor contributions, verifying whether high priority is driven "
-                "by raw trial count, rapid growth, or heavy sponsor concentration."
+                "**Metric Inspection:** Click any row in the table to audit contributing NCT IDs "
+                "and registry source records before making site qualification decisions."
             ),
         ],
         "adrd_context": (
@@ -237,35 +225,35 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         ),
     },
     "competition_landscape": {
-        "title": "📖 Competition Landscape: The 4-Quadrant Strategy Matrix",
+        "title": "Competition Landscape: The 4-Quadrant Strategy Matrix",
         "what_it_shows": (
-            "Scatter plot and segment table plotting Recruiting Trial Density (percentile) "
+            "Scatter plot and segment table plotting Recruiting Trial Count "
             "against Sponsor Concentration (Herfindahl-Hirschman Index, HHI). Bubble sizes "
             "represent listed trial facilities in that segment."
         ),
         "how_to_analyze": (
-            "The combination of trial density and sponsor concentration reveals distinct "
+            "The combination of trial counts and sponsor concentration reveals distinct "
             "competitive environments across the 4 quadrants of the scatter plot."
         ),
         "playbook": [
             (
-                "**Quadrant 1: High Density + High HHI (Dominant Cluster):** A single sponsor "
+                "**Quadrant 1: High Trial Count + High HHI (Dominant Cluster):** A single sponsor "
                 "leads multiple trials. Entering this market requires clear protocol "
                 "differentiation (subcutaneous vs IV infusion, novel mechanism) or targeting "
                 "independent sites."
             ),
             (
-                "**Quadrant 2: High Density + Low HHI (Fierce Competition):** Fragmented "
+                "**Quadrant 2: High Trial Count + Low HHI (Fierce Competition):** Fragmented "
                 "landscape with many sponsors competing for the same patient pool. Expect site "
                 "initiation delays, coordinator turnover, and slower enrollment velocity."
             ),
             (
-                "**Quadrant 3: Low Density + High HHI (Pioneer Territory):** A focused sponsor "
+                "**Quadrant 3: Low Trial Count + High HHI (Pioneer Territory):** A focused sponsor "
                 "program is operating with minimal external rivals. Indicates untapped patient "
                 "demand that can be activated with investigator partnerships."
             ),
             (
-                "**Quadrant 4: Low Density + Low HHI (Greenfield Frontier):** Minimal trial "
+                "**Quadrant 4: Low Trial Count + Low HHI (Greenfield Frontier):** Minimal trial "
                 "activity across the board. Ideal for teams seeking uncontested community memory "
                 "centers, though local referral networks must be verified."
             ),
@@ -277,7 +265,7 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         ),
     },
     "geography_trends": {
-        "title": "📖 Geography Trends Playbook: Geographic Optimization & Saturation",
+        "title": "Geography Trends Playbook: Geographic Optimization & Saturation",
         "what_it_shows": (
             "U.S. choropleth map and regional activity distribution displaying recruiting trial "
             "listings across states for the selected condition group, alongside monthly trends."
@@ -291,7 +279,7 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
             (
                 "**Balance Academic vs Community Geography:** Counteract academic site "
                 "congestion by identifying neighboring states with strong healthcare networks "
-                "but lower trial density."
+                "but lower trial counts."
             ),
             (
                 "**Evaluate Trial Posting Velocity:** Rising monthly listings in a state signal "
@@ -309,7 +297,7 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         ),
     },
     "site_overlap": {
-        "title": "📖 Site Overlap Playbook: Institutional Fatigue vs Site Capacity",
+        "title": "Site Overlap Playbook: Institutional Fatigue vs Site Capacity",
         "what_it_shows": (
             "Facilities listed on multiple recruiting trials within the same indication. "
             "Identifies experienced clinical trial sites and flags institutional congestion "
@@ -345,7 +333,7 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         ),
     },
     "sponsor_landscape": {
-        "title": "📖 Sponsor Landscape: Strategic Benchmarking",
+        "title": "Sponsor Landscape: Strategic Benchmarking",
         "what_it_shows": (
             "Lead sponsors ranked by count of actively recruiting interventional trials, broken "
             "down by registry sponsor class (Industry / Commercial vs Other / NIH / Academic)."
@@ -378,7 +366,7 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         ),
     },
     "data_reliability": {
-        "title": "📖 Data Reliability & Scenario Modeling: Risk-Informed Budgeting",
+        "title": "Data Reliability & Scenario Modeling: Risk-Informed Budgeting",
         "what_it_shows": (
             "Pipeline ingestion audit trail, bronze→silver→gold data reconciliation metrics, and "
             "an interactive clinical trial delay cost calculator. Sliders adjust study burn rate "
@@ -386,8 +374,8 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         ),
         "how_to_analyze": (
             "Use the ingestion audit logs to verify that only fully successful, validated weekly "
-            "snapshots feed analytics. Use the scenario model to replace arbitrary feasibility "
-            "budget guesswork with structured low/base/high sensitivity projections."
+            "snapshots feed analytics. Use the scenario model to explore structured "
+            "low/base/high sensitivity projections."
         ),
         "playbook": [
             (
@@ -411,7 +399,7 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         ),
     },
     "trial_explorer": {
-        "title": "📖 Trial Explorer Playbook: Protocol Deep-Dive & Direct Verification",
+        "title": "Trial Explorer Playbook: Protocol Deep-Dive & Direct Verification",
         "what_it_shows": (
             "Comprehensive, searchable registry records for individual clinical trials. Enables "
             "filtering by overall status, phase, indication profile, and text search across "
@@ -444,7 +432,7 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         ),
     },
     "trial_similarity": {
-        "title": "📖 Trial Similarity Playbook: Structural Protocol Benchmarking",
+        "title": "Trial Similarity Playbook: Structural Protocol Benchmarking",
         "what_it_shows": (
             "Pairwise similarity scores (0.0 to 1.0) benchmarking a selected index trial "
             "against all other trials in the warehouse across 7 structural protocol factors: "
@@ -481,11 +469,12 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
 }
 
 
-def render_page_guide(page_key: str) -> None:
+def render_page_guide(page_key: str, profile_id: str) -> None:
     """Render the contextual decision playbook for the specified dashboard page.
 
     Args:
         page_key: Identifier of the page (e.g. ``'priority_queue'``, ``'site_overlap'``).
+        profile_id: Active indication profile; ADRD-specific notes show only for ``"adrd"``.
     """
     guide = PAGE_PLAYBOOKS.get(page_key)
     if not guide:
@@ -495,14 +484,15 @@ def render_page_guide(page_key: str) -> None:
         st.markdown(f"**What This Data Shows:**\n{guide['what_it_shows']}")
         st.markdown(f"**How to Analyze the Data:**\n{guide['how_to_analyze']}")
 
-        st.markdown("**Operational Decision Playbook (Eliminating Guesswork):**")
+        st.markdown("**Operational Decision Playbook:**")
         for item in guide["playbook"]:
             st.markdown(f"- {item}")
 
-        st.markdown(f"**🧠 ADRD Clinical Feasibility Nuances:**\n{guide['adrd_context']}")
+        if profile_id == "adrd":
+            st.markdown(f"**ADRD clinical feasibility nuances:**\n{guide['adrd_context']}")
 
         st.caption(
-            "🛡️ **Guardrail Notice:** Signals are computed strictly from public registry listings "
+            "**Guardrail notice:** Signals are computed strictly from public registry listings "
             "to prioritize human feasibility investigation. They are not automated predictions of "
             "enrollment velocity, site quality, or clinical efficacy."
         )

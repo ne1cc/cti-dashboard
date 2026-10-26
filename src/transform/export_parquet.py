@@ -1,6 +1,7 @@
 """Parquet export for silver entities: data/silver/<entity>/run_id=<id>.parquet."""
 
 import os
+import types
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,10 @@ ENTITY_COLUMNS: dict[str, list[str]] = {
     "silver_trials": [
         "ingestion_run_id",
         "indication_profile_id",
+        "snapshot_id",
+        "retrieved_at_utc",
+        "raw_page_reference",
+        "raw_study_ordinal",
         "snapshot_timestamp_utc",
         "nct_id",
         "brief_title",
@@ -44,6 +49,9 @@ ENTITY_COLUMNS: dict[str, list[str]] = {
         "minimum_age",
         "maximum_age",
         "sex",
+        "gender_based",
+        "gender_description",
+        "std_age_groups",
         "eligibility_criteria_text",
         "has_results_flag",
         "source_json_hash",
@@ -52,6 +60,10 @@ ENTITY_COLUMNS: dict[str, list[str]] = {
     "silver_trial_conditions": [
         "ingestion_run_id",
         "indication_profile_id",
+        "snapshot_id",
+        "retrieved_at_utc",
+        "raw_page_reference",
+        "raw_study_ordinal",
         "nct_id",
         "source_json_hash",
         "condition_raw",
@@ -63,6 +75,10 @@ ENTITY_COLUMNS: dict[str, list[str]] = {
     "silver_trial_interventions": [
         "ingestion_run_id",
         "indication_profile_id",
+        "snapshot_id",
+        "retrieved_at_utc",
+        "raw_page_reference",
+        "raw_study_ordinal",
         "nct_id",
         "source_json_hash",
         "intervention_name",
@@ -73,6 +89,10 @@ ENTITY_COLUMNS: dict[str, list[str]] = {
     "silver_trial_sponsors": [
         "ingestion_run_id",
         "indication_profile_id",
+        "snapshot_id",
+        "retrieved_at_utc",
+        "raw_page_reference",
+        "raw_study_ordinal",
         "nct_id",
         "source_json_hash",
         "sponsor_name",
@@ -83,8 +103,13 @@ ENTITY_COLUMNS: dict[str, list[str]] = {
     "silver_trial_locations": [
         "ingestion_run_id",
         "indication_profile_id",
+        "snapshot_id",
+        "retrieved_at_utc",
+        "raw_page_reference",
+        "raw_study_ordinal",
         "nct_id",
         "source_json_hash",
+        "location_ordinal",
         "facility_name",
         "facility_normalized",
         "city",
@@ -102,6 +127,10 @@ ENTITY_COLUMNS: dict[str, list[str]] = {
     "silver_trial_outcomes": [
         "ingestion_run_id",
         "indication_profile_id",
+        "snapshot_id",
+        "retrieved_at_utc",
+        "raw_page_reference",
+        "raw_study_ordinal",
         "nct_id",
         "source_json_hash",
         "outcome_type",
@@ -123,8 +152,12 @@ _NON_STRING_ARROW_TYPES: dict[str, pa.DataType] = {
     "latitude": pa.float64(),
     "longitude": pa.float64(),
     "outcome_index": pa.int64(),
+    "raw_study_ordinal": pa.int64(),
+    "location_ordinal": pa.int64(),
     "expanded_access_info": pa.bool_(),
     "healthy_volunteers": pa.bool_(),
+    "gender_based": pa.bool_(),
+    "std_age_groups": pa.list_(pa.string()),
     "has_results_flag": pa.bool_(),
     "dementia_relevance_flag": pa.bool_(),
     "us_location_flag": pa.bool_(),
@@ -171,7 +204,12 @@ class SilverRunWriter:
     def __enter__(self) -> "SilverRunWriter":
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: types.TracebackType | None,
+    ) -> None:
         if self._closed:
             return
         if exc_type is None:

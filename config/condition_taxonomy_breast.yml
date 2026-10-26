@@ -1,0 +1,23 @@
+version: 1
+default:
+  condition_group: other_breast_conditions
+  dementia_relevance: false
+groups:
+- condition_group: breast_cancer_subtype
+  dementia_relevance: false
+  exact:
+  - triple negative breast cancer
+  - her2 positive breast cancer
+  - hormone receptor positive breast cancer
+  substrings:
+  - triple negative
+  - her2 positive
+- condition_group: breast_cancer
+  dementia_relevance: false
+  exact:
+  - breast cancer
+  - breast carcinoma
+  - breast neoplasm
+  substrings:
+  - breast cancer
+  - breast carcinoma

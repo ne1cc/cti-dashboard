@@ -2,7 +2,8 @@
 
 Layers: **bronze** (immutable raw JSON), **silver** (normalized Parquet),
 **gold** (dbt models in DuckDB: `main_staging`, `main_intermediate`,
-`main_marts`, `main_seeds`).
+`main_marts`, `main_seeds`), and **delivery** (v1 Read API OpenAPI contract
+and dashboards).
 
 Conventions: `nct_id` matches `^NCT\d{8}$`; `*_normalized` columns are
 lowercased, punctuation-stripped text for matching only (display columns
@@ -48,6 +49,13 @@ per repository (see data quality framework).
 | enrollment_count / enrollment_type | int/text | planned or actual per registry |
 | start_date, primary_completion_date, completion_date, study_first_post_date, results_first_post_date (+ `*_raw`) | date/text | partial dates parsed leniently (YYYY, YYYY-MM, YYYY-MM-DD) |
 | lead_sponsor_name / lead_sponsor_normalized | text | lead sponsor |
+| healthy_volunteers | bool | registry `healthyVolunteers` (true, false, null if unstated) |
+| minimum_age / maximum_age | text | verbatim registry age bounds (e.g. "18 Years", "6 Months", "N/A") |
+| sex | text | registry sex eligibility (`ALL`, `FEMALE`, `MALE`, or null) |
+| gender_based | bool | registry `genderBased` |
+| gender_description | text | registry `genderDescription` |
+| std_age_groups | list[text] | registry `stdAges` (`CHILD`, `ADULT`, `OLDER_ADULT`) |
+| eligibility_criteria_text | text | free-text inclusion/exclusion criteria |
 | has_results_flag | bool | registry `hasResults` |
 | record_quality_flag | text | `ok` or first failed check (see quality framework) |
 | source_json_hash | text | SHA-256 of the study JSON |
@@ -63,13 +71,13 @@ taxonomy), `mapping_confidence` (high/medium/low), `dementia_relevance_flag`.
 `sponsor_name`, `sponsor_normalized`, `sponsor_role`
 (`lead_sponsor`/`collaborator`), `sponsor_class` (registry agency class).
 
-### `silver_trial_locations` — grain: NCT × facility × city × state × country × run
+### `silver_trial_locations` — grain: profile × NCT × run × original location ordinal
 `facility_name`, `facility_normalized`, `city`, `state_raw`,
 `state_normalized` (2-letter code via `config/geography_rules.yml`),
 `zip_code`, `country`, `latitude`, `longitude`, `location_status`,
 `us_location_flag`, `usable_geography_flag`. **Facility names are not
-stable unique site identifiers.** No contact or investigator fields exist
-anywhere in this project.
+stable unique site identifiers.** No personal contact or investigator fields
+exist anywhere in this project (formalized in ADR 0065).
 
 ### `silver_trial_outcomes` — grain: NCT × outcome × run
 `outcome_type` (primary/secondary), `measure`, `time_frame`. Descriptive
@@ -80,7 +88,8 @@ text only — never interpreted clinically.
 ## Gold: staging (`main_staging`, views)
 Typed 1:1 reads of silver plus `stg_trial_snapshots` (manifest rows) and
 `stg_trial_contacts` — **deliberately empty** (`where 1=0`) privacy
-guardrail.
+guardrail (enforcing ADR 0065: official registry contact link plus site list,
+with zero contact information stored or exposed by design).
 
 Every grain in the three Gold sections below is additionally scoped by
 `indication_profile_id`: the multi-indication migration made the trial grain
@@ -98,6 +107,41 @@ fact, bridge and analytical mart.
 | int_trial_site_activity | NCT × facility × snapshot | listing signal |
 | int_condition_geography_activity | NCT × condition_group × state × snapshot | shared segment grain |
 | int_sponsor_concentration | segment × snapshot | top_sponsor_share, sponsor_hhi |
+
+## Eligibility semantics and age conversions
+
+### Unit conversions
+Registry age strings are parsed into double-precision fractional years across supported units:
+- Years / Year: `1.0`
+- Months / Month: `1.0 / 12.0`
+- Weeks / Week: `1.0 / 52.0`
+- Days / Day: `1.0 / 365.0`
+- Hours / Hour: `1.0 / 8760.0`
+- Minutes / Minute: `1.0 / 525600.0`
+
+Python (`src/transform/eligibility.py`) and dbt (`dbt_clinical_trials/macros/parse_age_years.sql`) share identical conversion rules.
+
+### Unknown and unstated handling
+- Missing, empty, or `N/A` bounds represent **unstated bounds**, never converted to zero.
+- In patient filters, unstated bounds are permissive: a trial with no stated upper limit is not excluded for older participants (e.g., age 67 excludes a trial with maximum 65 Years, but retains trials with no stated upper bound).
+- Bound classification:
+  - `missing`: bound is null or whitespace
+  - `not_applicable`: registry explicitly recorded `N/A` or `NA`
+  - `valid`: successfully parsed numeric unit
+  - `malformed`: unparseable string or unsupported unit
+  - `contradictory`: min age and max age both parsed, but `minimum_age_years > maximum_age_years`
+
+### Gold eligibility fields in `dim_trial`
+- `minimum_age_raw`, `maximum_age_raw` (VARCHAR): verbatim source age strings.
+- `min_age_years`, `max_age_years` (DOUBLE): parsed fractional years (null if missing/unbounded/malformed).
+- `std_age_groups` (VARCHAR[]): standard age groups (`CHILD`, `ADULT`, `OLDER_ADULT`).
+- `sex_eligibility` (VARCHAR): `ALL`, `FEMALE`, `MALE`, or null.
+- `gender_based` (BOOLEAN), `gender_description` (VARCHAR): gender criteria details.
+- `accepts_healthy_volunteers` (BOOLEAN): nullable boolean.
+- `age_bounds_valid_flag` (BOOLEAN): true if neither bound is malformed and min <= max.
+- `age_bounds_contradictory_flag` (BOOLEAN): true if both bounds are present and min > max.
+- `has_unspecified_min_age`, `has_unspecified_max_age` (BOOLEAN): explicit unknown bound flags.
+- `healthy_volunteers_unknown_flag`, `sex_eligibility_unknown_flag` (BOOLEAN): explicit unknown flags for patient matching.
 
 ## Gold: marts (`main_marts`, tables)
 
@@ -122,10 +166,65 @@ fact, bridge and analytical mart.
 | Model | Grain | Highlights |
 |---|---|---|
 | mart_trial_activity | snapshot × segment × status | listing counts, entered/left recruiting |
-| mart_recruiting_competition | snapshot × segment (RECRUITING) | density, 30/90-day windows, HHI, `competition_signal_band` |
+| mart_recruiting_competition | snapshot × segment (RECRUITING) | recruiting count, 30/90-day windows, HHI, `competition_signal_band` |
 | mart_site_overlap | snapshot × facility | multi-trial facilities, phase_mix |
 | mart_condition_geography_trends | month × condition_group × state | 3-month rolling baseline |
 | mart_data_reliability | ingestion run | reconciliation + usability shares |
-| mart_feasibility_priority_queue | segment @ latest snapshot | score, band, rank, deterministic explanation, `interpretation_note` |
+| mart_feasibility_priority_queue | segment @ latest snapshot | segment-level recruiting trial counts, distinct sponsors, sponsor HHI, site overlap, and deterministic interpretation note |
 
 Full column-level metric semantics: `docs/metric_definitions.md`.
+
+## Audit provenance and contracted marts
+
+All silver entities carry `indication_profile_id`, `snapshot_id` (immutable ingestion
+run ID), nullable `retrieved_at_utc`, `raw_page_reference` relative to the configured
+bronze API response root (normally `data/bronze/<profile>/api_responses`; the reference
+path alone is `run_id=<id>/page=00001.json`), zero-based `raw_study_ordinal`, and canonical
+`source_json_hash`. Historical receipt metadata is unknown, not reconstructed.
+Page receipts live separately at
+`data/bronze/<profile_id>/api_responses/run_id=<id>/_page_metadata/page=<number>.json`;
+the original page body stays unchanged. Original locations carry zero-based
+`location_ordinal`, preserving identical reported rows as distinct record identities.
+
+| Mart | Contracted grain | Fields and meaning |
+|---|---|---|
+| `mart_study_snapshot_audit` | profile × successful snapshot ID × NCT ID | provenance; start/end UTC; snapshot date; overall status; raw/parsed first-post date and posted update; verification text/precision/month age; enrollment count/type/category; recorded/usable/missing-geography/missing-facility counts; geography category; confirmed-recruiting flag; base state inclusion/exclusion |
+| `mart_location_snapshot_audit` | study audit key × original location ordinal | parent study lineage; original and normalized facility/city/state/country; coordinates; reported location status; geography category and usable flag; missing-facility warning; no enrollment allocation |
+
+Successful-run joins retain multiple runs on one UTC date. Staged manifest and study
+timestamps/dates explicitly normalize to UTC. Study geography is usable if any
+original location is usable, otherwise missing when required fields/locations are
+absent, otherwise unsupported. Filter-specific inside/outside/undetermined membership
+is computed from original locations, not inferred solely from the study category.
+
+`enrollment_category` is `estimated`, `actual`, `missing`, or `unknown_type`.
+`verification_date_precision` is `day`, `month`, `year`, `missing`, or `unparseable`.
+Source omissions and missing historical retrieval metadata remain nullable. Audit
+keys are record identities, not durable facility identities. See
+[metric definitions](metric_definitions.md) for clock formulas, coverage denominators,
+filter decisions and JSON fields. Raw references depend on configured bronze retention.
+
+---
+
+## Delivery: Read API (v1 REST Contract)
+
+The delivery layer provides standard JSON REST endpoints over DuckDB Gold marts and
+cached registry sources, contracted via OpenAPI 3.1.0 at [openapi.yaml](api/openapi.yaml).
+Full example payloads are in [examples.md](api/examples.md), and end-to-end field
+lineage is in [source-field-map.md](api/source-field-map.md).
+
+### Core Resources and Grains
+| Route | Method | Grain / Scope | Key Schemas | Governance Alignment |
+|---|---|---|---|---|
+| `/v1/trials` | GET | Paginated trial summaries matching query filters | `TrialsListResponse`, `TrialSummary`, `StructuredEligibilitySummary` | Keyset cursor pagination; Issue #62 eligibility filtering preserving unstated age bounds; great-circle geographic proximity. |
+| `/v1/trials/{nct_id}` | GET | NCT ID protocol and listed facilities | `TrialDetail`, `StructuredEligibility`, `TrialSite`, `DataProvenance` | ADR 0065 contact policy: excludes investigator/coordinator PII; requires `registry_contact_url` deep link. |
+| `/v1/conditions` | GET | MeSH condition ontology and synonyms | `ConditionsListResponse`, `ConditionNode` | Autocomplete prefix matching and MeSH tree branch browsing. |
+| `/v1/trials/{nct_id}/related` | GET | NCT ID × candidate comparable study (top-25) | `RelatedTrialsResponse`, `RelatedTrialItem`, `ComparabilityFactors` | Deterministic comparability scoring from `mart_trial_similarity`; factor weight disclosure; explicit non-clinical disclaimer. |
+| `/v1/geo/access` | GET | State × condition group access snapshot | `GeoAccessResponse`, `TravelBurdenSummary`, `RegionalSiteCount` | Site density, sponsor concentration (HHI), and travel burden analytics. |
+| `/v1/meta/freshness` | GET | System and per-profile ingestion status | `MetaFreshnessResponse`, `ProfileFreshness`, `QualitySummary` | Ingestion run IDs, source versions, and data quality pass rates. |
+
+### Contract Rules
+1. **Error Standard**: All 4xx and 5xx responses strictly adhere to RFC 7807 Problem Details (`application/problem+json`).
+2. **Provenance & Caching Headers**: Every successful response includes `Data-Snapshot`, `Data-Updated`, `ETag`, and `Cache-Control`.
+3. **Structured Eligibility (Issue #62)**: `minimum_age_years` and `maximum_age_years` are null-safe numeric values; `age_not_stated: true` marks unstated bounds; search filters do not silently drop studies with unstated criteria.
+4. **Contact Privacy Guardrail (ADR 0065)**: Trial sites provide public facility names, normalized addresses, and geocoordinates. Personal contact names, emails, and phone numbers are omitted across all endpoints. Direct inquiries link to `https://clinicaltrials.gov/study/{nct_id}#contacts-and-locations`.

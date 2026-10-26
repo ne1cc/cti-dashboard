@@ -1,0 +1,19 @@
+version: 1
+default:
+  condition_group: other_melanoma_conditions
+  dementia_relevance: false
+groups:
+- condition_group: melanoma_advanced
+  dementia_relevance: false
+  exact:
+  - metastatic melanoma
+  substrings:
+  - metastatic melanoma
+  - advanced melanoma
+- condition_group: melanoma
+  dementia_relevance: false
+  exact:
+  - melanoma
+  - malignant melanoma
+  substrings:
+  - melanoma

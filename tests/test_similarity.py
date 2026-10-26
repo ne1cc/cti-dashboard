@@ -30,11 +30,29 @@ def test_yaml_weights_match_dbt_seed():
 
 
 def test_similarity_models_reference_indication_profile_id():
+    candidates_path = ROOT / (
+        "dbt_clinical_trials/models/intermediate/int_similarity_candidates.sql"
+    )
     int_path = ROOT / "dbt_clinical_trials/models/intermediate/int_trial_comparability_features.sql"
     mart_path = ROOT / "dbt_clinical_trials/models/marts/mart_trial_similarity.sql"
+    candidates_sql = candidates_path.read_text()
     int_sql = int_path.read_text()
     mart_sql = mart_path.read_text()
 
     assert "indication_profile_id" in int_sql
     assert "indication_profile_id" in mart_sql
-    assert "a.indication_profile_id = b.indication_profile_id" in mart_sql
+    # Pair discovery self-joins within a profile in the candidates model (the
+    # bounded replacement for the mart's old in-model self-join), and the mart
+    # carries the profile through on both sides of its scoring join.
+    assert "a.indication_profile_id = b.indication_profile_id" in candidates_sql
+    assert "c.indication_profile_id = a.indication_profile_id" in mart_sql
+    assert "c.indication_profile_id = b.indication_profile_id" in mart_sql
+
+
+def test_comparability_features_references_eligibility_fields():
+    int_path = ROOT / "dbt_clinical_trials/models/intermediate/int_trial_comparability_features.sql"
+    int_sql = int_path.read_text()
+    assert "minimum_age_years" in int_sql
+    assert "maximum_age_years" in int_sql
+    assert "healthy_volunteers" in int_sql
+    assert "sex" in int_sql

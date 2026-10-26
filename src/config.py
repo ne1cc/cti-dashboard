@@ -105,6 +105,7 @@ class ProjectConfig(BaseModel):
     retention: RetentionConfig = RetentionConfig()
     scope: dict[str, Any] = {}
     guardrails: dict[str, Any] = {}
+    default_profile: str | None = None
 
 
 def load_config(config_path: str | Path | None = None) -> ProjectConfig:
@@ -113,9 +114,9 @@ def load_config(config_path: str | Path | None = None) -> ProjectConfig:
     path = Path(config_path if config_path is not None else env_path)
     if not path.is_absolute():
         path = project_root() / path
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
-    api_raw = dict(raw["api"])
+    api_raw = dict(raw.get("api") or {})
     http_raw = dict(api_raw.get("http", {}))
     if os.getenv("CTI_HTTP_TIMEOUT_SECONDS"):
         http_raw["timeout_seconds"] = float(os.environ["CTI_HTTP_TIMEOUT_SECONDS"])
@@ -123,15 +124,54 @@ def load_config(config_path: str | Path | None = None) -> ProjectConfig:
         http_raw["max_retries"] = int(os.environ["CTI_MAX_RETRIES"])
     api_raw["http"] = http_raw
 
-    paths_raw = {key: resolve_path(value) for key, value in raw["paths"].items()}
+    default_profile = raw.get("default_profile")
+    if default_profile is not None:
+        if not isinstance(default_profile, str) or not default_profile.strip():
+            raise ValueError(f"default_profile must be a non-empty string, got {default_profile!r}")
+        # Local import to prevent circular import loops (config -> profiles -> config)
+        from src.profiles import PROFILES_DIR, load_profile, normalize_profile_id
+
+        canonical_id = normalize_profile_id(default_profile.strip())
+        profile_candidate = Path(default_profile.strip())
+
+        if profile_candidate.is_absolute() and profile_candidate.is_file():
+            profile_path = profile_candidate
+        elif (path.parent / profile_candidate).is_file():
+            profile_path = path.parent / profile_candidate
+        elif (project_root() / profile_candidate).is_file():
+            profile_path = project_root() / profile_candidate
+        elif (path.parent / "profiles" / f"{canonical_id}.yml").is_file():
+            profile_path = path.parent / "profiles" / f"{canonical_id}.yml"
+        elif (path.parent / "profiles" / f"{canonical_id}.yaml").is_file():
+            profile_path = path.parent / "profiles" / f"{canonical_id}.yaml"
+        elif (project_root() / PROFILES_DIR / f"{canonical_id}.yml").is_file():
+            profile_path = project_root() / PROFILES_DIR / f"{canonical_id}.yml"
+        elif (project_root() / PROFILES_DIR / f"{canonical_id}.yaml").is_file():
+            profile_path = project_root() / PROFILES_DIR / f"{canonical_id}.yaml"
+        else:
+            profile_path = project_root() / PROFILES_DIR / f"{canonical_id}.yml"
+
+        if not profile_path.is_file():
+            raise FileNotFoundError(
+                f"Referenced default_profile '{default_profile}' not found at {profile_path}"
+            )
+
+        prof = load_profile(profile_path)
+        api_raw["query_params"] = prof.config.api.query_params
+        scope_raw = prof.config.scope
+    else:
+        scope_raw = raw.get("scope", {})
+
+    paths_raw = {key: resolve_path(value) for key, value in (raw.get("paths") or {}).items()}
 
     return ProjectConfig(
         api=ApiConfig(**api_raw),
         paths=PathsConfig(**paths_raw),
         ingestion=IngestionConfig(**(raw.get("ingestion") or {})),
         retention=RetentionConfig.from_raw(raw.get("retention")),
-        scope=raw.get("scope", {}),
+        scope=scope_raw,
         guardrails=raw.get("guardrails", {}),
+        default_profile=default_profile,
     )
 
 

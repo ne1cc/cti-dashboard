@@ -3,6 +3,8 @@
 import plotly.express as px
 import streamlit as st
 from components import data
+from components.audit_panel import render_metric_audit
+from components.formatting import format_phase
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import render_page_guide
 from components.profile import render_profile_selector
@@ -11,7 +13,7 @@ page_setup("Site Overlap")
 profile_id = render_profile_selector()
 data.require_warehouse(profile_id)
 
-render_page_guide("site_overlap")
+render_page_guide("site_overlap", profile_id)
 
 overlap = data.site_overlap(profile_id)
 
@@ -42,8 +44,16 @@ col2.metric(
 )
 
 st.subheader("Facilities by recruiting-trial listings")
+display_facilities = filtered.copy()
+display_facilities["phase_mix"] = display_facilities["phase_mix"].map(
+    lambda value: (
+        " · ".join(format_phase(phase.strip()) for phase in value.split("|"))
+        if isinstance(value, str)
+        else value
+    )
+)
 st.dataframe(
-    filtered[
+    display_facilities[
         [
             "facility_name",
             "city",
@@ -55,9 +65,9 @@ st.dataframe(
         ]
     ].head(200),
     hide_index=True,
-    width="stretch",
+    width="content",
     column_config={
-        "facility_name": st.column_config.TextColumn("Facility Name"),
+        "facility_name": st.column_config.TextColumn("Facility", width="large"),
         "city": st.column_config.TextColumn("City"),
         "state_normalized": st.column_config.TextColumn("State"),
         "recruiting_trial_count": st.column_config.NumberColumn(
@@ -72,7 +82,7 @@ st.dataframe(
         ),
         "sponsor_count": st.column_config.NumberColumn("Sponsors", format="%d"),
         "phase_mix": st.column_config.TextColumn(
-            "Phase Mix", help="Distribution of trial phases active at this location"
+            "Listed study phases", help="Phases of all studies listing this facility"
         ),
     },
 )
@@ -93,6 +103,46 @@ st.caption(
     "Facility identity is best-effort matching of public listing text "
     "(name + city + state). Overlap indicates shared listings only — it "
     "is not a claim about site workload or performance."
+)
+
+render_metric_audit(
+    profile_id,
+    filters={"states": selected_states},
+    metric="facility",
+    facilities=filtered[["facility_normalized", "city_normalized", "state_normalized"]]
+    .where(filtered.notna(), None)
+    .values.tolist(),
+    context={
+        "only_multi_trial_facilities": only_repeated,
+        "identity": (
+            "Normalized name + city + state; counts distinct NCT IDs at the facility/date. "
+            "Multi-trial requires >1 confirmed recruiting NCT ID within the profile. "
+            "Sponsor count and phase mix include all listed studies. "
+            "Shared listings do not measure workload."
+        ),
+    },
+    key="sites",
+)
+
+render_metric_audit(
+    profile_id,
+    metric="facility",
+    facilities=overlap.loc[
+        overlap["repeated_site_participation_flag"],
+        ["facility_normalized", "city_normalized", "state_normalized"],
+    ]
+    .where(overlap.notna(), None)
+    .values.tolist(),
+    context={
+        "displayed_measure": (
+            "All-states multi-trial facility card and chart: count "
+            "facility identities with >1 confirmed recruiting NCT ID at "
+            "the latest profile date. Bar chart shows the top 15 states "
+            "from these identities; audit summary counts distinct study "
+            "inputs."
+        )
+    },
+    key="sites_all_states",
 )
 
 guarded_footer()
