@@ -13,7 +13,7 @@ Every page renders the shared disclaimer banner via
 | filters.py | condition/state/phase sidebar multiselects with row-count caption |
 | profile.py | sidebar indication-profile selector; options come from `get_registry().refreshable()`, not a warehouse query, so it renders before the first build |
 | navigation.py | `st.navigation` registry: pages grouped Compare / Inspect / Verify; `app.py` only runs it. Page URLs match the former file-based paths |
-| formatting.py | display labels for phase (from `seeds/phase_mapping.csv`), number and percentage formatting, and snapshot date |
+| formatting.py | display labels for phase (from `dbt_clinical_trials/seeds/phase_mapping.csv`), number and percentage formatting, and snapshot date |
 
 ## Pages
 
