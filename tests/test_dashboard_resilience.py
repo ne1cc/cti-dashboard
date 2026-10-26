@@ -122,6 +122,21 @@ def test_trial_similarity_legacy_schema_returns_empty_dataframe(temp_duckdb_lega
     df = data.trial_similarity("NCT00000001")
     assert isinstance(df, pd.DataFrame)
     assert df.empty
+    data._connection.clear()
+    con = duckdb.connect(str(temp_duckdb_legacy_schema))
+    con.execute(
+        "create table main_marts.mart_trial_similarity "
+        "(same_condition integer, similarity_score double, similarity_rank integer, "
+        "similarity_explanation varchar)"
+    )
+    con.close()
+    data._table_exists.clear()
+    data._has_column.clear()
+    data.trial_similarity.clear()
+
+    df = data.trial_similarity("NCT00000001")
+    assert isinstance(df, pd.DataFrame)
+    assert df.empty
 
 
 def test_trial_explorer_page_smoke_legacy_schema(temp_duckdb_legacy_schema: Path):
