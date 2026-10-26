@@ -37,6 +37,7 @@ dbt_clinical_trials/dbt_packages/
 dbt_clinical_trials/logs/
 dbt_clinical_trials/profiles.yml
 dbt_clinical_trials/.user.yml
+dbt_clinical_trials/*/.user.yml
 logs/
 
 # Streamlit
