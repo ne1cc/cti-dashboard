@@ -18,19 +18,24 @@ from components.formatting import format_phase
 from src.utils.paths import project_root
 
 PRIORITY_DERIVED_RULES = (
-    "Each component uses (input - profile minimum)/(profile maximum - minimum), "
-    "with zero for no spread; weighted sum uses the active score weights. "
-    "Bands are fixed score thresholds: priority_review >=0.70, review >=0.45, "
-    "watch otherwise. Recruiting inputs and sponsor HHI use current segment "
-    "counts; HHI sums squared normalized lead-sponsor shares of segment trials. "
+    "Raw segment metrics are derived directly from dimensional marts "
+    "(fct_trial_snapshot, dim_trial, fct_trial_site). "
+    "recruiting_trial_count (standardized alias active_recruiting_trials) counts "
+    "actively recruiting interventional trials within the condition, state, and phase segment. "
+    "distinct_sponsors (alias sponsor_count) counts unique lead sponsors active in the segment. "
+    "sponsor_hhi calculates the Herfindahl-Hirschman Index of lead sponsor concentration, "
+    "summing squared sponsor shares of segment trials (bounded [0, 1]). "
+    "site_overlap_rate (alias site_overlap_share) measures the share of recruiting trials in the "
+    "segment that share at least one facility with another competing trial in the same "
+    "indication profile, divided by distinct recruiting segment trials (bounded [0, 1]). "
     "Growth sums daily recruiting entrants over 90 days, requiring a previous "
     "non-null non-recruiting status; with one captured date, first-post >= "
-    "snapshot minus 90 days is the proxy. Site overlap is distinct recruiting "
-    "segment trials sharing any facility with >1 recruiting trial in the "
-    "profile divided by distinct recruiting segment trials. Legacy operational "
-    "completeness = 0.5 segment record-quality-ok share + 0.5 latest successful-run "
-    "usable-location share (missing shares coalesce to zero). This panel audits "
-    "count inputs; derived score values remain warehouse calculations."
+    "snapshot minus 90 days is the proxy. "
+    "data_confidence_share retains operational data completeness (0.5 segment "
+    "record-quality-ok share + 0.5 latest successful-run usable-location share; "
+    "missing shares coalesce to zero) as a quality signal pending Issue #78. "
+    "This panel audits count inputs and underlying study records; derived metric values "
+    "remain warehouse calculations."
 )
 
 
@@ -41,7 +46,6 @@ def active_rules(profile_id: str) -> dict[str, Any]:
     paths = {
         "taxonomy": profile["profile"]["taxonomy"],
         "geography": "config/geography_rules.yml",
-        "score_weights": profile["profile"]["score_weights"],
     }
     model_root = Path(__file__).resolve().parents[2] / "dbt_clinical_trials"
     model_paths = [

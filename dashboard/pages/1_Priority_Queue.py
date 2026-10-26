@@ -1,4 +1,4 @@
-"""Feasibility Review Priority Queue — ranked segments for human review."""
+"""Registry Segments — transparent, sortable segments for human feasibility review."""
 
 import pandas as pd
 import plotly.express as px
@@ -6,88 +6,66 @@ import streamlit as st
 from components import data
 from components.audit_panel import PRIORITY_DERIVED_RULES, render_metric_audit
 from components.filters import segment_filters
-from components.formatting import format_band, format_phase, format_priority_explanation
+from components.formatting import format_phase, format_priority_explanation
 from components.guardrails import guarded_footer, page_setup
-from components.guidance import format_condition_group, render_page_guide
+from components.guidance import (
+    clinicaltrials_gov_search_url,
+    format_condition_group,
+    render_page_guide,
+)
 from components.profile import render_profile_selector
 
-page_setup("Feasibility Review Priority Queue")
+page_setup("Registry Segments")
 profile_id = render_profile_selector()
 data.require_warehouse(profile_id)
 
 render_page_guide("priority_queue", profile_id)
 
 queue = data.priority_queue(profile_id)
-queue["priority_explanation"] = (
-    queue["priority_explanation"]
-    .str.replace("data confidence", "legacy operational completeness adjustment", regex=False)
-    .str.replace("relative density", "relative trial count", regex=False)
-)
 st.caption(
-    "Legacy operational completeness adjustment: 0.5 × "
-    "record-quality-ok share + 0.5 × latest successful-run "
-    "usable-location share. This is an operational score input; "
-    "scientific validity is not measured."
+    "Segments are defined by condition group, U.S. state, and clinical trial phase. "
+    "Sort directly by any raw metric below (e.g. active recruiting trials, sponsor "
+    "concentration HHI, or site overlap) according to your operational screening "
+    "criteria. Scientific validity is not measured."
 )
 filtered = segment_filters(queue)
 
-band_options = ["priority_review", "review", "watch"]
-selected_bands = st.sidebar.multiselect("Priority band", band_options)
-if selected_bands:
-    pre_band_count = len(filtered)
-    filtered = filtered[filtered["priority_band"].isin(selected_bands)]
-    st.sidebar.caption(
-        f"{len(filtered):,} of {pre_band_count:,} rows shown after priority band filter"
-    )
-
-band_counts = filtered["priority_band"].value_counts()
-col1, col2, col3 = st.columns(3)
-col1.metric(
-    "Priority review",
-    int(band_counts.get("priority_review", 0)),
-    help=(
-        "Score at least 0.70, reflecting elevated recruiting trial counts or rapid recent growth."
-    ),
-)
-col2.metric(
-    "Review",
-    int(band_counts.get("review", 0)),
-    help=("Score from 0.45 to below 0.70, reflecting trial counts and viable site capacity."),
-)
-col3.metric(
-    "Watch",
-    int(band_counts.get("watch", 0)),
-    help=(
-        "Score below 0.45, reflecting low trial counts—"
-        "promising targets for community-based recruitment."
-    ),
-)
-
 if bool(filtered["growth_uses_registry_proxy_flag"].any()):
     st.warning(
-        "Growth component currently uses the registry first-post-date proxy "
-        "because multi-snapshot history has not accrued yet."
+        "Recent recruiting growth metric (recent_growth_input) currently uses "
+        "the registry first-post-date proxy because multi-snapshot history has "
+        "not accrued yet."
     )
 
-st.subheader("Ranked queue")
-st.caption("Click a row to see its full score breakdown below.")
+filtered = filtered.copy()
+filtered["registry_search_url"] = [
+    clinicaltrials_gov_search_url(cg, st_val)
+    for cg, st_val in zip(filtered["condition_group"], filtered["state_normalized"], strict=False)
+]
+
+st.subheader("Registry segments")
+st.caption(
+    "Default sort is active recruiting trials descending. "
+    "Click column headers to sort by sponsor concentration HHI, site overlap, or trial counts. "
+    "Click a row to inspect segment details."
+)
+
 queue_columns = [
-    "priority_rank",
     "condition_group",
     "state_normalized",
     "phase_normalized",
-    "feasibility_review_priority_score",
-    "priority_band",
-    "recruiting_trial_count",
+    "active_recruiting_trials",
     "sponsor_hhi",
-    "site_overlap_share",
+    "site_overlap_rate",
+    "distinct_sponsors",
+    "listed_site_count",
     "data_confidence_share",
+    "registry_search_url",
     "priority_explanation",
 ]
 display_df = filtered[queue_columns].copy()
 display_df["condition_group"] = display_df["condition_group"].apply(format_condition_group)
 display_df["phase_normalized"] = display_df["phase_normalized"].map(format_phase)
-display_df["priority_band"] = display_df["priority_band"].map(format_band)
 display_df["priority_explanation"] = [
     format_priority_explanation(row) for _, row in filtered.iterrows()
 ]
@@ -101,75 +79,88 @@ queue_event = st.dataframe(
     on_select="rerun",
     selection_mode="single-row",
     column_config={
-        "priority_rank": st.column_config.NumberColumn("Rank", format="%d"),
-        "condition_group": st.column_config.TextColumn("Condition Group"),
-        "state_normalized": st.column_config.TextColumn("State"),
-        "phase_normalized": st.column_config.TextColumn("Phase"),
-        "feasibility_review_priority_score": st.column_config.NumberColumn(
-            "Priority Score", format="%.4f", help="Weighted composite score (0.0 - 1.0)"
-        ),
-        "priority_band": st.column_config.TextColumn("Band", width=110),
-        "recruiting_trial_count": st.column_config.NumberColumn(
-            "Recruiting Trials", format="%d", width=125
+        "condition_group": st.column_config.TextColumn("Condition Group", width=220),
+        "state_normalized": st.column_config.TextColumn("State", width=70),
+        "phase_normalized": st.column_config.TextColumn("Phase", width=110),
+        "active_recruiting_trials": st.column_config.NumberColumn(
+            "Recruiting Trials",
+            format="%d",
+            width=135,
+            help="Actively recruiting trials in this segment (status RECRUITING)",
         ),
         "sponsor_hhi": st.column_config.NumberColumn(
             "Sponsor concentration",
             format="%.3f",
-            help="Herfindahl-Hirschman Index (0–1); higher means more concentrated",
+            width=150,
+            help="Herfindahl-Hirschman Index (0–1); higher means fewer sponsors dominate",
         ),
-        "site_overlap_share": st.column_config.NumberColumn(
+        "site_overlap_rate": st.column_config.NumberColumn(
             "Site Overlap",
             format="percent",
-            help="Share of listed facilities hosting multiple trials",
+            width=110,
+            help=(
+                "Share of recruiting trials sharing facilities with another competing "
+                "trial in the same indication profile"
+            ),
+        ),
+        "distinct_sponsors": st.column_config.NumberColumn(
+            "Sponsors",
+            format="%d",
+            width=90,
+            help="Distinct trial sponsor organizations operating in this segment",
+        ),
+        "listed_site_count": st.column_config.NumberColumn(
+            "Listed Sites",
+            format="%d",
+            width=100,
+            help="Attributable clinical facility listings in this state for this segment",
         ),
         "data_confidence_share": st.column_config.NumberColumn(
             "Completeness adjustment",
             format="percent",
-            help="Legacy operational completeness adjustment: 0.5 record-quality-ok share + "
-            "0.5 latest successful-run usable-location share",
+            width=160,
+            help="0.5 record-quality-ok share + 0.5 latest usable-location share",
+        ),
+        "registry_search_url": st.column_config.LinkColumn(
+            "Registry Search",
+            display_text="Search ClinicalTrials.gov",
+            help="Pre-filtered search for active recruiting studies in this market",
         ),
         "priority_explanation": st.column_config.TextColumn(
             "Explanation",
             width=700,
-            help="HHI measures sponsor concentration from 0–1. Completeness reflects "
-            "record and location coverage, not scientific confidence.",
+            help="Descriptive segment summary from public registry data.",
         ),
     },
 )
 
 export_columns = [
-    "priority_rank",
     "condition_group",
     "state_normalized",
     "phase_normalized",
-    "feasibility_review_priority_score",
-    "priority_band",
-    "recruiting_trial_count",
+    "active_recruiting_trials",
     "sponsor_hhi",
-    "site_overlap_share",
+    "site_overlap_rate",
+    "distinct_sponsors",
+    "listed_site_count",
+    "recent_growth_input",
     "data_confidence_share",
-    "normalized_recruiting_trial_count",
-    "normalized_recent_recruiting_growth",
-    "normalized_sponsor_concentration",
-    "normalized_site_overlap",
-    "normalized_data_confidence_adjustment",
+    "registry_search_url",
     "priority_explanation",
     "interpretation_note",
+    "snapshot_date",
 ]
 st.download_button(
-    "Download filtered queue as CSV",
+    "Download filtered segments as CSV",
     filtered[export_columns]
     .rename(
         columns={
             "data_confidence_share": "legacy_operational_completeness_adjustment",
-            "normalized_data_confidence_adjustment": (
-                "normalized_legacy_operational_completeness_adjustment"
-            ),
         }
     )
     .to_csv(index=False)
     .encode("utf-8"),
-    file_name="feasibility_priority_queue.csv",
+    file_name="registry_segments.csv",
     mime="text/csv",
     help="Exports exactly the rows and filters currently shown above, "
     "including the interpretation note on every row.",
@@ -181,107 +172,96 @@ selected_rows = (
 if selected_rows:
     segment = filtered.iloc[selected_rows[0]]
     st.subheader(
-        f"Score breakdown — {format_condition_group(segment['condition_group'])} · "
-        f"{segment['state_normalized']} · {format_phase(segment['phase_normalized'])} "
-        f"(rank #{int(segment['priority_rank'])})"
+        f"Segment details — {format_condition_group(segment['condition_group'])} · "
+        f"{segment['state_normalized']} · {format_phase(segment['phase_normalized'])}"
     )
-    breakdown_rows = [
-        (
-            "Recruiting trial count",
-            f"{int(segment['recruiting_trial_count'])} recruiting trials",
-            segment["normalized_recruiting_trial_count"],
-            segment["weight_recruiting_trial_count"],
-            segment["weighted_recruiting_trial_count"],
-        ),
-        (
-            "Recent growth",
-            f"{int(segment['recent_growth_input'])} newly recruiting",
-            segment["normalized_recent_recruiting_growth"],
-            segment["weight_recent_recruiting_growth"],
-            segment["weighted_recent_recruiting_growth"],
-        ),
-        (
-            "Sponsor concentration",
-            f"HHI {segment['sponsor_hhi']:.2f} across {int(segment['sponsor_count'])} sponsor(s)",
-            segment["normalized_sponsor_concentration"],
-            segment["weight_sponsor_concentration"],
-            segment["weighted_sponsor_concentration"],
-        ),
-        (
-            "Site overlap",
-            f"{segment['site_overlap_share'] * 100:.0f}% multi-trial facility share",
-            segment["normalized_site_overlap"],
-            segment["weight_site_overlap"],
-            segment["weighted_site_overlap"],
-        ),
-        (
-            "Legacy operational completeness adjustment",
-            f"{segment['data_confidence_share'] * 100:.0f}% operational completeness adjustment",
-            segment["normalized_data_confidence_adjustment"],
-            segment["weight_data_confidence_adjustment"],
-            segment["weighted_data_confidence_adjustment"],
-        ),
+    growth_label = (
+        "First-posted registry proxy"
+        if bool(segment.get("growth_uses_registry_proxy_flag", False))
+        else "Recent recruiting growth"
+    )
+    growth_val = (
+        f"{int(segment['recent_growth_input'])} newly posted (proxy)"
+        if bool(segment.get("growth_uses_registry_proxy_flag", False))
+        else f"{int(segment['recent_growth_input'])} newly recruiting"
+    )
+    details_rows = [
+        ("Active recruiting trials", f"{int(segment['active_recruiting_trials'])} trials"),
+        (growth_label, growth_val),
+        ("Sponsor count", f"{int(segment['distinct_sponsors'])} distinct sponsor(s)"),
+        ("Sponsor concentration HHI", f"{segment['sponsor_hhi']:.3f}"),
+        ("Top sponsor share", f"{segment['top_sponsor_share'] * 100:.1f}%"),
+        ("Site overlap rate", f"{segment['site_overlap_rate'] * 100:.1f}% of trials"),
+        ("Listed site affiliations", f"{int(segment['listed_site_count'])} sites"),
+        ("Operational completeness", f"{segment['data_confidence_share'] * 100:.1f}%"),
     ]
-    breakdown = pd.DataFrame(
-        breakdown_rows,
-        columns=["Component", "Raw value", "Normalized (0-1)", "Weight", "Weighted contribution"],
-    )
+    details_df = pd.DataFrame(details_rows, columns=["Metric", "Observed Value"])
     st.dataframe(
-        breakdown,
+        details_df,
         hide_index=True,
         width="content",
         column_config={
-            "Component": st.column_config.TextColumn("Factor", width="large"),
-            "Raw value": st.column_config.TextColumn("Observed input", width="large"),
-            "Normalized (0-1)": st.column_config.NumberColumn("Scaled value (0–1)", format="%.3f"),
-            "Weight": st.column_config.NumberColumn("Weight", format="percent"),
-            "Weighted contribution": st.column_config.NumberColumn(
-                "Score contribution", format="%.4f"
-            ),
+            "Metric": st.column_config.TextColumn("Registry Metric", width="large"),
+            "Observed Value": st.column_config.TextColumn("Observed Value", width="large"),
         },
-    )
-    weighted_total = sum(row[4] for row in breakdown_rows)
-    st.metric(
-        "Weighted total (sum of weighted contributions)",
-        f"{weighted_total:.4f}",
-        help="Matches feasibility_review_priority_score for this segment "
-        "(verified by the assert_weighted_components_sum_to_score dbt test).",
     )
     st.caption(segment["priority_explanation"])
 
-st.subheader("Score composition (top 15 shown)")
+    st.subheader(
+        f"Constituent Clinical Trials — {format_condition_group(segment['condition_group'])} · "
+        f"{segment['state_normalized']} · {segment['phase_normalized']}"
+    )
+    st.caption(
+        "Individual recruiting protocols registered on ClinicalTrials.gov contributing to this "
+        "market segment. Click 'View on ClinicalTrials.gov' to inspect official protocol "
+        "eligibility, inclusion criteria, and trial sites."
+    )
+    trials_df = data.trials_for_segment(
+        profile_id,
+        condition_group=str(segment["condition_group"]),
+        state_normalized=str(segment["state_normalized"]),
+        phase_normalized=str(segment["phase_normalized"]),
+    )
+    if trials_df.empty:
+        st.info("No individual active recruiting trial records identified for this segment.")
+    else:
+        st.dataframe(
+            trials_df,
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "nct_id": st.column_config.TextColumn("NCT ID"),
+                "brief_title": st.column_config.TextColumn("Brief Title", width="large"),
+                "lead_sponsor": st.column_config.TextColumn("Lead Sponsor"),
+                "phase": st.column_config.TextColumn("Phase"),
+                "overall_status": st.column_config.TextColumn("Status"),
+                "enrollment_count": st.column_config.NumberColumn(
+                    "Planned Enrollment", format="%d"
+                ),
+                "study_first_post_date": st.column_config.DateColumn("First Posted"),
+                "registry_url": st.column_config.LinkColumn(
+                    "Registry Record",
+                    display_text="View on ClinicalTrials.gov",
+                    help="Direct link to official trial record on ClinicalTrials.gov",
+                ),
+            },
+        )
+
+st.subheader("Active Recruiting Trials by Segment (Top 15)")
 top = filtered.head(15).copy()
 top["segment"] = (
     top["condition_group"] + " · " + top["state_normalized"] + " · " + top["phase_normalized"]
 )
-components = {
-    "normalized_recruiting_trial_count": "Recruiting trial count",
-    "normalized_recent_recruiting_growth": "Recent growth",
-    "normalized_sponsor_concentration": "Sponsor concentration",
-    "normalized_site_overlap": "Site overlap",
-    "normalized_data_confidence_adjustment": "Legacy operational completeness adjustment",
-}
-melted = top.melt(
-    id_vars="segment",
-    value_vars=list(components),
-    var_name="component",
-    value_name="normalized value",
-)
-melted["component"] = melted["component"].map(components)
 fig = px.bar(
-    melted,
+    top,
     y="segment",
-    x="normalized value",
-    color="component",
+    x="active_recruiting_trials",
     orientation="h",
-    title="Normalized (unweighted) component values per segment",
+    title="Active recruiting trials across top segments",
+    labels={"segment": "Segment", "active_recruiting_trials": "Active Recruiting Trials"},
 )
-fig.update_layout(yaxis=dict(autorange="reversed"), height=520)
+fig.update_layout(yaxis=dict(autorange="reversed"), height=480)
 st.plotly_chart(fig, width="stretch")
-st.caption(
-    "Bars show normalized component inputs before weighting; the score "
-    "applies the weights in config/score_weights.yml."
-)
 
 if not filtered.empty:
     st.info(filtered.iloc[0]["interpretation_note"])
@@ -291,7 +271,6 @@ render_metric_audit(
     filters=filtered.attrs.get("audit_filters", {}),
     segments=filtered,
     context={
-        "priority_bands": selected_bands,
         "derived_rules": PRIORITY_DERIVED_RULES,
     },
     key="priority",

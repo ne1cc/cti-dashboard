@@ -20,7 +20,6 @@ profile:
   display_name: "Full Registry (All Conditions, Worldwide)"
   ingest_only: true    # transform, dbt, and dashboard are NOT run for this profile
   taxonomy: null       # no condition grouping applicable
-  score_weights: null  # not applicable
 
 api:
   base_url: https://clinicaltrials.gov/api/v2

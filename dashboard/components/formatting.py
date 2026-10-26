@@ -17,12 +17,6 @@ PHASE_SEED = (
     Path(__file__).resolve().parents[2] / "dbt_clinical_trials" / "seeds" / "phase_mapping.csv"
 )
 
-BAND_LABELS: dict[str, str] = {
-    "priority_review": "Priority review",
-    "review": "Review",
-    "watch": "Watch",
-}
-
 
 @cache
 def _phase_labels() -> dict[str, str]:
@@ -37,13 +31,6 @@ def format_phase(code: object) -> str:
     return _phase_labels().get(code, code.replace("_", " ").title())
 
 
-def format_band(band: object) -> str:
-    """``"priority_review"`` → ``"Priority review"``; unknown bands pass through."""
-    if not isinstance(band, str):
-        return ""
-    return BAND_LABELS.get(band, band)
-
-
 def format_snapshot_date(value: str | pd.Timestamp | datetime | date | None) -> str:
     """Calendar date of a snapshot, e.g. ``"Oct 5, 2026"``."""
     if value is None or pd.isna(value):
@@ -53,7 +40,7 @@ def format_snapshot_date(value: str | pd.Timestamp | datetime | date | None) -> 
 
 
 def format_priority_explanation(row: pd.Series) -> str:
-    """Summarize score inputs without presenting first-post proxies as recruiting events."""
+    """Summarize segment metrics without presenting first-post proxies as recruiting events."""
     growth = (
         "First posted (90d proxy)"
         if row["growth_uses_registry_proxy_flag"]

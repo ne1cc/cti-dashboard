@@ -27,6 +27,9 @@ venv/
 htmlcov/
 .ruff_cache/
 
+# API cache
+.api_cache.db*
+
 # dbt
 dbt_clinical_trials/target/
 dbt_clinical_trials/dbt_target/
@@ -48,6 +51,6 @@ logs/
 .worktrees/
 
 # Superpowers / agent planning artifacts
-docs/superpowers/
 .superpowers/
+docs/superpowers/
 .scratch/

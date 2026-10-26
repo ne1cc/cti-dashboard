@@ -22,6 +22,8 @@ dependencies = [
     "dbt-duckdb>=1.8",
     "streamlit>=1.36",
     "plotly>=5.22",
+    "fastapi>=0.111.0",
+    "uvicorn>=0.30.0",
 ]
 
 [dependency-groups]
@@ -34,6 +36,7 @@ dev = [
     "requests-mock>=1.12",
     "ruff>=0.5",
     "types-pyyaml>=6.0.12.20260815",
+    "httpx>=0.27.0",
 ]
 orchestration = [
     "dagster>=1.13.21",
@@ -51,6 +54,9 @@ packages = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+    "benchmark: Query latency benchmark tests",
+]
 
 [tool.coverage.run]
 source = ["src", "dashboard"]

@@ -23,6 +23,14 @@
 -- registry-scale profile's dominant group (the taxonomy catch-all) would
 -- otherwise push the candidate join back toward N^2.
 --
+-- A token is (condition_group, phase_normalized), not condition_group alone:
+-- the ten profiles added 2026-10 have two to four populated groups each, so
+-- at full registry scale every group in oncology_colorectal and
+-- type2_diabetes reached the cap and those profiles got zero pairs
+-- (2026-10-19 twelve-profile build, docs/DEPLOY_FLY.md). Phase splits each
+-- group five to eight ways, and same_condition + same_phase are the two
+-- heaviest-weighted factors a candidate pair can match on together.
+--
 -- Materialized as a table, not the project's intermediate default view: the
 -- token self-join is the expensive CTE and the mart consumes it twice (once
 -- per side of the scoring join); a view would recompute it.
@@ -32,10 +40,13 @@
 
 with tokens as (
     select
-        indication_profile_id,
-        nct_id,
-        condition_group as token
-    from {{ ref('bridge_trial_condition') }}
+        bridge.indication_profile_id,
+        bridge.nct_id,
+        bridge.condition_group || '|' || features.phase_normalized as token
+    from {{ ref('bridge_trial_condition') }} as bridge
+    inner join {{ ref('int_trial_comparability_features') }} as features
+        on bridge.indication_profile_id = features.indication_profile_id
+        and bridge.nct_id = features.nct_id
 ),
 
 token_frequency as (
@@ -48,7 +59,7 @@ token_frequency as (
 ),
 
 selective_tokens as (
-    select tokens.indication_profile_id, tokens.nct_id
+    select tokens.indication_profile_id, tokens.nct_id, tokens.token
     from tokens
     inner join token_frequency
         on tokens.indication_profile_id = token_frequency.indication_profile_id
@@ -64,6 +75,7 @@ unordered_pairs as (
     from selective_tokens a
     inner join selective_tokens b
         on a.indication_profile_id = b.indication_profile_id
+        and a.token = b.token
         and a.nct_id < b.nct_id
 )
 

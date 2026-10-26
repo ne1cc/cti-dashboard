@@ -25,7 +25,7 @@ SECTIONS: dict[str, tuple[PageSpec, ...]] = {
     "Compare": (
         PageSpec(
             "pages/1_Priority_Queue.py",
-            "Priority Queue",
+            "Registry Segments",
             ":material/format_list_numbered:",
             "Priority_Queue",
         ),

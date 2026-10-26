@@ -24,8 +24,8 @@ trial_fields as (
         end as enrollment_band,
         t.healthy_volunteers,
         t.sex,
-        {{ parse_age_years('t.minimum_age') }} as minimum_age_years,
-        {{ parse_age_years('t.maximum_age') }} as maximum_age_years,
+        t.minimum_age_years,
+        t.maximum_age_years,
         t.start_date,
         t.completion_date
     from {{ ref('stg_trials') }} t

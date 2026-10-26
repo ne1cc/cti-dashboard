@@ -4,9 +4,15 @@
 
 **Live demo:** [cti-dashboard.fly.dev](https://cti-dashboard.fly.dev/)
 
-This project turns public ClinicalTrials.gov records into an inspectable study landscape
-for clinical-operations analysts preparing feasibility reviews. Counts and audit exports
-support preliminary research; workflow usefulness remains unvalidated.
+**An open, multi-stakeholder clinical trial access and intelligence platform providing transparent discovery and competition analytics over public ClinicalTrials.gov registry data.**
+
+The platform serves patients, caregivers, researchers, and feasibility analysts through open registry analytics. Clinical trial participants can search for active trials near them with clear privacy-first contact guidance (ADR 0061, ADR 0065). Research teams and analysts can explore trial activity, sponsor concentration, site overlap, and geographic trends across multiple therapeutic indications without unvalidated paywalls or black-box algorithms.
+
+Analyst feasibility workflows and business case models are preserved as exploratory hypotheses (ADR 0082, archived in [`docs/archive/business_case.md`](docs/archive/business_case.md)). The primary focus is open access trial discovery, reproducible public registry intelligence, and transparent data quality.
+
+This project turns public **ClinicalTrials.gov API v2** records into an inspectable study landscape with contributing NCT IDs, coverage caveats, and an exportable audit. Users can select an indication profile, phase, and captured snapshot to compare distinct study counts, inspect underlying facilities, and evaluate competition metrics.
+
+Counts describe registry listings under displayed rules; they do not establish patient availability, recruitment prospects, or site performance.
 
 ## 5-minute quickstart (synthetic fixture data)
 
@@ -28,27 +34,33 @@ uv run streamlit run ../../dashboard/app.py
 > nonempty destination. To reset, stop Streamlit and remove only the disposable
 > `.scratch/fixture-demo` directory from the repository root, then rerun these commands.
 
+**Start here:** [Project brief](docs/project_brief.md) ·
+[National Phase 3 Alzheimer's disease case study](docs/feasibility_case_study.md) ·
+[Metric definitions](docs/metric_definitions.md) ·
+[Archived exploratory business case](docs/archive/business_case.md).
+The case study uses an actual local captured dataset and a complete 50-state table;
+D.C. and territories appear in a separate supplement. Its observations describe
+that dataset, rather than the current live demo.
+
+> **Validation status:** Pipeline checks, dbt contracts, and automated test suites
+> are implemented. Commercial feasibility analyst workflows and operational ROI claims
+> remain exploratory hypotheses (ADR 0082). Current development headlines the open
+> multi-stakeholder access platform (ADR 0040).
+
 ---
 
 ## Decision Workflow and Operational Output
 
-**A clinical-operations analyst preparing a feasibility review needs to decide which condition–phase–geography segments, study records and evidence gaps to investigate next.** The assumed current workflow involves collecting registry listings, reconciling filters in spreadsheets and assembling evidence for a reviewer. Repeated manual comparisons can consume preparation time and make results difficult to reproduce. That workflow and its consequences still require stakeholder validation.
-
-This project turns public **ClinicalTrials.gov API v2** records into an inspectable study landscape with contributing NCT IDs, coverage caveats and an exportable audit. The analyst selects a condition, phase and captured snapshot, compares distinct study counts, inspects the underlying records, then prepares a scoped research shortlist and follow-up questions for qualified feasibility review.
-
-Success would mean less time preparing a comparable review, more complete evidence handoffs and easier reproduction of published counts. Baselines and targets have not been measured. Counts describe registry listings under the displayed rules; they do not establish patient availability, recruitment prospects or site performance.
-
-**Start here:** [Business case](docs/business_case.md) · [Project brief](docs/project_brief.md) · [National Phase 3 Alzheimer's disease case study](docs/feasibility_case_study.md) · [Metric definitions](docs/metric_definitions.md). The case study uses an actual local captured dataset and a complete 50-state table; D.C. and territories appear in a separate supplement. Its observations describe that dataset, rather than the current live demo.
-
-> **Validation status:** Calculation and pipeline checks are implemented. The proposed stakeholder workflow and business benefits have not been validated through stakeholder interviews or a measured operational evaluation.
-
 Agree on scope → compare the captured landscape → inspect contributors and gaps → export evidence → prepare a research shortlist and questions for further review.
 
-The dashboard and audit supply the evidence; the analyst writes the handoff memo. The memo should identify the selected scope, observations, contributing studies, coverage limitations and information to confirm next. The optional weighted review-priority score offers transparent ordering, but its operational usefulness is unvalidated and its bands are not intervention or site-activation thresholds.
+The dashboard and audit supply the evidence; analysts and researchers inspect
+transparent registry segments. Segments present raw sortable metrics (active recruiting
+trials, sponsor concentration HHI, site overlap rate); per ADR 0077, composite scoring
+and arbitrary priority bands have been removed.
 
 Weekly snapshots are the proposed collection cadence. Capture age and registry source age are shown separately; a recent capture can contain an older source record. Freshness expectations must be agreed with the reviewer before operational use. There is no enforced freshness SLA.
 
-## Why Recurring Engineering Matters
+## Why this needs recurring engineering
 
 A spreadsheet or one-off registry analysis can be sufficient for an isolated question. Repeated reviews need consistent filters and definitions, distinct-study deduplication, retained observations and evidence that a reviewer can inspect.
 
@@ -57,7 +69,11 @@ A spreadsheet or one-off registry analysis can be sufficient for an isolated que
 - **Inspectable evidence:** Contributing NCT IDs, coverage, exclusions and source lineage explain what a count includes and what remains unknown.
 - **Reliable delivery:** Python ingestion, typed Parquet entities, quality checks and CI support reproducible preparation of the Streamlit views and audit exports.
 
-The [business case](docs/business_case.md) defines the proposed evaluation: preparation minutes per comparable review, completeness of required handoff fields, and successful count reproduction. The captured [national case study](docs/feasibility_case_study.md) demonstrates calculation and evidence preparation; stakeholder adoption and business improvement remain unmeasured.
+The [archived business case](docs/archive/business_case.md) details an exploratory evaluation hypothesis:
+preparation minutes per comparable review, completeness of required handoff fields,
+and successful count reproduction. The captured
+[national case study](docs/feasibility_case_study.md) demonstrates calculation and
+evidence preparation; stakeholder adoption and business improvement remain unmeasured.
 
 ---
 
@@ -111,8 +127,12 @@ erDiagram
 
 - **Therapeutic area:** Alzheimer's disease and related dementias (config-driven taxonomy).
 - **Geography:** United States (all raw records preserved; U.S.-only in marts).
-- **Study type:** Interventional.
-- **Statuses:** RECRUITING, ACTIVE_NOT_RECRUITING, NOT_YET_RECRUITING, COMPLETED.
+- **Study type:** Interventional (`AREA[StudyType]INTERVENTIONAL`).
+- **Statuses:** All 8 overall statuses: `RECRUITING`, `ACTIVE_NOT_RECRUITING`, `NOT_YET_RECRUITING`, `COMPLETED`, `TERMINATED`, `WITHDRAWN`, `SUSPENDED`, `ENROLLING_BY_INVITATION`. Defined authoritatively in `config/profiles/adrd.yml` and referenced by `config/project_config.yml` (`default_profile: adrd`).
+- **Downstream implications of the 8-status scope:**
+  - **Tracked trial totals:** Total trial counts (`dim_trial`, `trial_count`, warehouse trials) reflect the entire interventional landscape across all 8 statuses, rather than only active/completed studies.
+  - **Stopped studies & feasibility risk:** Studies that stopped early (`TERMINATED`, `WITHDRAWN`, `SUSPENDED`) are ingested and retained, powering why-stopped and feasibility risk analyses.
+  - **Similarity candidate pool vs. recruiting competition:** The candidate pool for trial similarity scoring spans all 8 statuses to identify relevant precedents across past and stopped trials, while active competition metrics (`recruiting_trial_count`, `new_recruiting_30d/90d`, `sponsor_hhi`, and priority scoring) strictly isolate confirmed currently-recruiting studies (`overall_status = 'RECRUITING'`).
 - **Phases:** EARLY_PHASE1 – PHASE4 where available.
 - **Cadence:** Weekly snapshots; history accrues from this project's own runs.
 
@@ -206,9 +226,9 @@ make dashboard
 
 Fully documented in [`docs/metric_definitions.md`](docs/metric_definitions.md). Core rules: trial counts are always `COUNT(DISTINCT nct_id)`; site counts use the documented facility grain and are never presented as investigator capacity; only complete (`success`) snapshots feed metrics.
 
-### Feasibility Score Methodology
+### Registry Segment Metrics Methodology
 
-Weighted min-max-normalized components (weights in `config/score_weights.yml` and a dbt seed): recruiting-trial count (0.35), recent recruiting growth (0.20), sponsor concentration (0.20), site overlap (0.15), legacy operational completeness adjustment (0.10). All components, denominators, and deterministic explanations are displayed.
+Segments are evaluated using transparent, observable registry metrics: active recruiting trial counts, Herfindahl-Hirschman Index (HHI) sponsor concentration, site overlap rate, and data completeness adjustments. Per ADR 0077, composite scoring and arbitrary priority bands have been removed in favor of direct sorting by raw metrics.
 
 ### Data-Quality and Clinical Interpretation Guardrails
 
@@ -245,6 +265,7 @@ No fake ROI. A configurable scenario calculator (`config/roi_assumptions.yml`) l
 | [`docs/source_documentation.md`](docs/source_documentation.md) | API v2 usage, verification, and history caveats |
 | [`docs/metric_definitions.md`](docs/metric_definitions.md) | formula and grain for every metric and score |
 | [`docs/competition_audit.md`](docs/competition_audit.md) | competition audit panel specification, drill-through, and audit JSON artifacts |
+| [`docs/archive/business_case.md`](docs/archive/business_case.md) | archived exploratory analyst persona and business case hypothesis (ADR 0082) |
 | [`docs/clinical_interpretation_guardrails.md`](docs/clinical_interpretation_guardrails.md) | required/prohibited language and enforcement |
 | [`docs/assumptions_and_limitations.md`](docs/assumptions_and_limitations.md) | numbered assumptions register |
 | [`docs/data_quality_framework.md`](docs/data_quality_framework.md) | check layers, tests, severity philosophy, and CI gates |
