@@ -1,13 +1,13 @@
 """Bounded candidate discovery for mart_trial_similarity.
 
-Two warehouses, both built from one dense ADRD snapshot (24 cloned "Alzheimer
-Disease" listings push the alzheimers_disease token to df 27, so candidate
+Two warehouses, both built from one dense ADRD snapshot (52 cloned "Alzheimer
+Disease" listings push both alzheimers phase tokens past df 25, so candidate
 sets outnumber the top-25 cap) plus the base NSCLC page:
 `similarity_equivalence_root` keeps the default `similarity_max_token_df` and
 builds `mart_trial_similarity_reference` -- the pre-2026-10 unbounded
 self-join, var-gated because at registry scale it is the measured 28 GB run.
 `similarity_cap_root` sets `similarity_max_token_df: 4` so the dominant
-alzheimers token drops out of discovery while the small lewy token survives.
+alzheimers tokens drop out of discovery while the small lewy token survives.
 
 The load-bearing property is exact, not statistical: scoring is untouched and
 only pair discovery narrowed, so for every (profile, trial) the new mart's
@@ -136,20 +136,23 @@ def test_candidate_sets_outnumber_the_cap(
 
     A candidate-poor fixture makes the qualify invisible: if every trial's
     candidate count stayed under 25, the equivalence theorem above would pass
-    even if the mart dropped the cap entirely. alzheimers_disease's df of 27
-    (24 clones + 3 base trials carrying an Alzheimer condition) is what makes
-    the cap bind.
+    even if the mart dropped the cap entirely. The (alzheimers_disease, PHASE3)
+    token's df of 28 (26 clones + 2 base PHASE3 Alzheimer trials) is what
+    makes the cap bind.
     """
-    alzheimers_df = _rows(
+    alzheimers_phase3_df = _rows(
         similarity_equivalence_root,
         """
-        select count(distinct nct_id)
-        from main_marts.bridge_trial_condition
-        where indication_profile_id = 'adrd'
-          and condition_group = 'alzheimers_disease'
+        select count(distinct bridge.nct_id)
+        from main_marts.bridge_trial_condition as bridge
+        inner join main_intermediate.int_trial_comparability_features as features
+            using (indication_profile_id, nct_id)
+        where bridge.indication_profile_id = 'adrd'
+          and bridge.condition_group = 'alzheimers_disease'
+          and features.phase_normalized = 'PHASE3'
         """,
     )[0][0]
-    assert alzheimers_df >= 26
+    assert alzheimers_phase3_df >= 27
     max_rank = _rows(
         similarity_equivalence_root,
         "select max(similarity_rank) from main_marts.mart_trial_similarity "
@@ -184,7 +187,7 @@ def test_ranks_are_contiguous_per_trial(
 
 
 def test_cap_drops_only_dominant_tokens(similarity_cap_root: Path) -> None:
-    """At df 4 the alzheimers token (df 27) leaves discovery; lewy (df 3) stays.
+    """At df 4 the alzheimers tokens leave discovery; lewy (df 3) stays.
 
     "Lewy Body Dementia" and "Frontotemporal Dementia" both contain the
     substring "dementia", so dementia_unspecified also crosses the threshold
@@ -241,6 +244,28 @@ def test_cap_drops_only_dominant_tokens(similarity_cap_root: Path) -> None:
         """,
     )[0][0]
     assert lewy_pairs == 2
+
+
+def test_phase_splits_a_capped_group(similarity_phase_split_root: Path) -> None:
+    """A group over the cap still yields pairs through its under-cap phases.
+
+    Group-only tokens left oncology_colorectal and type2_diabetes with zero
+    pairs at registry scale (every populated group reached the cap). Here the
+    alzheimers group (df 55) is over a cap of 27, but its PHASE2 slice (df 26)
+    is under it and its PHASE3 slice (df 28) is not: the PHASE2-only filler
+    pairs with exactly its 25 PHASE2 peers, the PHASE3-only filler with none.
+    """
+    rows = _rows(
+        similarity_phase_split_root,
+        """
+        select nct_id_a, count(*)
+        from main_intermediate.int_similarity_candidates
+        where indication_profile_id = 'adrd'
+          and nct_id_a in ('NCT00000020', 'NCT00000021')
+        group by 1
+        """,
+    )
+    assert dict(rows) == {"NCT00000020": 25}
 
 
 def test_reference_model_is_not_built_without_its_var(

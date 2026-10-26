@@ -1,0 +1,161 @@
+{
+  "studies": [
+    {
+      "protocolSection": {
+        "identificationModule": {
+          "nctId": "NCT04245644",
+          "briefTitle": "Phase 3 Evaluation of Novel Tau-Targeted Therapy in Early Alzheimer Disease",
+          "officialTitle": "A Randomized, Double-Blind, Placebo-Controlled Study of BIIB080 in Participants With Early Alzheimer Disease"
+        },
+        "statusModule": {
+          "overallStatus": "RECRUITING",
+          "lastKnownStatus": null,
+          "statusVerifiedDate": "2026-06",
+          "startDateStruct": {
+            "date": "2020-04-15"
+          },
+          "lastUpdatePostDateStruct": {
+            "date": "2026-06-12"
+          }
+        },
+        "sponsorCollaboratorsModule": {
+          "leadSponsor": {
+            "name": "Biogen Inc.",
+            "class": "INDUSTRY"
+          },
+          "centralContacts": [
+            {
+              "name": "Dr. Central Coordinator",
+              "role": "Study Director",
+              "phone": "555-0199",
+              "email": "pii-coordinator@biogen.example.com"
+            }
+          ]
+        },
+        "designModule": {
+          "studyType": "INTERVENTIONAL",
+          "phases": ["PHASE3"],
+          "designInfo": {
+            "allocation": "RANDOMIZED",
+            "primaryPurpose": "TREATMENT",
+            "interventionModel": "PARALLEL"
+          }
+        },
+        "conditionsModule": {
+          "conditions": [
+            "Alzheimer Disease",
+            "Mild Cognitive Impairment"
+          ]
+        },
+        "eligibilityModule": {
+          "minimumAge": "55 Years",
+          "maximumAge": "85 Years",
+          "sex": "ALL",
+          "healthyVolunteers": false,
+          "stdAges": ["ADULT", "OLDER_ADULT"],
+          "eligibilityCriteria": "Inclusion: Age 55-85, Amyloid positive. Exclusion: Significant psychiatric illness."
+        },
+        "contactsLocationsModule": {
+          "locations": [
+            {
+              "facility": "UCSF Memory and Aging Center",
+              "city": "San Francisco",
+              "state": "CA",
+              "zip": "94143",
+              "country": "United States",
+              "status": "RECRUITING",
+              "geoPoint": {
+                "lat": 37.7631,
+                "lon": -122.4578
+              },
+              "contacts": [
+                {
+                  "name": "Local Site Coordinator",
+                  "phone": "415-555-0123",
+                  "email": "site-pii@ucsf.example.edu"
+                }
+              ]
+            },
+            {
+              "facility": "Stanford Center for Memory Disorders",
+              "city": "Palo Alto",
+              "state": "CA",
+              "zip": "94304",
+              "country": "United States",
+              "status": "RECRUITING",
+              "geoPoint": {
+                "lat": 37.4358,
+                "lon": -122.1762
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "protocolSection": {
+        "identificationModule": {
+          "nctId": "NCT03887455",
+          "briefTitle": "A Study to Evaluate the Efficacy and Safety of Lecanemab in Participants With Early Alzheimer Disease",
+          "officialTitle": "A Placebo-Controlled, Double-Blind Study of Lecanemab"
+        },
+        "statusModule": {
+          "overallStatus": "RECRUITING",
+          "lastKnownStatus": null,
+          "statusVerifiedDate": "2026-05",
+          "startDateStruct": {
+            "date": "2019-03-22"
+          },
+          "lastUpdatePostDateStruct": {
+            "date": "2026-05-30"
+          }
+        },
+        "sponsorCollaboratorsModule": {
+          "leadSponsor": {
+            "name": "Eisai Inc.",
+            "class": "INDUSTRY"
+          }
+        },
+        "designModule": {
+          "studyType": "INTERVENTIONAL",
+          "phases": ["PHASE3"],
+          "designInfo": {
+            "allocation": "RANDOMIZED",
+            "primaryPurpose": "TREATMENT"
+          }
+        },
+        "conditionsModule": {
+          "conditions": [
+            "Alzheimer Disease"
+          ]
+        },
+        "eligibilityModule": {
+          "minimumAge": "50 Years",
+          "maximumAge": "90 Years",
+          "sex": "ALL",
+          "healthyVolunteers": false,
+          "stdAges": ["ADULT", "OLDER_ADULT"],
+          "eligibilityCriteria": "Inclusion: Early AD diagnosis."
+        },
+        "contactsLocationsModule": {
+          "locations": [
+            {
+              "facility": "Stanford Center for Memory Disorders",
+              "city": "Palo Alto",
+              "state": "CA",
+              "zip": "94304",
+              "country": "United States",
+              "status": "RECRUITING",
+              "geoPoint": {
+                "lat": 37.4358,
+                "lon": -122.1762
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "totalCount": 2,
+  "nextPageToken": "sample_next_cursor_token"
+}

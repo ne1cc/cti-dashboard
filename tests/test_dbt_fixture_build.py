@@ -16,6 +16,7 @@ breaks. No network, no real API, everything under tmp_path_factory.
 import json
 import os
 import re
+import sys
 from datetime import date
 from pathlib import Path
 
@@ -636,30 +637,14 @@ def test_mart_condition_geography_trends_population_columns(
 
 
 def test_mart_feasibility_priority_queue_shape(fixture_project_root: Path) -> None:
-    """Segments pinned per profile, replacing one pooled count.
+    """Assert segment row counts per profile, key uniqueness, raw metrics, and no score columns.
 
-    The leg this replaces was `count(*) == [(6,)]`.
-
-    All four values below were PREDICTED when Task 10 wrote them: while R27's CI
-    blackout held this mart produced no table, so they were measured on a scratch
-    copy of the fixture tree with mart_data_reliability.indication_profile_id
-    forward-ported. Amendment A16 item 4 forbids inheriting that. Re-measured on
-    2026-09-06 against the committed `dbt build` of these models (green: 36
-    success + 137 pass, 0 non-pass nodes), every one of the four held exactly --
-    (6, 4) per profile, (10, 10) rows/keys, (1, 1) ranks for both profiles, 0
-    out-of-range scores. Nothing here is a prediction any more.
-
-    `[(1, 1)]` is still not the plan's `[(1, 6)]`, and that is the fixture's
-    doing rather than the model's: every segment on this warehouse holds exactly
-    one recruiting trial, so every min-max denominator is 0, all ten scores are
-    0.0, and rank() ties every row at 1. A single-snapshot-date fixture cannot
-    show anything else, and this module's header note in tests/conftest.py
-    explains why that date is pinned on purpose. A real spread is a property of
-    multi-snapshot, unevenly-sized segments, so it is asserted in
-    `test_priority_rank_spreads_within_a_profile_on_multi_snapshot_history`
-    against `divergent_fixture_root`, not here; keeping the two claims in
-    separate tests is A16 item 4's point, so neither can be read as covering the
-    other.
+    Per ADR 0077, the composite score and priority bands are removed. This test asserts:
+    - Row counts per profile match expectations: (adrd: 6, oncology_nsclc: 4).
+    - Segment key uniqueness holds (10 rows, 10 distinct priority_queue_key values).
+    - Raw metrics (active_recruiting_trials, distinct_sponsors, sponsor_hhi, site_overlap_rate)
+      are present.
+    - Legacy composite score, priority_band, and priority_rank columns are absent.
     """
     assert _rows(
         fixture_project_root,
@@ -675,96 +660,132 @@ def test_mart_feasibility_priority_queue_shape(fixture_project_root: Path) -> No
         "select count(*), count(distinct priority_queue_key)"
         " from main_marts.mart_feasibility_priority_queue",
     ) == [(10, 10)]
-    # All-tied scores on this fixture, so rank() returns 1 everywhere. See the
-    # docstring: the spread lives in
-    # test_priority_rank_spreads_within_a_profile_on_multi_snapshot_history.
-    for profile in ("adrd", "oncology_nsclc"):
-        ranks = _rows(
+    # ADR 0077: Verify presence of raw metrics and absence of composite score,
+    # priority band, and priority rank columns.
+    cols = [
+        r[0]
+        for r in _rows(
             fixture_project_root,
-            "select min(priority_rank), max(priority_rank)"
-            " from main_marts.mart_feasibility_priority_queue"
-            f" where indication_profile_id = '{profile}'",
+            "select column_name from information_schema.columns "
+            "where table_schema = 'main_marts' and table_name = 'mart_feasibility_priority_queue'",
         )
-        assert ranks == [(1, 1)], profile
-    # Carried forward unchanged: no score may leave [0, 1] now that the
-    # normalization is partitioned per profile. Measured 2026-09-06; on this
-    # fixture every score *is* 0.0, so the leg bounds the range rather than
-    # exercising it -- test_profile_scores_are_bit_identical_built_alone_or_alongside
-    # reads the non-degenerate scores.
-    assert _rows(
-        fixture_project_root,
-        "select count(*) from main_marts.mart_feasibility_priority_queue "
-        "where feasibility_review_priority_score < 0 "
-        "or feasibility_review_priority_score > 1",
-    ) == [(0,)]
+    ]
+    assert "active_recruiting_trials" in cols
+    assert "distinct_sponsors" in cols
+    assert "sponsor_hhi" in cols
+    assert "site_overlap_rate" in cols
+    assert "feasibility_review_priority_score" not in cols
+    assert "priority_band" not in cols
+    assert "priority_rank" not in cols
 
 
-def test_priority_rank_spreads_within_a_profile_on_multi_snapshot_history(
+def test_registry_segments_raw_metrics_non_empty(
     divergent_fixture_root: Path,
 ) -> None:
-    """The rank spread Task 10 could only predict, measured on the divergent build.
+    """Multi-snapshot raw metrics and absence of composite score columns (ADR 0077)."""
+    cols = [
+        r[0]
+        for r in _rows(
+            divergent_fixture_root,
+            "select column_name from information_schema.columns "
+            "where table_schema = 'main_marts' and table_name = 'mart_feasibility_priority_queue'",
+        )
+    ]
+    assert "feasibility_review_priority_score" not in cols
+    assert "priority_band" not in cols
+    assert "priority_rank" not in cols
 
-    Its warehouse cannot produce a spread at all: one recruiting trial per
-    segment makes every min-max denominator 0, every score 0.0, and `rank()` ties
-    the lot at 1, so `[(1, 1)]` there says nothing about the partition. Here
-    ADRD's second run puts a second recruiting trial into the
-    (alzheimers_disease, NC, PHASE3) segment while its profile's other segments
-    hold one, the density and growth inputs stop being constant, and the scores
-    and ranks finally spread: 8 rows over 4 distinct scores and 4 distinct ranks,
-    ranks running 1 to 5 because the ties are real (`rank()` skips), two priority
-    bands instead of one, and a top score of 0.5 against a floor of 0.0.
-
-    NSCLC stays at (1, 1) with a single distinct score, and that is half the
-    point. Per-profile normalization means ADRD's new spread must not move
-    NSCLC's numbers: a `min()/max()` that lost its `partition by
-    indication_profile_id` would rescale NSCLC against ADRD's 0-0.5 range and
-    take its ranks off 1. Task 10's static window guard reads the frames; this
-    reads the values, which is the pairing
-    `test_window_frames_partition_by_profile` says it is guarding.
-    """
     assert _rows(
         divergent_fixture_root,
-        "select indication_profile_id, min(priority_rank), max(priority_rank), count(*),"
-        " count(distinct priority_rank), count(distinct feasibility_review_priority_score),"
-        " min(feasibility_review_priority_score), max(feasibility_review_priority_score),"
-        " count(distinct priority_band)"
+        "select indication_profile_id, min(active_recruiting_trials),"
+        " max(active_recruiting_trials), count(*),"
+        " count(distinct active_recruiting_trials), count(distinct sponsor_hhi)"
         " from main_marts.mart_feasibility_priority_queue group by 1 order by 1",
     ) == [
-        ("adrd", 1, 5, 8, 4, 4, 0.0, 0.5, 2),
-        ("oncology_nsclc", 1, 1, 4, 1, 1, 0.0, 0.0, 1),
+        ("adrd", 1, 2, 8, 2, 1),
+        ("oncology_nsclc", 1, 1, 4, 1, 1),
     ]
-    # The top segment is the one whose recruiting count doubled, and it is the
-    # only row the base fixture could never produce: a density input of 2 against
-    # a profile maximum of 2 normalizes to 1.0, which is what lifts this row.
+    # The top segment is the one whose recruiting count doubled:
     assert _rows(
         divergent_fixture_root,
-        "select condition_group, state_normalized, phase_normalized, recruiting_trial_count,"
-        " priority_rank from main_marts.mart_feasibility_priority_queue"
-        " where indication_profile_id = 'adrd' and priority_rank = 1",
-    ) == [("alzheimers_disease", "NC", "PHASE3", 2, 1)]
-    # Item L's tripwire, asserted as a literal rather than as `< 25` so it goes
-    # red the moment the fixture grows instead of quietly becoming reachable.
-    # `analyses/analysis_top_priority_segments.sql` ends with `order by
-    # indication_profile_id, priority_rank limit 25`, and priority_rank is a
-    # rank(), so tied segments share a value the order by cannot separate: if the
-    # 25-row cut ever lands *inside* a tie band, which rows appear is whatever the
-    # sort happens to emit. Measured 2026-09-06, it cannot land there from this
-    # fixture -- 12 queue rows in total, 8 in the busiest profile -- so the limit
-    # never fires and the tie bands above are a presentation-order matter only.
-    # On a real warehouse the exposure is larger and much closer. Measured
-    # 2026-09-06 by querying main's checkout read-only
-    # (../../../data/warehouse/clinical_trials.duckdb): 448 queue rows over 79
-    # distinct ranks, and rows with priority_rank <= 25 number exactly 25 because
-    # the band at rank 25 is one row wide. That is deterministic today by luck; the
-    # very next band (rank 26) holds 31 rows, and the largest bands hold 153 and 63,
-    # so one score change moves the cut inside a band and which 25 segments a reader
-    # sees becomes sort-order chosen. What turns this from latent into live per
-    # profile is more than 25 segments, which is the number pinned below.
+        "select condition_group, state_normalized, phase_normalized, active_recruiting_trials"
+        " from main_marts.mart_feasibility_priority_queue"
+        " where indication_profile_id = 'adrd' and active_recruiting_trials = 2",
+    ) == [("alzheimers_disease", "NC", "PHASE3", 2)]
+    # Assert the maximum segment count for a single profile across the divergent fixture
+    # (adrd has 8 segments, oncology_nsclc has 4; max is 8).
     assert _rows(
         divergent_fixture_root,
         "select max(c) from (select indication_profile_id, count(*) c"
         " from main_marts.mart_feasibility_priority_queue group by 1)",
     ) == [(8,)]
+
+
+def test_mart_feasibility_priority_queue_deterministic_tiebreaker(
+    divergent_fixture_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify mart ordering and deterministic tiebreakers on ties.
+
+    Both mart_feasibility_priority_queue and downstream consumers order by:
+    active_recruiting_trials desc, distinct_sponsors desc, priority_queue_key asc.
+    """
+    import streamlit as st
+
+    from src.config import get_config
+
+    dashboard_dir = Path(__file__).resolve().parents[1] / "dashboard"
+    if str(dashboard_dir) not in sys.path:
+        sys.path.insert(0, str(dashboard_dir))
+    from components import data
+
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(divergent_fixture_root))
+    get_config.cache_clear()
+    st.cache_data.clear()
+    st.cache_resource.clear()
+
+    df = data.priority_queue("adrd")
+    assert len(df) == 8
+
+    # Assert that the returned segment keys strictly follow the tuple order:
+    # (active_recruiting_trials desc, distinct_sponsors desc, priority_queue_key asc)
+    expected_keys = sorted(
+        df["priority_queue_key"].tolist(),
+        key=lambda key: (
+            -int(df.loc[df["priority_queue_key"] == key, "active_recruiting_trials"].iloc[0]),
+            -int(df.loc[df["priority_queue_key"] == key, "distinct_sponsors"].iloc[0]),
+            str(key),
+        ),
+    )
+    assert df["priority_queue_key"].tolist() == expected_keys
+
+    rows = _rows(
+        divergent_fixture_root,
+        "select active_recruiting_trials, distinct_sponsors, priority_queue_key "
+        "from main_marts.mart_feasibility_priority_queue "
+        "where indication_profile_id = 'adrd' "
+        "order by active_recruiting_trials desc, distinct_sponsors desc, priority_queue_key asc",
+    )
+    assert len(rows) == 8
+    sort_keys = [(-r[0], -r[1], str(r[2])) for r in rows]
+    assert sort_keys == sorted(sort_keys)
+
+    mart_sql = (
+        Path(__file__).resolve().parents[1]
+        / "dbt_clinical_trials/models/marts/mart_feasibility_priority_queue.sql"
+    ).read_text(encoding="utf-8")
+    assert (
+        "order by active_recruiting_trials desc, distinct_sponsors desc, priority_queue_key asc"
+        in mart_sql
+    )
+
+    data_py = (Path(__file__).resolve().parents[1] / "dashboard/components/data.py").read_text(
+        encoding="utf-8"
+    )
+    assert (
+        "order by active_recruiting_trials desc, distinct_sponsors desc, priority_queue_key asc"
+        in data_py
+    )
 
 
 _INVARIED_MODELS = [
@@ -826,6 +847,7 @@ def test_profile_scores_are_bit_identical_built_alone_or_alongside(
     differ by design. Its profile column is asserted where it belongs, in
     `test_reliability_prefers_the_silver_profile_when_the_manifest_disagrees`.
     """
+    compared = dict.fromkeys(_INVARIED_MODELS, 0)
     for profile, solo_root in solo_fixture_roots.items():
         for model in _INVARIED_MODELS:
             query = (
@@ -834,14 +856,16 @@ def test_profile_scores_are_bit_identical_built_alone_or_alongside(
             )
             alone = _rows(solo_root, query)
             together = _rows(divergent_fixture_root, query)
-            # A comparison of two empty lists proves nothing, and a typo in the
-            # profile literal would produce exactly that.
-            assert alone, f"{model}: profile {profile} is empty built alone"
+            compared[model] += bool(alone)
             assert together == alone, (
                 f"{model}/{profile}: {len(together)} rows built alongside another profile vs"
                 f" {len(alone)} built alone -- a per-profile number changed because a second"
                 " indication was loaded"
             )
+    # Two empty lists prove nothing, and a typo in the profile literal would
+    # produce exactly that. Per model, not per profile: NSCLC's base page has no
+    # similarity neighbours, so mart_trial_similarity is proven on ADRD alone.
+    assert all(compared.values()), f"models empty for every profile: {compared}"
 
 
 def test_segment_mart_contracts_declare_the_profile(fixture_project_root: Path) -> None:
@@ -1257,8 +1281,8 @@ def test_window_frames_partition_by_profile() -> None:
     and a global `rank()` over all-tied scores still yields (1, 1). Task 12's
     divergent warehouse does discriminate --
     test_profile_scores_are_bit_identical_built_alone_or_alongside and
-    test_priority_rank_spreads_within_a_profile_on_multi_snapshot_history read
-    real, unevenly distributed scores -- so the value assertions and this guard
+    test_registry_segments_raw_metrics_non_empty read
+    real, unevenly distributed metrics -- so the value assertions and this guard
     now cover each other's blind spots: a frame this file never reads is caught
     there, and a partition that is present but pointed at the wrong column is
     caught here.
@@ -1451,57 +1475,41 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
         assert "not_null" in (column.get("tests") or []), model["name"]
 
 
-def test_similarity_top_25_cap_trims_a_busy_profile(divergent_fixture_root: Path) -> None:
+def test_similarity_top_25_cap_trims_a_busy_profile(similarity_equivalence_root: Path) -> None:
     """`qualify similarity_rank <= 25` in mart_trial_similarity.sql, made countable.
 
-    The cap is invisible on a small profile: with 10 or 12 trials each, every
-    trial has 9 or 11 candidates and all of them fit, so deleting the `qualify`
-    line changes no row in the warehouse and no test in the repository could
-    notice (measured 2026-09-06 on the pre-growth divergent fixture: adrd's
-    maximum similarity_rank was 11 over 132 rows). A15 item 2's warehouse grows
-    ADRD to 27 listings, which puts every one of its trials over the line -- 26
-    candidates against a cap of 25 -- so the cap now trims exactly one row per
-    trial and its removal is a countable 702 vs 675.
-
-    A grown fixture rather than a second static guard, deliberately. The static
-    guard this module already has (`test_window_frames_partition_by_profile`)
-    checks the *partition* of the frame that produces the rank, which is a
-    property of the source text; whether the cap *binds* is a property of the
-    data, and no amount of reading `mart_trial_similarity.sql` can tell a clause
-    that removes 27 rows from one that removes none. A text search for
-    `qualify similarity_rank <= 25` would also be satisfied by a cap at any other
-    number, by a commented-out one, and by one whose rank column is all nulls.
-    Both halves of the claim matter and they are checked in different places: the
-    frame's partition statically, the clause's effect here.
-
-    NSCLC is the other half of the assertion and it is not a throwaway: 10 trials
-    give each one 9 candidates, so its 90 rows are exactly 10 x 9 and its maximum
-    rank is 9. A cap that fired there -- a `<= 25` that became `<= 5`, or a rank
-    computed over the whole warehouse instead of per profile -- would delete real
-    neighbours from the thin profile, and the 90 would drop.
+    Every trial keeps exactly min(its candidate count, 25) rows. The dense
+    similarity fixture is what makes both halves observable: ADRD trials in
+    the (alzheimers_disease, PHASE3) token have 27 candidates, so the cap must
+    trim them, while NSCLC's three PHASE3 trials have 2 each, so a cap that
+    fired on a thin profile (a `<= 5`, or a rank over the whole warehouse
+    instead of per profile) would delete real neighbours there. A text search
+    for the clause could not tell either case from a commented-out cap.
     """
-    assert _rows(
-        divergent_fixture_root,
-        "select indication_profile_id, count(*), count(distinct nct_id_a),"
-        " max(similarity_rank) from main_marts.mart_trial_similarity group by 1 order by 1",
-    ) == [("adrd", 675, 27, 25), ("oncology_nsclc", 90, 10, 9)]
-    # Candidates, from the model's own input: 27 ADRD trials join to 26 partners
-    # each = 702 scored pairs, against the 675 rows the cap lets through.
-    assert _rows(
-        divergent_fixture_root,
-        "select indication_profile_id, count(*), count(distinct nct_id)"
-        " from main_intermediate.int_trial_comparability_features group by 1 order by 1",
-    ) == [("adrd", 27, 27), ("oncology_nsclc", 10, 10)]
-    # Every busy-profile trial sits exactly on the cap, so the trim is uniform
-    # rather than one trial's rank column running away: an ADRD trial with any
-    # other row count means the cap stopped doing its job.
-    assert _rows(
-        divergent_fixture_root,
-        "select count(*) from (select nct_id_a, count(*) c"
-        " from main_marts.mart_trial_similarity where indication_profile_id = 'adrd'"
-        " group by 1 having c <> 25)",
-    ) == [(0,)]
-    assert _rows(
-        divergent_fixture_root,
-        "select count(*) from main_marts.mart_trial_similarity where similarity_rank > 25",
-    ) == [(0,)]
+    rows = _rows(
+        similarity_equivalence_root,
+        """
+        with candidates as (
+            select indication_profile_id, nct_id_a, count(*) as n
+            from main_intermediate.int_similarity_candidates
+            group by 1, 2
+        ),
+        kept as (
+            select indication_profile_id, nct_id_a, count(*) as n
+            from main_marts.mart_trial_similarity
+            group by 1, 2
+        )
+        select
+            c.indication_profile_id,
+            max(c.n) as max_candidates,
+            count(*) filter (where coalesce(k.n, 0) <> least(c.n, 25)) as off_cap
+        from candidates c
+        left join kept k using (indication_profile_id, nct_id_a)
+        group by 1
+        order by 1
+        """,
+    )
+    assert [(p, off) for p, _, off in rows] == [("adrd", 0), ("oncology_nsclc", 0)]
+    max_candidates = {p: hi for p, hi, _ in rows}
+    assert max_candidates["adrd"] > 25, "the cap never binds on the dense profile"
+    assert max_candidates["oncology_nsclc"] < 25, "NSCLC must stay under the cap"

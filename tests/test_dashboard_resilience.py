@@ -122,6 +122,21 @@ def test_trial_similarity_legacy_schema_returns_empty_dataframe(temp_duckdb_lega
     df = data.trial_similarity("NCT00000001")
     assert isinstance(df, pd.DataFrame)
     assert df.empty
+    data._connection.clear()
+    con = duckdb.connect(str(temp_duckdb_legacy_schema))
+    con.execute(
+        "create table main_marts.mart_trial_similarity "
+        "(same_condition integer, similarity_score double, similarity_rank integer, "
+        "similarity_explanation varchar)"
+    )
+    con.close()
+    data._table_exists.clear()
+    data._has_column.clear()
+    data.trial_similarity.clear()
+
+    df = data.trial_similarity("NCT00000001")
+    assert isinstance(df, pd.DataFrame)
+    assert df.empty
 
 
 def test_trial_explorer_page_smoke_legacy_schema(temp_duckdb_legacy_schema: Path):
@@ -179,19 +194,29 @@ def temp_duckdb_modern_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
         """
         insert into main_marts.dim_trial (
             trial_key, nct_id, indication_profile_id, registry_url, current_brief_title,
-            current_overall_status, current_phase, study_first_post_date, enrollment_count
+            current_overall_status, current_phase, current_lead_sponsor,
+            study_first_post_date, enrollment_count
         ) values (
             'adrd:NCT00000001', 'NCT00000001', 'adrd', 'https://clinicaltrials.gov/study/NCT00000001',
-            'ADRD Trial 1', 'RECRUITING', 'PHASE2', '2024-01-01', 100
+            'ADRD Trial 1', 'RECRUITING', 'PHASE2', 'Test Lead Sponsor', '2024-01-01', 100
         ), (
             'adrd:NCT00000002', 'NCT00000002', 'adrd', 'https://clinicaltrials.gov/study/NCT00000002',
-            'ADRD Trial 2', 'RECRUITING', 'PHASE2', '2024-01-02', 120
+            'ADRD Trial 2', 'RECRUITING', 'PHASE2', 'Test Lead Sponsor 2', '2024-01-02', 120
         ), (
             'oncology_nsclc:NCT00000003', 'NCT00000003', 'oncology_nsclc', 'https://clinicaltrials.gov/study/NCT00000003',
-            'NSCLC Trial 1', 'RECRUITING', 'PHASE3', '2024-01-03', 200
+            'NSCLC Trial 1', 'RECRUITING', 'PHASE3', 'Oncology Sponsor', '2024-01-03', 200
         )
         """
     )
+    con.execute("""
+        create table main_marts.bridge_trial_condition (
+            trial_key varchar, nct_id varchar, condition_group varchar
+        );
+        insert into main_marts.bridge_trial_condition values
+            ('adrd:NCT00000001', 'NCT00000001', 'alzheimers_disease'),
+            ('adrd:NCT00000002', 'NCT00000002', 'alzheimers_disease'),
+            ('oncology_nsclc:NCT00000003', 'NCT00000003', 'oncology_nsclc')
+    """)
     con.execute(
         """
         create table main_marts.fct_trial_site (
@@ -405,3 +430,70 @@ def test_guidance_copy_does_not_overclaim():
     from components.guidance import PAGE_PLAYBOOKS
 
     assert "guesswork" not in str(PAGE_PLAYBOOKS).lower()
+
+
+def test_clinicaltrials_gov_search_url():
+    from components.guidance import clinicaltrials_gov_search_url
+
+    url_ad = clinicaltrials_gov_search_url("alzheimers_disease", "CA")
+    assert "cond=Alzheimer+Disease" in url_ad
+    assert "locStr=CA" in url_ad
+    assert "country=United%20States" in url_ad
+
+    url_mci = clinicaltrials_gov_search_url("mild_cognitive_impairment", "NY")
+    assert "cond=Mild+Cognitive+Impairment" in url_mci
+    assert "locStr=NY" in url_mci
+
+    url_fallback = clinicaltrials_gov_search_url("multiple_sclerosis", "TX")
+    assert "cond=Multiple+Sclerosis" in url_fallback
+    assert "locStr=TX" in url_fallback
+
+
+def test_trials_for_segment_modern_schema(temp_duckdb_modern_schema: Path):
+    from components import data
+
+    df = data.trials_for_segment("adrd", "alzheimers_disease", "CA", "PHASE2")
+    assert isinstance(df, pd.DataFrame)
+    assert len(df) == 1
+    assert df.iloc[0]["nct_id"] == "NCT00000001"
+    assert df.iloc[0]["lead_sponsor"] == "Test Lead Sponsor"
+    assert df.iloc[0]["phase"] == "PHASE2"
+    assert df.iloc[0]["overall_status"] == "RECRUITING"
+    assert "registry_url" in df.columns
+
+    # Non-existent segment returns empty DataFrame
+    df_empty = data.trials_for_segment("adrd", "alzheimers_disease", "FL", "PHASE2")
+    assert isinstance(df_empty, pd.DataFrame)
+    assert df_empty.empty
+
+
+def test_trials_for_segment_keeps_profile_keys_and_snapshot_scope(temp_duckdb_modern_schema: Path):
+    from components import data
+
+    with duckdb.connect(str(temp_duckdb_modern_schema)) as con:
+        con.execute("""
+            insert into main_marts.dim_trial
+            select 'oncology_nsclc:NCT00000001', nct_id, 'oncology_nsclc', registry_url,
+                   current_brief_title, current_overall_status, current_phase, current_study_type,
+                   'Other profile sponsor', current_lead_sponsor_normalized, start_date,
+                   primary_completion_date, completion_date, study_first_post_date,
+                   enrollment_count, enrollment_type, current_has_results_flag, record_quality_flag,
+                   first_seen_snapshot_date, latest_seen_snapshot_date,
+                   active_in_latest_snapshot_flag
+            from main_marts.dim_trial where nct_id = 'NCT00000001'
+        """)
+        con.execute("""
+            insert into main_marts.bridge_trial_condition (trial_key, nct_id, condition_group)
+            values ('oncology_nsclc:NCT00000001', 'NCT00000001', 'oncology_nsclc')
+        """)
+        con.execute("""
+            insert into main_marts.fct_trial_site values
+                ('oncology_nsclc:NCT00000001', 'NCT00000001', 'oncology_nsclc', '2024-02-01', 'TX')
+        """)
+    data.trials_for_segment.clear()
+    adrd = data.trials_for_segment("adrd", "alzheimers_disease", "CA", "PHASE2")
+    assert adrd["lead_sponsor"].tolist() == ["Test Lead Sponsor"]
+    assert data.trials_for_segment("adrd", "alzheimers_disease", "TX", "PHASE2").empty
+    assert data.trials_for_segment("adrd", "oncology_nsclc", "CA", "PHASE2").empty
+    oncology = data.trials_for_segment("oncology_nsclc", "oncology_nsclc", "TX", "PHASE2")
+    assert oncology["lead_sponsor"].tolist() == ["Other profile sponsor"]

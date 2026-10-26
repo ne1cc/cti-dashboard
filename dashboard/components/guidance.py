@@ -39,6 +39,34 @@ def format_condition_group(group: str | Any) -> str:
     return ADRD_CONDITION_LABELS.get(group, group.replace("_", " ").title())
 
 
+def clinicaltrials_gov_search_url(condition_group: str, state_normalized: str) -> str:
+    """Generate a ClinicalTrials.gov web search URL for a condition and state.
+
+    Args:
+        condition_group: Internal condition group key.
+        state_normalized: 2-letter U.S. state postal abbreviation.
+
+    Returns:
+        str: Clickable ClinicalTrials.gov search URL.
+    """
+    term_map = {
+        "alzheimers_disease": "Alzheimer Disease",
+        "mild_cognitive_impairment": "Mild Cognitive Impairment",
+        "frontotemporal_dementia": "Frontotemporal Dementia",
+        "lewy_body_dementia": "Lewy Body Dementia",
+        "vascular_dementia": "Vascular Dementia",
+        "parkinsons_disease_dementia": "Parkinson Disease Dementia",
+        "dementia_unspecified": "Dementia",
+    }
+    cond_term = term_map.get(condition_group, format_condition_group(condition_group)).replace(
+        " ", "+"
+    )
+    return (
+        f"https://clinicaltrials.gov/search?cond={cond_term}"
+        f"&locStr={state_normalized}&country=United%20States"
+    )
+
+
 def render_indication_banner(profile_id: str | None = None) -> None:
     """Render the active indication scope banner.
 
@@ -108,10 +136,7 @@ def render_indication_banner(profile_id: str | None = None) -> None:
 
                         reg = get_registry()
                         prof = reg.get(profile_id)
-                        desc = (
-                            prof.description
-                            or f"Clinical trials investigating {prof.display_name}."
-                        )
+                        desc = f"Clinical trials investigating {prof.display_name}."
                     except Exception:
                         pass
                 st.markdown(
@@ -133,11 +158,11 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         "how_to_analyze": (
             "Use this overview as an operational health check. Compare total trials against "
             "the 'Currently recruiting' count to gauge protocol turnover, and review the "
-            "top-ranked segments to spot immediate regional contention."
+            "top activity segments to spot immediate regional contention."
         ),
         "playbook": [
             (
-                "**Step 1: Identify Opportunity & Risk (Priority Queue):** Filter by target "
+                "**Step 1: Check Registry Segments:** Filter by target "
                 "phase and disease sub-group to pinpoint states where high trial density "
                 "or rapid growth warrants thorough protocol differentiation."
             ),
@@ -159,40 +184,38 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
         ),
     },
     "priority_queue": {
-        "title": "Priority Queue Playbook: Reading the Ranked Segments",
+        "title": "Registry Segments Playbook: Inspecting Clinical Trial Segments",
         "what_it_shows": (
-            "Ranks condition × state × phase segments using a transparent, multi-factor "
-            "feasibility review priority score (0.0 to 1.0). Each segment summarizes recruiting "
-            "trial volume, recent growth momentum, sponsor concentration (HHI), site overlap, "
-            "and the legacy operational completeness adjustment."
+            "Displays condition × state × phase segments with transparent, sortable "
+            "raw registry metrics. Each segment summarizes active recruiting trial "
+            "volume, distinct sponsors, sponsor concentration (HHI), site overlap, "
+            "and operational data completeness."
         ),
         "how_to_analyze": (
-            "The priority score is a relative ranking index, not an enrollment prediction. "
-            "Segments in the **Priority Review** band (score ≥ 0.70) exhibit elevated trial "
-            "trial counts or rapid growth; segments in **Review** (0.45 ≤ score < 0.70) represent "
-            "moderate activity; segments in **Watch** (score < 0.45) "
-            "represent low trial counts."
+            "Evaluate segments by sorting directly on raw operational metrics according "
+            "to your study's specific criteria. Inspect active recruiting trials to assess "
+            "overall protocol density, distinct sponsors and sponsor HHI to gauge market "
+            "competition, and site overlap to identify potential institutional bottlenecks."
         ),
         "playbook": [
             (
-                "**Priority Review Segments (Score ≥ 0.70):** Do NOT automatically eliminate these "
-                "regions; instead, conduct deep-dive feasibility. Check if competing trials "
-                "share identical biomarker entry criteria (e.g. early AD MMSE 22–30 vs mild-to-"
-                "moderate MMSE 16–26)."
+                "**Active Recruiting Trials:** Sort by trial count to identify regions with "
+                "proven trial activity and established patient pipelines, or locate low-density "
+                "regions for uncontested expansion."
             ),
             (
-                "**Review Segments (Moderate):** Often the most productive expansion targets—"
-                "sufficient patient population and clinical infrastructure with manageable overlap."
+                "**Sponsor Concentration (HHI):** Evaluate whether a segment is dominated by a "
+                "single lead sponsor (high HHI) or distributed across multiple competitors, "
+                "indicating whether local investigative capacity is tied up."
             ),
             (
-                "**Watch Segments (Emerging / Low-Count):** Ideal for expanding geographic "
-                "diversity and recruiting treatment-naive subjects through regional community "
-                "neurology networks, provided adequate diagnostic infrastructure is accessible."
+                "**Site Overlap Rate:** Examine the share of recruiting trials sharing "
+                "facilities with competing studies in the same indication profile to "
+                "assess institutional fatigue and coordinator capacity."
             ),
             (
-                "**Component Inspection:** Click any row in the table to inspect unweighted "
-                "and weighted factor contributions, verifying whether high priority is driven "
-                "by raw trial count, rapid growth, or heavy sponsor concentration."
+                "**Metric Inspection:** Click any row in the table to audit contributing NCT IDs "
+                "and registry source records before making site qualification decisions."
             ),
         ],
         "adrd_context": (
