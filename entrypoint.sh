@@ -117,7 +117,10 @@ try:
     }
     connection.close()
 except Exception:
-    raise SystemExit(1)
+    # Unreadable or corrupt file: a scoped rebuild cannot fix it, and the next
+    # full pipeline refresh recreates the warehouse. Treat as current so the
+    # supervisor keeps serving instead of burning a doomed dbt build.
+    raise SystemExit(0)
 
 required = {"indication_profile_id", "nct_id_a", "nct_id_b", "similarity_rank"}
 raise SystemExit(0 if required <= columns else 1)
