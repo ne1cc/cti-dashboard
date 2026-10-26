@@ -16,6 +16,7 @@ import pandas as pd
 import streamlit as st
 
 from src.config import get_config
+from src.quality.freshness import status as freshness_status
 
 
 def warehouse_path() -> Path:
@@ -62,6 +63,22 @@ def require_warehouse(profile_id: str | None = None) -> None:
             f"No trials recorded for `{profile_id}` yet. The refresh has not "
             "produced a successful run for this profile, so every figure below "
             "is empty. That is a missing run, not a zero count."
+        )
+    elif profile_id is not None:
+        _freshness_banner(profile_id)
+
+
+def _freshness_banner(profile_id: str) -> None:
+    freshness = freshness_status(profile_id)
+    if not freshness["ok"]:
+        st.warning("Data freshness warning: " + "; ".join(freshness["errors"]))
+    metadata = freshness["metadata"]
+    success = metadata.get("last_success") if metadata else None
+    if success and profile_id in success["profiles"]:
+        capture = success["profiles"][profile_id]
+        st.caption(
+            f"Last verified pipeline completion (UTC): {success['pipeline_completed_at_utc']} · "
+            f"{profile_id} capture (UTC): {capture['captured_at_utc']}"
         )
 
 

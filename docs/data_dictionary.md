@@ -228,3 +228,18 @@ lineage is in [source-field-map.md](api/source-field-map.md).
 2. **Provenance & Caching Headers**: Every successful response includes `Data-Snapshot`, `Data-Updated`, `ETag`, and `Cache-Control`.
 3. **Structured Eligibility (Issue #62)**: `minimum_age_years` and `maximum_age_years` are null-safe numeric values; `age_not_stated: true` marks unstated bounds; search filters do not silently drop studies with unstated criteria.
 4. **Contact Privacy Guardrail (ADR 0065)**: Trial sites provide public facility names, normalized addresses, and geocoordinates. Personal contact names, emails, and phone numbers are omitted across all endpoints. Direct inquiries link to `https://clinicaltrials.gov/study/{nct_id}#contacts-and-locations`.
+
+---
+
+## Glossary
+
+| Term | Meaning here |
+|---|---|
+| **NCT ID** | ClinicalTrials.gov study identifier; trial identity is scoped by indication profile in the shared warehouse |
+| **Snapshot** | A complete ingestion run's captured view of matching current records; snapshot-date facts can collapse multiple runs on one UTC date |
+| **Segment** | Condition group × U.S. state × phase within an indication profile |
+| **Run ID** | UTC timestamp plus UUID suffix minted for a new ingestion run; partitions bronze and silver |
+| **Manifest** | Per-run JSON recording endpoint, query parameters/hash, page/record counts, timestamps, profile, and completion status |
+| **HHI** | Herfindahl–Hirschman Index: sum of squared lead-sponsor listing shares within a segment; see [metric definitions](metric_definitions.md) for denominator rules |
+| **Proxy growth** | Registry-first-post-date proxy used when snapshot history is insufficient, identified by `growth_uses_registry_proxy_flag`; not an observed recruiting transition |
+| **Quarantine** | Records rejected by ingestion screening, retained with reason codes; transformation skips records without an NCT ID |

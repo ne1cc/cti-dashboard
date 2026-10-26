@@ -497,3 +497,55 @@ def test_trials_for_segment_keeps_profile_keys_and_snapshot_scope(temp_duckdb_mo
     assert data.trials_for_segment("adrd", "oncology_nsclc", "CA", "PHASE2").empty
     oncology = data.trials_for_segment("oncology_nsclc", "oncology_nsclc", "TX", "PHASE2")
     assert oncology["lead_sponsor"].tolist() == ["Other profile sponsor"]
+
+
+def test_require_warehouse_warns_for_unknown_freshness(temp_duckdb_modern_schema, project_root_tmp):
+    from streamlit.testing.v1 import AppTest
+
+    def page():
+        from components import data
+
+        data.require_warehouse("adrd")
+
+    at = AppTest.from_function(page).run()
+    assert not at.exception, at.exception
+    assert any("freshness" in warning.value.lower() for warning in at.warning)
+
+
+def test_freshness_banner_uses_selected_capture_and_uncached_clock(
+    temp_duckdb_modern_schema, project_root_tmp, monkeypatch
+):
+    import json
+    from datetime import timedelta
+
+    from streamlit.testing.v1 import AppTest
+
+    from src.quality import freshness
+    from tests.test_freshness import NOW, marker_payload
+
+    monkeypatch.setenv("CTI_REFRESHABLE_PROFILES", "adrd,oncology_nsclc")
+    monkeypatch.setattr(freshness, "utc_now", lambda: NOW)
+    payload = marker_payload()
+    payload["last_success"]["profiles"]["oncology_nsclc"]["captured_at_utc"] = (
+        NOW - timedelta(days=11)
+    ).isoformat()
+    path = freshness.marker_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload))
+
+    def page(profile_id):
+        from components import data
+
+        data.require_warehouse(profile_id)
+
+    fresh = AppTest.from_function(page, args=("adrd",)).run()
+    assert not fresh.exception, fresh.exception
+    assert not fresh.warning
+    assert any("2026-10-20" in caption.value for caption in fresh.caption)
+    assert any("2026-10-23" in caption.value for caption in fresh.caption)
+    stale = AppTest.from_function(page, args=("oncology_nsclc",)).run()
+    assert not stale.exception, stale.exception
+    assert any("stale" in warning.value.lower() for warning in stale.warning)
+    monkeypatch.setattr(freshness, "utc_now", lambda: NOW + timedelta(days=8))
+    fresh.run()
+    assert any("stale" in warning.value.lower() for warning in fresh.warning)

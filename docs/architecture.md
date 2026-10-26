@@ -77,7 +77,8 @@ flowchart TB
 - One manifest per run: run ID (UTC timestamp + UUID), start/end time, endpoint,
   full query parameters, page count, response count, success/failure state.
 - Never edited, never deleted by pipeline code. Re-runs create new run IDs;
-  completed runs are not re-downloaded in incremental mode.
+  incremental mode can reuse a recent successful run within the configured
+  [reuse window](source_documentation.md#incremental-reuse).
 - Malformed records go to a quarantine report with reason codes — never dropped
   silently.
 
@@ -160,13 +161,48 @@ collection. This is documented, not hidden.
 
 ## 5. Reproducibility and operations
 
-- `Makefile` is the single entry point (`make pipeline` = orchestrate → prune-data → dbt-run → dbt-test → quality-report).
+- The [Makefile command reference](../README.md#development-and-pipeline-commands) covers pipeline order, refresh, checks, cleanup, and DuckDB access.
 - All query parameters, taxonomy, geography rules, score weights, and scenario
   assumptions live in `config/*.yml` under version control.
-- `.env` carries only local paths/log levels — no secrets exist in this project.
+- `.env` supplies optional local overrides to the legacy config loader; the public API requires no key.
 - Logging via loguru with run-context fields; no sensitive data is ever logged
   (the source is public, but site contacts/investigators are still excluded from
   all delivery surfaces).
+
+### Configuration reference
+
+| File | Responsibility |
+|---|---|
+| [`config/project_config.yml`](../config/project_config.yml) | Legacy single-config API/query, paths, ingestion/reuse, retention, scope, and guardrails; used by `load_config` / `get_config` |
+| `config/profiles/*.yml` | Indication metadata, API/query/HTTP settings, bronze/quarantine paths, reuse/retention policy, and taxonomy/score-weight references; CLI ingest/transform/orchestrate use the registry |
+| [`config/profiles/adrd.yml`](../config/profiles/adrd.yml) / [`config/profiles/full_catalog.yml`](../config/profiles/full_catalog.yml) | ADRD profile / opt-in registry-wide, ingest-only profile |
+| [`config/shared_paths.yml`](../config/shared_paths.yml) | Silver, gold, and DuckDB destinations injected into profile configs, overriding those profile path fields |
+| `config/condition_taxonomy*.yml` / [`config/geography_rules.yml`](../config/geography_rules.yml) | Profile-selected condition mapping/confidence rules / state-name normalization |
+| [`config/score_weights.yml`](../config/score_weights.yml) | Score weights, min-max normalization, and priority bands; weights mirror the dbt seed and bands mirror dbt vars, checked by pytest |
+| [`config/similarity_weights.yml`](../config/similarity_weights.yml) | Comparability factor weights mirrored in the similarity dbt seed, checked by pytest |
+| [`config/roi_assumptions.yml`](../config/roi_assumptions.yml) | Scenario-calculator assumptions and disclaimer |
+| [`dbt_clinical_trials/dbt_project.yml`](../dbt_clinical_trials/dbt_project.yml) / `dbt_clinical_trials/profiles.yml` | Schema routing, seed types, and score-band vars / dbt connection settings (created from the example at setup) |
+| `.env` / [`.env.example`](../.env.example) | Optional local environment settings / sample values; loader behavior is described below |
+
+| Environment variable | Effect |
+|---|---|
+| `CTI_PROJECT_ROOT` | Root for Python configuration and relative data paths; unset or `.` auto-detects the repository root |
+| `CTI_CONFIG_PATH` | Selects the legacy YAML file (default `config/project_config.yml`); an explicit `load_config` path takes precedence |
+| `CTI_HTTP_TIMEOUT_SECONDS` / `CTI_MAX_RETRIES` | Override HTTP timeout / retry-attempt limit in the legacy loader |
+| `CTI_LOG_LEVEL` | Loguru level, default `INFO` |
+| `CTI_REFRESHABLE_PROFILES` | Comma-separated allowlist for registry refreshable profiles and dashboard choices; unset includes all non-ingest-only profiles; unknown or empty selections fail |
+| `DBT_PROFILES_DIR` | dbt profiles-directory setting; Makefile commands explicitly pass their own profiles directory |
+
+[`src/config.py`](../src/config.py) loads `.env` with existing process variables taking
+precedence. [`src/profiles.py`](../src/profiles.py) reads profile YAML and shared paths
+directly: `CTI_CONFIG_PATH` and the HTTP overrides above do not override registry
+profiles. Set their HTTP values in profile YAML. Export variables needed by paths,
+logging, or the registry in the launching process. dbt connection paths follow its
+own profile and working directory; `CTI_PROJECT_ROOT` does not redirect dbt.
+The sample `CTI_DATA_DIR`, `CTI_BRONZE_DIR`, `CTI_SILVER_DIR`, `CTI_GOLD_DIR`, and
+`CTI_DUCKDB_PATH` entries are not read by the current Python loaders; change YAML
+paths (and dbt connection settings) instead. Container refresh-loop settings are
+documented in the [Fly deployment runbook](DEPLOY_FLY.md).
 
 ## 6. Scaling path (implemented extensions, and the roadmap beyond them)
 
