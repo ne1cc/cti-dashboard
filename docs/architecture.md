@@ -178,7 +178,6 @@ collection. This is documented, not hidden.
 | [`config/profiles/adrd.yml`](../config/profiles/adrd.yml) / [`config/profiles/full_catalog.yml`](../config/profiles/full_catalog.yml) | ADRD profile / opt-in registry-wide, ingest-only profile |
 | [`config/shared_paths.yml`](../config/shared_paths.yml) | Silver, gold, and DuckDB destinations injected into profile configs, overriding those profile path fields |
 | `config/condition_taxonomy*.yml` / [`config/geography_rules.yml`](../config/geography_rules.yml) | Profile-selected condition mapping/confidence rules / state-name normalization |
-| [`config/score_weights.yml`](../config/score_weights.yml) | Score weights, min-max normalization, and priority bands; weights mirror the dbt seed and bands mirror dbt vars, checked by pytest |
 | [`config/similarity_weights.yml`](../config/similarity_weights.yml) | Comparability factor weights mirrored in the similarity dbt seed, checked by pytest |
 | [`config/roi_assumptions.yml`](../config/roi_assumptions.yml) | Scenario-calculator assumptions and disclaimer |
 | [`dbt_clinical_trials/dbt_project.yml`](../dbt_clinical_trials/dbt_project.yml) / `dbt_clinical_trials/profiles.yml` | Schema routing, seed types, and score-band vars / dbt connection settings (created from the example at setup) |
