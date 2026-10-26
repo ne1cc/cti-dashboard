@@ -23,12 +23,12 @@
    and does not observe actual enrollment competition.
 7. **Segment grain.** Trials without a usable U.S. location are excluded
    from segment marts (U.S.-scope MVP); original rows remain inspectable in audit marts; bronze availability follows retention.
-8. **Score normalization.** Min-max within the scored population makes the
-   score *relative to the current snapshot's segments*; scores are not
-   comparable across projects or absolute over time.
-9. **Bands.** Competition low/moderate/elevated bands use relative
-   percentile cuts; priority watch/review/priority_review bands use fixed
-   score thresholds. Neither is a validated risk tier.
+8. **Raw sortable metrics (ADR 0077).** Composite feasibility priority scores
+   and priority bands were removed in favor of transparent, unweighted raw metrics
+   (recruiting trial counts, distinct sponsors, sponsor HHI, and site overlap).
+9. **Descriptive competition bands.** Competition low/moderate/elevated bands in
+   `mart_recruiting_competition` use relative percentile cuts of sponsor concentration;
+   they are descriptive sorting aids, not validated operational risk tiers.
 
 ## Scenario-model assumptions
 10. Every ROI figure is arithmetic over user-editable assumptions in
@@ -67,7 +67,7 @@
     allocated among locations; repeated locations/history do not multiply totals.
 19. Normalized facility/city/state text can merge different facilities or split one
     facility. Recorded-location ordinals distinguish rows only. Study segment counts
-    overlap and must not be summed into a unique-study total. Derived scores, sponsor
+    overlap and must not be summed into a unique-study total. Derived metrics, sponsor
     concentration, percentiles and growth remain warehouse calculations; the panel
     enumerates count inputs and qualifying growth/proxy events with predecessor/source
     evidence, and discloses formulas, windows and displayed values.

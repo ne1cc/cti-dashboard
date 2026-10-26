@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   lint-and-test:
@@ -38,4 +38,67 @@ jobs:
         run: uv run mypy
 
       - name: Unit tests with coverage gate
-        run: uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=71
+        run: uv run pytest --cov=src --cov=dashboard --cov-report=term-missing --cov-fail-under=71
+
+      - name: Cache dbt packages and artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            dbt_clinical_trials/dbt_packages
+            dbt_clinical_trials/target/partial_parse.msgpack
+          key: dbt-${{ runner.os }}-${{ hashFiles('dbt_clinical_trials/packages.yml', 'dbt_clinical_trials/dbt_project.yml') }}
+          restore-keys: |
+            dbt-${{ runner.os }}-
+
+      - name: Prepare dbt CI fixture warehouse
+        run: |
+          uv run python -m tests.fixture_warehouse --root "${{ runner.temp }}/dbt_fixture" --prepare-only
+
+      - name: Independent dbt parse and build
+        run: |
+          DBT_TARGET="${{ runner.temp }}/dbt_target"
+          DBT_LOGS="${{ runner.temp }}/dbt_logs"
+          mkdir -p "$DBT_TARGET" "$DBT_LOGS"
+
+          echo "### dbt CI Execution Summary" >> $GITHUB_STEP_SUMMARY
+
+          if uv run dbt parse --project-dir dbt_clinical_trials --profiles-dir "${{ runner.temp }}/dbt_fixture" --target-path "$DBT_TARGET" --log-path "$DBT_LOGS" && \
+             uv run dbt build --project-dir dbt_clinical_trials --profiles-dir "${{ runner.temp }}/dbt_fixture" --target-path "$DBT_TARGET" --log-path "$DBT_LOGS"; then
+            echo "✅ dbt parse and build completed successfully with all models and data tests passing." >> $GITHUB_STEP_SUMMARY
+            if [ -f "$DBT_TARGET/run_results.json" ]; then
+              echo '```json' >> $GITHUB_STEP_SUMMARY
+              uv run python -c "import json; res = json.load(open('$DBT_TARGET/run_results.json')); print(f'Executed: {len(res.get(\"results\", []))} nodes in {res.get(\"elapsed_time\", 0):.2f}s')" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "❌ dbt parse or build failed." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+      - name: Upload dbt failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-build-failure
+          path: |
+            ${{ runner.temp }}/dbt_target
+            ${{ runner.temp }}/dbt_logs
+
+  deploy:
+    needs: lint-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy to Fly.io with smoke check and rollback
+        run: .github/scripts/deploy_fly.sh
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

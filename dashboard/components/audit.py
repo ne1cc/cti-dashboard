@@ -38,12 +38,12 @@ OBSERVATION_SOURCES = {
     "first_post_proxy": "int_trial_status_history at competition latest profile date",
     "competition": "int_trial_status_history at mart_recruiting_competition latest profile date",
     "history": "int_trial_status_history: latest study observation per profile/date",
-    "facility": "int_trial_status_history at mart_site_overlap latest profile date",
+    "facility": "int_trial_status_history at fct_trial_snapshot latest profile date",
     "latest_study": "int_current_trial_status: latest observation per profile/study",
 }
 
 
-def _keys(frame: pd.DataFrame) -> set[tuple]:
+def _keys(frame: pd.DataFrame) -> set[tuple[Any, ...]]:
     return set(frame[KEY].itertuples(index=False, name=None)) if not frame.empty else set()
 
 
@@ -223,7 +223,12 @@ def compute_audit(
                 )
                 event_reason = "no_recruiting_entry_event"
             else:
-                first_post = pd.to_datetime(row.get("study_first_post_date"), errors="coerce")
+                raw_post_date = row.get("study_first_post_date")
+                first_post = (
+                    pd.to_datetime(raw_post_date, errors="coerce")
+                    if raw_post_date is not None
+                    else pd.NaT
+                )
                 event_qualifies = (
                     recruiting and pd.notna(first_post) and first_post >= pd.Timestamp(window_start)
                 )
@@ -296,7 +301,7 @@ def compute_audit(
         included.confirmed_recruiting_flag.astype(bool), "nct_id"
     ]
 
-    def enrollment_totals(records: pd.DataFrame) -> dict:
+    def enrollment_totals(records: pd.DataFrame) -> dict[str, dict[str, Any]]:
         return {
             category: {
                 "studies": int((records.enrollment_category == category).sum()),
@@ -398,21 +403,25 @@ def compute_audit(
             else events.get("study_first_post_date")
         )
         if metric == "recent_recruiting" and not predecessor_studies.empty:
-            lookup = predecessor_studies.set_index(KEY)
+            predecessor_records = {
+                (
+                    row["indication_profile_id"],
+                    row["snapshot_id"],
+                    row["nct_id"],
+                ): row
+                for row in predecessor_studies.to_dict("records")
+            }
             for column in [
                 "raw_page_reference",
                 "raw_study_ordinal",
                 "source_json_hash",
                 "overall_status",
             ]:
-                values = []
+                values: list[Any] = []
                 for _, event in events.iterrows():
                     identity = (profile_id, event.get("predecessor_snapshot_id"), event.nct_id)
-                    values.append(
-                        lookup.loc[identity, column]
-                        if identity in lookup.index and column in lookup.columns
-                        else None
-                    )
+                    row_data = predecessor_records.get(identity)
+                    values.append(row_data.get(column) if row_data is not None else None)
                 events[f"predecessor_{column}"] = values
     metadata["predecessor_snapshot_ids"] = sorted(
         events.get("predecessor_snapshot_id", pd.Series(dtype="object")).dropna().unique().tolist()

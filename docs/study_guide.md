@@ -16,7 +16,7 @@ Read these, in order, before touching code:
 
 The whole system in one sentence: **download public registry pages verbatim (bronze),
 flatten them into typed tables (silver), model them into tested analytics tables
-(gold), and rank market segments for human feasibility review (dashboard).**
+(gold), and inspect sortable market segments for human feasibility review (dashboard).**
 
 Three ideas explain most design decisions:
 
@@ -47,7 +47,7 @@ Questions to answer yourself (all answerable with SQL against `main_marts`):
 
 - How many trials are recruiting in your state, and in which phases?
 - Which facility appears on the most recruiting trials?
-- What are the top 5 segments in the priority queue, and what does each
+- What are the top 5 segments in the registry segments mart, and what does each
   `priority_explanation` say?
 
 ## Level 2 — Trace one trial through every layer
@@ -97,11 +97,11 @@ The order matters; each file is more understandable after the previous one.
 | 8 | `dbt_clinical_trials/models/staging/stg_trials.sql` + `_sources.yml` | how dbt reads Parquet via `read_parquet`, staging conventions |
 | 9 | `models/intermediate/int_current_trial_status.sql` + `int_trial_status_history.sql` | snapshot logic: latest record per trial, history construction |
 | 10 | `models/marts/dim_trial.sql`, `fct_trial_snapshot.sql`, `fct_trial_site.sql` | dimensional modeling: surrogate keys, grains, current-record flag |
-| 11 | `models/marts/mart_feasibility_priority_queue.sql` | the centerpiece — read every CTE; map each to a score component in §10 of `PROJECT_DOCUMENTATION.md` |
+| 11 | `models/marts/mart_feasibility_priority_queue.sql` | registry segments — read every CTE; see how raw metrics (density, growth, concentration, overlap) are prepared (ADR 0077) |
 | 12 | `models/marts/_marts.yml` + `tests/*.sql` | how invariants become executable tests |
 | 13 | `src/quality/reconciliation.py` + `schema_drift.py` | cross-layer trust: counts must agree, schema changes must be noticed |
 | 14 | `dashboard/components/data.py` + `guardrails.py` | cached read-only access; mechanically enforced disclaimers |
-| 15 | `tests/test_metrics.py` | the three-way config sync test and score edge cases |
+| 15 | `tests/test_metrics.py` | raw metric mathematical invariants and ROI scenario arithmetic |
 
 Companion while reading: `docs/data_dictionary.md` (column meanings) and
 `docs/metric_definitions.md` (formulas).
@@ -113,9 +113,9 @@ Doing these will teach more than any reading. Each is safe and reversible.
 1. **Grain violation.** In a scratch SQL session, try inserting a duplicate
    `nct_id` into a copy of `dim_trial`, then run `make dbt-test` mentally against
    it — find which test would catch it (`_marts.yml`).
-2. **Weight drift.** Change one weight in `config/score_weights.yml` *without*
-   touching the seed CSV. Run `make test`. Find the failing test and understand
-   why the project refuses to let the three weight locations diverge. Revert.
+2. **Weight drift.** Change one weight in `config/similarity_weights.yml` *without*
+   touching `dbt_clinical_trials/seeds/similarity_score_weights.csv`. Run `make test`. Find the failing test and understand
+   why the project enforces sync between weight declarations. Revert.
 3. **New metric.** Add `enrollment_count_median` per segment to
    `mart_trial_activity.sql`, add a `not_null` test, run
    `make dbt-run dbt-test`. (Median is one line in DuckDB: `median(...)`.)
@@ -139,8 +139,8 @@ You understand the project when you can answer these without notes
    and what is honestly impossible on day one?
 3. Why is `nct_id` a reliable key but `facility_name` is not, and how does the
    schema encode that difference?
-4. Walk through the feasibility score: components, normalization, weights, bands.
-   Why is a *ranking* more defensible than a *prediction* here?
+4. Walk through the registry segment metrics (active recruiting trials, HHI sponsor concentration, site overlap rate).
+   Why did ADR 0077 replace the composite score with transparent raw metrics?
 5. What stops this project from claiming "site X is failing to recruit"? Name the
    mechanical controls, not just the intent.
 6. Why `error` vs `warn` severities in dbt tests — what class of problem is each for?

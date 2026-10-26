@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 from unittest import mock
 
+import duckdb
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -460,6 +461,110 @@ def test_overview_metrics_counts_only_its_profile(fixture_project_root) -> None:
         assert sum(scoped.values()) == blend, (
             f"{tile}: the two profiles' scoped counts do not account for every row"
         )
+
+
+@pytest.fixture
+def facility_snapshots(monkeypatch):
+    """An isolated reader fixture; shared session warehouses stay read-only."""
+    data = _load_data_module()
+    with duckdb.connect() as connection:
+        connection.execute("""
+            create schema main_marts;
+            create schema main_intermediate;
+            create table main_marts.dim_trial (
+                indication_profile_id varchar, current_overall_status varchar
+            );
+            create table main_marts.dim_geography (indication_profile_id varchar);
+            create table main_marts.mart_site_overlap as
+            select *, 'city' as city_normalized, 'NC' as state_normalized,
+                   1 as recruiting_trial_count, 1 as listed_trial_count
+            from (values
+                ('adrd', date '2026-09-01', 'one'),
+                ('adrd', date '2026-09-01', 'two'),
+                ('adrd', date '2026-09-08', 'one'),
+                ('adrd', date '2026-09-08', 'two'),
+                ('oncology_nsclc', date '2026-09-15', 'three'),
+                ('oncology_nsclc', date '2026-09-15', 'four'),
+                ('oncology_nsclc', date '2026-09-15', 'five')
+            ) as sites(indication_profile_id, snapshot_date, facility_normalized);
+            create table main_marts.fct_trial_snapshot as
+            select distinct indication_profile_id, snapshot_date
+            from main_marts.mart_site_overlap;
+            create table main_intermediate.int_trial_status_history as
+            select *, indication_profile_id || '-' || snapshot_date as ingestion_run_id,
+                   'NCT00000001' as nct_id
+            from main_marts.fct_trial_snapshot;
+            create table main_marts.mart_study_snapshot_audit as
+            select * from main_intermediate.int_trial_status_history;
+        """)
+        monkeypatch.setattr(data, "_connection", lambda: connection)
+        yield connection
+
+
+@pytest.mark.parametrize("profile, expected", [("adrd", 2), ("oncology_nsclc", 3)])
+def test_overview_facilities_count_only_the_profiles_latest_capture(
+    facility_snapshots, profile, expected
+) -> None:
+    data = _load_data_module()
+    assert int(data.overview_metrics(profile)["listed_facilities"]) == expected
+    overlap = data.site_overlap(profile)
+    assert len(overlap) == expected
+    observations = data.metric_audit_observations(profile, "facility")
+    assert _snapshot_dates(observations) == _snapshot_dates(overlap)
+    assert set(observations.indication_profile_id) == {profile}
+
+
+@pytest.mark.parametrize(
+    "reader", ["overview_metrics", "site_overlap", "metric_audit_observations"]
+)
+def test_facility_readers_do_not_fall_back_when_latest_capture_has_no_facilities(
+    facility_snapshots, reader
+) -> None:
+    facility_snapshots.execute("""
+        insert into main_marts.fct_trial_snapshot values ('adrd', date '2026-09-22');
+        insert into main_intermediate.int_trial_status_history
+        values ('adrd', date '2026-09-22', 'adrd-2026-09-22', 'NCT00000001');
+    """)
+    data = _load_data_module()
+    if reader == "overview_metrics":
+        assert int(data.overview_metrics("adrd")["listed_facilities"]) == 0
+    elif reader == "site_overlap":
+        assert data.site_overlap("adrd").empty
+    else:
+        observations = data.metric_audit_observations("adrd", "facility")
+        assert _snapshot_dates(observations) == {"2026-09-22"}
+        assert set(observations.indication_profile_id) == {"adrd"}
+
+
+def test_overview_facilities_are_zero_for_an_empty_profile(facility_snapshots) -> None:
+    data = _load_data_module()
+    assert int(data.overview_metrics("full_catalog")["listed_facilities"]) == 0
+    assert data.site_overlap("full_catalog").empty
+    assert data.metric_audit_observations("full_catalog", "facility").empty
+
+
+def test_overview_location_tiles_preserve_their_documented_grains(
+    divergent_warehouse, monkeypatch
+) -> None:
+    monkeypatch.chdir(divergent_warehouse)
+    data = _load_data_module()
+    assert data.profile_trial_count("adrd") == DIVERGENT_ADRD_TRIALS
+    for profile in PROFILES:
+        metrics = data.overview_metrics(profile)
+        expected = data.query(
+            "select count(*) as n from main_marts.mart_site_overlap "
+            "where indication_profile_id = ? and snapshot_date = "
+            "(select max(snapshot_date) from main_marts.fct_trial_snapshot "
+            "where indication_profile_id = ?)",
+            [profile, profile],
+        ).iloc[0]["n"]
+        assert int(metrics["listed_facilities"]) == int(expected)
+        states = data.query(
+            "select count(distinct state_normalized) as n "
+            "from main_intermediate.int_geography_normalized where indication_profile_id = ?",
+            [profile],
+        ).iloc[0]["n"]
+        assert int(metrics["states_with_sites"]) == int(states)
 
 
 def test_trial_similarity_stays_inside_its_profile(

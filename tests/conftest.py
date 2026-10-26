@@ -1,12 +1,17 @@
-import json
 import shutil
 import subprocess
-import sys
-from dataclasses import dataclass, field, replace
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+
+from tests.fixture_warehouse import (
+    AddedStudy,
+    FixtureRun,
+    build_fixture_warehouse,
+    variant_page,
+)
 
 CONFIG_YAML = """
 api:
@@ -76,102 +81,7 @@ ADRD_CONDITION = "Alzheimer Disease"
 NSCLC_CONDITION = "Non-Small Cell Lung Cancer"
 
 
-@dataclass(frozen=True)
-class AddedStudy:
-    """One extra study on a *variant* bronze page, cloned from a study that
-    already exists on the base page.
-
-    The divergent fixture needs its second ADRD run to differ from its first in
-    something the models can see: an identical page two weeks later only proves
-    that `lag()` returns null again. Cloning keeps every field the transform
-    reads (dates, eligibility, interventions) valid without hand-writing a
-    second 10-study JSON fixture.
-    """
-
-    nct_id: str
-    clone_of: str
-    overall_status: str
-    phase: str | None = None
-    condition: str | None = None
-    sponsor: str | None = None
-    location: tuple[str, str, str] | None = None  # facility, city, state
-
-
-@dataclass(frozen=True)
-class FixtureRun:
-    """One bronze→silver→manifest cycle inside a fixture warehouse."""
-
-    profile: str  # registry profile_id: stamps silver and selects the bronze dir
-    run_id: str
-    started_at: datetime
-    condition: str
-    fixture_dir: str
-    page: str = "page=00001.json"
-    manifest_profile: str | None = None  # None -> same as `profile`
-    status_overrides: dict[str, str] = field(default_factory=dict)  # nct_id -> status
-    added: tuple[AddedStudy, ...] = ()
-    study_overrides: dict[str, dict] = field(default_factory=dict)
-    retrieved_at: str | None = None
-    final_status: str = "success"
-
-    @property
-    def effective_manifest_profile(self) -> str:
-        return self.manifest_profile or self.profile
-
-
-def _variant_page(
-    src: Path,
-    *,
-    status_overrides: dict[str, str],
-    added: tuple[AddedStudy, ...],
-) -> dict:
-    """The bronze page at `src` with `status_overrides` applied and `added` cloned in.
-
-    Returns the document; the caller writes it. Nothing here is guessed: an
-    unknown nct_id in either collection raises rather than silently producing a
-    page that is the same as the base one (which would make the divergent
-    fixture divergent in date only, and quietly).
-    """
-    doc = json.loads(src.read_text(encoding="utf-8"))
-    by_id = {s["protocolSection"]["identificationModule"]["nctId"]: s for s in doc["studies"]}
-    for nct_id, status in status_overrides.items():
-        study = by_id.get(nct_id)
-        if study is None:
-            raise KeyError(f"{src} has no {nct_id} to re-status")
-        study["protocolSection"]["statusModule"]["overallStatus"] = status
-        study["protocolSection"]["statusModule"]["lastKnownStatus"] = status
-    for spec in added:
-        template = by_id.get(spec.clone_of)
-        if template is None:
-            raise KeyError(f"{src} has no {spec.clone_of} to clone")
-        clone = json.loads(json.dumps(template))
-        section = clone["protocolSection"]
-        ids = section["identificationModule"]
-        ids["nctId"] = spec.nct_id
-        ids["briefTitle"] = f"{ids.get('briefTitle', 'Fixture study')} [variant {spec.nct_id}]"
-        status = section["statusModule"]
-        status["overallStatus"] = spec.overall_status
-        status["lastKnownStatus"] = spec.overall_status
-        if spec.phase is not None:
-            section["designModule"]["phases"] = [spec.phase]
-        if spec.condition is not None:
-            section["conditionsModule"]["conditions"] = [spec.condition]
-        if spec.sponsor is not None:
-            section["sponsorCollaboratorsModule"]["leadSponsor"]["name"] = spec.sponsor
-        if spec.location is not None:
-            facility, city, state = spec.location
-            section["contactsLocationsModule"]["locations"] = [
-                {
-                    "facility": facility,
-                    "city": city,
-                    "state": state,
-                    "zip": "00000",
-                    "country": "United States",
-                    "status": spec.overall_status,
-                }
-            ]
-        doc["studies"].append(clone)
-    return doc
+_variant_page = variant_page
 
 
 @pytest.fixture
@@ -290,162 +200,15 @@ def _build_fixture_root(
     session_timezone: str | None = None,
     dbt_vars: dict[str, object] | None = None,
 ) -> Path:
-    """Bronze→silver→gold for `runs`, then one `dbt build`; returns the scratch root.
-
-    Shared by every warehouse fixture in this module. dbt runs in a subprocess:
-    dbt's in-process adapter keeps the DuckDB file open, which would block the
-    read-only connections the assertions use. The project dir is the repo's real
-    `dbt_clinical_trials/`, so the models under test are the committed ones; only
-    the data, the profiles.yml and the target dir are per-root (A22: nothing here
-    may write under the repo's own `data/`).
-    """
+    """Bronze->silver->gold for `runs`, then one `dbt build`; returns the scratch root."""
     root = tmp_path_factory.mktemp(name)
-    mp = pytest.MonkeyPatch()
-    mp.setenv("CTI_PROJECT_ROOT", str(root))
-    try:
-        (root / "config").mkdir()
-        (root / "config" / "project_config.yml").write_text(CONFIG_YAML, encoding="utf-8")
-        for cfg_name in (
-            "geography_rules.yml",
-            "score_weights.yml",
-            "roi_assumptions.yml",
-            "shared_paths.yml",
-        ):
-            shutil.copy(REPO_ROOT / "config" / cfg_name, root / "config" / cfg_name)
-        for taxonomy in (REPO_ROOT / "config").glob("condition_taxonomy*.yml"):
-            shutil.copy(taxonomy, root / "config" / taxonomy.name)
-        shutil.copytree(REPO_ROOT / "config" / "profiles", root / "config" / "profiles")
-
-        from src.config import load_config
-        from src.ingest.snapshot_manifest import (
-            IngestionManifest,
-            write_manifest,
-            write_summary,
-        )
-        from src.profiles import load_profile, load_shared_paths
-        from src.transform.build_silver_entities import run_transform
-
-        cfg = load_config()
-        shared = load_shared_paths(root / "config" / "shared_paths.yml")
-        profiles = {
-            "adrd": load_profile(root / "config/profiles/adrd.yml", shared=shared),
-            "oncology_nsclc": load_profile(
-                root / "config/profiles/oncology_nsclc.yml", shared=shared
-            ),
-        }
-
-        for index, run in enumerate(runs):
-            profile_cfg = profiles[run.profile].config
-            run_dir = profile_cfg.paths.bronze_api_responses / f"run_id={run.run_id}"
-            run_dir.mkdir(parents=True)
-            page_src = Path(__file__).parent / "fixtures" / run.fixture_dir / run.page
-            page_dst = run_dir / run.page
-            if run.status_overrides or run.added:
-                doc = _variant_page(
-                    page_src,
-                    status_overrides=run.status_overrides,
-                    added=run.added,
-                )
-                page_dst.write_text(json.dumps(doc), encoding="utf-8")
-            else:
-                shutil.copy(page_src, page_dst)
-                doc = json.loads(page_src.read_text(encoding="utf-8"))
-            for study in doc["studies"]:
-                section = study["protocolSection"]
-                for module, fields in run.study_overrides.get(
-                    section["identificationModule"]["nctId"], {}
-                ).items():
-                    section[module].update(fields)
-            if run.study_overrides:
-                page_dst.write_text(json.dumps(doc), encoding="utf-8")
-            if run.retrieved_at:
-                metadata_dir = run_dir / "_page_metadata"
-                metadata_dir.mkdir()
-                (metadata_dir / run.page).write_text(
-                    json.dumps({"retrieved_at_utc": run.retrieved_at}), encoding="utf-8"
-                )
-            record_count = len(doc["studies"])
-            manifest = IngestionManifest(
-                ingestion_run_id=run.run_id,
-                # Unique per run: two runs of one profile must not share a query
-                # hash, which is what the incremental reuser matches on.
-                query_hash=f"fixturequeryhash{index:02d}",
-                endpoint="https://clinicaltrials.gov/api/v2/studies",
-                condition=run.condition,
-                params={"query.cond": run.condition},
-                mode="incremental",
-                # Mirrors src/ingest/extract_studies.py, which stamps the manifest
-                # with profile.profile_id. The bronze glob in _sources.yml and the
-                # `profile as indication_profile_id` alias in stg_trial_snapshots
-                # read exactly this field, so a fixture that left it at the
-                # "default" fallback would make the reliability mart's per-profile
-                # grain unprovable.
-                #
-                # `UNSTAMPED_NSCLC_RUN_ID` deliberately *does* leave it there: that
-                # run exists to reproduce a manifest written before profile
-                # stamping landed, so mart_data_reliability's coalesce ordering
-                # (silver first) is the only thing keeping its profile correct.
-                profile=run.effective_manifest_profile,
-                status="success",
-                started_at_utc=run.started_at,
-                ended_at_utc=run.started_at + timedelta(minutes=30),
-                page_count=1,
-                record_count=record_count,
-                total_count_reported=record_count,
-            )
-            write_manifest(profile_cfg.paths.bronze_manifests, manifest)
-            write_summary(profile_cfg.paths.bronze_manifests, manifest)
-            assert run_transform(profile=profiles[run.profile]) == [run.run_id]
-            if run.final_status != "success":
-                manifest.status = run.final_status
-                write_manifest(profile_cfg.paths.bronze_manifests, manifest)
-                write_summary(profile_cfg.paths.bronze_manifests, manifest)
-        assert cfg.paths.silver == profiles["adrd"].config.paths.silver  # one silver tree
-
-        (root / "profiles.yml").write_text(
-            """clinical_trials:
-  target: dev
-  outputs:
-    dev:
-      type: duckdb
-      path: data/warehouse/clinical_trials.duckdb
-      threads: 4
-"""
-            + (
-                f"      settings:\n        TimeZone: {session_timezone}\n"
-                if session_timezone
-                else ""
-            ),
-            encoding="utf-8",
-        )
-        (root / "data/warehouse").mkdir(parents=True, exist_ok=True)
-        build_command = [
-            sys.executable,
-            "-m",
-            "dbt.cli.main",
-            "build",
-            "--project-dir",
-            str(REPO_ROOT / "dbt_clinical_trials"),
-            "--profiles-dir",
-            str(root),
-            "--target-path",
-            str(root / "dbt_target"),
-        ]
-        if dbt_vars:
-            build_command += ["--vars", json.dumps(dbt_vars)]
-        result = subprocess.run(
-            build_command,
-            cwd=root,
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-        assert result.returncode == 0, (
-            f"dbt build failed:\n{result.stdout[-3000:]}\n{result.stderr[-1000:]}"
-        )
-        return root
-    finally:
-        mp.undo()
+    build_fixture_warehouse(
+        root,
+        runs=runs,
+        session_timezone=session_timezone,
+        dbt_vars=dbt_vars,
+    )
+    return root
 
 
 def _base_adrd_run() -> FixtureRun:

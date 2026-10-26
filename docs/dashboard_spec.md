@@ -13,24 +13,24 @@ Every page renders the shared disclaimer banner via
 | filters.py | condition/state/phase sidebar multiselects with row-count caption |
 | profile.py | sidebar indication-profile selector; options come from `get_registry().refreshable()`, not a warehouse query, so it renders before the first build |
 | navigation.py | `st.navigation` registry: pages grouped Compare / Inspect / Verify; `app.py` only runs it. Page URLs match the former file-based paths |
-| formatting.py | display labels for phase (from `seeds/phase_mapping.csv`), priority band and snapshot date |
+| formatting.py | display labels for phase (from `seeds/phase_mapping.csv`), number and percentage formatting, and snapshot date |
 
 ## Pages
 
 ### Overview (`overview.py`)
 KPIs (trials tracked, recruiting, states, facilities), snapshot date and
-count, top-10 queue preview with display labels and a score bar, link to
+count, top-10 segment preview with display labels, link to
 the full queue, "Where to look next" cards built from the navigation
 sections, and three separately named metric audits.
 
-### 1 · Priority Queue
-Band KPIs (priority_review / review / watch), priority band sidebar
-multiselect with dynamic row-count reconciliation caption, proxy warning
-when growth uses the registry-date fallback, interactive selectable ranked
-table (click a row to inspect its exact weighted score breakdown), CSV
+### 1 · Registry Segments
+Segment-level activity metrics, condition/state/phase multiselects with
+dynamic row-count reconciliation caption, proxy warning when growth uses
+the registry-date fallback, interactive selectable raw metrics table sorted
+by active recruiting trials (click a row to inspect segment details), CSV
 export button with full decision-brief columns and embedded guardrail
-notes, horizontal stacked bar of normalized *unweighted* components for
-the top 15, interpretation note.
+notes, horizontal bar chart of active recruiting trials across top 15
+segments, interpretation note.
 
 ### 2 · Competition Landscape
 Latest-snapshot segments: density vs sponsor-HHI scatter (bubble = listed
@@ -70,7 +70,7 @@ listed enrollment is the sponsor-reported plan, not actual accrual.
 Deterministic protocol comparability for one index trial. A banner sets the
 scope first: shared phase, geography, intervention type, study design and
 eligibility — **not** clinical equivalence, and (unlike the Competition
-Landscape and Priority Queue pages) not itself a competition or recruitment
+Landscape and Registry Segments pages) not itself a competition or recruitment
 signal. Free-text search over brief title / NCT ID narrows the profile's trial
 set, and a selectbox offers the first 50 matches labelled
 `NCT — title [indication_profile_id]`.

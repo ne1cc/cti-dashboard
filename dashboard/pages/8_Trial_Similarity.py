@@ -69,9 +69,11 @@ def _format_option(row: Any) -> str:
     return f"{row.nct_id} — {row.brief_title}{ind_tag}"
 
 
-options = {_format_option(row): row.nct_id for row in candidates.head(50).itertuples()}
+options: dict[str, str] = {
+    _format_option(row): str(row.nct_id) for row in candidates.head(50).itertuples()
+}
 selected_label = st.selectbox("Select the index trial", list(options))
-selected_nct_id = options[selected_label]
+selected_nct_id = str(options[selected_label])
 
 sim_df = data.trial_similarity(profile_id, selected_nct_id)
 if sim_df.empty or "nct_id_b" not in sim_df.columns:
@@ -110,7 +112,7 @@ if "indication_profile_id" in matches.columns:
     match_columns.append("indication_profile_id")
 match_columns.append("registry_url")
 
-col_cfg: dict = {
+col_cfg: dict[str, Any] = {
     "similarity_rank": st.column_config.NumberColumn("Rank", format="%d"),
     "similarity_explanation": st.column_config.TextColumn("Why comparable", width="large"),
     "nct_id_b": st.column_config.TextColumn("NCT ID"),
@@ -136,10 +138,12 @@ match_event = st.dataframe(
     selection_mode="single-row",
 )
 
-selected_rows = match_event.selection.rows if match_event.selection else []
+selected_rows = (
+    match_event.get("selection", {}).get("rows", []) if isinstance(match_event, dict) else []
+)
 if selected_rows:
     m = matches.iloc[selected_rows[0]]
-    st.subheader(f"Factor breakdown — {selected_nct_id} vs {m['nct_id_b']}")
+    st.subheader(f"Factor breakdown — {selected_nct_id} vs {str(m['nct_id_b'])}")
     breakdown = pd.DataFrame(
         [
             {

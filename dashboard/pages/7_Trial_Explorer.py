@@ -1,5 +1,7 @@
 """Trial Explorer — individual registry records with links to ClinicalTrials.gov."""
 
+from typing import Any
+
 import streamlit as st
 from components import data
 from components.formatting import format_phase
@@ -61,7 +63,7 @@ display_trials["overall_status"] = (
     display_trials["overall_status"].str.replace("_", " ").str.capitalize()
 )
 
-column_config = {
+column_config: dict[str, Any] = {
     "overall_status": st.column_config.TextColumn("Status"),
     "phase": st.column_config.TextColumn("Phase"),
     "lead_sponsor": st.column_config.TextColumn("Lead sponsor"),

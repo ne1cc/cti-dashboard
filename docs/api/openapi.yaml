@@ -1,0 +1,1669 @@
+openapi: 3.1.0
+info:
+  title: Clinical Trial Intelligence Read API
+  version: 1.0.0
+  description: |
+    Production-grade Read API contract for Clinical Trial Intelligence (ne1cc/cti-dashboard).
+
+    ### Architectural Foundations
+    - **Dual Delivery Surfaces (ADR 0061)**: Serves both the public, server-rendered patient discovery interface with progressive enhancement and the analytical workbench directly from DuckDB Gold marts and cached registry sources.
+    - **Contact Privacy Guardrail (ADR 0065)**: Deliberately excludes personal investigator names, facility coordinator names, direct phone numbers, and individual email addresses. Directs prospective participants and analysts to verified study records via `registry_contact_url` while providing verified site geocoordinates and addresses.
+    - **Structured Eligibility Modeling (Issue #62)**: Provides structured participant criteria including `minimum_age_years`, `maximum_age_years`, `age_not_stated`, `sex`, `accepts_healthy_volunteers`, and `std_age_groups`. Trials without stated age requirements are preserved rather than silently dropped.
+    - **Standard Error Envelopes (RFC 7807)**: All 4xx and 5xx responses return structured `application/problem+json` Problem Details payloads.
+    - **Data Provenance & Caching**: All responses carry `Data-Snapshot`, `Data-Updated`, `ETag`, and `Cache-Control` headers referencing immutable bronze ingestion and dimensional warehouse snapshots.
+
+  contact:
+    name: CTI Platform Engineering
+    url: https://github.com/ne1cc/cti-dashboard
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.cti.example.org/v1
+    description: Production API Gateway
+  - url: http://localhost:8000/v1
+    description: Local Development / Test Instance
+
+tags:
+  - name: Trials
+    description: Search, filter, and protocol detail for clinical studies
+  - name: Conditions
+    description: Medical Subject Headings (MeSH) condition autocomplete and hierarchy
+  - name: Similarity
+    description: Deterministic design comparability and similarity scoring
+  - name: Geography
+    description: Population trial access, competition intensity, and travel burden analytics
+  - name: Metadata
+    description: Ingestion pipeline freshness, quality audit, and schema status
+
+paths:
+  /v1/trials:
+    get:
+      tags:
+        - Trials
+      summary: Search and filter clinical trials
+      description: |
+        Search interventional clinical trials with multi-dimensional filtering across conditions,
+        geographic proximity, structured eligibility, study phase, and overall status.
+        Supports opaque upstream cursor pagination. In the M1-A live backend,
+        eligibility, phase, standard-age-group and sponsor filters and all sorts
+        apply to one upstream page only. Filtered pages can be empty with has_more=true;
+        total_count is null when in-memory filters or malformed-record omissions apply.
+        intervention_type and updated_since currently return 422 UNSUPPORTED_FILTER.
+        See live-backend.md for the supported subset and pagination limitations.
+      operationId: listTrials
+      parameters:
+        - name: cond
+          in: query
+          description: Condition name, keyword, or MeSH term (e.g. "Alzheimer Disease").
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Trial recruitment status filter. Defaults to open/active statuses if omitted.
+          required: false
+          schema:
+            type: string
+            enum:
+              - RECRUITING
+              - ACTIVE_NOT_RECRUITING
+              - ENROLLING_BY_INVITATION
+              - NOT_YET_RECRUITING
+              - COMPLETED
+              - SUSPENDED
+              - TERMINATED
+              - WITHDRAWN
+        - name: phase
+          in: query
+          description: Clinical trial development phase.
+          required: false
+          schema:
+            type: string
+            enum:
+              - EARLY_PHASE1
+              - PHASE1
+              - PHASE2
+              - PHASE3
+              - PHASE4
+              - NOT_APPLICABLE
+        - name: lat
+          in: query
+          description: Latitude of user or search center point (-90.0 to 90.0). Required if lon is supplied.
+          required: false
+          schema:
+            type: number
+            minimum: -90.0
+            maximum: 90.0
+        - name: lon
+          in: query
+          description: Longitude of user or search center point (-180.0 to 180.0). Required if lat is supplied.
+          required: false
+          schema:
+            type: number
+            minimum: -180.0
+            maximum: 180.0
+        - name: radius_mi
+          in: query
+          description: Search radius in miles around (lat, lon). Defaults to 50.
+          required: false
+          schema:
+            type: number
+            minimum: 1.0
+            maximum: 500.0
+            default: 50.0
+        - name: min_age
+          in: query
+          description: |
+            Participant age in years. Returns trials whose maximum age is >= min_age,
+            preserving trials with unstated age bounds per Issue #62.
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 130
+        - name: max_age
+          in: query
+          description: |
+            Participant age in years. Returns trials whose minimum age is <= max_age,
+            preserving trials with unstated age bounds per Issue #62.
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 130
+        - name: sex
+          in: query
+          description: Participant biological sex eligibility criteria.
+          required: false
+          schema:
+            type: string
+            enum:
+              - ALL
+              - FEMALE
+              - MALE
+        - name: healthy_volunteers
+          in: query
+          description: Filter by healthy volunteer acceptance (true, false, or any).
+          required: false
+          schema:
+            type: boolean
+        - name: std_age_group
+          in: query
+          description: Standardized age group classification from ClinicalTrials.gov.
+          required: false
+          schema:
+            type: string
+            enum:
+              - CHILD
+              - ADULT
+              - OLDER_ADULT
+        - name: intervention_type
+          in: query
+          description: Type of study intervention (e.g. DRUG, BIOLOGICAL, BEHAVIORAL, DEVICE).
+          required: false
+          schema:
+            type: string
+        - name: sponsor_class
+          in: query
+          description: Agency class of lead sponsor (e.g. INDUSTRY, NIH, FED, OTHER).
+          required: false
+          schema:
+            type: string
+            enum:
+              - INDUSTRY
+              - NIH
+              - FED
+              - OTHER
+              - OTHER_GOV
+              - INDIV
+              - NETWORK
+        - name: updated_since
+          in: query
+          description: Filter studies updated on or after this ISO-8601 calendar date (YYYY-MM-DD).
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: cursor
+          in: query
+          description: Opaque pagination cursor token obtained from next_cursor in previous response.
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Number of items to return per page.
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: sort
+          in: query
+          description: |
+            Sorting order. 'distance' requires lat and lon query parameters.
+          required: false
+          schema:
+            type: string
+            enum:
+              - distance
+              - updated
+              - -updated
+              - start_date
+              - -start_date
+            default: -updated
+      responses:
+        '200':
+          description: Paginated collection of clinical trial summaries.
+          headers:
+            Data-Snapshot:
+              $ref: '#/components/headers/DataSnapshot'
+            Data-Updated:
+              $ref: '#/components/headers/DataUpdated'
+            ETag:
+              $ref: '#/components/headers/ETag'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrialsListResponse'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '422':
+          $ref: '#/components/responses/422Unprocessable'
+        '429':
+          $ref: '#/components/responses/429TooManyRequests'
+        '500':
+          $ref: '#/components/responses/500InternalError'
+        '503':
+          $ref: '#/components/responses/503ServiceUnavailable'
+
+  /v1/trials/{nct_id}:
+    get:
+      tags:
+        - Trials
+      summary: Retrieve complete clinical trial protocol and sites
+      description: |
+        Returns comprehensive study protocol details, structured eligibility criteria (Issue #62),
+        listed site locations, nearest site distance (if lat/lon coordinates are supplied), and
+        an official ClinicalTrials.gov deep link (`registry_contact_url`) for study inquiries.
+        In strict compliance with ADR 0065, no personal investigator or facility contact PII is exposed.
+      operationId: getTrialDetail
+      parameters:
+        - name: nct_id
+          in: path
+          description: National Clinical Trial identifier (e.g. NCT04245644).
+          required: true
+          schema:
+            type: string
+            pattern: '^NCT\d{8}$'
+        - name: lat
+          in: query
+          description: Optional latitude to calculate proximity distances to listed trial sites.
+          required: false
+          schema:
+            type: number
+            minimum: -90.0
+            maximum: 90.0
+        - name: lon
+          in: query
+          description: Optional longitude to calculate proximity distances to listed trial sites.
+          required: false
+          schema:
+            type: number
+            minimum: -180.0
+            maximum: 180.0
+      responses:
+        '200':
+          description: Full clinical trial protocol specification and sites.
+          headers:
+            Data-Snapshot:
+              $ref: '#/components/headers/DataSnapshot'
+            Data-Updated:
+              $ref: '#/components/headers/DataUpdated'
+            ETag:
+              $ref: '#/components/headers/ETag'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrialDetail'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+        '422':
+          $ref: '#/components/responses/422Unprocessable'
+        '429':
+          $ref: '#/components/responses/429TooManyRequests'
+        '500':
+          $ref: '#/components/responses/500InternalError'
+
+  /v1/conditions:
+    get:
+      tags:
+        - Conditions
+      summary: Search and browse conditions hierarchy
+      description: |
+        Autocomplete search for condition names and synonyms, or browse Medical Subject Headings (MeSH)
+        disease taxonomy nodes and parent-child hierarchies.
+      operationId: listConditions
+      parameters:
+        - name: q
+          in: query
+          description: Prefix search string for condition name or synonym autocomplete.
+          required: false
+          schema:
+            type: string
+        - name: mesh_id
+          in: query
+          description: Exact Medical Subject Headings unique descriptor identifier (e.g. D000544).
+          required: false
+          schema:
+            type: string
+        - name: parent_id
+          in: query
+          description: MeSH tree number or parent identifier to retrieve sub-branches.
+          required: false
+          schema:
+            type: string
+        - name: indication_profile_id
+          in: query
+          description: Filter conditions scoped to an active indication profile (e.g. adrd, oncology_nsclc).
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum number of conditions to return.
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: List of conditions with synonyms and active study counts.
+          headers:
+            Data-Snapshot:
+              $ref: '#/components/headers/DataSnapshot'
+            Data-Updated:
+              $ref: '#/components/headers/DataUpdated'
+            ETag:
+              $ref: '#/components/headers/ETag'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConditionsListResponse'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '422':
+          $ref: '#/components/responses/422Unprocessable'
+        '429':
+          $ref: '#/components/responses/429TooManyRequests'
+        '500':
+          $ref: '#/components/responses/500InternalError'
+
+  /v1/trials/{nct_id}/related:
+    get:
+      tags:
+        - Similarity
+      summary: Retrieve comparable clinical trials and factor scoring
+      description: |
+        Returns the top-ranked comparable trials based on deterministic design feature scoring
+        from Gold mart `mart_trial_similarity`. Exposes individual factor weights and match status
+        (condition, phase, geography, intervention, study design, eligibility, enrollment band).
+        This is an objective study-design comparability signal, NOT a clinical equivalence claim.
+      operationId: getRelatedTrials
+      parameters:
+        - name: nct_id
+          in: path
+          description: NCT identifier of target trial.
+          required: true
+          schema:
+            type: string
+            pattern: '^NCT\d{8}$'
+        - name: limit
+          in: query
+          description: Maximum candidate trials to return (bounded to 25 per mart contract).
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 25
+            default: 10
+        - name: min_score
+          in: query
+          description: Minimum similarity score threshold (0.0 to 1.0).
+          required: false
+          schema:
+            type: number
+            minimum: 0.0
+            maximum: 1.0
+      responses:
+        '200':
+          description: Ranked list of comparable clinical trials with factor disclosure.
+          headers:
+            Data-Snapshot:
+              $ref: '#/components/headers/DataSnapshot'
+            Data-Updated:
+              $ref: '#/components/headers/DataUpdated'
+            ETag:
+              $ref: '#/components/headers/ETag'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelatedTrialsResponse'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+        '422':
+          $ref: '#/components/responses/422Unprocessable'
+        '429':
+          $ref: '#/components/responses/429TooManyRequests'
+        '500':
+          $ref: '#/components/responses/500InternalError'
+
+  /v1/geo/access:
+    get:
+      tags:
+        - Geography
+      summary: Retrieve geographic trial access and competition metrics
+      description: |
+        Provides state-level and regional metrics on trial site density, sponsor market concentration (HHI),
+        competition intensity, and access-gap metrics derived from Gold analytical marts.
+      operationId: getGeoAccessMetrics
+      parameters:
+        - name: state
+          in: query
+          description: Two-letter US state postal code (e.g. CA, NY, TX).
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z]{2}$'
+        - name: condition_group
+          in: query
+          description: Condition group taxonomy filter.
+          required: false
+          schema:
+            type: string
+        - name: indication_profile_id
+          in: query
+          description: Indication profile scope (defaults to adrd).
+          required: false
+          schema:
+            type: string
+            default: adrd
+        - name: snapshot_date
+          in: query
+          description: Target snapshot date (YYYY-MM-DD). Defaults to latest warehouse snapshot.
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Access and competition intelligence metrics for the requested geography.
+          headers:
+            Data-Snapshot:
+              $ref: '#/components/headers/DataSnapshot'
+            Data-Updated:
+              $ref: '#/components/headers/DataUpdated'
+            ETag:
+              $ref: '#/components/headers/ETag'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeoAccessResponse'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '422':
+          $ref: '#/components/responses/422Unprocessable'
+        '429':
+          $ref: '#/components/responses/429TooManyRequests'
+        '500':
+          $ref: '#/components/responses/500InternalError'
+
+  /v1/meta/freshness:
+    get:
+      tags:
+        - Metadata
+      summary: Retrieve ingestion freshness and dataset coverage metadata
+      description: |
+        Exposes ingestion run timestamps, latest snapshot identifiers, upstream ClinicalTrials.gov API version,
+        reconciliation status, and record quality distributions across indication profiles.
+      operationId: getMetaFreshness
+      parameters:
+        - name: indication_profile_id
+          in: query
+          description: Optional indication profile identifier filter.
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: System freshness and quality audit report.
+          headers:
+            Data-Snapshot:
+              $ref: '#/components/headers/DataSnapshot'
+            Data-Updated:
+              $ref: '#/components/headers/DataUpdated'
+            ETag:
+              $ref: '#/components/headers/ETag'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetaFreshnessResponse'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '422':
+          $ref: '#/components/responses/422Unprocessable'
+        '429':
+          $ref: '#/components/responses/429TooManyRequests'
+        '500':
+          $ref: '#/components/responses/500InternalError'
+
+components:
+  headers:
+    DataSnapshot:
+      description: Identifier of the immutable snapshot serving this response (e.g. 2026-07-31T140000_uuid).
+      schema:
+        type: string
+    DataUpdated:
+      description: ISO-8601 UTC timestamp of the latest source update reflected in this response.
+      schema:
+        type: string
+        format: date-time
+    ETag:
+      description: Entity tag representation for client HTTP caching and validation.
+      schema:
+        type: string
+    CacheControl:
+      description: Directives for caching mechanisms in requests and responses.
+      schema:
+        type: string
+    RateLimitLimit:
+      description: Number of allowed requests in the current rate limiting window.
+      schema:
+        type: integer
+    RateLimitRemaining:
+      description: Number of remaining requests in the current rate limiting window.
+      schema:
+        type: integer
+    RateLimitReset:
+      description: Seconds until the rate limiting window resets.
+      schema:
+        type: integer
+    RetryAfter:
+      description: Seconds to wait before retrying when rate limited.
+      schema:
+        type: integer
+
+  responses:
+    400BadRequest:
+      description: Invalid request parameters or malformed input syntax.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    404NotFound:
+      description: Requested study or resource does not exist in the warehouse.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    422Unprocessable:
+      description: Semantic validation failure or unprocessable query combination.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    429TooManyRequests:
+      description: API rate limit exceeded. Client should respect the Retry-After header.
+      headers:
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    500InternalError:
+      description: Unexpected internal server error or query execution failure.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    503ServiceUnavailable:
+      description: The service or backend warehouse is temporarily unavailable.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+  schemas:
+    ProblemDetails:
+      type: object
+      description: RFC 7807 compliant error details payload.
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - instance
+      properties:
+        type:
+          type: string
+          format: uri
+          description: A URI reference that identifies the problem type.
+          example: 'https://api.cti.example.org/errors/invalid-parameters'
+        title:
+          type: string
+          description: A short, human-readable summary of the problem type.
+          example: 'Invalid Query Parameters'
+        status:
+          type: integer
+          description: The HTTP status code generated by the origin server.
+          example: 400
+        detail:
+          type: string
+          description: A human-readable explanation specific to this occurrence of the problem.
+          example: 'Latitude value 95.5 is outside the valid range of -90.0 to 90.0.'
+        instance:
+          type: string
+          format: uri
+          description: A URI reference that identifies the specific occurrence of the problem.
+          example: '/v1/trials?lat=95.5&lon=-122.4'
+        code:
+          type: string
+          description: Machine-readable internal error category code.
+          example: 'INVALID_COORDINATES'
+        invalid_params:
+          type: array
+          description: Optional list of specific field validation failures.
+          items:
+            $ref: '#/components/schemas/InvalidParam'
+
+    InvalidParam:
+      type: object
+      required:
+        - name
+        - reason
+      properties:
+        name:
+          type: string
+          description: Parameter or field name causing the validation error.
+        reason:
+          type: string
+          description: Clear explanation of why the value failed validation.
+        value:
+          description: The rejected value provided in the request.
+
+    PaginationMetadata:
+      type: object
+      required:
+        - limit
+        - has_more
+      properties:
+        next_cursor:
+          type:
+            - string
+            - 'null'
+          description: Opaque token to retrieve the next page of results. Null if at final page.
+          example: 'eyJvZmZzZXQiOjIwLCJzb3J0IjoidXBkYXRlZCJ9'
+        prev_cursor:
+          type:
+            - string
+            - 'null'
+          description: Opaque token to retrieve previous page of results.
+        limit:
+          type: integer
+          description: Number of items requested per page.
+          example: 20
+        total_count:
+          type:
+            - integer
+            - 'null'
+          description: Total matching studies count across all pages, when calculated.
+          example: 142
+        has_more:
+          type: boolean
+          description: Indicates if additional results exist beyond the current page.
+          example: true
+
+    TrialsListResponse:
+      type: object
+      required:
+        - items
+        - pagination
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrialSummary'
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
+
+    TrialSummary:
+      type: object
+      required:
+        - nct_id
+        - brief_title
+        - overall_status
+        - phase
+        - study_type
+        - lead_sponsor
+        - conditions
+        - structured_eligibility
+        - registry_url
+      properties:
+        nct_id:
+          type: string
+          pattern: '^NCT\d{8}$'
+          example: 'NCT04245644'
+        brief_title:
+          type: string
+          example: 'Phase 3 Evaluation of Novel Tau-Targeted Therapy in Early Alzheimer Disease'
+        overall_status:
+          type: string
+          example: 'RECRUITING'
+        phase:
+          type: string
+          example: 'PHASE3'
+        study_type:
+          type: string
+          example: 'INTERVENTIONAL'
+        lead_sponsor:
+          type: string
+          example: 'Biogen Inc.'
+        sponsor_class:
+          type:
+            - string
+            - 'null'
+          example: 'INDUSTRY'
+        start_date:
+          type:
+            - string
+            - 'null'
+          format: date
+          example: '2020-04-15'
+        last_update_post_date:
+          type:
+            - string
+            - 'null'
+          format: date
+          example: '2026-06-12'
+        conditions:
+          type: array
+          items:
+            type: string
+          example: ['Alzheimer Disease', 'Mild Cognitive Impairment']
+        structured_eligibility:
+          $ref: '#/components/schemas/StructuredEligibilitySummary'
+        nearest_site:
+          type:
+            - object
+            - 'null'
+          $ref: '#/components/schemas/NearestSiteSummary'
+        registry_url:
+          type: string
+          format: uri
+          example: 'https://clinicaltrials.gov/study/NCT04245644'
+
+    StructuredEligibilitySummary:
+      type: object
+      description: |
+        Structured summary of core eligibility criteria per Issue #62.
+        Preserves unstated criteria via `age_not_stated: true` and null bounds.
+      required:
+        - age_not_stated
+        - sex
+        - std_age_groups
+      properties:
+        minimum_age_years:
+          type:
+            - number
+            - 'null'
+          description: Lower bound participant age in years. Null when unstated.
+          example: 55.0
+        maximum_age_years:
+          type:
+            - number
+            - 'null'
+          description: Upper bound participant age in years. Null when unstated.
+          example: 85.0
+        age_not_stated:
+          type: boolean
+          description: Explicit flag indicating whether age restrictions are absent or unspecified.
+          example: false
+        sex:
+          type: string
+          enum:
+            - ALL
+            - FEMALE
+            - MALE
+            - UNKNOWN
+          example: 'ALL'
+        accepts_healthy_volunteers:
+          type:
+            - boolean
+            - 'null'
+          description: Indicates whether healthy participants are eligible.
+          example: false
+        std_age_groups:
+          type: array
+          items:
+            type: string
+            enum:
+              - CHILD
+              - ADULT
+              - OLDER_ADULT
+          example: ['ADULT', 'OLDER_ADULT']
+
+    NearestSiteSummary:
+      type: object
+      description: Listed facility geographically closest to the user's provided coordinates.
+      required:
+        - facility_name
+        - city
+      properties:
+        facility_name:
+          type: string
+          example: 'UCSF Memory and Aging Center'
+        city:
+          type: string
+          example: 'San Francisco'
+        state:
+          type:
+            - string
+            - 'null'
+          example: 'CA'
+        distance_miles:
+          type:
+            - number
+            - 'null'
+          description: Calculated great-circle distance in miles from search center point.
+          example: 4.8
+
+    TrialDetail:
+      type: object
+      description: |
+        Comprehensive clinical trial protocol details.
+        ADR 0065 Contract: No investigator or facility personal contact PII is stored or exposed.
+        Users are provided official registry URL deep links to contacts via `registry_contact_url`.
+      required:
+        - nct_id
+        - brief_title
+        - overall_status
+        - study_type
+        - study_design
+        - enrollment
+        - dates
+        - sponsors
+        - conditions
+        - interventions
+        - eligibility
+        - sites
+        - registry_url
+        - registry_contact_url
+        - provenance
+      properties:
+        nct_id:
+          type: string
+          pattern: '^NCT\d{8}$'
+          example: 'NCT04245644'
+        brief_title:
+          type: string
+          example: 'Phase 3 Evaluation of Novel Tau-Targeted Therapy in Early Alzheimer Disease'
+        official_title:
+          type:
+            - string
+            - 'null'
+          example: 'A Randomized, Double-Blind, Placebo-Controlled Study of BIIB080 in Participants With Early Alzheimer Disease'
+        overall_status:
+          type: string
+          example: 'RECRUITING'
+        last_known_status:
+          type:
+            - string
+            - 'null'
+          example: null
+        status_verified_date:
+          type:
+            - string
+            - 'null'
+          example: '2026-06'
+        study_type:
+          type: string
+          example: 'INTERVENTIONAL'
+        has_expanded_access:
+          type: boolean
+          example: false
+        study_design:
+          $ref: '#/components/schemas/StudyDesign'
+        enrollment:
+          $ref: '#/components/schemas/EnrollmentInfo'
+        dates:
+          $ref: '#/components/schemas/StudyDates'
+        sponsors:
+          $ref: '#/components/schemas/StudySponsors'
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/StudyCondition'
+        interventions:
+          type: array
+          items:
+            $ref: '#/components/schemas/StudyIntervention'
+        eligibility:
+          $ref: '#/components/schemas/StructuredEligibility'
+        sites:
+          type: array
+          description: |
+            Listed trial facilities with addresses and geocoordinates.
+            Excludes personal contact PII per ADR 0065.
+          items:
+            $ref: '#/components/schemas/TrialSite'
+        registry_url:
+          type: string
+          format: uri
+          description: Canonical link to ClinicalTrials.gov study record.
+          example: 'https://clinicaltrials.gov/study/NCT04245644'
+        registry_contact_url:
+          type: string
+          format: uri
+          description: |
+            Direct deep link to the official registry record contacts and locations section.
+            Mandated by ADR 0065 to ensure verified, up-to-date central contact access without storing personal PII.
+          example: 'https://clinicaltrials.gov/study/NCT04245644#contacts-and-locations'
+        provenance:
+          $ref: '#/components/schemas/DataProvenance'
+
+    StudyDesign:
+      type: object
+      required:
+        - phase_normalized
+      properties:
+        phases:
+          type: array
+          items:
+            type: string
+          example: ['PHASE3']
+        phase_raw:
+          type:
+            - string
+            - 'null'
+          example: 'Phase 3'
+        phase_normalized:
+          type: string
+          example: 'PHASE3'
+        allocation:
+          type:
+            - string
+            - 'null'
+          example: 'RANDOMIZED'
+        primary_purpose:
+          type:
+            - string
+            - 'null'
+          example: 'TREATMENT'
+        intervention_model:
+          type:
+            - string
+            - 'null'
+          example: 'PARALLEL'
+        masking:
+          type:
+            - string
+            - 'null'
+          example: 'QUADRUPLE'
+
+    EnrollmentInfo:
+      type: object
+      properties:
+        count:
+          type:
+            - integer
+            - 'null'
+          example: 450
+        type:
+          type:
+            - string
+            - 'null'
+          example: 'ESTIMATED'
+
+    StudyDates:
+      type: object
+      properties:
+        start_date:
+          type:
+            - string
+            - 'null'
+          format: date
+          example: '2020-04-15'
+        primary_completion_date:
+          type:
+            - string
+            - 'null'
+          format: date
+          example: '2027-02-28'
+        completion_date:
+          type:
+            - string
+            - 'null'
+          format: date
+          example: '2027-06-30'
+        study_first_post_date:
+          type:
+            - string
+            - 'null'
+          format: date
+          example: '2020-01-24'
+        results_first_post_date:
+          type:
+            - string
+            - 'null'
+          format: date
+          example: null
+        last_update_post_date:
+          type:
+            - string
+            - 'null'
+          format: date
+          example: '2026-06-12'
+
+    StudySponsors:
+      type: object
+      required:
+        - lead_sponsor
+      properties:
+        lead_sponsor:
+          $ref: '#/components/schemas/SponsorDetail'
+        collaborators:
+          type: array
+          items:
+            $ref: '#/components/schemas/SponsorDetail'
+        responsible_party_type:
+          type:
+            - string
+            - 'null'
+          example: 'SPONSOR'
+
+    SponsorDetail:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          example: 'Biogen Inc.'
+        class:
+          type:
+            - string
+            - 'null'
+          example: 'INDUSTRY'
+
+    StudyCondition:
+      type: object
+      required:
+        - condition_raw
+        - condition_normalized
+      properties:
+        condition_raw:
+          type: string
+          example: 'Alzheimer Disease'
+        condition_normalized:
+          type: string
+          example: 'alzheimer disease'
+        condition_group:
+          type:
+            - string
+            - 'null'
+          example: 'Alzheimer Disease'
+        mesh_id:
+          type:
+            - string
+            - 'null'
+          example: 'D000544'
+        dementia_relevance_flag:
+          type:
+            - boolean
+            - 'null'
+          example: true
+
+    StudyIntervention:
+      type: object
+      required:
+        - intervention_type
+        - intervention_name
+      properties:
+        intervention_type:
+          type: string
+          example: 'DRUG'
+        intervention_name:
+          type: string
+          example: 'BIIB080'
+        description:
+          type:
+            - string
+            - 'null'
+          example: 'Antisense oligonucleotide targeting tau synthesis administered intrathecally'
+
+    StructuredEligibility:
+      type: object
+      description: |
+        Participant eligibility model per Issue #62.
+        Captures parsed age years, raw registry strings, unstated age flags, sex, healthy volunteer flag,
+        and standard age cohorts.
+      required:
+        - age_not_stated
+        - sex
+        - std_age_groups
+      properties:
+        minimum_age_raw:
+          type:
+            - string
+            - 'null'
+          example: '55 Years'
+        maximum_age_raw:
+          type:
+            - string
+            - 'null'
+          example: '85 Years'
+        minimum_age_years:
+          type:
+            - number
+            - 'null'
+          description: Lower age limit in years. Null when unstated.
+          example: 55.0
+        maximum_age_years:
+          type:
+            - number
+            - 'null'
+          description: Upper age limit in years. Null when unstated.
+          example: 85.0
+        age_not_stated:
+          type: boolean
+          description: True when no age limits are specified in protocol.
+          example: false
+        sex:
+          type: string
+          enum:
+            - ALL
+            - FEMALE
+            - MALE
+            - UNKNOWN
+          example: 'ALL'
+        gender_based:
+          type:
+            - boolean
+            - 'null'
+          example: false
+        gender_description:
+          type:
+            - string
+            - 'null'
+          example: null
+        accepts_healthy_volunteers:
+          type:
+            - boolean
+            - 'null'
+          example: false
+        std_age_groups:
+          type: array
+          items:
+            type: string
+            enum:
+              - CHILD
+              - ADULT
+              - OLDER_ADULT
+          example: ['ADULT', 'OLDER_ADULT']
+        criteria_text:
+          type:
+            - string
+            - 'null'
+          description: Full unstructured eligibility criteria narrative block from protocol.
+          example: 'Inclusion Criteria: 1. Age 55 to 85. 2. Confirmed biomarker evidence of amyloid. Exclusion Criteria: 1. Current significant psychiatric disorder.'
+
+    TrialSite:
+      type: object
+      description: |
+        Physical study facility location.
+        Per ADR 0065 privacy guardrails, this schema strictly omits individual investigator and contact
+        names, personal emails, or telephone numbers.
+      required:
+        - facility_name
+        - city
+        - country
+      properties:
+        facility_name:
+          type: string
+          example: 'UCSF Memory and Aging Center'
+        city:
+          type: string
+          example: 'San Francisco'
+        state:
+          type:
+            - string
+            - 'null'
+          example: 'CA'
+        zip_code:
+          type:
+            - string
+            - 'null'
+          example: '94143'
+        country:
+          type: string
+          example: 'United States'
+        location_status:
+          type:
+            - string
+            - 'null'
+          example: 'RECRUITING'
+        coordinates:
+          type:
+            - object
+            - 'null'
+          $ref: '#/components/schemas/GeoPoint'
+        distance_miles:
+          type:
+            - number
+            - 'null'
+          description: Proximity distance from query lat/lon, when provided.
+          example: 4.8
+
+    GeoPoint:
+      type: object
+      required:
+        - lat
+        - lon
+      properties:
+        lat:
+          type: number
+          minimum: -90.0
+          maximum: 90.0
+          example: 37.7631
+        lon:
+          type: number
+          minimum: -180.0
+          maximum: 180.0
+          example: -122.4578
+
+    DataProvenance:
+      type: object
+      required:
+        - ingestion_run_id
+        - snapshot_id
+        - snapshot_date
+        - snapshot_timestamp_utc
+        - source_json_hash
+        - record_quality_flag
+        - indication_profile_id
+      properties:
+        ingestion_run_id:
+          type: string
+          example: '2026-07-31T140000_3f5a473e'
+        snapshot_id:
+          type: string
+          example: '2026-07-31T140000_3f5a473e'
+        snapshot_date:
+          type: string
+          format: date
+          example: '2026-07-31'
+        snapshot_timestamp_utc:
+          type: string
+          format: date-time
+          example: '2026-07-31T14:00:00Z'
+        source_json_hash:
+          type: string
+          description: SHA-256 digest of unmodified study JSON in bronze layer.
+          example: '8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4'
+        record_quality_flag:
+          type: string
+          example: 'ok'
+        retrieved_at_utc:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          example: '2026-07-31T14:02:18Z'
+        indication_profile_id:
+          type: string
+          example: 'adrd'
+
+    ConditionsListResponse:
+      type: object
+      required:
+        - items
+        - total_count
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConditionNode'
+        total_count:
+          type: integer
+          example: 1
+
+    ConditionNode:
+      type: object
+      required:
+        - condition_name
+        - condition_normalized
+        - synonyms
+        - trial_count
+        - active_trial_count
+        - has_children
+      properties:
+        condition_name:
+          type: string
+          example: 'Alzheimer Disease'
+        condition_normalized:
+          type: string
+          example: 'alzheimer disease'
+        condition_group:
+          type:
+            - string
+            - 'null'
+          example: 'Alzheimer Disease'
+        mesh_id:
+          type:
+            - string
+            - 'null'
+          example: 'D000544'
+        mesh_tree_code:
+          type:
+            - string
+            - 'null'
+          example: 'C10.228.140.380.100'
+        synonyms:
+          type: array
+          items:
+            type: string
+          example: ['Alzheimer Dementia', 'Alzheimers', 'AD', 'Primary Senile Degenerative Dementia']
+        trial_count:
+          type: integer
+          description: Total registered trials mapping to this condition node.
+          example: 320
+        active_trial_count:
+          type: integer
+          description: Trials currently recruiting or active for this condition node.
+          example: 84
+        has_children:
+          type: boolean
+          description: True if sub-branches exist in the MeSH taxonomy under this node.
+          example: true
+
+    RelatedTrialsResponse:
+      type: object
+      required:
+        - target_nct_id
+        - related_trials
+        - methodology_disclaimer
+      properties:
+        target_nct_id:
+          type: string
+          pattern: '^NCT\d{8}$'
+          example: 'NCT04245644'
+        related_trials:
+          type: array
+          items:
+            $ref: '#/components/schemas/RelatedTrialItem'
+        methodology_disclaimer:
+          type: string
+          example: 'Deterministic design comparability signal based on public registry attributes. NOT clinical equivalence or medical advice.'
+
+    RelatedTrialItem:
+      type: object
+      required:
+        - nct_id
+        - brief_title
+        - overall_status
+        - phase
+        - lead_sponsor
+        - similarity_score
+        - similarity_rank
+        - comparability_factors
+        - registry_url
+      properties:
+        nct_id:
+          type: string
+          pattern: '^NCT\d{8}$'
+          example: 'NCT03887455'
+        brief_title:
+          type: string
+          example: 'A Study to Evaluate the Efficacy and Safety of Lecanemab in Participants With Early Alzheimer Disease'
+        overall_status:
+          type: string
+          example: 'ACTIVE_NOT_RECRUITING'
+        phase:
+          type: string
+          example: 'PHASE3'
+        lead_sponsor:
+          type: string
+          example: 'Eisai Inc.'
+        similarity_score:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.8850
+        similarity_rank:
+          type: integer
+          minimum: 1
+          maximum: 25
+          example: 1
+        comparability_factors:
+          $ref: '#/components/schemas/ComparabilityFactors'
+        registry_url:
+          type: string
+          format: uri
+          example: 'https://clinicaltrials.gov/study/NCT03887455'
+
+    ComparabilityFactors:
+      type: object
+      description: Component factors contributing to the pairwise similarity score.
+      required:
+        - same_condition
+        - same_phase
+        - geography_overlap
+        - intervention_type_overlap
+        - study_design_match
+        - eligibility_compatible
+        - enrollment_band_match
+        - explanation_summary
+      properties:
+        same_condition:
+          $ref: '#/components/schemas/FactorScore'
+        same_phase:
+          $ref: '#/components/schemas/FactorScore'
+        geography_overlap:
+          $ref: '#/components/schemas/FactorScore'
+        intervention_type_overlap:
+          $ref: '#/components/schemas/FactorScore'
+        study_design_match:
+          $ref: '#/components/schemas/FactorScore'
+        eligibility_compatible:
+          $ref: '#/components/schemas/FactorScore'
+        enrollment_band_match:
+          $ref: '#/components/schemas/FactorScore'
+        explanation_summary:
+          type: string
+          example: 'shared condition mapping; same phase (PHASE3); overlapping U.S. states; matching study type, allocation, and primary purpose; compatible eligibility criteria'
+
+    FactorScore:
+      type: object
+      required:
+        - matched
+        - weight
+        - weighted_score
+      properties:
+        matched:
+          type: boolean
+          example: true
+        weight:
+          type: number
+          example: 0.25
+        weighted_score:
+          type: number
+          example: 0.25
+
+    GeoAccessResponse:
+      type: object
+      required:
+        - state
+        - condition_group
+        - snapshot_date
+        - active_sites_count
+        - recruiting_trials_count
+        - sponsor_hhi
+        - top_sponsor_share
+        - competition_intensity_tier
+        - access_gap_index
+        - travel_burden_summary
+        - regional_distribution
+      properties:
+        state:
+          type: string
+          example: 'CA'
+        condition_group:
+          type: string
+          example: 'Alzheimer Disease'
+        snapshot_date:
+          type: string
+          format: date
+          example: '2026-07-31'
+        active_sites_count:
+          type: integer
+          example: 48
+        recruiting_trials_count:
+          type: integer
+          example: 32
+        sponsor_hhi:
+          type: number
+          description: Herfindahl-Hirschman Index measuring sponsor concentration across active trials (0 to 10,000).
+          example: 1820.5
+        top_sponsor_share:
+          type: number
+          description: Fraction of all open study arms sponsored by the leading sponsor (0.0 to 1.0).
+          example: 0.285
+        competition_intensity_tier:
+          type: string
+          enum:
+            - LOW
+            - MODERATE
+            - HIGH
+            - SATURATED
+          example: 'HIGH'
+        access_gap_index:
+          type: number
+          description: Normalized trial accessibility deficit score (0.0 = high density, 1.0 = severe access gap).
+          example: 0.34
+        travel_burden_summary:
+          $ref: '#/components/schemas/TravelBurdenSummary'
+        regional_distribution:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegionalSiteCount'
+
+    TravelBurdenSummary:
+      type: object
+      required:
+        - average_distance_miles
+        - median_distance_miles
+        - isolated_population_percent
+      properties:
+        average_distance_miles:
+          type: number
+          example: 24.6
+        median_distance_miles:
+          type: number
+          example: 12.4
+        isolated_population_percent:
+          type: number
+          description: Percentage of state population residing > 60 miles from any active recruiting facility.
+          example: 14.8
+
+    RegionalSiteCount:
+      type: object
+      required:
+        - region_name
+        - site_count
+        - trial_count
+      properties:
+        region_name:
+          type: string
+          example: 'San Francisco Bay Area'
+        site_count:
+          type: integer
+          example: 18
+        trial_count:
+          type: integer
+          example: 15
+
+    MetaFreshnessResponse:
+      type: object
+      required:
+        - profiles
+        - system_status
+        - data_dictionary_version
+        - checked_at_utc
+      properties:
+        profiles:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProfileFreshness'
+        system_status:
+          type: string
+          enum:
+            - HEALTHY
+            - STALE
+            - DEGRADED
+          example: 'HEALTHY'
+        data_dictionary_version:
+          type: string
+          example: '2026-10-24'
+        checked_at_utc:
+          type: string
+          format: date-time
+          example: '2026-10-24T14:50:00Z'
+
+    ProfileFreshness:
+      type: object
+      required:
+        - indication_profile_id
+        - latest_snapshot_id
+        - latest_snapshot_date
+        - latest_snapshot_timestamp_utc
+        - latest_ingestion_run_id
+        - source_api
+        - source_api_version
+        - schema_baseline_version
+        - total_studies_tracked
+        - active_recruiting_studies
+        - last_reconciliation_status
+        - quality_summary
+      properties:
+        indication_profile_id:
+          type: string
+          example: 'adrd'
+        latest_snapshot_id:
+          type: string
+          example: '2026-07-31T140000_3f5a473e'
+        latest_snapshot_date:
+          type: string
+          format: date
+          example: '2026-07-31'
+        latest_snapshot_timestamp_utc:
+          type: string
+          format: date-time
+          example: '2026-07-31T14:00:00Z'
+        latest_ingestion_run_id:
+          type: string
+          example: '2026-07-31T140000_3f5a473e'
+        source_api:
+          type: string
+          example: 'ClinicalTrials.gov API v2'
+        source_api_version:
+          type: string
+          example: 'v2.0'
+        schema_baseline_version:
+          type: string
+          example: '2026-07-24'
+        total_studies_tracked:
+          type: integer
+          example: 1482
+        active_recruiting_studies:
+          type: integer
+          example: 388
+        last_reconciliation_status:
+          type: string
+          example: 'PASS'
+        quality_summary:
+          $ref: '#/components/schemas/QualitySummary'
+
+    QualitySummary:
+      type: object
+      required:
+        - ok_records_percent
+        - quarantined_records_count
+      properties:
+        ok_records_percent:
+          type: number
+          example: 99.8
+        quarantined_records_count:
+          type: integer
+          example: 3

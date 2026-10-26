@@ -18,7 +18,6 @@ profile:
   display_name: "Alzheimer's Disease and Related Dementias"
   ingest_only: false
   taxonomy: config/condition_taxonomy.yml    # path relative to project root
-  score_weights: config/score_weights.yml   # path relative to project root
 
 api:
   base_url: https://clinicaltrials.gov/api/v2

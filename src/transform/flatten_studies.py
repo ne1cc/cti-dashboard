@@ -7,6 +7,7 @@ hasResults. Location contact/investigator fields are deliberately not extracted.
 """
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -26,8 +27,9 @@ def dig(obj: Any, *keys: str) -> Any:
     return current
 
 
-def _struct_date(status_module: dict, key: str) -> str | None:
-    return dig(status_module, key, "date")
+def _struct_date(status_module: dict[str, Any], key: str) -> str | None:
+    val = dig(status_module, key, "date")
+    return str(val) if isinstance(val, str) else None
 
 
 def normalize_phases(phases: list[str] | None) -> tuple[str | None, str]:
@@ -132,6 +134,9 @@ def flatten_study(
         "minimum_age": eligibility.get("minimumAge"),
         "maximum_age": eligibility.get("maximumAge"),
         "sex": eligibility.get("sex"),
+        "gender_based": eligibility.get("genderBased"),
+        "gender_description": eligibility.get("genderDescription"),
+        "std_age_groups": eligibility.get("stdAges"),
         "eligibility_criteria_text": eligibility.get("eligibilityCriteria"),
         "has_results_flag": bool(study.get("hasResults", False)),
         "source_json_hash": source_json_hash,
@@ -244,14 +249,14 @@ def flatten_study(
     }
 
 
-def iter_bronze_studies(run_dir) -> Any:
+def iter_bronze_studies(run_dir: Path) -> Iterator[dict[str, Any]]:
     """Yield study dicts from every page file of a bronze run, in page order."""
     for page_path in sorted(run_dir.glob("page=*.json")):
         payload = json.loads(page_path.read_text(encoding="utf-8"))
         yield from payload.get("studies", [])
 
 
-def iter_bronze_study_records(run_dir: Path) -> Any:
+def iter_bronze_study_records(run_dir: Path) -> Iterator[tuple[dict[str, Any], dict[str, Any]]]:
     """Yield (study, provenance) in source order; ordinals are zero-based.
 
     Raw page references resolve relative to the configured bronze response root.
