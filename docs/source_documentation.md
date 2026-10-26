@@ -62,3 +62,23 @@ Central/overall contacts and investigator names, emails, and phone
 numbers. They are never extracted from bronze, and the staging layer ships
 an intentionally empty `stg_trial_contacts` model so any accidental
 downstream reference fails visibly.
+
+## U.S. Census Bureau Resident Population Estimates (Vintage 2024)
+
+For population-normalized state listing metrics (`recruiting_trials_per_100k`), the project incorporates a static denominator seed extracted from the U.S. Census Bureau Population Estimates Program:
+
+- **Source Dataset:** U.S. Census Bureau Vintage 2024 State Population Totals (`NST-EST2024-ALLDATA.csv`).
+- **Source URL:** `https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/state/totals/NST-EST2024-ALLDATA.csv`
+- **Retrieval Date:** 2026-10-23
+- **SHA-256 Checksum:** `b8b50bd345d8a5f33d5c8a28c95aeaa0a50971356f000d9b48276a65fd9022a7`
+- **Scope & Filtering:**
+  - Filtered strictly to state-level rows where summary level `SUMLEV == '040'`, covering 50 U.S. states, the District of Columbia, and Puerto Rico (52 rows).
+  - National summary (`SUMLEV == '010'`) and regional summary rows (`020`, `030`) are excluded.
+- **Fields Extracted:**
+  - `STATE` (2-digit zero-padded string `fips_code`, e.g. `'01'`, `'06'`, `'72'`)
+  - `NAME` (`state_name`, e.g. `'Alabama'`, `'California'`, `'Puerto Rico'`)
+  - `POPESTIMATE2024` (resident population estimate as of July 1, 2024, `population`)
+  - Postal abbreviation mapped via `config/geography_rules.yml` (`state_code`, e.g. `'AL'`, `'CA'`, `'PR'`).
+  - Fixed metadata: `estimate_date: '2024-07-01'`, `vintage: 'Vintage 2024'`, and `source_url`.
+- **Handling of Unmatched Jurisdictions:**
+  - Territories without Vintage 2024 estimates (e.g. Guam, U.S. Virgin Islands, American Samoa, Northern Mariana Islands) remain in raw listing counts and data tables, with null population values and null per-100k rates. Different Census vintages are not mixed.

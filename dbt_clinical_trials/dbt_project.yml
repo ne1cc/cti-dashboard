@@ -46,3 +46,8 @@ seeds:
     phase_mapping:
       +column_types:
         phase_order: integer
+    state_population:
+      +column_types:
+        population: bigint
+        fips_code: varchar
+        state_code: varchar
