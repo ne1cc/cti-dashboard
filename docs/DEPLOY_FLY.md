@@ -37,7 +37,7 @@ shape.
 ## Automated deployment (GitHub Actions)
 
 Production deployments are automated and gated by CI in `.github/workflows/ci.yml`.
-The uncoordinated standalone `.github/workflows/fly-deploy.yml` has been removed
+The uncoordinated standalone Fly deployment workflow has been removed
 so broken code can never deploy to production if tests fail.
 
 ### Unified Pipeline & CI Gating
@@ -229,19 +229,15 @@ Remediation in PR `fix/production-volume-and-profile-scope`:
   `shared-cpu-1x`, an empty named volume mounted at `/app/data`):
   **130 seconds** for `make pipeline` over both refreshable profiles — a real
   31-page ADRD run (3,037 records) and a real 61-page NSCLC run (6,060
-  records), `prune-data` a no-op at 0 runs removed, 32 dbt models and 137 dbt
+  records), `prune-data` a no-op at 0 runs removed, dbt models and dbt
   tests green, 12 reconciliation checks passing across 2 profiles. Budget
   first boot at about two minutes, not one.
 - **Every 7 days**, the entrypoint pauses the dashboard, reruns the pipeline,
   and resumes serving. Budget the outage as one pipeline run plus Streamlit's
   startup. The one-profile figure was 50 seconds, measured on 2026-09-05 in
   this image itself (Docker, linux/arm64, shared CPU) over a reused ingestion
-  run — 3,037 trials, 32 dbt models, 115 dbt tests, counts that drift with the
-  catalogue and with `dbt_clinical_trials/models/`; the same two counters read
-  **32 models and 137 tests** on 2026-09-07 (`uv run dbt parse --project-dir
-  dbt_clinical_trials --profiles-dir dbt_clinical_trials` plus a counter over
-  `target/manifest.json`, corroborated by the container's own `dbt test`,
-  which reported `PASS=137`). Measured for two profiles on 2026-09-07 in the
+  run — 3,037 trials, with all dbt models and tests passing green.
+  Measured for two profiles on 2026-09-07 in the
   same image: **130 s** from an empty volume, **120 s and 118 s** for two
   forced pulls onto a volume that already held a run (each = 47 s/45 s of
   `orchestrate --full-refresh` + 73 s of `prune-data dbt-run dbt-test
@@ -261,9 +257,11 @@ Remediation in PR `fix/production-volume-and-profile-scope`:
   Fly's proxy stops routing to the machine, but nothing restarts: the machine's
   `restart` policy is `on-failure`, which keys off the entrypoint process's
   exit code, and the supervisor stays PID 1 through the whole refresh.
-  Output is appended to `/app/data/logs/pipeline.log` on the volume, and every
+  Output goes to stdout/stderr and is also appended best-effort to
+  `/app/data/logs/pipeline.log` on the volume. A failed file append cannot
+  suppress stdout or change the pipeline exit status. Every
   cadence tick logs its inputs (`refresh check: now=… last=… elapsed=…s
-  interval=…s`), so a skipped refresh is visible in the log rather than merely
+  interval=…s`), so a skipped refresh is visible in stdout rather than merely
   absent. Both intervals are tunable via `CTI_REFRESH_INTERVAL_SECONDS` and
   `CTI_REFRESH_CHECK_SECONDS`.
 - **This machine cannot auto-suspend to zero.** `auto_stop_machines` is set
@@ -345,6 +343,112 @@ Remediation in PR `fix/production-volume-and-profile-scope`:
   settled here and nothing above depends on it: the arithmetic counts only
   bytes visible inside the container at `/app/data`. If they do count, the
   extension stops being a recommendation.
+
+## Local freshness metadata and disk preflight (#88, partial)
+
+This local implementation does not activate production monitoring. External
+uptime/freshness alerts, the public metadata/API contract in #58, secret setup,
+and real staging/production acceptance remain open. No HTTP route or server is
+added here. A healthy Streamlit process alone does not prove fresh data.
+
+Defaults are `CTI_FRESHNESS_MAX_AGE_DAYS=10` and
+`CTI_REFRESH_MIN_FREE_BYTES=500000000` (positive integer bytes). Capture age is
+stale only when **greater than** the configured number of days; exactly ten
+days is acceptable at the default. Nonpositive or malformed thresholds fail
+the check. The floor is an interim conservative operating choice based on
+previously documented transient growth of roughly 367 MB plus margin, not a
+new capacity measurement. Verify actual free bytes and approve the floor
+before activation: it can block an already near-full deployment. This does
+not authorize adding profiles or increasing the volume.
+
+The supervisor checks available bytes on the configured warehouse filesystem
+before initialization writes and before pausing a serving dashboard. A disk
+rejection reports `free_bytes` and `min_free_bytes` on stdout, skips the
+pipeline, and leaves the existing warehouse and dashboard serving. If no
+warehouse exists, it reports that bootstrap is impossible under the floor;
+there is no prior data to serve. Scheduled retries retain the existing weekly
+epoch cadence and hourly due checks. The legacy `.last_pipeline_run` epoch
+advances only after the JSON success marker is published.
+
+The marker is `.freshness.json` under the configured warehouse's grandparent
+(normally the data directory). It uses a temporary file on that filesystem
+and atomic replace. Schema version 1 records:
+
+- `attempt_at_utc`, `attempt_status` (`running`, `success`, `failed`) and an
+  optional verification error;
+- `last_success.pipeline_completed_at_utc`, separately from each profile's
+  original ingestion-start `captured_at_utc` and accepted `run_id`;
+- each profile's warehouse row counts for `dim_trial`, `fct_trial_snapshot`
+  (all retained snapshots), and `mart_trial_similarity`, plus reconciliation
+  totals (`checks_total`, `checks_failed`);
+- `source_api_version: "v2"` and `source_release_at_utc: null`. The source's
+  dataset release timestamp is unknown; capture time is not a release version.
+
+Only the registry's configured `refreshable()` set is required. A success
+requires a complete successful manifest and an accepted current warehouse run
+for every required profile, along with passing existing reconciliation checks.
+The supervisor invokes the writer only after the full pipeline, including dbt
+tests and the quality-report gate, succeeds. A failed attempt retains the
+previous `last_success`; an interrupted attempt remains `running` and fails
+freshness verification. Reusing an old capture may complete the pipeline
+successfully but cannot reset capture age. Missing, malformed, future-dated,
+incomplete, or unsuccessful metadata never means fresh.
+
+Every dashboard page checks the selected profile and shows its capture time
+and last verified pipeline completion. It warns on stale/unknown metadata or
+an unsuccessful latest attempt. Decisions use the current UTC clock on each
+page render. A stale profile fails the aggregate CLI check even when another
+profile is fresh.
+
+Run these commands **only against an explicit disposable local root** for
+verification. The fixture runner uses saved synthetic records and performs
+a local dbt build; it never refreshes live registry data. Use a new empty
+destination (the fixture runner refuses nonempty roots).
+
+```bash
+export CTI_PROJECT_ROOT="$(mktemp -d)/freshness-fixture"
+export CTI_REFRESHABLE_PROFILES=adrd,oncology_nsclc
+export CTI_FRESHNESS_MAX_AGE_DAYS=10
+export CTI_REFRESH_MIN_FREE_BYTES=500000000
+uv run python -m tests.fixture_warehouse --root "$CTI_PROJECT_ROOT"
+uv run python -m src.quality.freshness --preflight
+# Only after a completed pipeline/dbt fixture build and all its tests:
+uv run python -m src.quality.freshness --record-success
+uv run python -m src.quality.freshness --check
+```
+
+`--check` prints JSON and exits 1 on unacceptable metadata or low disk, 0
+otherwise. Fixed historical fixture captures are expected to be stale; a
+recent pipeline completion must not hide that. Without a flag, the CLI prints
+metadata/status for inspection without enforcing freshness as an exit code.
+`--preflight` is read-only. The supervisor uses `--record-attempt` before the
+pipeline and `--record-failure` on failure; these preserve the last success.
+If success verification records an error, the subsequent `--record-failure`
+preserves it. Status and `--check` expose that reason in `metadata.error` and
+`errors`, including when no prior success exists; the dashboard warning uses
+the same `errors`. A new `--record-attempt` clears the previous attempt's error.
+Use `--record-failure --error "REASON"` to replace an earlier diagnostic for a
+different failure. The supervisor records `Disk preflight failed` for a rejected
+scheduled refresh; actual free/floor bytes remain on stdout. `--error` requires
+`--record-failure`; omitting it keeps an already-recorded verifier reason.
+Those writer flags change only the local marker and never run the pipeline.
+Do not use `--record-success` to label an unverified warehouse successful.
+
+If a check fails, inspect stdout for the attempt, required profile, and actual
+free/floor bytes; inspect the accepted manifests and quality reconciliation
+before retrying. Use only approved retention cleanup or capacity changes.
+Do not delete the serving warehouse, manually advance the epoch, or rewrite
+capture times to silence a warning. A failed atomic marker write preserves
+the old marker and cannot advance the epoch; stdout is needed when the disk
+cannot persist failure metadata.
+
+Low-space rejection is **not atomic rollback**. Unexpected mid-refresh
+ENOSPC/OOM or a partial multi-model dbt build can still leave partial state.
+Full atomic publication needs a separate approved design. An outside monitor
+still needs a parent-approved metadata/API interpretation, workflow/issue
+permissions, app-scoped credentials, activation approval, a verified disk
+floor, and a real controlled alert within a check interval. Fixture/stub
+evidence here does not satisfy that outside acceptance; #88 stays open.
 
 ## What the first week in production caught
 

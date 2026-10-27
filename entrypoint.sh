@@ -1,28 +1,39 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+APP_DIR="${CTI_PROJECT_ROOT:-/app}"
+PYTHON_BIN="$APP_DIR/.venv/bin/python"
+
 if [ "${1:-}" = "api" ]; then
-    exec /app/.venv/bin/uvicorn src.api.app:create_app --factory --host "${CTI_API_HOST:-0.0.0.0}" --port "${CTI_API_PORT:-8000}" "${@:2}"
+    exec "$APP_DIR/.venv/bin/uvicorn" src.api.app:create_app --factory --host "${CTI_API_HOST:-0.0.0.0}" --port "${CTI_API_PORT:-8000}" "${@:2}"
 fi
 
-DATA_DIR="/app/data"
-WAREHOUSE="$DATA_DIR/warehouse/clinical_trials.duckdb"
+WAREHOUSE=$("$PYTHON_BIN" -c 'from src.profiles import load_shared_paths; print(load_shared_paths().duckdb)')
+DATA_DIR="$(dirname "$(dirname "$WAREHOUSE")")"
 MARKER="$DATA_DIR/.last_pipeline_run"
 LOG_DIR="$DATA_DIR/logs"
 REFRESH_INTERVAL_SECONDS="${CTI_REFRESH_INTERVAL_SECONDS:-604800}"   # 7 days
 CHECK_INTERVAL_SECONDS="${CTI_REFRESH_CHECK_SECONDS:-3600}"          # 1 hour
 TICK_SECONDS=5
-STREAMLIT_BIN="/app/.venv/bin/streamlit"
+STREAMLIT_BIN="$APP_DIR/.venv/bin/streamlit"
 
 DASHBOARD_PID=""
 SHUTDOWN=0
 SINCE_CHECK=0
 
-# The append must not be fatal: on 2026-10-07 a full data volume made this very
-# echo fail with ENOSPC, `set -euo pipefail` killed the machine within seconds
-# of boot, and the crash loop could not log its own cause. Losing a log line on
-# a full disk is acceptable; losing the boot is not.
-log() { echo "[entrypoint] $(date -u +%FT%TZ) $*" >> "$LOG_DIR/pipeline.log" 2>/dev/null || true; }
+# Stdout is authoritative; a full or broken optional volume log must not hide it.
+log_output() {
+    local line
+    while IFS= read -r line || [ -n "$line" ]; do
+        printf '%s\n' "$line"
+        { printf '%s\n' "$line" >> "$LOG_DIR/pipeline.log"; } 2>/dev/null || true
+    done
+}
+log() { log_output <<< "[entrypoint] $(date -u +%FT%TZ) $*"; }
+run_logged() {
+    "$@" 2>&1 | log_output
+    return "${PIPESTATUS[0]}"
+}
 
 # DuckDB does not create parent directories for a new database file (verified:
 # duckdb.connect() raises IOException on a missing directory), and a Fly Volume
@@ -30,11 +41,17 @@ log() { echo "[entrypoint] $(date -u +%FT%TZ) $*" >> "$LOG_DIR/pipeline.log" 2>/
 # baked into this path. Recreate the full tree on every boot from the profile
 # registry — a hardcoded list here is how a newly added profile fails on its
 # first write in production.
-mkdir -p "$LOG_DIR"
-/app/.venv/bin/python -m src.cli init-data-dirs >> "$LOG_DIR/pipeline.log" 2>&1 || {
-    log "init-data-dirs FAILED; aborting boot rather than half-creating the tree"
-    exit 1
-}
+BOOT_PREFLIGHT_OK=0
+if "$PYTHON_BIN" -m src.quality.freshness --preflight; then
+    BOOT_PREFLIGHT_OK=1
+    mkdir -p "$LOG_DIR" || true
+    if ! run_logged "$PYTHON_BIN" -m src.cli init-data-dirs; then
+        log "init-data-dirs FAILED; aborting boot rather than half-creating the tree"
+        exit 1
+    fi
+else
+    log "startup disk preflight FAILED; skipping initialization writes"
+fi
 
 start_dashboard() {
     "$STREAMLIT_BIN" run dashboard/app.py \
@@ -57,11 +74,16 @@ trap request_shutdown TERM INT
 
 run_pipeline() {
     log "starting make pipeline"
-    if make pipeline >> "$LOG_DIR/pipeline.log" 2>&1; then
-        date +%s > "$MARKER"
-        log "pipeline succeeded"
-        return 0
+    if run_logged "$PYTHON_BIN" -m src.quality.freshness --record-attempt \
+        && run_logged make pipeline \
+        && run_logged "$PYTHON_BIN" -m src.quality.freshness --record-success; then
+        if date +%s > "$MARKER"; then
+            log "pipeline succeeded"
+            return 0
+        fi
     fi
+    run_logged "$PYTHON_BIN" -m src.quality.freshness --record-failure \
+        || log "failed to persist unsuccessful attempt; inspect stdout"
     log "pipeline FAILED (marker not updated, will retry)"
     return 1
 }
@@ -80,7 +102,7 @@ run_similarity_rebuild() {
 
 similarity_mart_is_current() {
     [ -f "$WAREHOUSE" ] || return 1
-    /app/.venv/bin/python - "$WAREHOUSE" <<'PY'
+    "$PYTHON_BIN" - "$WAREHOUSE" <<'PY'
 import duckdb
 import sys
 
@@ -95,7 +117,10 @@ try:
     }
     connection.close()
 except Exception:
-    raise SystemExit(1)
+    # Unreadable or corrupt file: a scoped rebuild cannot fix it, and the next
+    # full pipeline refresh recreates the warehouse. Treat as current so the
+    # supervisor keeps serving instead of burning a doomed dbt build.
+    raise SystemExit(0)
 
 required = {"indication_profile_id", "nct_id_a", "nct_id_b", "similarity_rank"}
 raise SystemExit(0 if required <= columns else 1)
@@ -107,9 +132,17 @@ refresh_if_due() {
     now=$(date +%s)
     last=0
     [ -f "$MARKER" ] && last=$(cat "$MARKER")
+    case "$last" in *[!0-9]*|"") last=0 ;; esac
     elapsed=$(( now - last ))
     log "refresh check: now=$now last=$last elapsed=${elapsed}s interval=${REFRESH_INTERVAL_SECONDS}s"
     if [ "$elapsed" -lt "$REFRESH_INTERVAL_SECONDS" ]; then
+        return 0
+    fi
+    if ! run_logged "$PYTHON_BIN" -m src.quality.freshness --preflight; then
+        log "refresh skipped: disk preflight FAILED; keeping the existing dashboard serving"
+        run_logged "$PYTHON_BIN" -m src.quality.freshness --record-failure \
+            --error "Disk preflight failed" \
+            || log "failed to persist disk rejection; inspect stdout"
         return 0
     fi
     # DuckDB allows one read-write connection or read-only ones, never both, and
@@ -126,8 +159,12 @@ refresh_if_due() {
 # First-boot bootstrap: block startup until the warehouse exists at least once,
 # so the dashboard never shows "warehouse not found" on a fresh volume.
 if [ ! -f "$WAREHOUSE" ]; then
-    log "no warehouse found, running first-boot pipeline"
-    run_pipeline || log "first-boot pipeline failed; dashboard will show 'warehouse not found' until the next successful refresh"
+    if [ "$BOOT_PREFLIGHT_OK" -eq 1 ]; then
+        log "no warehouse found, running first-boot pipeline"
+        run_pipeline || log "first-boot pipeline failed; dashboard will show 'warehouse not found' until the next successful refresh"
+    else
+        log "no warehouse found; cannot bootstrap under the disk floor; no previous warehouse exists"
+    fi
 elif ! similarity_mart_is_current; then
     log "trial similarity mart schema is outdated; rebuilding its dbt dependency graph before serving"
     run_similarity_rebuild || log "schema rebuild failed; dashboard will show a rebuild message for Trial Similarity"
