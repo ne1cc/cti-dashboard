@@ -2,6 +2,8 @@
 
 Streamlit dashboard and data pipeline over public ClinicalTrials.gov API v2 records (bronze → silver → gold, dbt, DuckDB). Product context is in `README.md`.
 
+Workflow rules for agents: read `.github/AGENT-WORKFLOW.md` before your first commit.
+
 ## Commands
 Same checks CI runs (`.github/workflows/ci.yml`); copy them into an issue's "Verify with".
 - Install: `uv sync --all-groups --frozen`

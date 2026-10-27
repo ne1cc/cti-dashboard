@@ -1,5 +1,7 @@
 Closes #<issue>
 
+<!-- Do not include generated-by notices, AI/vendor credit, or AI co-author lines in this PR body. -->
+
 <!--
 One PR per issue. Fill in EVERY section; CI fails on empty sections or a missing "Closes #N".
 Write for a developer reading this months from now who never saw the issue thread.
