@@ -19,7 +19,7 @@ def _relative_luminance(color: str) -> float:
 
 def test_dashboard_themes() -> None:
     theme = tomllib.loads(CONFIG.read_text(encoding="utf-8"))["theme"]
-    assert theme["base"] == "dark"
+    assert theme["base"] == "light"
 
     dark = theme["dark"]
     assert {

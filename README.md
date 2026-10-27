@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/ne1cc/cti-dashboard/actions/workflows/ci.yml/badge.svg)](https://github.com/ne1cc/cti-dashboard/actions/workflows/ci.yml)
 
-**Live demo:** [cti-dashboard.fly.dev](https://cti-dashboard.fly.dev/)
+**Live demo:** [cti-trials.duckdns.org](https://cti-trials.duckdns.org)
 
 **An open, multi-stakeholder clinical trial access and intelligence platform providing transparent discovery and competition analytics over public ClinicalTrials.gov registry data.**
 
