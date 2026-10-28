@@ -77,8 +77,11 @@ models:
           Registry designInfo.maskingInfo.masking level (NONE, SINGLE, DOUBLE,
           TRIPLE, QUADRUPLE); null when unstated.
       - name: has_placebo_arm
-        description: True when any registry arm group declares type PLACEBO_COMPARATOR.
-        tests: [not_null]
+        description: >
+          True when any registry arm group declares type PLACEBO_COMPARATOR,
+          false when the snapshot lists arms with no placebo arm, and null for
+          silver written before this field existed (unknown — absent historical
+          data is never read as "no placebo").
       - name: why_stopped
         description: Registry statusModule.whyStopped, stored verbatim; populated for terminated/withdrawn/suspended trials.
       - name: brief_summary

@@ -968,8 +968,14 @@ components:
           items:
             $ref: '#/components/schemas/StudyArm'
         has_placebo_arm:
-          type: boolean
-          description: True when any registry arm group declares type PLACEBO_COMPARATOR.
+          type:
+            - boolean
+            - 'null'
+          description: |
+            True when any registry arm group declares type PLACEBO_COMPARATOR;
+            false when the snapshot lists arms with no placebo arm; null when
+            the stored snapshot predates the field (unknown, not asserted false
+            from absent historical data).
           example: true
         why_stopped:
           type:

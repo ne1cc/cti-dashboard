@@ -667,7 +667,7 @@ class DuckDBWarehouseManager:
             conditions=conditions,
             interventions=interventions,
             arms=arms,
-            has_placebo_arm=bool(r.get("has_placebo_arm")),
+            has_placebo_arm=r.get("has_placebo_arm"),
             why_stopped=r.get("why_stopped"),
             brief_summary=r.get("brief_summary"),
             primary_outcome_time_frame=r.get("primary_outcome_time_frame"),

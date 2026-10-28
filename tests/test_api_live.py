@@ -405,6 +405,20 @@ def test_normalize_study_detail_absent_arm_data_defaults(live_detail_fixture) ->
     assert detail.primary_outcome_time_frame is None
 
 
+def test_normalize_study_detail_tolerates_explicit_null_modules(live_detail_fixture) -> None:
+    """The registry can send `"key": null` as well as omitting the key; both
+    degrade to the same defaults instead of TypeError/AttributeError."""
+    study = deepcopy(live_detail_fixture)
+    study["protocolSection"]["armsInterventionsModule"]["armGroups"] = None
+    study["protocolSection"]["descriptionModule"] = None
+    study["protocolSection"]["outcomesModule"] = None
+    detail = normalize_study_detail(study)
+    assert detail.arms == []
+    assert detail.has_placebo_arm is False
+    assert detail.brief_summary is None
+    assert detail.primary_outcome_time_frame is None
+
+
 # --- Issue #62 Structured Eligibility & Unstated Ages ---
 
 

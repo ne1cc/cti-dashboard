@@ -338,9 +338,13 @@ class TrialDetail(BaseModel):
     arms: list[StudyArm] = Field(
         default_factory=list, description="Registry arm groups (verbatim registry text)"
     )
-    has_placebo_arm: bool = Field(
-        default=False,
-        description="True when any registry arm group declares type PLACEBO_COMPARATOR",
+    has_placebo_arm: bool | None = Field(
+        default=None,
+        description=(
+            "True when any registry arm group declares type PLACEBO_COMPARATOR; false when "
+            "the snapshot lists arms with no placebo arm; null when the stored snapshot "
+            "predates the field (unknown, never asserted false from absent data)"
+        ),
     )
     why_stopped: str | None = Field(
         default=None,

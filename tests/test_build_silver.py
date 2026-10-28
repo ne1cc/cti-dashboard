@@ -1,4 +1,5 @@
 import json
+import shutil
 from pathlib import Path
 
 import duckdb
@@ -223,6 +224,48 @@ def test_profile_run_treats_dedup_shortfall_as_expected(tmp_path: Path, monkeypa
     assert stats["duplicate_nct_ids_dropped"] == 1
     assert stats["records_without_nct_id"] == 0
     assert stats["row_counts"]["silver_trials"] == 2
+
+
+def test_run_transform_skips_a_retained_run_whose_bronze_was_pruned(tmp_path: Path):
+    """A pipeline upgrade must not fail on retained pre-feature silver.
+
+    Adding `silver_trial_arms` to ENTITY_NAMES marks every pre-upgrade run as
+    not-yet-transformed, but a run whose bronze was pruned (`bronze_runs_to_keep: 1`)
+    can never be rebuilt: `run_transform` must skip it and keep its silver
+    exactly as written instead of raising FileNotFoundError.
+    """
+    cfg = make_config(tmp_path)
+    run_id = "r_upgraded_volume"
+    run_dir = cfg.paths.bronze_api_responses / f"run_id={run_id}"
+    write_bronze_page(run_dir, 1, [make_study("NCT00000001")])
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+    write_manifest(cfg.paths.bronze_manifests, make_manifest(run_id, record_count=1))
+    build_silver_for_run(make_manifest(run_id, record_count=1), cfg)
+
+    # Rewind to the pre-feature shape: drop the arms entity, the new trial
+    # columns, and prune the bronze like `bronze_runs_to_keep: 1` would.
+    trials_path = cfg.paths.silver / "silver_trials" / f"run_id={run_id}.parquet"
+    legacy_columns = (
+        "intervention_model",
+        "masking",
+        "has_placebo_arm",
+        "why_stopped",
+        "brief_summary",
+        "primary_outcome_time_frame",
+    )
+    table = pq.read_table(trials_path)
+    pq.write_table(
+        table.select([c for c in table.column_names if c not in legacy_columns]), trials_path
+    )
+    (cfg.paths.silver / "silver_trial_arms" / f"run_id={run_id}.parquet").unlink()
+    shutil.rmtree(run_dir)
+    before = pd.read_parquet(trials_path)
+
+    assert build_silver_entities.run_transform(config=cfg) == []
+
+    after = pd.read_parquet(trials_path)
+    assert list(after.columns) == list(before.columns)
+    assert after["nct_id"].tolist() == before["nct_id"].tolist()
 
 
 def test_profile_run_records_an_absent_manifest_instead_of_nothing_to_do(tmp_path: Path):

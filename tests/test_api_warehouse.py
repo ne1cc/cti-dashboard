@@ -1096,6 +1096,19 @@ def test_warehouse_trial_detail_absent_design_data(client_warehouse: TestClient)
     assert detail.primary_outcome_time_frame is None
 
 
+def test_warehouse_trial_detail_null_placebo_stays_unknown(
+    warehouse_db: Path, client_warehouse: TestClient
+) -> None:
+    """A pre-feature row (NULL flag) must not surface as "no placebo"."""
+    con = duckdb.connect(str(warehouse_db))
+    con.execute("update stg_trials set has_placebo_arm = null where nct_id = 'NCT00000002'")
+    con.close()
+    resp = client_warehouse.get("/v1/trials/NCT00000002")
+    assert resp.status_code == 200
+    detail = TrialDetail(**resp.json())
+    assert detail.has_placebo_arm is None
+
+
 def test_warehouse_trial_detail_not_found(client_warehouse: TestClient) -> None:
     resp = client_warehouse.get("/v1/trials/NCT99999999")
     assert resp.status_code == 404

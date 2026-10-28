@@ -112,8 +112,10 @@ models:
         description: Registry masking level (NONE, SINGLE, DOUBLE, TRIPLE, QUADRUPLE); null when unstated.
       - name: has_placebo_arm
         data_type: BOOLEAN
-        description: True when any registry arm group declares type PLACEBO_COMPARATOR.
-        tests: [not_null]
+        description: >
+          True when any registry arm group declares type PLACEBO_COMPARATOR;
+          null when the trial's current snapshot predates the field (unknown,
+          not asserted false).
       - name: why_stopped
         data_type: VARCHAR
         description: Registry statusModule.whyStopped, verbatim; populated for terminated/withdrawn/suspended trials.

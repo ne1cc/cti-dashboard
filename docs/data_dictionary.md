@@ -59,7 +59,7 @@ per repository (see data quality framework).
 | allocation / primary_purpose | text | registry `designInfo.allocation` / `designInfo.primaryPurpose` |
 | intervention_model | text | registry `designInfo.interventionModel` (`PARALLEL`, `SINGLE_GROUP`, ...) |
 | masking | text | registry `designInfo.maskingInfo.masking` level (`NONE`, `SINGLE`, `DOUBLE`, `TRIPLE`, `QUADRUPLE`); null when unstated |
-| has_placebo_arm | bool | true when any registry arm group declares type `PLACEBO_COMPARATOR` |
+| has_placebo_arm | bool | true when any registry arm group declares type `PLACEBO_COMPARATOR`; null for silver written before the field existed (unknown, never read as false) |
 | why_stopped | text | registry `statusModule.whyStopped`, stored verbatim; populated for terminated/withdrawn/suspended trials |
 | brief_summary | text | registry `descriptionModule.briefSummary`, stored verbatim — registry-provided text, never generated |
 | primary_outcome_time_frame | text | `timeFrame` of the first registry primary outcome, verbatim (e.g. "78 weeks") |
@@ -161,7 +161,7 @@ Python (`src/transform/eligibility.py`) and dbt (`dbt_clinical_trials/macros/par
 ### Gold design/participant fields in `dim_trial`
 - `current_intervention_model` (VARCHAR): registry `designInfo.interventionModel` (`PARALLEL`, `SINGLE_GROUP`, ...); null when unstated.
 - `current_masking` (VARCHAR): registry masking level (`NONE`, `SINGLE`, `DOUBLE`, `TRIPLE`, `QUADRUPLE`); null when unstated.
-- `has_placebo_arm` (BOOLEAN): true when any registry arm group declares type `PLACEBO_COMPARATOR`; never null.
+- `has_placebo_arm` (BOOLEAN): true when any registry arm group declares type `PLACEBO_COMPARATOR`; null when the trial's current snapshot predates the field (unknown, not asserted false).
 - `why_stopped` (VARCHAR): registry `statusModule.whyStopped`, passed through verbatim; populated for terminated/withdrawn/suspended trials.
 - `brief_summary` (VARCHAR): registry `descriptionModule.briefSummary`, stored verbatim — registry-provided text, never generated.
 - `primary_outcome_time_frame` (VARCHAR): `timeFrame` of the first registry primary outcome, verbatim (e.g. "78 weeks"); null when absent.

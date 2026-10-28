@@ -338,7 +338,7 @@ def normalize_study_detail(
 
     # Arm groups (registry text passed through verbatim)
     arms: list[StudyArm] = []
-    for arm in interventions_mod.get("armGroups", []):
+    for arm in interventions_mod.get("armGroups") or []:
         if isinstance(arm, dict):
             names = arm.get("interventionNames")
             arms.append(
@@ -351,9 +351,9 @@ def normalize_study_detail(
             )
     has_placebo = any(arm.arm_type == "PLACEBO_COMPARATOR" for arm in arms)
 
-    brief_summary = protocol.get("descriptionModule", {}).get("briefSummary")
+    brief_summary = (protocol.get("descriptionModule") or {}).get("briefSummary")
     why_stopped = status.get("whyStopped")
-    primary_outcomes = protocol.get("outcomesModule", {}).get("primaryOutcomes") or []
+    primary_outcomes = (protocol.get("outcomesModule") or {}).get("primaryOutcomes") or []
     primary_outcome_time_frame = (
         primary_outcomes[0].get("timeFrame")
         if primary_outcomes and isinstance(primary_outcomes[0], dict)

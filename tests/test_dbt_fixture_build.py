@@ -1559,3 +1559,52 @@ def test_participant_design_fields_reach_gold_and_staging(
         """,
     )[0]
     assert no_arms_flag is False
+
+
+def test_legacy_silver_without_bronze_builds_and_keeps_placebo_unknown(
+    legacy_silver_fixture_root: Path,
+) -> None:
+    """The round-1 blocking regression: upgrading a real volume.
+
+    Production retains silver for every run while pruning all but the latest
+    bronze, so ADRD run fixture01 survives as pre-feature silver (no arms
+    entity, no new trial columns) with no source pages to rebuild from. The
+    transform must skip it (asserted when `legacy_silver_fixture_root` is
+    built) and an isolated `dbt build` must still succeed, with the legacy
+    rows keeping unknown as NULL instead of being coerced to "no placebo".
+    The current NSCLC run keeps real values, so the assertions discriminate.
+    """
+    # The legacy run contributes no arm rows; only the current run does.
+    assert _rows(
+        legacy_silver_fixture_root,
+        "select distinct ingestion_run_id from main_staging.stg_trial_arms",
+    ) == [(NSCLC_FIXTURE_RUN_ID,)]
+
+    # Legacy trial rows stay nullable through staging: 10 rows, none of them
+    # carrying a placebo flag; the current run's rows all carry one.
+    staging = _rows(
+        legacy_silver_fixture_root,
+        """
+        select indication_profile_id, count(*), count(has_placebo_arm)
+        from main_staging.stg_trials
+        group by 1 order by 1
+        """,
+    )
+    assert staging == [("adrd", 10, 0), ("oncology_nsclc", 10, 10)]
+
+    # ...and gold: unknown stays unknown on the legacy profile, and the fresh
+    # profile keeps its concrete false (one EXPERIMENTAL arm, no placebo).
+    assert _rows(
+        legacy_silver_fixture_root,
+        """
+        select distinct has_placebo_arm from main_marts.dim_trial
+        where indication_profile_id = 'adrd'
+        """,
+    ) == [(None,)]
+    assert _rows(
+        legacy_silver_fixture_root,
+        """
+        select distinct has_placebo_arm from main_marts.dim_trial
+        where indication_profile_id = 'oncology_nsclc'
+        """,
+    ) == [(False,)]
