@@ -31,8 +31,11 @@ location_stats as (
         count(*) as location_row_count,
         count(*) filter (usable_geography_flag) as usable_location_count,
         -- Issue #63 coordinate coverage: exact = registry geoPoint present;
-        -- approximate = missing geoPoint but resolvable to an offline
-        -- Gazetteer ZIP (ZCTA) or city+state centroid fallback.
+        -- fallback-eligible = missing geoPoint and carrying the fields the
+        -- offline Gazetteer fallback needs (a ZIP, or a normalized city+state).
+        -- Eligibility only: whether a fallback actually resolves is decided at
+        -- query time — the Gazetteer reference files are not part of the dbt
+        -- build — so this share is an upper bound on approximate coordinates.
         count(*) filter (latitude is not null and longitude is not null)
             as coordinates_exact_count,
         count(*) filter (
@@ -45,7 +48,7 @@ location_stats as (
                     and state_normalized != 'UNKNOWN'
                 )
             )
-        ) as coordinates_fallback_count
+        ) as coordinates_fallback_eligible_count
     from {{ ref('stg_trial_locations') }}
     group by 1
 ),
@@ -99,11 +102,11 @@ select
     {{ safe_divide('l.usable_location_count', 'l.location_row_count') }}
         as usable_location_share,
     l.coordinates_exact_count,
-    l.coordinates_fallback_count,
+    l.coordinates_fallback_eligible_count,
     {{ safe_divide('l.coordinates_exact_count', 'l.location_row_count') }}
         as coordinates_exact_share,
-    {{ safe_divide('l.coordinates_fallback_count', 'l.location_row_count') }}
-        as coordinates_fallback_share,
+    {{ safe_divide('l.coordinates_fallback_eligible_count', 'l.location_row_count') }}
+        as coordinates_fallback_eligible_share,
     c.condition_row_count,
     c.low_confidence_condition_count,
     {{ safe_divide(

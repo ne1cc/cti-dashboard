@@ -32,7 +32,7 @@ st.dataframe(
             "flagged_record_share",
             "usable_location_share",
             "coordinates_exact_share",
-            "coordinates_fallback_share",
+            "coordinates_fallback_eligible_share",
             "low_confidence_condition_share",
             "ingestion_run_id",
         ]
@@ -60,12 +60,13 @@ st.dataframe(
             format="percent",
             help="Sites with registry geoPoint latitude/longitude (exact coordinates).",
         ),
-        "coordinates_fallback_share": st.column_config.NumberColumn(
-            "Approximate coordinates",
+        "coordinates_fallback_eligible_share": st.column_config.NumberColumn(
+            "Approximate coordinates (eligible)",
             format="percent",
             help=(
-                "Sites without geoPoint that resolve to an offline Census Gazetteer "
-                "ZIP or city centroid; distances from these sites are approximate."
+                "Sites without geoPoint that carry a ZIP or city+state the offline "
+                "Census Gazetteer fallback can use. Fallback-eligible only: actual "
+                "resolution happens at query time, so this is an upper bound."
             ),
         ),
         "low_confidence_condition_share": st.column_config.NumberColumn(
@@ -108,10 +109,12 @@ if not success.empty:
     )
     geo_col2.metric(
         "Approximate coordinates share",
-        f"{latest['coordinates_fallback_share']:.1%}",
+        f"{latest['coordinates_fallback_eligible_share']:.1%}",
         help=(
-            "Trial sites without geoPoint that resolve to an offline Census Gazetteer "
-            "ZIP or city centroid; distances from these sites are approximate."
+            "Trial sites without geoPoint that carry a ZIP or city+state the "
+            "offline Census Gazetteer fallback can use (fallback-eligible, an "
+            "upper bound; actual resolution happens at query time and is "
+            "flagged per site as coordinate_approximate)."
         ),
     )
 

@@ -535,18 +535,9 @@ def create_app(
                 str(request.url),
                 code="INVALID_AGE_RANGE",
             )
-        if sort == "distance" and lat is None:
-            return create_problem_response(
-                422,
-                "Unprocessable Query Combination",
-                "Distance sort requires lat and lon.",
-                str(request.url),
-                code="MISSING_COORDINATES_FOR_SORT",
-                invalid_params=[
-                    InvalidParam(name="sort", reason="Requires coordinates", value=sort)
-                ],
-            )
-
+        # Issue #63: postal_code resolves to coordinates before any sort
+        # validation, so postal + radius + sort=distance works and the
+        # acceptance query ("98101, 50 mi, NSCLC") sorts by distance by default.
         if postal_code is not None and (lat is not None or lon is not None):
             return create_problem_response(
                 400,
@@ -566,6 +557,19 @@ def create_app(
                     code="UNKNOWN_POSTAL_CODE",
                 )
             lat, lon = point.lat, point.lon
+        if lat is not None and "sort" not in request.query_params:
+            sort = "distance"
+        if sort == "distance" and lat is None:
+            return create_problem_response(
+                422,
+                "Unprocessable Query Combination",
+                "Distance sort requires lat and lon.",
+                str(request.url),
+                code="MISSING_COORDINATES_FOR_SORT",
+                invalid_params=[
+                    InvalidParam(name="sort", reason="Requires coordinates", value=sort)
+                ],
+            )
 
         # Warehouse backend path
         if deps.warehouse is not None:

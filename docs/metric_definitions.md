@@ -67,7 +67,7 @@ mean is the opposite case: a one-point mean is honest, so
 | flagged_record_share | trials with quality flag ≠ ok / all trials |
 | usable_location_share | locations with `usable_geography_flag` / all locations |
 | coordinates_exact_count / coordinates_exact_share | locations with registry geoPoint latitude and longitude (exact coordinates); share over all locations |
-| coordinates_fallback_count / coordinates_fallback_share | locations without geoPoint but resolvable to an approximate offline Census Gazetteer centroid via ZIP (ZCTA, first 5 digits) or normalized city+state; share over all locations. Reported so the exact-vs-approximate coordinate mix behind distance search is visible |
+| coordinates_fallback_eligible_count / coordinates_fallback_eligible_share | locations without geoPoint that carry the fields the offline Census Gazetteer fallback needs — a ZIP (first 5 digits) or a normalized city+state; share over all locations. Fallback-eligible rather than verified: the Gazetteer reference files are not part of the dbt build, so actual resolution (and the per-site `coordinate_approximate` flag) is decided at query time, making this an upper bound on approximate coordinates. Reported so the exact-vs-approximate coordinate mix behind distance search is visible |
 | low_confidence_condition_share | taxonomy fallback mappings / all condition rows |
 
 ## Distance search (read API, Issue #63)

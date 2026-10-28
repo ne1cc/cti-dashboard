@@ -1287,12 +1287,14 @@ def test_mart_data_reliability_reports_coordinate_coverage(
 ) -> None:
     """Issue #63 coordinate coverage. The fixture bronze pages publish ZIPs but
     never geoPoint, so all 16 site rows are coordinateless; the 14 U.S. rows
-    with a ZIP are approximate-fallback material and the 2 international rows
-    (no ZIP, state UNKNOWN) are not resolvable at all."""
+    with a ZIP are fallback-eligible and the 2 international rows (no ZIP,
+    state UNKNOWN) are not — eligibility is field presence, not Gazetteer
+    resolution, which happens at query time."""
     assert _rows(
         fixture_project_root,
-        "select location_row_count, coordinates_exact_count, coordinates_fallback_count,"
-        " coordinates_exact_share, coordinates_fallback_share"
+        "select location_row_count, coordinates_exact_count,"
+        " coordinates_fallback_eligible_count,"
+        " coordinates_exact_share, coordinates_fallback_eligible_share"
         f" from main_marts.mart_data_reliability where ingestion_run_id = '{FIXTURE_RUN_ID}'",
     ) == [(16, 0, 14, 0.0, 0.875)]
 

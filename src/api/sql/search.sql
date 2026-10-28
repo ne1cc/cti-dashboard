@@ -50,6 +50,9 @@ distinct_trials AS (
 -- sites missing them fall back to the offline Census Gazetteer ZIP (ZCTA) or
 -- city centroid and are flagged approximate. Gazetteer views always exist
 -- (empty when the reference files were never downloaded via `make gazetteer`).
+-- The place join can fan out (repeated city names within a state, sometimes
+-- hundreds of miles apart), so one deterministic row wins per site — ranked
+-- exactly like detail.sql, never by distance to the user.
 nearest_sites AS (
     SELECT
         nct_id,
@@ -58,19 +61,31 @@ nearest_sites AS (
         state,
         location_status,
         coordinate_approximate,
-        -- Haversine in miles; propagates to NULL when the user point or the
-        -- site's effective coordinates are missing.
-        2 * 3958.8 * asin(sqrt(
-            greatest(0.0, least(1.0,
-                power(sin(radians(site_latitude - $lat) / 2.0), 2) +
-                cos(radians($lat)) * cos(radians(site_latitude)) *
-                power(sin(radians(site_longitude - $lon) / 2.0), 2)
+        location_ordinal,
+        -- Haversine in miles. DuckDB's least/greatest ignore NULLs, so the raw
+        -- expression would degrade to the antipodal distance when the user
+        -- point or the site's effective coordinates are missing; guard it so
+        -- distance propagates to NULL instead (same guard as detail.sql).
+        CASE
+            WHEN $lat IS NULL OR $lon IS NULL
+                 OR site_latitude IS NULL OR site_longitude IS NULL THEN NULL
+            ELSE 2 * 3958.8 * asin(sqrt(
+                greatest(0.0, least(1.0,
+                    power(sin(radians(site_latitude - $lat) / 2.0), 2) +
+                    cos(radians($lat)) * cos(radians(site_latitude)) *
+                    power(sin(radians(site_longitude - $lon) / 2.0), 2)
+                ))
             ))
-        )) AS distance_miles,
-        ROW_NUMBER() OVER (PARTITION BY nct_id ORDER BY distance_miles ASC) AS site_rn
+        END AS distance_miles,
+        ROW_NUMBER() OVER (
+            PARTITION BY nct_id
+            ORDER BY distance_miles ASC NULLS LAST, location_ordinal ASC
+        ) AS site_rn
     FROM (
         SELECT
             loc.nct_id,
+            loc.ingestion_run_id,
+            loc.location_ordinal,
             loc.facility_name,
             loc.city,
             COALESCE(loc.state_raw, loc.state_normalized) AS state,
@@ -104,6 +119,10 @@ nearest_sites AS (
               gz.zcta IS NOT NULL OR
               gp.state_usps IS NOT NULL
           )
+        QUALIFY row_number() OVER (
+            PARTITION BY loc.ingestion_run_id, loc.nct_id, loc.location_ordinal
+            ORDER BY CASE WHEN gz.zcta IS NOT NULL THEN 0 ELSE 1 END, gp.latitude, gp.longitude
+        ) = 1
     )
 ),
 

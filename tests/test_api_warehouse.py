@@ -853,6 +853,7 @@ def test_keyset_pagination_with_null_dates_across_all_date_sorts(tmp_path: Path)
     CREATE TABLE stg_trial_locations (
         nct_id VARCHAR,
         ingestion_run_id VARCHAR,
+        location_ordinal BIGINT,
         facility_name VARCHAR,
         city VARCHAR,
         city_normalized VARCHAR,

@@ -5,7 +5,8 @@
 -- Issue #63: one row per site with effective coordinates. Registry geoPoint
 -- preferred; ZIP (ZCTA) then city Gazetteer centroids as flagged-approximate
 -- fallback. The place join can fan out (repeated city names within a state),
--- so one deterministic row wins per site.
+-- so one deterministic row wins per site — the same dedup and tie-break as
+-- search.sql, so both endpoints report identical coordinates for a site.
 WITH site_fallback AS (
     SELECT
         loc.ingestion_run_id,
@@ -39,7 +40,7 @@ WITH site_fallback AS (
        AND (gp.city_name = loc.city_normalized OR gp.city_name_stripped = loc.city_normalized)
     QUALIFY row_number() OVER (
         PARTITION BY loc.ingestion_run_id, loc.nct_id, loc.location_ordinal
-        ORDER BY CASE WHEN gz.zcta IS NOT NULL THEN 0 ELSE 1 END
+        ORDER BY CASE WHEN gz.zcta IS NOT NULL THEN 0 ELSE 1 END, gp.latitude, gp.longitude
     ) = 1
 )
 

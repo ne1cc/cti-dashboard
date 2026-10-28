@@ -366,3 +366,79 @@ def test_site_with_unknown_status_excluded(
     resp = client_gazetteer_warehouse.get("/v1/trials?lat=37.7631&lon=-122.4578&radius_mi=5")
     assert resp.status_code == 200
     assert len(resp.json()["items"]) == 1
+
+
+def test_postal_code_plus_condition_sorts_by_distance_by_default(
+    warehouse_db: Path, client_gazetteer_warehouse: TestClient
+) -> None:
+    """Acceptance: '98101, 50 mi, NSCLC'-style queries (ZIP + radius + condition)
+    return trials sorted by distance without an explicit sort param, nearest
+    site and miles on each item."""
+    con = duckdb.connect(str(warehouse_db))
+    # A second dementia trial with a recruiting site ~11 mi from the 94143
+    # centroid, plus a Dementia condition row so cond=dementia matches both it
+    # and NCT00000001.
+    con.execute("""
+    INSERT INTO stg_trial_locations VALUES
+    ('run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
+     'page=00001.json', 1, 'adrd', 'NCT00000002', 2,
+     'East Bay Memory Clinic', 'east bay memory clinic',
+     'Oakland', 'oakland',
+     'CA', 'CA', '94612', 'United States', 'US',
+     37.8044, -122.2712, 'RECRUITING', true, true, 'h10');
+    """)
+    con.execute("""
+    INSERT INTO stg_trial_conditions VALUES
+    ('run_01', 'adrd', 'NCT00000002', 'Dementia',
+     'dementia', 'Alzheimer Disease', true, 0.9, 'hc6');
+    """)
+    con.close()
+    resp = client_gazetteer_warehouse.get("/v1/trials?postal_code=94143&radius_mi=50&cond=dementia")
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert [i["nct_id"] for i in items] == ["NCT00000001", "NCT00000002"]
+    distances = [i["nearest_site"]["distance_miles"] for i in items]
+    assert distances == sorted(distances)
+    assert all(i["nearest_site"]["location_status"] == "RECRUITING" for i in items)
+    # Explicit sort=distance via postal code no longer 422s either.
+    explicit = client_gazetteer_warehouse.get(
+        "/v1/trials?postal_code=94143&radius_mi=50&sort=distance"
+    )
+    assert explicit.status_code == 200
+    assert [i["nct_id"] for i in explicit.json()["items"]] == ["NCT00000001", "NCT00000002"]
+
+
+def test_ambiguous_city_name_resolves_one_fixed_centroid(
+    warehouse_db: Path, client_gazetteer_warehouse: TestClient
+) -> None:
+    """The fixture has two same-named Springfield places in TX ~385 mi apart.
+    A site in Springfield must resolve to one fixed centroid (same tie-break
+    as detail.sql), never to whichever twin is closest to the user."""
+    con = duckdb.connect(str(warehouse_db))
+    con.execute("""
+    INSERT INTO stg_trial_locations VALUES
+    ('run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
+     'page=00001.json', 1, 'adrd', 'NCT00000002', 2,
+     'Springfield Clinic', 'springfield clinic',
+     'Springfield', 'springfield',
+     'TX', 'TX', NULL, 'United States', 'US',
+     NULL, NULL, 'RECRUITING', true, true, 'h11');
+    """)
+    con.close()
+    # From near the northern twin: the site must not snap to the closer twin,
+    # so the trial stays out of the radius.
+    far = client_gazetteer_warehouse.get("/v1/trials?lat=36.5&lon=-101.0&radius_mi=25")
+    assert far.status_code == 200
+    assert "NCT00000002" not in {i["nct_id"] for i in far.json()["items"]}
+    # Detail reports the same fixed centroid search uses (lowest latitude).
+    detail = client_gazetteer_warehouse.get("/v1/trials/NCT00000002?lat=36.5&lon=-101.0")
+    assert detail.status_code == 200
+    site = next(s for s in detail.json()["sites"] if s["facility_name"] == "Springfield Clinic")
+    assert site["coordinate_approximate"] is True
+    assert site["coordinates"]["lat"] == pytest.approx(32.0)
+    assert site["coordinates"]["lon"] == pytest.approx(-97.0)
+    assert site["distance_miles"] is not None and site["distance_miles"] > 25
+    # From near the fixed centroid the site is inside the radius.
+    near = client_gazetteer_warehouse.get("/v1/trials?lat=32.0&lon=-97.0&radius_mi=25")
+    assert near.status_code == 200
+    assert "NCT00000002" in {i["nct_id"] for i in near.json()["items"]}

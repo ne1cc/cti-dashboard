@@ -642,17 +642,19 @@ models:
         description: >
           Site rows carrying registry geoPoint latitude and longitude (exact
           coordinates, Issue #63 coordinate coverage).
-      - name: coordinates_fallback_count
+      - name: coordinates_fallback_eligible_count
         data_type: BIGINT
         description: >
-          Site rows without geoPoint but resolvable to an approximate offline
-          Gazetteer centroid via ZIP or city+state (Issue #63).
+          Site rows without geoPoint that carry the fields the offline
+          Gazetteer fallback needs (a ZIP, or a normalized city+state).
+          Fallback-eligible rather than verified against the Gazetteer, whose
+          reference files are outside the dbt build (Issue #63).
       - name: coordinates_exact_share
         data_type: DOUBLE
         description: coordinates_exact_count / location_row_count.
-      - name: coordinates_fallback_share
+      - name: coordinates_fallback_eligible_share
         data_type: DOUBLE
-        description: coordinates_fallback_count / location_row_count.
+        description: coordinates_fallback_eligible_count / location_row_count.
       - name: condition_row_count
         data_type: BIGINT
       - name: low_confidence_condition_count
