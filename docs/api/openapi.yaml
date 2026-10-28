@@ -1229,6 +1229,46 @@ components:
             - 'null'
           description: Full unstructured eligibility criteria narrative block from protocol.
           example: 'Inclusion Criteria: 1. Age 55 to 85. 2. Confirmed biomarker evidence of amyloid. Exclusion Criteria: 1. Current significant psychiatric disorder.'
+        eligibility_sections:
+          allOf:
+            - $ref: '#/components/schemas/EligibilitySections'
+          description: |
+            Lossless structural split of criteria_text into inclusion/exclusion
+            lists (Issue #67). These are the study's own criteria: review them
+            with a clinician and the study team. Null when criteria_text is absent.
+
+    EligibilitySections:
+      type: object
+      description: |
+        Deterministic structural split of the registry criteria text per Issue #67.
+        Split by heading and bullet structure only: never interpreted, scored, or
+        paraphrased. Text that cannot be confidently classified is kept in
+        unclassified, so nothing is dropped.
+      required:
+        - parsed
+      properties:
+        parsed:
+          type: boolean
+          description: True when at least one Inclusion/Exclusion heading was recognized.
+          example: true
+        inclusion:
+          type: array
+          items:
+            type: string
+          description: Verbatim inclusion items, in source order.
+          example: ['Age 55 to 85.', 'Confirmed biomarker evidence of amyloid.']
+        exclusion:
+          type: array
+          items:
+            type: string
+          description: Verbatim exclusion items, in source order.
+          example: ['Current significant psychiatric disorder.']
+        unclassified:
+          type: array
+          items:
+            type: string
+          description: Verbatim items that could not be attributed to Inclusion or Exclusion.
+          example: []
 
     TrialSite:
       type: object

@@ -23,6 +23,7 @@ import duckdb
 from src.api.gazetteer import register_gazetteer_views
 from src.api.models import (
     DataProvenance,
+    EligibilitySections,
     EnrollmentInfo,
     GeoPoint,
     NearestSiteSummary,
@@ -41,6 +42,7 @@ from src.api.models import (
     TrialsListResponse,
     TrialSummary,
 )
+from src.transform.eligibility_sections import split_eligibility_sections
 
 logger = logging.getLogger(__name__)
 
@@ -578,6 +580,8 @@ class DuckDBWarehouseManager:
                 )
 
         # Eligibility (Issue #62)
+        criteria_text = r.get("criteria_text")
+        sections_parsed = split_eligibility_sections(criteria_text)
         eligibility = StructuredEligibility(
             minimum_age_raw=r.get("minimum_age_raw"),
             maximum_age_raw=r.get("maximum_age_raw"),
@@ -589,7 +593,15 @@ class DuckDBWarehouseManager:
             gender_description=r.get("gender_description"),
             accepts_healthy_volunteers=r.get("accepts_healthy_volunteers"),
             std_age_groups=r.get("std_age_groups") or [],
-            criteria_text=r.get("criteria_text"),
+            criteria_text=criteria_text,
+            eligibility_sections=EligibilitySections(
+                parsed=sections_parsed.parsed,
+                inclusion=sections_parsed.inclusion,
+                exclusion=sections_parsed.exclusion,
+                unclassified=sections_parsed.unclassified,
+            )
+            if sections_parsed is not None
+            else None,
         )
 
         # Sites (ADR 0065 strict compliance: strictly zero investigator contact PII)

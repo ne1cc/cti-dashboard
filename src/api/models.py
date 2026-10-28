@@ -211,6 +211,35 @@ class StudyIntervention(BaseModel):
     description: str | None = Field(default=None, description="Intervention details")
 
 
+class EligibilitySections(BaseModel):
+    """Deterministic structural split of the registry criteria text per Issue #67.
+
+    These are the study's own criteria, split by heading/bullet structure only —
+    never interpreted, scored, or paraphrased. Text the splitter cannot
+    confidently classify is kept in ``unclassified``; nothing is dropped.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    parsed: bool = Field(
+        ...,
+        description="True when at least one Inclusion/Exclusion heading was recognized.",
+    )
+    inclusion: list[str] = Field(
+        default_factory=list, description="Verbatim inclusion items, in source order."
+    )
+    exclusion: list[str] = Field(
+        default_factory=list, description="Verbatim exclusion items, in source order."
+    )
+    unclassified: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Verbatim items the splitter could not attribute to Inclusion or "
+            "Exclusion (e.g. no recognizable headings). Never dropped."
+        ),
+    )
+
+
 class StructuredEligibility(BaseModel):
     """Complete participant eligibility criteria model per Issue #62."""
 
@@ -238,6 +267,14 @@ class StructuredEligibility(BaseModel):
     )
     criteria_text: str | None = Field(
         default=None, description="Full unstructured eligibility text block"
+    )
+    eligibility_sections: EligibilitySections | None = Field(
+        default=None,
+        description=(
+            "Lossless structural split of criteria_text into inclusion/exclusion "
+            "lists (Issue #67). The study's own criteria: review with a clinician "
+            "and the study team. Null when criteria_text is absent."
+        ),
     )
 
 

@@ -13,6 +13,7 @@ from typing import Any
 
 from src.api.models import (
     DataProvenance,
+    EligibilitySections,
     EnrollmentInfo,
     GeoPoint,
     NearestSiteSummary,
@@ -29,6 +30,7 @@ from src.api.models import (
     TrialSummary,
 )
 from src.transform.eligibility import parse_age_to_years
+from src.transform.eligibility_sections import split_eligibility_sections
 from src.transform.flatten_studies import normalize_phases, trial_quality_flags
 from src.utils.dates import parse_partial_date
 
@@ -335,13 +337,23 @@ def normalize_study_detail(
                 )
             )
 
+    criteria_text = elig.get("eligibilityCriteria")
+    sections_parsed = split_eligibility_sections(criteria_text)
     eligibility = StructuredEligibility(
         **_normalize_eligibility(elig).model_dump(),
         minimum_age_raw=elig.get("minimumAge"),
         maximum_age_raw=elig.get("maximumAge"),
         gender_based=elig.get("genderBased"),
         gender_description=elig.get("genderDescription"),
-        criteria_text=elig.get("eligibilityCriteria"),
+        criteria_text=criteria_text,
+        eligibility_sections=EligibilitySections(
+            parsed=sections_parsed.parsed,
+            inclusion=sections_parsed.inclusion,
+            exclusion=sections_parsed.exclusion,
+            unclassified=sections_parsed.unclassified,
+        )
+        if sections_parsed is not None
+        else None,
     )
 
     # Sites / Facilities (ADR 0065: excludes contacts and investigator personal details)

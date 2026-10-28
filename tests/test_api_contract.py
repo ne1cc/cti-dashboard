@@ -180,6 +180,17 @@ def test_issue_62_structured_eligibility_fields(openapi_doc: dict[str, Any]) -> 
     for prop in expected_props:
         assert prop in props, f"Issue #62 field '{prop}' missing in StructuredEligibility"
 
+    # Issue #67: lossless eligibility section split (additive field)
+    schemas_full = openapi_doc.get("components", {}).get("schemas", {})
+    assert "EligibilitySections" in schemas_full, "EligibilitySections schema must be defined"
+    sections_schema = schemas_full["EligibilitySections"]
+    sections_props = sections_schema.get("properties", {})
+    for prop in ["parsed", "inclusion", "exclusion", "unclassified"]:
+        assert prop in sections_props, f"Issue #67 field '{prop}' missing in EligibilitySections"
+    assert "eligibility_sections" in props, (
+        "Issue #67 field 'eligibility_sections' missing in StructuredEligibility"
+    )
+
     # Search filter parameters check in GET /v1/trials
     trials_op = openapi_doc["paths"]["/v1/trials"]["get"]
     params = {p["name"]: p for p in trials_op.get("parameters", []) if "name" in p}
