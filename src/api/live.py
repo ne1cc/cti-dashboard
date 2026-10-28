@@ -445,12 +445,32 @@ def filter_and_sort_summaries(
     std_age_group: str | None = None,
     sponsor_class: str | None = None,
     sort: str | None = "-updated",
+    max_distance_miles: float | None = None,
 ) -> list[TrialSummary]:
-    """Filter and sort normalized summaries in-memory."""
+    """Filter and sort normalized summaries in-memory.
+
+    Issue #63: when ``max_distance_miles`` is set (a lat/lon or postal_code
+    search), drop trials without a RECRUITING/NOT_YET_RECRUITING site within
+    that radius. The upstream ``filter.geo`` distance filter matches a study
+    when *any* site of *any* status is inside the radius; the nearest-site
+    distance on each summary is the haversine distance to the nearest
+    recruiting site, so it is the post-filter criterion.
+    """
     result: list[TrialSummary] = []
 
     for item in items:
         elig = item.structured_eligibility
+
+        # Issue #63: the upstream geo filter matches any site of any status;
+        # keep only trials whose nearest recruiting site is inside the radius.
+        if max_distance_miles is not None:
+            nearest = item.nearest_site
+            if (
+                nearest is None
+                or nearest.distance_miles is None
+                or nearest.distance_miles > max_distance_miles
+            ):
+                continue
 
         # Age bounds filtering (Issue #62: unstated bounds are never discarded)
         if min_age is not None:

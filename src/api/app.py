@@ -688,6 +688,10 @@ def create_app(
                 summaries.append(normalize_study_summary(study, user_lat=lat, user_lon=lon))
             except (ValueError, TypeError, AttributeError, KeyError):
                 logger.warning("Skipping malformed upstream study", exc_info=True)
+        # Issue #63: the upstream geo filter matches any site of any status,
+        # so a location search (lat/lon or postal) post-filters to trials with
+        # a recruiting site inside the radius.
+        max_distance_miles = radius_mi if lat is not None else None
         items = filter_and_sort_summaries(
             summaries,
             min_age=min_age,
@@ -698,6 +702,7 @@ def create_app(
             std_age_group=std_age_group,
             sponsor_class=sponsor_class,
             sort=sort,
+            max_distance_miles=max_distance_miles,
         )
         post_filtered = any(
             value is not None
@@ -709,6 +714,7 @@ def create_app(
                 phase,
                 std_age_group,
                 sponsor_class,
+                max_distance_miles,
             )
         ) or len(summaries) != len(raw_studies)
         set_live_response_headers(response, entry)
