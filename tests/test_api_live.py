@@ -371,6 +371,11 @@ def test_normalize_study_detail_splits_eligibility_sections(
     ]
     assert sections.exclusion == ["Non-Alzheimer neurodegenerative disorder."]
     assert sections.unclassified == []
+    # Ordered groups carry the verbatim headings on the live backend too.
+    assert [(s.kind, s.heading) for s in sections.sections] == [
+        ("inclusion", "Inclusion Criteria:"),
+        ("exclusion", "Exclusion Criteria:"),
+    ]
 
 
 def test_normalize_study_detail_without_criteria_has_null_sections(

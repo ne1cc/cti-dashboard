@@ -211,12 +211,28 @@ class StudyIntervention(BaseModel):
     description: str | None = Field(default=None, description="Intervention details")
 
 
+class EligibilitySection(BaseModel):
+    """One ordered chunk of the split criteria text per Issue #67.
+
+    ``heading`` is the verbatim heading line (bullet marker stripped), or None
+    for the leading unclassified chunk.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    kind: str = Field(..., description="inclusion, exclusion, or unclassified.")
+    heading: str | None = Field(..., description="Verbatim heading line, or None when absent.")
+    items: list[str] = Field(..., description="Verbatim items of this section, in source order.")
+
+
 class EligibilitySections(BaseModel):
     """Deterministic structural split of the registry criteria text per Issue #67.
 
     These are the study's own criteria, split by heading/bullet structure only —
     never interpreted, scored, or paraphrased. Text the splitter cannot
     confidently classify is kept in ``unclassified``; nothing is dropped.
+    ``sections`` is the lossless representation: ordered chunks with their
+    verbatim headings, so repeated same-kind headings keep separate boundaries.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -225,11 +241,29 @@ class EligibilitySections(BaseModel):
         ...,
         description="True when at least one Inclusion/Exclusion heading was recognized.",
     )
+    sections: list[EligibilitySection] = Field(
+        default_factory=list,
+        description=(
+            "Lossless ordered split of the criteria text: one entry per "
+            "heading-bounded chunk (plus the leading unclassified chunk). "
+            "Concatenating each heading with its items rebuilds the source text."
+        ),
+    )
     inclusion: list[str] = Field(
-        default_factory=list, description="Verbatim inclusion items, in source order."
+        default_factory=list,
+        description=(
+            "Convenience view: verbatim inclusion items merged across all "
+            "inclusion sections, in source order. Repeated same-kind heading "
+            "boundaries are only visible in ``sections``."
+        ),
     )
     exclusion: list[str] = Field(
-        default_factory=list, description="Verbatim exclusion items, in source order."
+        default_factory=list,
+        description=(
+            "Convenience view: verbatim exclusion items merged across all "
+            "exclusion sections, in source order. Repeated same-kind heading "
+            "boundaries are only visible in ``sections``."
+        ),
     )
     unclassified: list[str] = Field(
         default_factory=list,
@@ -271,9 +305,10 @@ class StructuredEligibility(BaseModel):
     eligibility_sections: EligibilitySections | None = Field(
         default=None,
         description=(
-            "Lossless structural split of criteria_text into inclusion/exclusion "
-            "lists (Issue #67). The study's own criteria: review with a clinician "
-            "and the study team. Null when criteria_text is absent."
+            "Structural split of criteria_text into inclusion/exclusion "
+            "sections (Issue #67). The study's own criteria: review with a "
+            "clinician and the study team. Null when criteria_text is absent "
+            "or blank."
         ),
     )
 

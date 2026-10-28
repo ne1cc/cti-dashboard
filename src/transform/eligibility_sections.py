@@ -29,7 +29,6 @@ _BULLET_RE = re.compile(
 # words is never treated as a heading.
 _HEADING_RE = re.compile(
     r"""^
-    (?:[*•·‣◦]\s+|-\s+)?                    # optional bullet marker
     \**\s*                                  # optional bold markers
     (?:[A-Za-z][\w ()'&/,.-]{0,40}?:\s*)?   # 'Extension Phase:'-style prefix
     (?:[A-Za-z][\w-]{0,14}\s+)?             # single-word qualifier ('Key', 'General')
@@ -44,8 +43,30 @@ _HEADING_RE = re.compile(
     re.IGNORECASE | re.VERBOSE,
 )
 
+# Standalone headings on bulleted lines get the same body but NOT the free
+# descriptor tail: a bullet plus keyword plus arbitrary colon-terminated text
+# is far more likely a criterion ("* Prior exclusion from study:") than a
+# heading. "for ..."/parenthetical tails stay allowed (they are heading-shaped).
+_BULLETED_HEADING_RE = re.compile(
+    r"""^
+    (?:[*•·‣◦]\s+|-\s+)?                    # optional bullet marker
+    \**\s*
+    (?:[A-Za-z][\w ()'&/,.-]{0,40}?:\s*)?   # 'Extension Phase:'-style prefix
+    (?:[A-Za-z][\w-]{0,14}\s+)?             # single-word qualifier
+    \**\s*
+    (?P<keyword>inclusions?|exclusions?)\b
+    \s*(?:\bcriteria\b)?\b
+    (?:\s+for\b[^.!?,;:]{0,50}
+      |\s*\([^)!?,;]{0,60}\)
+    )?
+    :                                       # bare colon only (no free tail)
+    \s*(?:\*\*)?\s*$""",
+    re.IGNORECASE | re.VERBOSE,
+)
+
 # Inline headings: 'Inclusion Criteria: first criterion text...'. The colon
-# must directly follow the keyword/criteria phrase, so any remaining text is
+# must directly follow the keyword/criteria phrase (a parenthetical qualifier
+# such as '(PCP)' may sit in between), so any remaining text is
 # unambiguously heading-owned content, not prose.
 _INLINE_HEADING_RE = re.compile(
     r"""^
@@ -53,8 +74,26 @@ _INLINE_HEADING_RE = re.compile(
     \**\s*
     (?P<keyword>inclusions?|exclusions?)\b
     \s*(?:\bcriteria\b)?\b
+    (?:\s*\([^)!?,;]{0,60}\))?
     \**\s*
     :(?P<rest>.+)$""",
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# Heading phrase appearing mid-line after criterion text
+# ('... consent. Exclusion Criteria: The patients ...'). Requires a colon so
+# prose mentioning the words never splits; the text before the phrase stays
+# with the current section.
+_MIDLINE_HEADING_RE = re.compile(
+    r"""\s
+    (?P<heading>
+        \**\s*
+        (?P<keyword>inclusions?|exclusions?)\b
+        \s*(?:\bcriteria\b)?\b
+        (?:\s*\([^)!?,;]{0,60}\))?
+        \**\s*
+        :
+    )""",
     re.IGNORECASE | re.VERBOSE,
 )
 
@@ -123,8 +162,15 @@ class _SectionBuilder:
 
 
 def _heading_kind(line: str) -> str | None:
-    """Return the section kind when the whole line is a recognized heading."""
-    match = _HEADING_RE.match(line)
+    """Return the section kind when the whole line is a recognized heading.
+
+    Bulleted lines are held to a stricter shape (no free descriptor tail) so a
+    criterion that merely ends in a colon and contains the keyword
+    ("* Prior exclusion from study:") is never read as a heading.
+    """
+    bulleted = _BULLET_RE.match(line) is not None
+    regex = _BULLETED_HEADING_RE if bulleted else _HEADING_RE
+    match = regex.match(line)
     if match is None:
         return None
     keyword = match.group("keyword").lower()
@@ -139,6 +185,19 @@ def _inline_heading(line: str) -> tuple[str, str, str] | None:
     keyword = match.group("keyword").lower()
     kind = _KIND_EXCLUSION if keyword.startswith("exclusion") else _KIND_INCLUSION
     return kind, match.group("rest").strip(), line[: match.start("rest")].rstrip()
+
+
+def _split_midline_heading(line: str) -> tuple[str, str] | None:
+    """Split 'text Exclusion Criteria: rest' at a mid-line heading phrase.
+
+    Returns (text-before, heading-onwards) when a colon-terminated heading
+    phrase occurs after leading content, else None. The colon requirement
+    keeps prose that merely mentions the words unsplit.
+    """
+    match = _MIDLINE_HEADING_RE.search(line)
+    if match is None or match.start() <= 0:
+        return None
+    return line[: match.start()].strip(), line[match.start("heading") :].strip()
 
 
 def _strip_bullet(line: str) -> str:
@@ -161,17 +220,36 @@ def split_eligibility_sections(text: str | None) -> ParsedEligibilitySections | 
     current = _SectionBuilder(_KIND_UNCLASSIFIED, None)
     found_heading = False
 
+    def _add_content(content_line: str) -> None:
+        """Route a non-heading line into the current section (item or continuation)."""
+        if _BULLET_RE.match(content_line):
+            current.start_item(_strip_bullet(content_line))
+        elif current.heading_raw is not None or current.items:
+            current.append_continuation(content_line)
+        else:
+            current.start_item(content_line)
+
     for raw_line in text.splitlines():
         line = raw_line.strip()
         if not line:
             continue
 
+        # Whole-line headings win over the mid-line split, so prefix-style
+        # headings ('Extension Phase: Inclusion Criteria:') stay intact.
         heading_kind = _heading_kind(line)
         if heading_kind is not None:
             builders.append(current)
             current = _SectionBuilder(heading_kind, _strip_bullet(line))
             found_heading = True
             continue
+
+        # A heading phrase buried mid-line ('... consent. Exclusion Criteria: ...')
+        # splits: the text before it stays with the current section, the
+        # remainder re-enters this loop's logic as a heading line.
+        midline = _split_midline_heading(line)
+        if midline is not None:
+            _add_content(midline[0])
+            line = midline[1]
 
         inline = _inline_heading(line)
         if inline is not None:
@@ -183,12 +261,7 @@ def split_eligibility_sections(text: str | None) -> ParsedEligibilitySections | 
             found_heading = True
             continue
 
-        if _BULLET_RE.match(line):
-            current.start_item(_strip_bullet(line))
-        elif current.heading_raw is not None or current.items:
-            current.append_continuation(line)
-        else:
-            current.start_item(line)
+        _add_content(line)
 
     builders.append(current)
 

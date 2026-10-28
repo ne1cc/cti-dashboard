@@ -1233,9 +1233,36 @@ components:
           allOf:
             - $ref: '#/components/schemas/EligibilitySections'
           description: |
-            Lossless structural split of criteria_text into inclusion/exclusion
-            lists (Issue #67). These are the study's own criteria: review them
-            with a clinician and the study team. Null when criteria_text is absent.
+            Structural split of criteria_text into inclusion/exclusion sections
+            (Issue #67). These are the study's own criteria: review them with a
+            clinician and the study team. Null when criteria_text is absent or blank.
+
+    EligibilitySection:
+      type: object
+      description: |
+        One ordered chunk of the split criteria text: a verbatim heading plus
+        the items under it. The leading chunk has no heading and is unclassified.
+      required:
+        - kind
+        - heading
+        - items
+      properties:
+        kind:
+          type: string
+          description: 'Section kind: inclusion, exclusion, or unclassified.'
+          example: exclusion
+        heading:
+          type:
+            - string
+            - 'null'
+          description: Verbatim heading line (bullet marker stripped), or null when absent.
+          example: 'Exclusion Criteria (PCP):'
+        items:
+          type: array
+          items:
+            type: string
+          description: Verbatim items of this section, in source order.
+          example: ['none']
 
     EligibilitySections:
       type: object
@@ -1243,7 +1270,9 @@ components:
         Deterministic structural split of the registry criteria text per Issue #67.
         Split by heading and bullet structure only: never interpreted, scored, or
         paraphrased. Text that cannot be confidently classified is kept in
-        unclassified, so nothing is dropped.
+        unclassified, so nothing is dropped. sections is the lossless
+        representation: ordered chunks with their verbatim headings, so repeated
+        same-kind headings keep separate boundaries.
       required:
         - parsed
       properties:
@@ -1251,17 +1280,31 @@ components:
           type: boolean
           description: True when at least one Inclusion/Exclusion heading was recognized.
           example: true
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/EligibilitySection'
+          description: |
+            Lossless ordered split: one entry per heading-bounded chunk (plus the
+            leading unclassified chunk). Concatenating each heading with its items
+            rebuilds the source text.
         inclusion:
           type: array
           items:
             type: string
-          description: Verbatim inclusion items, in source order.
+          description: |
+            Convenience view: verbatim inclusion items merged across all inclusion
+            sections, in source order. Repeated same-kind heading boundaries are
+            only visible in sections.
           example: ['Age 55 to 85.', 'Confirmed biomarker evidence of amyloid.']
         exclusion:
           type: array
           items:
             type: string
-          description: Verbatim exclusion items, in source order.
+          description: |
+            Convenience view: verbatim exclusion items merged across all exclusion
+            sections, in source order. Repeated same-kind heading boundaries are
+            only visible in sections.
           example: ['Current significant psychiatric disorder.']
         unclassified:
           type: array

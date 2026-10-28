@@ -180,16 +180,22 @@ def test_issue_62_structured_eligibility_fields(openapi_doc: dict[str, Any]) -> 
     for prop in expected_props:
         assert prop in props, f"Issue #62 field '{prop}' missing in StructuredEligibility"
 
-    # Issue #67: lossless eligibility section split (additive field)
+    # Issue #67: eligibility section split (additive field)
     schemas_full = openapi_doc.get("components", {}).get("schemas", {})
     assert "EligibilitySections" in schemas_full, "EligibilitySections schema must be defined"
     sections_schema = schemas_full["EligibilitySections"]
     sections_props = sections_schema.get("properties", {})
-    for prop in ["parsed", "inclusion", "exclusion", "unclassified"]:
+    for prop in ["parsed", "sections", "inclusion", "exclusion", "unclassified"]:
         assert prop in sections_props, f"Issue #67 field '{prop}' missing in EligibilitySections"
+    assert "EligibilitySection" in schemas_full, "EligibilitySection schema must be defined"
+    section_props = schemas_full["EligibilitySection"].get("properties", {})
+    for prop in ["kind", "heading", "items"]:
+        assert prop in section_props, f"Issue #67 field '{prop}' missing in EligibilitySection"
     assert "eligibility_sections" in props, (
         "Issue #67 field 'eligibility_sections' missing in StructuredEligibility"
     )
+    # Finding 8: wording must cover blank, not just absent, criteria_text.
+    assert "absent or blank" in props["eligibility_sections"].get("description", "")
 
     # Search filter parameters check in GET /v1/trials
     trials_op = openapi_doc["paths"]["/v1/trials"]["get"]

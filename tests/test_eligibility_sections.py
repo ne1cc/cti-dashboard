@@ -237,3 +237,90 @@ def test_exclusion_before_inclusion_order_preserved() -> None:
     assert parsed is not None
     assert parsed.exclusion == ["Prior therapy"]
     assert parsed.inclusion == ["Age 18+"]
+
+
+def test_midline_exclusion_heading_splits_sections() -> None:
+    # Real-world shape (NCT07259369): the Exclusion heading sits mid-line after
+    # the last inclusion criterion.
+    text = (
+        "Inclusion Criteria: The patients are\n\n"
+        "* 18 years old or over\n"
+        "* can provide written informed consent. Exclusion Criteria: The patients who have\n"
+        "* advanced cancer\n"
+    )
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is True
+    assert "can provide written informed consent." in parsed.inclusion
+    assert "advanced cancer" in parsed.exclusion
+    assert parsed.exclusion[0] == "The patients who have"
+    assert reconstruct(parsed).split() == _tokens_after_marker_strip(text)
+
+
+def test_prefix_style_whole_line_heading_not_split_midline() -> None:
+    text = "Baseline: Inclusion Criteria:\n* Age 18+\n"
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.sections[0].heading_raw == "Baseline: Inclusion Criteria:"
+    assert parsed.unclassified == []
+
+
+def test_inline_heading_with_parenthetical_qualifier() -> None:
+    # Real-world shape (NCT07812337): 'Exclusion Criteria (PCP): none'.
+    text = "Inclusion Criteria:\n* Age 50 or older\n\nExclusion Criteria (PCP): none\n"
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is True
+    assert parsed.inclusion == ["Age 50 or older"]
+    assert parsed.exclusion == ["none"]
+    assert parsed.sections[1].heading_raw == "Exclusion Criteria (PCP):"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "* Prior exclusion from study:",
+        "* Previous inclusion in this study:",
+        "* Inclusion criteria were met previously:",
+    ],
+)
+def test_bulleted_colon_line_with_keyword_is_not_a_heading(line: str) -> None:
+    text = f"Exclusion Criteria:\n{line}\n* x\n"
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is True
+    assert parsed.inclusion == []
+    assert line.removeprefix("* ").removeprefix("- ") in parsed.exclusion
+    assert "x" in parsed.exclusion
+
+
+def test_blank_lines_do_not_separate_items() -> None:
+    # Documented behavior: blank lines are ignored; only bullet markers start
+    # new items, so consecutive non-bullet lines join into one item.
+    text = "Inclusion Criteria:\n\nAge 18 or older\n\nSigned consent\n"
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.inclusion == ["Age 18 or older\nSigned consent"]
+
+
+def test_trailing_note_joins_last_item() -> None:
+    text = "Exclusion Criteria:\n* Prior therapy\n\nNote: discuss with the study team.\n"
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.exclusion == ["Prior therapy\nNote: discuss with the study team."]
+
+
+def test_nested_bullets_flatten_to_sibling_items() -> None:
+    # Documented limitation: indentation is ignored, so sub-bullets become
+    # sibling items and any-of grouping is not preserved structurally.
+    text = "Inclusion Criteria:\n* Has one of:\n  * A\n  * B\n"
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.inclusion == ["Has one of:", "A", "B"]

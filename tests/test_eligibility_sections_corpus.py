@@ -1,9 +1,10 @@
 """Corpus tests for eligibility section splitting over real registry blobs.
 
 The corpus in ``tests/fixtures/criteria_corpus/`` is verbatim
-ClinicalTrials.gov API v2 ``eligibilityCriteria`` text with per-sample
-provenance (NCT ID, source URL, retrieval date). It is real data: never
-fabricate, edit, or pad it. See the ``provenance`` block in the fixture.
+ClinicalTrials.gov API v2 ``eligibilityCriteria`` text. Each sample records
+its NCT ID, source study URL, and criteria text; the API endpoint, field
+path, and retrieval date are recorded once at corpus level in the fixture's
+``provenance`` block. This is real data: never fabricate, edit, or pad it.
 """
 
 import json

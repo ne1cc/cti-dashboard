@@ -23,6 +23,7 @@ import duckdb
 from src.api.gazetteer import register_gazetteer_views
 from src.api.models import (
     DataProvenance,
+    EligibilitySection,
     EligibilitySections,
     EnrollmentInfo,
     GeoPoint,
@@ -596,6 +597,10 @@ class DuckDBWarehouseManager:
             criteria_text=criteria_text,
             eligibility_sections=EligibilitySections(
                 parsed=sections_parsed.parsed,
+                sections=[
+                    EligibilitySection(kind=s.kind, heading=s.heading_raw, items=s.items)
+                    for s in sections_parsed.sections
+                ],
                 inclusion=sections_parsed.inclusion,
                 exclusion=sections_parsed.exclusion,
                 unclassified=sections_parsed.unclassified,

@@ -13,6 +13,7 @@ from typing import Any
 
 from src.api.models import (
     DataProvenance,
+    EligibilitySection,
     EligibilitySections,
     EnrollmentInfo,
     GeoPoint,
@@ -348,6 +349,10 @@ def normalize_study_detail(
         criteria_text=criteria_text,
         eligibility_sections=EligibilitySections(
             parsed=sections_parsed.parsed,
+            sections=[
+                EligibilitySection(kind=s.kind, heading=s.heading_raw, items=s.items)
+                for s in sections_parsed.sections
+            ],
             inclusion=sections_parsed.inclusion,
             exclusion=sections_parsed.exclusion,
             unclassified=sections_parsed.unclassified,
