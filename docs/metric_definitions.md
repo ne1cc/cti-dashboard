@@ -83,6 +83,12 @@ mean is the opposite case: a one-point mean is honest, so
   `coordinate_approximate: true`. Sites with no resolvable coordinates are
   excluded from distance results. Their exact-vs-approximate mix is the
   coordinate coverage reported above.
+- Known limitation of the city fallback: when several Gazetteer places share
+  the same normalized city+state name, the fallback resolves to one
+  deterministic centroid (lowest latitude, then longitude) rather than the
+  one closest to the user, and that centroid can be far from the actual site.
+  It is flagged `coordinate_approximate`; the ZIP fallback is the primary
+  approximate path.
 
 ## Registry Segments and Raw Feasibility Metrics (`mart_feasibility_priority_queue`)
 Purpose: **provide transparent, sortable raw registry signals for human feasibility review.** Not a forecast.

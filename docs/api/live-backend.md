@@ -28,7 +28,7 @@ Importing the API package does not open a client or create a database. `CTI_CACH
 | `sort` | Sort the fetched page in memory |
 | Internal | `countTotal=true`, `format=json` |
 
-Enums and numeric ranges follow the contract. Coordinates must be finite, within latitude/longitude bounds, and supplied together. The radius must be 1–500 miles, and ages must be 0–130 years. An inverted age range returns 400. `sort=distance` requires coordinates and otherwise returns 422. Invalid parameter types, enum values, and ranges return RFC 7807 400/422 problems before upstream dispatch.
+Enums and numeric ranges follow the contract. Coordinates must be finite, within latitude/longitude bounds, and supplied together. The radius must be 1–500 miles, and ages must be 0–130 years. An inverted age range returns 400. `sort=distance` requires a location (`lat`/`lon` or `postal_code`) and otherwise returns 422; a location query (postal or coordinates) without an explicit `sort` sorts by distance. Invalid parameter types, enum values, and ranges return RFC 7807 400/422 problems before upstream dispatch.
 
 Age filters compare stated bounds with the requested range; missing bounds do not exclude a study (Issue #62). Sex and healthy-volunteer filters also retain unspecified eligibility. A standard-age-group filter retains trials without declared groups; it never infers groups from numeric ages. Sponsor class requires an explicit matching class.
 

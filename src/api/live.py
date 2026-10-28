@@ -36,6 +36,10 @@ EARTH_RADIUS_MILES = 3958.8
 DEFAULT_ACTIVE_STATUSES = (
     "RECRUITING|NOT_YET_RECRUITING|ACTIVE_NOT_RECRUITING|ENROLLING_BY_INVITATION"
 )
+# Issue #63: only these site-level statuses count as "available near me"; the
+# nearest site in search results is chosen among them (the detail endpoint
+# still lists every site with its status). Matches the warehouse SQL rule.
+RECRUITING_SITE_STATUSES = frozenset({"RECRUITING", "NOT_YET_RECRUITING"})
 
 
 def haversine_distance_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -177,6 +181,8 @@ def normalize_study_summary(
 
         for loc in locations:
             if not isinstance(loc, dict):
+                continue
+            if loc.get("status") not in RECRUITING_SITE_STATUSES:
                 continue
             geo = loc.get("geoPoint")
             if isinstance(geo, dict) and "lat" in geo and "lon" in geo:

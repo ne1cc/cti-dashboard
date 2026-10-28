@@ -377,7 +377,9 @@ def test_postal_code_plus_condition_sorts_by_distance_by_default(
     con = duckdb.connect(str(warehouse_db))
     # A second dementia trial with a recruiting site ~11 mi from the 94143
     # centroid, plus a Dementia condition row so cond=dementia matches both it
-    # and NCT00000001.
+    # and NCT00000001. Its update date is made NEWER than NCT00000001's, so
+    # -updated order is the reverse of distance order and the default-sort
+    # assertion below actually discriminates the distance behavior.
     con.execute("""
     INSERT INTO stg_trial_locations VALUES
     ('run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
@@ -387,6 +389,10 @@ def test_postal_code_plus_condition_sorts_by_distance_by_default(
      'CA', 'CA', '94612', 'United States', 'US',
      37.8044, -122.2712, 'RECRUITING', true, true, 'h10');
     """)
+    con.execute(
+        "UPDATE stg_trials SET last_update_post_date = DATE '2026-07-01'"
+        " WHERE nct_id = 'NCT00000002'"
+    )
     con.execute("""
     INSERT INTO stg_trial_conditions VALUES
     ('run_01', 'adrd', 'NCT00000002', 'Dementia',
@@ -396,10 +402,18 @@ def test_postal_code_plus_condition_sorts_by_distance_by_default(
     resp = client_gazetteer_warehouse.get("/v1/trials?postal_code=94143&radius_mi=50&cond=dementia")
     assert resp.status_code == 200
     items = resp.json()["items"]
+    # Distance order: the nearer trial first. This is the reverse of -updated
+    # order (NCT00000002 was updated more recently), asserted explicitly below.
     assert [i["nct_id"] for i in items] == ["NCT00000001", "NCT00000002"]
     distances = [i["nearest_site"]["distance_miles"] for i in items]
     assert distances == sorted(distances)
     assert all(i["nearest_site"]["location_status"] == "RECRUITING" for i in items)
+    # The discriminating counterpart: with an explicit -updated the same query
+    # returns the reverse order.
+    by_update = client_gazetteer_warehouse.get(
+        "/v1/trials?postal_code=94143&radius_mi=50&cond=dementia&sort=-updated"
+    )
+    assert [i["nct_id"] for i in by_update.json()["items"]] == ["NCT00000002", "NCT00000001"]
     # Explicit sort=distance via postal code no longer 422s either.
     explicit = client_gazetteer_warehouse.get(
         "/v1/trials?postal_code=94143&radius_mi=50&sort=distance"

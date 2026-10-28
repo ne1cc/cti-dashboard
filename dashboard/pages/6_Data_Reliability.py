@@ -108,7 +108,7 @@ if not success.empty:
         help=("Trial sites with registry geoPoint latitude/longitude (exact coordinates)."),
     )
     geo_col2.metric(
-        "Approximate coordinates share",
+        "Approximate coordinates (eligible)",
         f"{latest['coordinates_fallback_eligible_share']:.1%}",
         help=(
             "Trial sites without geoPoint that carry a ZIP or city+state the "

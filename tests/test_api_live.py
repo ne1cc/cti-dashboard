@@ -159,6 +159,74 @@ def test_normalize_study_summary_conforms_to_schema(
     assert summary.registry_url == "https://clinicaltrials.gov/study/NCT04245644"
 
 
+def _study_with_site_statuses() -> dict[str, Any]:
+    """Study with a COMPLETED site ~0.2 mi from the user and a RECRUITING
+    site ~15 mi away (Issue #63: only the latter may be the nearest site)."""
+    return {
+        "protocolSection": {
+            "identificationModule": {"nctId": "NCT99999999"},
+            "statusModule": {"overallStatus": "RECRUITING"},
+            "designModule": {"studyType": "INTERVENTIONAL", "phases": ["PHASE3"]},
+            "sponsorCollaboratorsModule": {"leadSponsor": {"name": "Test Sponsor"}},
+            "conditionsModule": {"conditions": ["Dementia"]},
+            "eligibilityModule": {},
+            "contactsLocationsModule": {
+                "locations": [
+                    {
+                        "facility": "Closed Site",
+                        "city": "Seattle",
+                        "state": "WA",
+                        "status": "COMPLETED",
+                        "geoPoint": {"lat": 47.609, "lon": -122.3321},
+                    },
+                    {
+                        "facility": "Open Site",
+                        "city": "Bellevue",
+                        "state": "WA",
+                        "status": "RECRUITING",
+                        "geoPoint": {"lat": 47.61, "lon": -122.0},
+                    },
+                ]
+            },
+        }
+    }
+
+
+def test_live_nearest_site_counts_only_recruiting_statuses() -> None:
+    summary = normalize_study_summary(_study_with_site_statuses(), user_lat=47.61, user_lon=-122.33)
+
+    assert summary.nearest_site is not None
+    assert summary.nearest_site.facility_name == "Open Site"
+    assert summary.nearest_site.location_status == "RECRUITING"
+    assert summary.nearest_site.distance_miles is not None
+    assert summary.nearest_site.distance_miles > 1.0
+
+
+def test_live_nearest_site_none_when_only_inactive_sites() -> None:
+    study = _study_with_site_statuses()
+    study["protocolSection"]["contactsLocationsModule"]["locations"] = [
+        {
+            "facility": "Closed Site",
+            "city": "Seattle",
+            "state": "WA",
+            "status": "COMPLETED",
+            "geoPoint": {"lat": 47.609, "lon": -122.3321},
+        }
+    ]
+    summary = normalize_study_summary(study, user_lat=47.61, user_lon=-122.33)
+
+    assert summary.nearest_site is None
+
+
+def test_live_detail_still_lists_inactive_sites() -> None:
+    detail = normalize_study_detail(_study_with_site_statuses(), user_lat=47.61, user_lon=-122.33)
+
+    statuses = {s.facility_name: s.location_status for s in detail.sites}
+    assert statuses == {"Closed Site": "COMPLETED", "Open Site": "RECRUITING"}
+    closed = next(s for s in detail.sites if s.facility_name == "Closed Site")
+    assert closed.distance_miles is not None
+
+
 def test_normalize_study_detail_conforms_to_schema(
     live_detail_fixture: dict[str, Any],
 ) -> None:

@@ -215,7 +215,10 @@ paths:
         - name: sort
           in: query
           description: |
-            Sorting order. 'distance' requires lat and lon query parameters.
+            Sorting order. 'distance' requires a location: lat and lon query
+            parameters, or postal_code (5-digit ZIP). A location query
+            (postal_code or lat/lon) without an explicit sort defaults to
+            'distance'; every other query defaults to '-updated'.
           required: false
           schema:
             type: string
