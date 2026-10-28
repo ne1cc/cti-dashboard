@@ -59,6 +59,12 @@ SELECT
     st.phase_normalized,
     st.allocation,
     st.primary_purpose,
+    st.intervention_model,
+    st.masking,
+    st.has_placebo_arm,
+    st.why_stopped,
+    st.brief_summary,
+    st.primary_outcome_time_frame,
 
     -- Enrollment
     st.enrollment_count,
@@ -118,6 +124,19 @@ SELECT
         WHERE ti.nct_id = st.nct_id
           AND ti.ingestion_run_id = st.ingestion_run_id
     ) AS interventions,
+
+    -- Arm groups (registry text stored verbatim)
+    (
+        SELECT list({
+            'label': ta.arm_label,
+            'arm_type': ta.arm_type,
+            'description': ta.arm_description,
+            'intervention_names': COALESCE(ta.intervention_names, [])
+        } ORDER BY ta.arm_ordinal)
+        FROM stg_trial_arms ta
+        WHERE ta.nct_id = st.nct_id
+          AND ta.ingestion_run_id = st.ingestion_run_id
+    ) AS arms,
 
     -- Eligibility (Issue #62)
     st.minimum_age_raw,

@@ -104,6 +104,25 @@ models:
       - name: sex_eligibility_unknown_flag
         data_type: BOOLEAN
         description: True when sex eligibility is unstated, empty, or unknown.
+      - name: current_intervention_model
+        data_type: VARCHAR
+        description: Registry designInfo.interventionModel (PARALLEL, SINGLE_GROUP, ...); null when unstated.
+      - name: current_masking
+        data_type: VARCHAR
+        description: Registry masking level (NONE, SINGLE, DOUBLE, TRIPLE, QUADRUPLE); null when unstated.
+      - name: has_placebo_arm
+        data_type: BOOLEAN
+        description: True when any registry arm group declares type PLACEBO_COMPARATOR.
+        tests: [not_null]
+      - name: why_stopped
+        data_type: VARCHAR
+        description: Registry statusModule.whyStopped, verbatim; populated for terminated/withdrawn/suspended trials.
+      - name: brief_summary
+        data_type: VARCHAR
+        description: Registry descriptionModule.briefSummary, stored verbatim (registry-provided text, never generated).
+      - name: primary_outcome_time_frame
+        data_type: VARCHAR
+        description: timeFrame of the first registry primary outcome, verbatim (e.g. "78 weeks"); null when absent.
 
   - name: dim_condition
     description: >

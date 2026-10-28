@@ -66,6 +66,25 @@ models:
         description: Registry explanation when gender_based is true.
       - name: std_age_groups
         description: List of standard age groups (CHILD, ADULT, OLDER_ADULT).
+      - name: allocation
+        description: Registry designInfo.allocation (RANDOMIZED, NON_RANDOMIZED, NA).
+      - name: primary_purpose
+        description: Registry designInfo.primaryPurpose (TREATMENT, PREVENTION, ...).
+      - name: intervention_model
+        description: Registry designInfo.interventionModel (PARALLEL, SINGLE_GROUP, ...).
+      - name: masking
+        description: >
+          Registry designInfo.maskingInfo.masking level (NONE, SINGLE, DOUBLE,
+          TRIPLE, QUADRUPLE); null when unstated.
+      - name: has_placebo_arm
+        description: True when any registry arm group declares type PLACEBO_COMPARATOR.
+        tests: [not_null]
+      - name: why_stopped
+        description: Registry statusModule.whyStopped, stored verbatim; populated for terminated/withdrawn/suspended trials.
+      - name: brief_summary
+        description: Registry descriptionModule.briefSummary, stored verbatim (registry-provided text).
+      - name: primary_outcome_time_frame
+        description: timeFrame of the first registry primary outcome, verbatim (e.g. "78 weeks"); null when absent.
 
   - name: stg_trial_conditions
     columns:
@@ -83,6 +102,30 @@ models:
 
   - name: stg_trial_interventions
     columns:
+      - name: indication_profile_id
+        description: Indication profile that produced this run; staging is where the column becomes mandatory.
+        tests: [not_null]
+
+  - name: stg_trial_arms
+    description: One row per profile + NCT ID + run + original zero-based arm group ordinal; registry text stored verbatim.
+    columns:
+      - name: nct_id
+        tests: [not_null]
+      - name: arm_ordinal
+        description: Zero-based position of the arm group in the registry's armGroups list.
+        tests: [not_null]
+      - name: arm_type
+        description: >
+          Registry arm group type (EXPERIMENTAL, ACTIVE_COMPARATOR,
+          PLACEBO_COMPARATOR, SHAM_COMPARATOR, NO_INTERVENTION, OTHER); null
+          when the registry omits it (some observational arms).
+        tests:
+          - accepted_values:
+              values: [EXPERIMENTAL, ACTIVE_COMPARATOR, PLACEBO_COMPARATOR, SHAM_COMPARATOR, NO_INTERVENTION, OTHER]
+              config:
+                severity: warn
+      - name: intervention_names
+        description: Registry interventionNames list for the arm, stored verbatim.
       - name: indication_profile_id
         description: Indication profile that produced this run; staging is where the column becomes mandatory.
         tests: [not_null]

@@ -35,6 +35,7 @@ ENTITY_NAMES = (
     "silver_trials",
     "silver_trial_conditions",
     "silver_trial_interventions",
+    "silver_trial_arms",
     "silver_trial_sponsors",
     "silver_trial_locations",
     "silver_trial_outcomes",

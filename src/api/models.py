@@ -211,6 +211,27 @@ class StudyIntervention(BaseModel):
     description: str | None = Field(default=None, description="Intervention details")
 
 
+class StudyArm(BaseModel):
+    """Registry arm group.
+
+    All text is stored verbatim as provided by the registry (never generated).
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    label: str | None = Field(default=None, description="Arm group label")
+    arm_type: str | None = Field(
+        default=None,
+        description="Arm group type (EXPERIMENTAL, PLACEBO_COMPARATOR, ACTIVE_COMPARATOR, ...)",
+    )
+    description: str | None = Field(
+        default=None, description="Arm group description (registry-provided text)"
+    )
+    intervention_names: list[str] = Field(
+        default_factory=list, description="Interventions assigned to this arm, verbatim"
+    )
+
+
 class StructuredEligibility(BaseModel):
     """Complete participant eligibility criteria model per Issue #62."""
 
@@ -313,6 +334,31 @@ class TrialDetail(BaseModel):
     conditions: list[StudyCondition] = Field(default_factory=list, description="Target conditions")
     interventions: list[StudyIntervention] = Field(
         default_factory=list, description="Study interventions"
+    )
+    arms: list[StudyArm] = Field(
+        default_factory=list, description="Registry arm groups (verbatim registry text)"
+    )
+    has_placebo_arm: bool = Field(
+        default=False,
+        description="True when any registry arm group declares type PLACEBO_COMPARATOR",
+    )
+    why_stopped: str | None = Field(
+        default=None,
+        description=(
+            "Registry-provided reason the trial stopped (statusModule.whyStopped), verbatim; "
+            "populated for terminated/withdrawn/suspended trials"
+        ),
+    )
+    brief_summary: str | None = Field(
+        default=None,
+        description=(
+            "Registry-provided brief summary (descriptionModule.briefSummary), stored verbatim; "
+            "never generated or paraphrased"
+        ),
+    )
+    primary_outcome_time_frame: str | None = Field(
+        default=None,
+        description="timeFrame of the first registry primary outcome, verbatim (e.g. '78 weeks')",
     )
     eligibility: StructuredEligibility = Field(
         ..., description="Structured eligibility criteria (Issue #62)"

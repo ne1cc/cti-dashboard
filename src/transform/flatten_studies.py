@@ -1,9 +1,11 @@
-"""Flatten nested ClinicalTrials.gov study JSON into the six silver entities.
+"""Flatten nested ClinicalTrials.gov study JSON into the seven silver entities.
 
 Grounded in the actual API v2 structure (verified against saved bronze pages):
 protocolSection.{identification,status,sponsorCollaborators,design,conditions,
-armsInterventions,outcomes,eligibility,contactsLocations}Module + top-level
-hasResults. Location contact/investigator fields are deliberately not extracted.
+armsInterventions,description,outcomes,eligibility,contactsLocations}Module +
+top-level hasResults. Location contact/investigator fields are deliberately not
+extracted. Arm groups, masking, whyStopped, briefSummary and the primary
+outcome's timeFrame are stored verbatim from the registry.
 """
 
 import json
@@ -40,6 +42,16 @@ def normalize_phases(phases: list[str] | None) -> tuple[str | None, str]:
     raw = "|".join(phases)
     normalized = [("NOT_APPLICABLE" if p == "NA" else p) for p in phases]
     return raw, "/".join(normalized)
+
+
+PLACEBO_ARM_TYPE = "PLACEBO_COMPARATOR"
+
+
+def has_placebo_arm(arm_groups: list[dict[str, Any]] | None) -> bool:
+    """True when any registry arm group declares type PLACEBO_COMPARATOR."""
+    return any(
+        isinstance(arm, dict) and arm.get("type") == PLACEBO_ARM_TYPE for arm in arm_groups or []
+    )
 
 
 def trial_quality_flags(row: dict[str, Any]) -> str:
@@ -86,8 +98,16 @@ def flatten_study(
     identification = protocol.get("identificationModule", {})
     status = protocol.get("statusModule", {})
     design = protocol.get("designModule", {})
+    description = protocol.get("descriptionModule", {})
     sponsors_module = protocol.get("sponsorCollaboratorsModule", {})
     eligibility = protocol.get("eligibilityModule", {})
+    arm_groups = dig(protocol, "armsInterventionsModule", "armGroups")
+    primary_outcomes = dig(protocol, "outcomesModule", "primaryOutcomes") or []
+    first_primary_time_frame = (
+        primary_outcomes[0].get("timeFrame")
+        if primary_outcomes and isinstance(primary_outcomes[0], dict)
+        else None
+    )
 
     nct_id = identification.get("nctId")
     source_json_hash = sha256_json(study)
@@ -128,6 +148,12 @@ def flatten_study(
         "enrollment_type": dig(design, "enrollmentInfo", "type"),
         "allocation": dig(design, "designInfo", "allocation"),
         "primary_purpose": dig(design, "designInfo", "primaryPurpose"),
+        "intervention_model": dig(design, "designInfo", "interventionModel"),
+        "masking": dig(design, "designInfo", "maskingInfo", "masking"),
+        "has_placebo_arm": has_placebo_arm(arm_groups),
+        "why_stopped": status.get("whyStopped"),
+        "brief_summary": description.get("briefSummary"),
+        "primary_outcome_time_frame": first_primary_time_frame,
         "lead_sponsor_name": dig(sponsors_module, "leadSponsor", "name"),
         "responsible_party_type": dig(sponsors_module, "responsibleParty", "type"),
         "healthy_volunteers": eligibility.get("healthyVolunteers"),
@@ -166,6 +192,21 @@ def flatten_study(
                 "intervention_type": item.get("type"),
                 "intervention_description": item.get("description"),
                 "intervention_normalized": normalize_text(item.get("name")),
+            }
+        )
+
+    arms = []
+    for arm_ordinal, arm in enumerate(arm_groups or []):
+        if not isinstance(arm, dict):
+            continue
+        arms.append(
+            {
+                **base,
+                "arm_ordinal": arm_ordinal,
+                "arm_label": arm.get("label"),
+                "arm_type": arm.get("type"),
+                "arm_description": arm.get("description"),
+                "intervention_names": arm.get("interventionNames"),
             }
         )
 
@@ -243,6 +284,7 @@ def flatten_study(
         "silver_trials": [trial],
         "silver_trial_conditions": conditions,
         "silver_trial_interventions": interventions,
+        "silver_trial_arms": arms,
         "silver_trial_sponsors": sponsors,
         "silver_trial_locations": locations,
         "silver_trial_outcomes": outcomes,
