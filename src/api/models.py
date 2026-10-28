@@ -25,6 +25,17 @@ class NearestSiteSummary(BaseModel):
     facility_name: str = Field(..., description="Facility name")
     city: str = Field(..., description="City")
     state: str | None = Field(default=None, description="State code or region")
+    location_status: str | None = Field(
+        default=None,
+        description="Site-level recruiting status of this site (e.g. RECRUITING)",
+    )
+    coordinate_approximate: bool = Field(
+        default=False,
+        description=(
+            "True when coordinates come from an offline Gazetteer ZIP/city centroid "
+            "fallback rather than registry geoPoint data (Issue #63)"
+        ),
+    )
     distance_miles: float | None = Field(
         default=None, description="Great-circle distance in miles from search coordinates"
     )
@@ -245,6 +256,13 @@ class TrialSite(BaseModel):
     country: str = Field(..., description="Country name")
     location_status: str | None = Field(default=None, description="Site recruitment status")
     coordinates: GeoPoint | None = Field(default=None, description="Geocoded coordinates")
+    coordinate_approximate: bool = Field(
+        default=False,
+        description=(
+            "True when coordinates come from an offline Gazetteer ZIP/city centroid "
+            "fallback rather than registry geoPoint data (Issue #63)"
+        ),
+    )
     distance_miles: float | None = Field(
         default=None, description="Proximity distance from search coordinates"
     )

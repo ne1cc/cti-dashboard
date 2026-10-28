@@ -20,6 +20,7 @@ from typing import Any
 
 import duckdb
 
+from src.api.gazetteer import register_gazetteer_views
 from src.api.models import (
     DataProvenance,
     EnrollmentInfo,
@@ -97,8 +98,10 @@ class DuckDBConnectionPool:
         database_path: str | Path,
         max_connections: int = 10,
         timeout: float = 5.0,
+        gazetteer_dir: str | Path | None = None,
     ) -> None:
         self.database_path = Path(database_path)
+        self.gazetteer_dir = gazetteer_dir
         self.max_connections = max(1, max_connections)
         self.timeout = timeout
         self._pool: queue.Queue[duckdb.DuckDBPyConnection] = queue.Queue(
@@ -126,6 +129,9 @@ class DuckDBConnectionPool:
             if valid:
                 path_str = ",".join(valid)
                 conn.execute(f"SET search_path = '{path_str}';")
+            # Offline Gazetteer fallback coordinates (Issue #63): always present
+            # (empty when reference files are missing) so queries stay bindable.
+            register_gazetteer_views(conn, self.gazetteer_dir)
             return conn
         except Exception as err:
             raise WarehouseNotReadyError(f"Failed to connect to DuckDB warehouse: {err}") from err
@@ -205,10 +211,14 @@ class DuckDBWarehouseManager:
         database_path: str | Path,
         max_connections: int = 10,
         timeout: float = 5.0,
+        gazetteer_dir: str | Path | None = None,
     ) -> None:
         self.database_path = Path(database_path)
         self.pool = DuckDBConnectionPool(
-            self.database_path, max_connections=max_connections, timeout=timeout
+            self.database_path,
+            max_connections=max_connections,
+            timeout=timeout,
+            gazetteer_dir=gazetteer_dir,
         )
         self._search_sql = SEARCH_SQL_PATH.read_text(encoding="utf-8")
         self._detail_sql = DETAIL_SQL_PATH.read_text(encoding="utf-8")
@@ -413,6 +423,8 @@ class DuckDBWarehouseManager:
                     facility_name=r["nearest_facility_name"],
                     city=r["nearest_city"],
                     state=r.get("nearest_state"),
+                    location_status=r.get("nearest_location_status"),
+                    coordinate_approximate=bool(r.get("nearest_coordinate_approximate")),
                     distance_miles=r.get("nearest_distance_miles"),
                 )
 
@@ -602,6 +614,7 @@ class DuckDBWarehouseManager:
                     country=site.get("country") or "United States",
                     location_status=site.get("location_status"),
                     coordinates=coords,
+                    coordinate_approximate=bool(site.get("coordinate_approximate")),
                     distance_miles=site.get("distance_miles"),
                 )
             )

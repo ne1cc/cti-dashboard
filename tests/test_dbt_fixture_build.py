@@ -1282,6 +1282,21 @@ def test_mart_data_reliability_reconciles(fixture_project_root: Path) -> None:
     ) == [("success", 10, 10, True, True)]
 
 
+def test_mart_data_reliability_reports_coordinate_coverage(
+    fixture_project_root: Path,
+) -> None:
+    """Issue #63 coordinate coverage. The fixture bronze pages publish ZIPs but
+    never geoPoint, so all 16 site rows are coordinateless; the 14 U.S. rows
+    with a ZIP are approximate-fallback material and the 2 international rows
+    (no ZIP, state UNKNOWN) are not resolvable at all."""
+    assert _rows(
+        fixture_project_root,
+        "select location_row_count, coordinates_exact_count, coordinates_fallback_count,"
+        " coordinates_exact_share, coordinates_fallback_share"
+        f" from main_marts.mart_data_reliability where ingestion_run_id = '{FIXTURE_RUN_ID}'",
+    ) == [(16, 0, 14, 0.0, 0.875)]
+
+
 def test_reliability_prefers_the_silver_profile_when_the_manifest_disagrees(
     divergent_fixture_root: Path,
 ) -> None:

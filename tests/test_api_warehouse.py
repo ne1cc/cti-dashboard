@@ -855,10 +855,13 @@ def test_keyset_pagination_with_null_dates_across_all_date_sorts(tmp_path: Path)
         ingestion_run_id VARCHAR,
         facility_name VARCHAR,
         city VARCHAR,
+        city_normalized VARCHAR,
         state_raw VARCHAR,
         state_normalized VARCHAR,
+        zip_code VARCHAR,
         latitude DOUBLE,
-        longitude DOUBLE
+        longitude DOUBLE,
+        location_status VARCHAR
     );
 
     CREATE TABLE stg_trial_conditions (

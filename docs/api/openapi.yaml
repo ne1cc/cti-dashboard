@@ -113,6 +113,17 @@ paths:
             minimum: 1.0
             maximum: 500.0
             default: 50.0
+        - name: postal_code
+          in: query
+          description: |
+            5-digit U.S. postal code. Resolved offline to search coordinates via the
+            Census Gazetteer ZCTA centroid file (`make gazetteer`); no geocoding API is
+            contacted and no address is stored. Mutually exclusive with lat/lon.
+          required: false
+          schema:
+            type: string
+            pattern: '^\d{5}$'
+            example: '98101'
         - name: min_age
           in: query
           description: |
@@ -836,7 +847,10 @@ components:
 
     NearestSiteSummary:
       type: object
-      description: Listed facility geographically closest to the user's provided coordinates.
+      description: |-
+        Recruiting (or not-yet-recruiting) site geographically closest to the user's
+        provided coordinates or postal code. Sites with other statuses are inactive
+        for this listing; the trial detail endpoint shows every site with its status.
       required:
         - facility_name
         - city
@@ -852,6 +866,20 @@ components:
             - string
             - 'null'
           example: 'CA'
+        location_status:
+          type:
+            - string
+            - 'null'
+          description: Site-level recruiting status of this site.
+          example: 'RECRUITING'
+        coordinate_approximate:
+          type: boolean
+          default: false
+          description: |
+            True when the site's coordinates come from the offline Census Gazetteer
+            ZIP/city centroid fallback rather than registry geoPoint data (Issue #63);
+            the reported distance is then approximate.
+          example: false
         distance_miles:
           type:
             - number
@@ -1239,6 +1267,14 @@ components:
             - object
             - 'null'
           $ref: '#/components/schemas/GeoPoint'
+        coordinate_approximate:
+          type: boolean
+          default: false
+          description: |
+            True when coordinates come from the offline Census Gazetteer ZIP/city centroid
+            fallback rather than registry geoPoint data (Issue #63); distances are then
+            approximate.
+          example: false
         distance_miles:
           type:
             - number

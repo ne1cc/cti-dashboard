@@ -31,6 +31,7 @@ from src.api.cache import (
     canonical_cache_key,
     scrub_contact_pii,
 )
+from src.api.gazetteer import resolve_postal_code
 from src.api.live import (
     build_upstream_search_params,
     filter_and_sort_summaries,
@@ -497,6 +498,14 @@ def create_app(
         phase: Annotated[PhaseFilter | None, Query()] = None,
         lat: float | None = Query(default=None, ge=-90, le=90, allow_inf_nan=False),
         lon: float | None = Query(default=None, ge=-180, le=180, allow_inf_nan=False),
+        postal_code: str | None = Query(
+            default=None,
+            pattern=r"^\d{5}$",
+            description=(
+                "5-digit U.S. postal code; resolved to coordinates offline via the "
+                "Census Gazetteer (no geocoding API, no address storage)"
+            ),
+        ),
         radius_mi: float = Query(default=50.0, ge=1, le=500, allow_inf_nan=False),
         min_age: int | None = Query(default=None, ge=0, le=130),
         max_age: int | None = Query(default=None, ge=0, le=130),
@@ -537,6 +546,26 @@ def create_app(
                     InvalidParam(name="sort", reason="Requires coordinates", value=sort)
                 ],
             )
+
+        if postal_code is not None and (lat is not None or lon is not None):
+            return create_problem_response(
+                400,
+                "Invalid Query Parameters",
+                "Supply either lat and lon or postal_code, not both.",
+                str(request.url),
+                code="CONFLICTING_LOCATION_PARAMS",
+            )
+        if postal_code is not None:
+            point = resolve_postal_code(postal_code)
+            if point is None:
+                return create_problem_response(
+                    400,
+                    "Unknown Postal Code",
+                    "postal_code was not found in the offline Census Gazetteer.",
+                    str(request.url),
+                    code="UNKNOWN_POSTAL_CODE",
+                )
+            lat, lon = point.lat, point.lon
 
         # Warehouse backend path
         if deps.warehouse is not None:

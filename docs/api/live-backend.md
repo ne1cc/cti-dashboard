@@ -19,6 +19,7 @@ Importing the API package does not open a client or create a database. `CTI_CACH
 | `cond` | `query.cond` |
 | `status` | `filter.overallStatus`; defaults to `RECRUITING\|NOT_YET_RECRUITING\|ACTIVE_NOT_RECRUITING\|ENROLLING_BY_INVITATION` |
 | `lat`, `lon`, `radius_mi` | `filter.geo=distance(lat,lon,radius_mi)` with the radius unit appended, for example `distance(37.7749,-122.4194,50.0mi)` |
+| `postal_code` | Resolved offline to coordinates from the Census Gazetteer ZCTA centroid file (`make gazetteer`; `CTI_GAZETTEER_DIR`), then passed as the `filter.geo` distance filter above — the registry filters geographically, not this service client-side. Unknown codes return 400 `UNKNOWN_POSTAL_CODE`; the parameter is mutually exclusive with `lat`/`lon` |
 | `limit` | `pageSize`; 1–100, default 20 |
 | `cursor` | Opaque upstream `pageToken` |
 | `min_age`, `max_age`, `sex`, `healthy_volunteers` | Filter the fetched page in memory; preserve unstated criteria |
@@ -45,7 +46,7 @@ a = sin²(Δlatitude / 2)
 distance_miles = 2 × 3958.8 × atan2(√a, √(1 − a))
 ```
 
-Angles are in radians. Sites without usable `geoPoint` values remain in detail responses with null coordinates/distance; they cannot supply the nearest-site distance. Missing distances sort last.
+Angles are in radians. In search results the nearest site is chosen among sites whose site-level status is `RECRUITING` or `NOT_YET_RECRUITING` — other statuses (and sites without coordinates) cannot make a trial "available near me", while the detail response continues to list every site with its status. In the warehouse backend, a site without a registry `geoPoint` falls back to the offline Census Gazetteer ZIP (ZCTA), then city centroid, and is flagged `coordinate_approximate: true`; the exact-vs-approximate coordinate mix is reported on the data-quality page (Issue #63). Missing distances sort last.
 
 ## Privacy and normalization
 
