@@ -45,7 +45,7 @@ def test_priority_summary_labels_proxy_and_observed_growth_distinctly(proxy):
             "sponsor_count": 6,
             "sponsor_hhi": 0.26,
             "site_overlap_share": 0.93,
-            "data_confidence_share": 0.74,
+            "operational_completeness_share": 0.74,
         }
     )
     before = row.copy()

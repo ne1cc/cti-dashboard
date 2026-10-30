@@ -99,7 +99,7 @@ Per ADR 0077, the composite priority score and categorical priority bands were r
 2. **Recent Growth (`new_recruiting_90d`, `recent_growth_input`):** `new_recruiting_90d` if multi-snapshot history exists, else `newly_posted_90d_proxy` (`growth_uses_registry_proxy_flag` exposes which source was used).
 3. **Sponsor Concentration (`sponsor_hhi`):** Herfindahl-Hirschman Index (Σ s_i²) measuring market concentration across segment sponsors, bounded in [0, 1.0].
 4. **Site Overlap Rate (`site_overlap_rate`, `site_overlap_share`):** Share of segment trials listing ≥1 facility that hosts multiple recruiting trials in this indication profile.
-5. **Operational Completeness Adjustment (`data_confidence_share`):** 0.5 × segment record-quality-ok share + 0.5 × run-level usable-location share. Reflects reporting and location usability; not scientific confidence.
+5. **Operational Completeness (`operational_completeness_share`):** 0.5 × segment record-quality-ok share + 0.5 × run-level usable-location share. Reflects reporting and location usability; not scientific confidence. The usable-location half comes from the profile's latest successful ingestion run (`run_reliability` CTE), so it is a run-level value that is constant across all segments of one profile; only the record-quality half varies at segment grain.
 6. `priority_explanation` is assembled from fixed component phrases — the same inputs always yield the same sentence. Every row carries an `interpretation_note`.
 
 ## Scenario values (`src/analysis/roi_scenarios.py`)
