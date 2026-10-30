@@ -19,83 +19,106 @@ _KIND_UNCLASSIFIED = "unclassified"
 
 # Leading bullet markers that start a new item. Numbered markers require a
 # separator plus whitespace so decimal doses ("1.5 mg") never split items.
-_BULLET_RE = re.compile(
-    r"^\s*(?P<marker>(?:[-*•·‣◦–—]\s+)|(?:\(?\d{1,3}[.)]\s+)|(?:\(\d{1,3}\)\s+))"
+_BULLET_PATTERN = r"(?:[-*•·‣◦–—]\s+)|(?:\(?\d{1,3}[.)]\s+)|(?:\(\d{1,3}\)\s+)"
+_BULLET_RE = re.compile(rf"^\s*(?P<marker>{_BULLET_PATTERN})")
+
+# Negative, lead-in, and note words that indicate a criterion or preamble
+# rather than a section heading (e.g. '* No exclusion criteria', 'Meets inclusion criteria...').
+_DISALLOWED_LEAD_RE = re.compile(
+    rf"^\s*(?:{_BULLET_PATTERN})?\**\s*(?:No|None|Not|Meets?|Fails?|Prior|Previous|Note|Without)\b",
+    re.IGNORECASE,
 )
 
-# Standalone heading lines: the whole line is the heading. Kept deliberately
-# narrow — qualifier prefixes must end with a colon, and tails are limited to
-# "for ..." phrases or parentheticals — so prose that merely mentions the
-# words is never treated as a heading.
+# Canonical qualifiers allowed before keywords on headings.
+_CANONICAL_QUALIFIERS = (
+    r"(?:Key|Other|Additional|Main|General|Specific|Primary|Secondary|Core|"
+    r"Clinical|Angiographic|Ocular|Healthy|Common|Patient|Participant|Cohort|Part\s+[A-Za-z0-9]+)"
+)
+
+# Combined headings mentioning both inclusion and exclusion
+# (e.g. 'Inclusion and Exclusion Criteria:').
+_COMBINED_HEADING_RE = re.compile(
+    r"\b(?:inclusions?[\s/&]+(?:and|or)?[\s/&]*exclusions?|exclusions?[\s/&]+(?:and|or)?[\s/&]*inclusions?)\b",
+    re.IGNORECASE,
+)
+
+# Standalone heading lines: the whole line is the heading. Qualifier prefixes
+# must end with a colon, and tails are limited to "for ..." phrases or parentheticals
+# or colon-terminated descriptors.
 _HEADING_RE = re.compile(
-    r"""^
-    \**\s*                                  # optional bold markers
-    (?:[A-Za-z][\w ()'&/,.-]{0,40}?:\s*)?   # 'Extension Phase:'-style prefix
-    (?:[A-Za-z][\w-]{0,14}\s+)?             # single-word qualifier ('Key', 'General')
+    r"""^\s*
     \**\s*
-    (?P<keyword>inclusions?|exclusions?)\b  # keyword
-    \s*(?:\bcriteria\b)?\b                  # optional word 'criteria'
-    (?:\s+for\b[^.!?,;:]{0,50}              # 'for Healthy Volunteers'
-      |\s*\([^)!?,;]{0,60}\)                # '(applies to all patients)'
+    (?:[A-Za-z][\w ()'&/,.-]{0,40}?:\s*)?   # Prefix like 'Extension Phase:'
+    (?:[A-Za-z][\w-]{0,14}\s+)?             # single-word qualifier
+    \**\s*
+    (?P<keyword>(?:non[- ]?)?(?:inclusions?|exclusions?))\b
+    \s*(?:\bcriteria\b)?\b
+    (?:
+        \s+for\b[^.!?,;:]{0,50}
+      | \s*\([^)!?,;]{0,60}\)
     )?
-    (?:(?:\s*[,;:-]?\s*[^.!?:]{0,80})?:)?   # descriptor tail or bare colon (colon mandatory)
+    (?:
+        (?:\s*[,;:-]?\s*[^.!?:]{0,80})?:
+      | \s*$
+    )
     \s*(?:\*\*)?\s*$""",
     re.IGNORECASE | re.VERBOSE,
 )
 
-# Standalone headings on bulleted lines get the same body but NOT the free
-# descriptor tail: a bullet plus keyword plus arbitrary colon-terminated text
-# is far more likely a criterion ("* Prior exclusion from study:") than a
-# heading. "for ..."/parenthetical tails stay allowed (they are heading-shaped).
+# Standalone headings on bulleted lines. When colon-less, the qualifier MUST come from
+# the canonical allowlist and the word 'criteria' is mandatory (e.g. '* INCLUSION CRITERIA'),
+# rejecting bare '* Exclusion' or criteria lines with free tails.
 _BULLETED_HEADING_RE = re.compile(
-    r"""^
-    (?:[*•·‣◦]\s+|-\s+)?                    # optional bullet marker
+    rf"""^\s*
+    (?:{_BULLET_PATTERN})?
     \**\s*
-    (?:[A-Za-z][\w ()'&/,.-]{0,40}?:\s*)?   # 'Extension Phase:'-style prefix
-    (?:[A-Za-z][\w-]{0,14}\s+)?             # single-word qualifier
+    (?:[A-Za-z][\w ()'&/,.-]{{0,40}}?:\s*)?
+    (?:{_CANONICAL_QUALIFIERS}\s+)?
     \**\s*
-    (?P<keyword>inclusions?|exclusions?)\b
-    \s*(?:\bcriteria\b)?\b
-    (?:\s+for\b[^.!?,;:]{0,50}
-      |\s*\([^)!?,;]{0,60}\)
-    )?
-    :?                                      # optional bare colon (no free tail)
+    (?P<keyword>(?:non[- ]?)?(?:inclusions?|exclusions?))\b
+    (?:
+        \s+\bcriteria\b
+        (?:\s*\([^)!?,;]{{0,60}}\))?
+        \s*:?
+      |
+        (?:\s*\bcriteria\b)?
+        (?:\s*\([^)!?,;]{{0,60}}\))?
+        \s*:
+    )
     \s*(?:\*\*)?\s*$""",
     re.IGNORECASE | re.VERBOSE,
 )
 
 # Inline headings: 'Inclusion Criteria: first criterion text...'. The colon
-# must directly follow the keyword/criteria phrase (a parenthetical qualifier
-# such as '(PCP)' may sit in between), so any remaining text is
-# unambiguously heading-owned content, not prose.
+# must follow the keyword/criteria phrase (a parenthetical qualifier
+# such as '(PCP)' may sit in between). Trailing bold markers are stripped.
 _INLINE_HEADING_RE = re.compile(
-    r"""^
-    (?:[*•·‣◦]\s+|-\s+|\*\*\s*)?
+    rf"""^\s*
+    (?:{_BULLET_PATTERN})?
     \**\s*
-    (?P<keyword>inclusions?|exclusions?)\b
+    (?P<keyword>(?:non[- ]?)?(?:inclusions?|exclusions?))\b
     \s*(?:\bcriteria\b)?\b
-    (?:\s*\([^)!?,;]{0,60}\))?
+    (?:\s*\([^)!?,;]{{0,60}}\))?
     \**\s*
-    :(?P<rest>.+)$""",
+    :(?:\**\s*)?(?P<rest>.+)$""",
     re.IGNORECASE | re.VERBOSE,
 )
 
 # Heading phrase appearing mid-line after criterion text
-# ('... consent. Exclusion Criteria: The patients ...'). Requires a colon and
-# sentence-ending punctuation plus title/all-caps casing so prose mentioning
-# the words (e.g. '* No other exclusion:') is never split; the text before
-# the phrase stays with the current section.
+# ('... consent. Exclusion Criteria: The patients ...'). Requires sentence-ending
+# punctuation ([.;:\)]) and mandatory word 'criteria' with colon, ensuring prose
+# mentioning the bare words (e.g. '; Inclusion: allowed') is never split.
 _MIDLINE_HEADING_RE = re.compile(
     r"""(?<=[.;:\)])\s+
     (?P<heading>
         \**\s*
-        (?P<keyword>Inclusions?|Exclusions?|INCLUSIONS?|EXCLUSIONS?)\b
-        \s*(?:\b(?:Criteria|CRITERIA)\b)?\b
+        (?P<keyword>(?:non[- ]?)?(?:inclusions?|exclusions?))\b
+        \s+(?:criteria)\b
         (?:\s*\([^)!?,;]{0,60}\))?
         \**\s*
         :
     )""",
-    re.VERBOSE,
+    re.IGNORECASE | re.VERBOSE,
 )
 
 
@@ -162,39 +185,54 @@ class _SectionBuilder:
         )
 
 
-def _heading_kind(line: str) -> str | None:
-    """Return the section kind when the whole line is a recognized heading.
+def _classify_heading_text(text: str) -> str | None:
+    """Determine section kind.
 
-    Bulleted lines are held to a stricter shape (no free descriptor tail) so a
-    criterion that merely ends in a colon and contains the keyword
-    ("* Prior exclusion from study:") is never read as a heading.
+    Falls back to unclassified for combined or non-inclusion headings.
     """
+    if _COMBINED_HEADING_RE.search(text):
+        return _KIND_UNCLASSIFIED
+    lower = text.lower()
+    if re.search(r"\bnon[- ]?inclusions?\b", lower):
+        return _KIND_UNCLASSIFIED
+    if re.search(r"\bexclusions?\b", lower):
+        return _KIND_EXCLUSION
+    if re.search(r"\binclusions?\b", lower):
+        return _KIND_INCLUSION
+    return None
+
+
+def _heading_kind(line: str) -> str | None:
+    """Return the section kind when the whole line is a recognized heading."""
+    if _DISALLOWED_LEAD_RE.match(line):
+        return None
     bulleted = _BULLET_RE.match(line) is not None
     regex = _BULLETED_HEADING_RE if bulleted else _HEADING_RE
     match = regex.match(line)
     if match is None:
         return None
-    keyword = match.group("keyword").lower()
-    return _KIND_EXCLUSION if keyword.startswith("exclusion") else _KIND_INCLUSION
+    return _classify_heading_text(line)
 
 
 def _inline_heading(line: str) -> tuple[str, str, str] | None:
     """Return (kind, rest-of-line, heading-portion) for a heading with inline text."""
+    if _DISALLOWED_LEAD_RE.match(line):
+        return None
     match = _INLINE_HEADING_RE.match(line)
     if match is None:
         return None
-    keyword = match.group("keyword").lower()
-    kind = _KIND_EXCLUSION if keyword.startswith("exclusion") else _KIND_INCLUSION
-    return kind, match.group("rest").strip(), line[: match.start("rest")].rstrip()
+    heading_part = line[: match.start("rest")].rstrip()
+    kind = _classify_heading_text(heading_part)
+    if kind is None:
+        return None
+    rest = match.group("rest").strip()
+    if rest.startswith("**"):
+        rest = rest.lstrip("*").strip()
+    return kind, rest, heading_part
 
 
 def _split_midline_heading(line: str) -> tuple[str, str] | None:
-    """Split 'text Exclusion Criteria: rest' at a mid-line heading phrase.
-
-    Returns (text-before, heading-onwards) when a colon-terminated heading
-    phrase occurs after leading content, else None. The colon requirement
-    keeps prose that merely mentions the words unsplit.
-    """
+    """Split 'text Exclusion Criteria: rest' at a mid-line heading phrase."""
     match = _MIDLINE_HEADING_RE.search(line)
     if match is None or match.start() <= 0:
         return None
@@ -235,31 +273,12 @@ def split_eligibility_sections(text: str | None) -> ParsedEligibilitySections | 
         if not line:
             continue
 
-        # Whole-line headings win over the mid-line split, so prefix-style
-        # headings ('Extension Phase: Inclusion Criteria:') stay intact.
-        heading_kind = _heading_kind(line)
-        if heading_kind is not None:
+        hk = _heading_kind(line)
+        if hk is not None:
             builders.append(current)
-            current = _SectionBuilder(heading_kind, _strip_bullet(line))
-            found_heading = True
-            continue
-
-        # A heading phrase buried mid-line ('... consent. Exclusion Criteria: ...')
-        # splits: the text before it stays with the current section, the
-        # remainder re-enters this loop's logic as a heading line.
-        midline = _split_midline_heading(line)
-        if midline is not None:
-            _add_content(midline[0])
-            line = midline[1]
-
-        # Check whole-line heading on the remainder first so end-of-line
-        # headings without inline text (e.g. '... consent. Exclusion Criteria:')
-        # open a new section rather than falling through to inline/content.
-        heading_kind = _heading_kind(line)
-        if heading_kind is not None:
-            builders.append(current)
-            current = _SectionBuilder(heading_kind, _strip_bullet(line))
-            found_heading = True
+            current = _SectionBuilder(hk, _strip_bullet(line))
+            if hk in (_KIND_INCLUSION, _KIND_EXCLUSION):
+                found_heading = True
             continue
 
         inline = _inline_heading(line)
@@ -267,12 +286,39 @@ def split_eligibility_sections(text: str | None) -> ParsedEligibilitySections | 
             kind, rest, heading_part = inline
             builders.append(current)
             current = _SectionBuilder(kind, _strip_bullet(heading_part))
-            if rest:
-                current.start_item(rest)
-            found_heading = True
-            continue
+            if kind in (_KIND_INCLUSION, _KIND_EXCLUSION):
+                found_heading = True
+            remainder = rest
+        else:
+            remainder = line
 
-        _add_content(line)
+        while remainder:
+            midline = _split_midline_heading(remainder)
+            if midline is None:
+                if remainder.strip():
+                    _add_content(remainder.strip())
+                break
+            before, after = midline
+            if before.strip():
+                _add_content(before.strip())
+            hk_after = _heading_kind(after)
+            if hk_after is not None:
+                builders.append(current)
+                current = _SectionBuilder(hk_after, _strip_bullet(after))
+                if hk_after in (_KIND_INCLUSION, _KIND_EXCLUSION):
+                    found_heading = True
+                break
+            inline_after = _inline_heading(after)
+            if inline_after is not None:
+                kind2, rest2, heading_part2 = inline_after
+                builders.append(current)
+                current = _SectionBuilder(kind2, _strip_bullet(heading_part2))
+                if kind2 in (_KIND_INCLUSION, _KIND_EXCLUSION):
+                    found_heading = True
+                remainder = rest2
+                continue
+            _add_content(after)
+            break
 
     builders.append(current)
 

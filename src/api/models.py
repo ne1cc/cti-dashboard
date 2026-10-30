@@ -222,7 +222,13 @@ class EligibilitySection(BaseModel):
 
     kind: str = Field(..., description="inclusion, exclusion, or unclassified.")
     heading: str | None = Field(..., description="Verbatim heading line, or None when absent.")
-    items: list[str] = Field(..., description="Verbatim items of this section, in source order.")
+    items: list[str] = Field(
+        ...,
+        description=(
+            "Items of this section with bullet and list markers stripped, in "
+            "source order. See criteria_text for the exact verbatim source blob."
+        ),
+    )
 
 
 class EligibilitySections(BaseModel):
@@ -246,13 +252,15 @@ class EligibilitySections(BaseModel):
         description=(
             "Lossless ordered split of the criteria text: one entry per "
             "heading-bounded chunk (plus the leading unclassified chunk). "
-            "Concatenating each heading with its items rebuilds the source text."
+            "Concatenating each heading with its items rebuilds the source text "
+            "(bullet and numbered list markers stripped; see criteria_text for "
+            "the exact verbatim source blob)."
         ),
     )
     inclusion: list[str] = Field(
         default_factory=list,
         description=(
-            "Convenience view: verbatim inclusion items merged across all "
+            "Convenience view: inclusion items (bullet markers stripped) merged across all "
             "inclusion sections, in source order. Repeated same-kind heading "
             "boundaries are only visible in ``sections``."
         ),
@@ -260,7 +268,7 @@ class EligibilitySections(BaseModel):
     exclusion: list[str] = Field(
         default_factory=list,
         description=(
-            "Convenience view: verbatim exclusion items merged across all "
+            "Convenience view: exclusion items (bullet markers stripped) merged across all "
             "exclusion sections, in source order. Repeated same-kind heading "
             "boundaries are only visible in ``sections``."
         ),
@@ -268,8 +276,8 @@ class EligibilitySections(BaseModel):
     unclassified: list[str] = Field(
         default_factory=list,
         description=(
-            "Verbatim items the splitter could not attribute to Inclusion or "
-            "Exclusion (e.g. no recognizable headings). Never dropped."
+            "Items the splitter could not attribute to Inclusion or "
+            "Exclusion (e.g. no recognizable headings; bullet markers stripped). Never dropped."
         ),
     )
 

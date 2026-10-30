@@ -196,6 +196,18 @@ def test_issue_62_structured_eligibility_fields(openapi_doc: dict[str, Any]) -> 
     )
     # Finding 8: wording must cover blank, not just absent, criteria_text.
     assert "absent or blank" in props["eligibility_sections"].get("description", "")
+    # Round 3 finding 6: eligibility_sections schema must accept null.
+    assert "null" in props["eligibility_sections"].get("type", [])
+
+    # Round 3 finding 6: criteria_text example must parse to match eligibility_sections example.
+    from src.transform.eligibility_sections import split_eligibility_sections
+
+    example_text = props["criteria_text"]["example"]
+    parsed_example = split_eligibility_sections(example_text)
+    assert parsed_example is not None
+    assert parsed_example.inclusion == sections_props["inclusion"]["example"]
+    assert parsed_example.exclusion == sections_props["exclusion"]["example"]
+    assert parsed_example.unclassified == sections_props["unclassified"]["example"]
 
     # Search filter parameters check in GET /v1/trials
     trials_op = openapi_doc["paths"]["/v1/trials"]["get"]

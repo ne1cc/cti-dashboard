@@ -408,3 +408,200 @@ def test_bulleted_prose_lead_in_is_not_a_heading() -> None:
     assert parsed.unclassified == [
         "Patients meeting all of the following inclusion criteria: age 18+"
     ]
+
+
+def test_bulleted_no_exclusion_criteria_is_an_item_not_heading() -> None:
+    # Round 3 finding 1: '* No exclusion criteria' is an item, never an exclusion heading.
+    text = "Inclusion Criteria:\n* Age 18+\n* No exclusion criteria\n* Signed consent\n"
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is True
+    assert parsed.inclusion == ["Age 18+", "No exclusion criteria", "Signed consent"]
+    assert parsed.exclusion == []
+
+
+def test_bulleted_lead_in_words_are_items_not_headings() -> None:
+    # Round 3 finding 1: criteria starting with negative/lead-in words stay items.
+    text = (
+        "Inclusion Criteria:\n"
+        "* Meets inclusion criteria for DBS implant in OCD\n"
+        "* Prior exclusion from study: not allowed\n"
+        "* Note: exclusion may apply\n"
+        "* Exclusion\n"
+    )
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is True
+    assert parsed.inclusion == [
+        "Meets inclusion criteria for DBS implant in OCD",
+        "Prior exclusion from study: not allowed",
+        "Note: exclusion may apply",
+        "Exclusion",
+    ]
+    assert parsed.exclusion == []
+
+
+def test_unbulleted_no_exclusion_criteria_is_not_a_heading() -> None:
+    # Round 3 finding 1: unbulleted 'No exclusion criteria' stays an item.
+    text = "No exclusion criteria\n"
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is False
+    assert parsed.unclassified == ["No exclusion criteria"]
+
+
+def test_non_inclusion_criteria_heading_falls_back_to_unclassified() -> None:
+    # Round 3 finding 2: 'Non-inclusion Criteria:' must never be inclusion;
+    # falls back to unclassified.
+    text = (
+        "Inclusion Criteria:\n"
+        "* Age 18+\n"
+        "Non-inclusion Criteria:\n"
+        "* Cancer history\n"
+        "* Alcohol abuse\n"
+        "Exclusion Criteria:\n"
+        "* Stroke\n"
+    )
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is True
+    assert parsed.inclusion == ["Age 18+"]
+    assert parsed.unclassified == ["Cancer history", "Alcohol abuse"]
+    assert parsed.exclusion == ["Stroke"]
+    assert "Cancer history" not in parsed.inclusion
+
+
+def test_non_inclusion_with_space_falls_back_to_unclassified() -> None:
+    # Round 3 finding 2: 'Non inclusion criteria' must never open an inclusion section.
+    text = "Inclusion Criteria:\n* Age 18+\nNon inclusion criteria\n* Cancer history\n"
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is True
+    assert parsed.inclusion == ["Age 18+"]
+    assert parsed.unclassified == ["Cancer history"]
+    assert "Cancer history" not in parsed.inclusion
+
+
+def test_midline_split_with_ordinary_casing_and_punctuation() -> None:
+    # Round 3 finding 3: 'Exclusion criteria:' with lowercase 'criteria' splits mid-line.
+    text = (
+        "Inclusion Criteria:\n"
+        "* consent given. Exclusion criteria:\n"
+        "* advanced cancer\n"
+        "* pregnancy\n"
+    )
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is True
+    assert parsed.inclusion == ["consent given."]
+    assert parsed.exclusion == ["advanced cancer", "pregnancy"]
+
+
+def test_multiple_headings_on_single_line_split_in_order() -> None:
+    # Round 3 finding 3: multiple headings on one line processed from left to right.
+    text = "* a. Exclusion Criteria: b. Inclusion Criteria: c\n* d\n"
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is True
+    assert parsed.unclassified == ["a."]
+    assert parsed.exclusion == ["b."]
+    assert parsed.inclusion == ["c", "d"]
+
+
+def test_inline_heading_followed_by_midline_heading() -> None:
+    # Round 3 finding 3: leading inline heading + subsequent mid-line heading.
+    text = "Inclusion Criteria: age 18+. Exclusion Criteria: pregnancy\n"
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is True
+    assert parsed.inclusion == ["age 18+."]
+    assert parsed.exclusion == ["pregnancy"]
+    assert parsed.unclassified == []
+
+
+def test_combined_inclusion_and_exclusion_criteria_is_unclassified() -> None:
+    # Round 3 finding 4: combined heading maps to unclassified.
+    text = (
+        "Inclusion and Exclusion Criteria:\n"
+        "* minimal access spinal surgery\n"
+        "* older than 18 years\n"
+    )
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is False
+    assert parsed.inclusion == []
+    assert parsed.exclusion == []
+    assert parsed.unclassified == [
+        "minimal access spinal surgery",
+        "older than 18 years",
+    ]
+    assert [s.kind for s in parsed.sections] == ["unclassified"]
+
+
+def test_combined_slash_criteria_is_unclassified() -> None:
+    # Round 3 finding 4: 'INCLUSION/EXCLUSION CRITERIA - SAMPLE 3:' maps to unclassified.
+    text = "INCLUSION/EXCLUSION CRITERIA - SAMPLE 3:\n* Sample item\n"
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is False
+    assert parsed.inclusion == []
+    assert parsed.exclusion == []
+    assert parsed.unclassified == ["Sample item"]
+
+
+def test_midline_bare_keywords_without_criteria_word_do_not_split() -> None:
+    # Round 3 finding 5: bare 'Inclusion:' or 'Exclusion:' mid-line without the word
+    # 'criteria' must not split.
+    text = "Exclusion Criteria:\n* Prior therapy; Inclusion: allowed if washed out\n* B\n"
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is True
+    assert parsed.inclusion == []
+    assert parsed.exclusion == [
+        "Prior therapy; Inclusion: allowed if washed out",
+        "B",
+    ]
+
+
+def test_cosmetic_bold_inline_heading_has_no_orphan_markers() -> None:
+    # Round 3 finding 10: '**Exclusion Criteria:** text' has clean item without dangling '**'.
+    text = "**Exclusion Criteria:** text\n"
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is True
+    assert parsed.exclusion == ["text"]
+    assert parsed.sections[0].heading_raw == "**Exclusion Criteria:**"
+
+
+def test_numbered_and_dash_headings_recognized() -> None:
+    # Round 3 finding 10: numbered and en-dash headings are recognized.
+    text = "1. Inclusion Criteria :\n* Item 1\n2. Exclusion Criteria:\n* Item 2\n"
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is True
+    assert parsed.inclusion == ["Item 1"]
+    assert parsed.exclusion == ["Item 2"]
+    assert [s.heading_raw for s in parsed.sections] == [
+        "Inclusion Criteria :",
+        "Exclusion Criteria:",
+    ]
+
+    text2 = "– Exclusion Criteria\n* Item 1\n"
+    parsed2 = split_eligibility_sections(text2)
+    assert parsed2 is not None
+    assert parsed2.parsed is True
+    assert parsed2.exclusion == ["Item 1"]
+    assert parsed2.sections[0].heading_raw == "Exclusion Criteria"

@@ -1228,10 +1228,12 @@ components:
             - string
             - 'null'
           description: Full unstructured eligibility criteria narrative block from protocol.
-          example: 'Inclusion Criteria: 1. Age 55 to 85. 2. Confirmed biomarker evidence of amyloid. Exclusion Criteria: 1. Current significant psychiatric disorder.'
+          example: "Inclusion Criteria:\n\n* Age 55 to 85.\n* Confirmed biomarker evidence of amyloid.\n\nExclusion Criteria:\n\n* Current significant psychiatric disorder."
         eligibility_sections:
-          allOf:
-            - $ref: '#/components/schemas/EligibilitySections'
+          type:
+            - object
+            - 'null'
+          $ref: '#/components/schemas/EligibilitySections'
           description: |
             Structural split of criteria_text into inclusion/exclusion sections
             (Issue #67). These are the study's own criteria: review them with a
@@ -1261,7 +1263,9 @@ components:
           type: array
           items:
             type: string
-          description: Verbatim items of this section, in source order.
+          description: |
+            Items of this section with bullet and list markers stripped, in source
+            order. See criteria_text for the exact verbatim source blob.
           example: ['none']
 
     EligibilitySections:
@@ -1287,13 +1291,14 @@ components:
           description: |
             Lossless ordered split: one entry per heading-bounded chunk (plus the
             leading unclassified chunk). Concatenating each heading with its items
-            rebuilds the source text.
+            rebuilds the source text (bullet and numbered list markers stripped;
+            see criteria_text for the exact verbatim source blob).
         inclusion:
           type: array
           items:
             type: string
           description: |
-            Convenience view: verbatim inclusion items merged across all inclusion
+            Convenience view: inclusion items (bullet markers stripped) merged across all inclusion
             sections, in source order. Repeated same-kind heading boundaries are
             only visible in sections.
           example: ['Age 55 to 85.', 'Confirmed biomarker evidence of amyloid.']
@@ -1302,7 +1307,7 @@ components:
           items:
             type: string
           description: |
-            Convenience view: verbatim exclusion items merged across all exclusion
+            Convenience view: exclusion items (bullet markers stripped) merged across all exclusion
             sections, in source order. Repeated same-kind heading boundaries are
             only visible in sections.
           example: ['Current significant psychiatric disorder.']
@@ -1310,7 +1315,9 @@ components:
           type: array
           items:
             type: string
-          description: Verbatim items that could not be attributed to Inclusion or Exclusion.
+          description: |
+            Items that could not be attributed to Inclusion or Exclusion
+            (e.g. no recognizable headings; bullet markers stripped).
           example: []
 
     TrialSite:
