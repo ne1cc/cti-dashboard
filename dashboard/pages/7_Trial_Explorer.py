@@ -6,7 +6,7 @@ import streamlit as st
 from components import data
 from components.formatting import format_phase
 from components.guardrails import guarded_footer, page_setup
-from components.guidance import render_indication_banner, render_page_guide
+from components.guidance import registry_link_guidance, render_indication_banner, render_page_guide
 from components.profile import render_profile_selector
 
 page_setup("Trial Explorer")
@@ -104,9 +104,9 @@ st.dataframe(
 )
 
 st.caption(
-    "Each row is a public registry record as of this project's latest snapshot; "
-    "the link opens the authoritative current record on ClinicalTrials.gov. "
-    "Reported enrollment may be estimated or actual; this view does not distinguish the type."
+    "Each row is a public registry record as of this project's latest snapshot. "
+    + registry_link_guidance()
+    + " Reported enrollment may be estimated or actual; this view does not distinguish the type."
 )
 
 guarded_footer()

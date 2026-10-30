@@ -67,6 +67,22 @@ def clinicaltrials_gov_search_url(condition_group: str, state_normalized: str) -
     )
 
 
+def registry_link_guidance() -> str:
+    """Return registry-link recovery text without diagnosing external access failures.
+
+    Returns:
+        str: Static caption with the canonical URL shape and browser/search steps.
+        A 403 does not establish record validity or reveal why access was refused.
+    """
+    return (
+        "'Open registry' uses `https://clinicaltrials.gov/study/<NCT_ID>` for the row. "
+        "A 403 Forbidden means ClinicalTrials.gov refused the request; this dashboard "
+        "cannot determine why. Try a private window or another browser, or copy the "
+        "row's NCT ID and search at "
+        "[clinicaltrials.gov/search](https://clinicaltrials.gov/search)."
+    )
+
+
 def render_indication_banner(profile_id: str | None = None) -> None:
     """Render the active indication scope banner.
 

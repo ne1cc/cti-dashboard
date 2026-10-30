@@ -145,6 +145,9 @@ def test_trial_explorer_page_smoke_legacy_schema(temp_duckdb_legacy_schema: Path
     at = AppTest.from_file(str(ROOT / "dashboard/pages/7_Trial_Explorer.py"), default_timeout=30)
     at.run()
     assert not at.exception, at.exception[0].value if at.exception else ""
+    # Registry-link guidance names the canonical URL shape and the 403 search fallback
+    assert any("clinicaltrials.gov/search" in str(caption.value) for caption in at.caption)
+    assert any("study/<NCT_ID>" in str(caption.value) for caption in at.caption)
 
 
 def test_trial_similarity_page_smoke_legacy_schema(temp_duckdb_legacy_schema: Path):
@@ -374,6 +377,8 @@ def test_trial_similarity_page_smoke_modern_schema(temp_duckdb_modern_schema: Pa
     assert not at.exception, at.exception[0].value if at.exception else ""
     # Should render the top comparable trials section
     assert any("Top comparable trials" in str(header.value) for header in at.subheader)
+    # Shared registry-link guidance renders alongside the comparable-trials links
+    assert any("clinicaltrials.gov/search" in str(caption.value) for caption in at.caption)
 
 
 def test_guidance_format_condition_group():
@@ -430,6 +435,19 @@ def test_guidance_copy_does_not_overclaim():
     from components.guidance import PAGE_PLAYBOOKS
 
     assert "guesswork" not in str(PAGE_PLAYBOOKS).lower()
+
+
+def test_registry_link_guidance_names_canonical_url_and_fallback():
+    from components.guidance import registry_link_guidance
+
+    guidance = registry_link_guidance()
+    assert "https://clinicaltrials.gov/study/<NCT_ID>" in guidance
+    assert "https://clinicaltrials.gov/search" in guidance
+    assert "NCT ID" in guidance
+    assert "403" in guidance
+    assert "private window or another browser" in guidance
+    assert "cannot determine why" in guidance
+    assert "not a broken record" not in guidance
 
 
 def test_clinicaltrials_gov_search_url():
