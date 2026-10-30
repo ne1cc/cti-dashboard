@@ -6,7 +6,11 @@ import pandas as pd
 import streamlit as st
 from components import data
 from components.guardrails import guarded_footer, page_setup
-from components.guidance import render_indication_banner, render_page_guide
+from components.guidance import (
+    registry_link_guidance,
+    render_indication_banner,
+    render_page_guide,
+)
 from components.profile import render_profile_selector
 
 FACTOR_LABELS = {
@@ -137,6 +141,8 @@ match_event = st.dataframe(
     on_select="rerun",
     selection_mode="single-row",
 )
+
+st.caption(registry_link_guidance())
 
 selected_rows = (
     match_event.get("selection", {}).get("rows", []) if isinstance(match_event, dict) else []

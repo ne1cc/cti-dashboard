@@ -67,6 +67,26 @@ def clinicaltrials_gov_search_url(condition_group: str, state_normalized: str) -
     )
 
 
+def registry_link_guidance() -> str:
+    """Explain the canonical registry link and the fallback when the registry blocks the browser.
+
+    Returns:
+        str: Caption text naming the canonical ``/study/<NCT_ID>`` URL shape,
+        attributing a 403 Forbidden page to ClinicalTrials.gov's own access
+        protection rather than a data error, and giving the copy-NCT-ID-plus-search
+        fallback. The application cannot bypass the registry's bot protection.
+    """
+    return (
+        "The 'Open registry' link opens the canonical record "
+        "`https://clinicaltrials.gov/study/<NCT_ID>` for that row. If ClinicalTrials.gov "
+        "shows a 403 Forbidden page, that is the registry's own bot protection or a "
+        "temporary block — not a broken record and not a data error in this dashboard. "
+        "Copy the row's NCT ID and search it at "
+        "[clinicaltrials.gov/search](https://clinicaltrials.gov/search), or retry the "
+        "link later."
+    )
+
+
 def render_indication_banner(profile_id: str | None = None) -> None:
     """Render the active indication scope banner.
 
