@@ -324,3 +324,87 @@ def test_nested_bullets_flatten_to_sibling_items() -> None:
 
     assert parsed is not None
     assert parsed.inclusion == ["Has one of:", "A", "B"]
+
+
+def test_bulleted_canonical_heading_without_colon_recognized() -> None:
+    # Review round 2 finding 1: bulleted canonical lines without colon
+    # (e.g. '* INCLUSION CRITERIA' in NCT02262806, NCT05713799) must parse.
+    text = "- Inclusion Criteria\n- a\n- Exclusion Criteria\n- b\n"
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is True
+    assert parsed.inclusion == ["a"]
+    assert parsed.exclusion == ["b"]
+    assert parsed.unclassified == []
+
+
+def test_end_of_line_exclusion_heading_splits_sections() -> None:
+    # Review round 2 finding 2: exclusion heading at end of content line
+    # must open an exclusion section rather than merging into inclusion.
+    text = (
+        "Inclusion Criteria:\n"
+        "* consent given. Exclusion Criteria:\n"
+        "* advanced cancer\n"
+        "* pregnancy\n"
+    )
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is True
+    assert parsed.inclusion == ["consent given."]
+    assert parsed.exclusion == ["advanced cancer", "pregnancy"]
+    assert [s.heading_raw for s in parsed.sections] == [
+        "Inclusion Criteria:",
+        "Exclusion Criteria:",
+    ]
+
+
+def test_end_of_line_bold_exclusion_heading_splits_sections() -> None:
+    # Review round 2 finding 2 bold variant.
+    text = (
+        "Inclusion Criteria:\n"
+        "* consent given. **Exclusion Criteria:**\n"
+        "* advanced cancer\n"
+        "* pregnancy\n"
+    )
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is True
+    assert parsed.inclusion == ["consent given."]
+    assert parsed.exclusion == ["advanced cancer", "pregnancy"]
+    assert [s.heading_raw for s in parsed.sections] == [
+        "Inclusion Criteria:",
+        "**Exclusion Criteria:**",
+    ]
+
+
+def test_midline_prose_with_exclusion_word_is_not_a_heading() -> None:
+    # Review round 2 finding 3 negative probe 1: prose mentioning 'exclusion:'
+    # without sentence punctuation / title-casing must not split.
+    text = "Inclusion Criteria:\n* No other exclusion: patients may enroll after washout\n* B\n"
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is True
+    assert parsed.inclusion == [
+        "No other exclusion: patients may enroll after washout",
+        "B",
+    ]
+    assert parsed.exclusion == []
+
+
+def test_bulleted_prose_lead_in_is_not_a_heading() -> None:
+    # Review round 2 finding 3 negative probe 2: descriptive prose line
+    # starting with bullet is not a heading.
+    text = "* Patients meeting all of the following inclusion criteria: age 18+\n"
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is False
+    assert parsed.inclusion == []
+    assert parsed.exclusion == []
+    assert parsed.unclassified == [
+        "Patients meeting all of the following inclusion criteria: age 18+"
+    ]

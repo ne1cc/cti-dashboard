@@ -59,7 +59,7 @@ _BULLETED_HEADING_RE = re.compile(
     (?:\s+for\b[^.!?,;:]{0,50}
       |\s*\([^)!?,;]{0,60}\)
     )?
-    :                                       # bare colon only (no free tail)
+    :?                                      # optional bare colon (no free tail)
     \s*(?:\*\*)?\s*$""",
     re.IGNORECASE | re.VERBOSE,
 )
@@ -81,20 +81,21 @@ _INLINE_HEADING_RE = re.compile(
 )
 
 # Heading phrase appearing mid-line after criterion text
-# ('... consent. Exclusion Criteria: The patients ...'). Requires a colon so
-# prose mentioning the words never splits; the text before the phrase stays
-# with the current section.
+# ('... consent. Exclusion Criteria: The patients ...'). Requires a colon and
+# sentence-ending punctuation plus title/all-caps casing so prose mentioning
+# the words (e.g. '* No other exclusion:') is never split; the text before
+# the phrase stays with the current section.
 _MIDLINE_HEADING_RE = re.compile(
-    r"""\s
+    r"""(?<=[.;:\)])\s+
     (?P<heading>
         \**\s*
-        (?P<keyword>inclusions?|exclusions?)\b
-        \s*(?:\bcriteria\b)?\b
+        (?P<keyword>Inclusions?|Exclusions?|INCLUSIONS?|EXCLUSIONS?)\b
+        \s*(?:\b(?:Criteria|CRITERIA)\b)?\b
         (?:\s*\([^)!?,;]{0,60}\))?
         \**\s*
         :
     )""",
-    re.IGNORECASE | re.VERBOSE,
+    re.VERBOSE,
 )
 
 
@@ -250,6 +251,16 @@ def split_eligibility_sections(text: str | None) -> ParsedEligibilitySections | 
         if midline is not None:
             _add_content(midline[0])
             line = midline[1]
+
+        # Check whole-line heading on the remainder first so end-of-line
+        # headings without inline text (e.g. '... consent. Exclusion Criteria:')
+        # open a new section rather than falling through to inline/content.
+        heading_kind = _heading_kind(line)
+        if heading_kind is not None:
+            builders.append(current)
+            current = _SectionBuilder(heading_kind, _strip_bullet(line))
+            found_heading = True
+            continue
 
         inline = _inline_heading(line)
         if inline is not None:

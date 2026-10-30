@@ -78,3 +78,62 @@ def test_corpus_parse_rate_meets_floor_and_report(corpus: list[dict[str, Any]]) 
         f"(floor {PARSE_RATE_FLOOR:.0%}); unparsed NCT IDs: {misses}"
     )
     assert rate >= PARSE_RATE_FLOOR, f"Parse rate {rate:.1%} below floor {PARSE_RATE_FLOOR:.0%}"
+
+
+@pytest.mark.parametrize(
+    ("nct_id", "expected_sections"),
+    [
+        (
+            "NCT02262806",
+            [
+                ("inclusion", "INCLUSION CRITERIA"),
+                ("exclusion", "EXCLUSION CRITERIA"),
+            ],
+        ),
+        (
+            "NCT05713799",
+            [
+                ("inclusion", "INCLUSION CRITERIA"),
+                ("exclusion", "EXCLUSION CRITERIA"),
+            ],
+        ),
+        (
+            "NCT07259369",
+            [
+                ("inclusion", "Inclusion Criteria:"),
+                ("exclusion", "Exclusion Criteria:"),
+            ],
+        ),
+        (
+            "NCT07812337",
+            [
+                ("inclusion", "Inclusion Criteria:"),
+                ("exclusion", "Exclusion Criteria (PCP):"),
+                ("exclusion", "Participant Exclusion Criteria:"),
+            ],
+        ),
+        (
+            "NCT07779785",
+            [
+                ("inclusion", "Inclusion Criteria:"),
+                ("inclusion", "Inclusion Criteria:"),
+                ("exclusion", "Exclusion Criteria:"),
+                ("exclusion", "Exclusion Criteria:"),
+            ],
+        ),
+    ],
+)
+def test_pinned_real_corpus_headings(
+    corpus: list[dict[str, Any]],
+    nct_id: str,
+    expected_sections: list[tuple[str, str]],
+) -> None:
+    sample = next(s for s in corpus if s["nct_id"] == nct_id)
+    parsed = split_eligibility_sections(sample["criteria_text"])
+
+    assert parsed is not None
+    assert parsed.parsed is True
+    actual_sections = [(s.kind, s.heading_raw) for s in parsed.sections]
+    assert actual_sections == expected_sections
+    assert len(parsed.inclusion) > 0
+    assert len(parsed.exclusion) > 0
