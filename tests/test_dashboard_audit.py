@@ -219,8 +219,9 @@ def test_every_metric_page_exposes_profile_audit(script, warehouse):
                 assert set(frame.indication_profile_id) <= {profile}
                 assert "snapshot_id" in frame.columns
         if "Priority_Queue" in script:
-            assert "Data Confidence" not in str(at.dataframe[0].proto)
-            assert "data confidence" not in str(at.dataframe[0].value).lower()
+            assert "Operational completeness" in str(at.dataframe[0].proto)
+            assert "confidence" not in str(at.dataframe[0].proto).lower()
+            assert "confidence" not in str(at.dataframe[0].value).lower()
 
 
 def test_growth_input_window_export_metadata(warehouse):
