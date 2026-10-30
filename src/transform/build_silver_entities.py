@@ -6,9 +6,12 @@ incomplete snapshot. Duplicate NCT IDs within a run are deduplicated (first
 occurrence kept) and reported, never silently ignored.
 
 When called via the profile system, build_silver_for_run receives an
-IndicationProfile that supplies the per-profile taxonomy and profile_id
-(used to stamp every silver row with indication_profile_id and to correctly
-de-duplicate: the same NCT ID in two profiles is valid, not a duplicate).
+IndicationProfile that supplies the profile_id (used to stamp every silver row
+with indication_profile_id and to correctly de-duplicate: the same NCT ID in
+two profiles is valid, not a duplicate) and, optionally, the profile's
+condition taxonomy overlay. Since Issue #52 a profile without a taxonomy still
+transforms: MeSH browse terms are the default condition identity and condition
+text rows fall back (mapping_source text_fallback).
 """
 
 from __future__ import annotations
@@ -34,6 +37,7 @@ PROGRESS_EVERY = 100_000
 ENTITY_NAMES = (
     "silver_trials",
     "silver_trial_conditions",
+    "silver_trial_condition_mesh",
     "silver_trial_interventions",
     "silver_trial_sponsors",
     "silver_trial_locations",
@@ -58,21 +62,11 @@ def build_silver_for_run(
     if not run_dir.exists():
         raise FileNotFoundError(f"Bronze pages missing for run {run_id}: {run_dir}")
 
-    # A named profile with no taxonomy is a caller bug, not a licence to borrow
-    # another profile's: the rows would carry this profile's
-    # `indication_profile_id` while classifying conditions by someone else's
-    # aliases. Only a caller that predates the registry (profile is None) gets the
-    # global ADRD singleton.
-    if profile is not None and profile.taxonomy is None:
-        raise ValueError(
-            f"Profile '{profile.profile_id}' has no condition_taxonomy and cannot be "
-            "transformed; it is ingest_only (see its config/profiles/*.yml)."
-        )
-    if profile is not None:
-        assert profile.taxonomy is not None
-        taxonomy = profile.taxonomy
-    else:
-        taxonomy = get_taxonomy()
+    # Taxonomy is an optional overlay (Issue #52): MeSH browse terms are the
+    # default condition identity. A profile without one still transforms —
+    # condition text rows fall back (mapping_source text_fallback) and the
+    # registry's conditionBrowseModule carries the browsable identity.
+    taxonomy = profile.taxonomy if profile is not None else get_taxonomy()
     geography = get_geography_rules()
     profile_id = profile.profile_id if profile else "adrd"
     snapshot_ts = manifest.started_at_utc.isoformat()

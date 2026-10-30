@@ -202,6 +202,14 @@ FULL_STUDY = {
             "otherOutcomes": [{"measure": "m3", "description": "d", "timeFrame": "t"}],
         },
     },
+    # Issue #52: keep one entity of every kind populated, including the MeSH
+    # browse module, so the flatten -> silver column contract covers it.
+    "derivedSection": {
+        "conditionBrowseModule": {
+            "meshes": [{"id": "D000544", "term": "Alzheimer Disease"}],
+            "ancestors": [{"id": "D003072", "term": "Cognition Disorders"}],
+        }
+    },
 }
 
 

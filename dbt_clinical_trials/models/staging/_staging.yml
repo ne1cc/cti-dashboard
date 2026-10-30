@@ -77,6 +77,35 @@ models:
         tests:
           - accepted_values:
               values: [high, medium, low]
+      - name: mapping_source
+        description: >
+          How this condition text's group was assigned: yaml_overlay when a
+          taxonomy rule matched, text_fallback otherwise (Issue #52).
+        tests:
+          - accepted_values:
+              values: [yaml_overlay, text_fallback]
+      - name: indication_profile_id
+        description: Indication profile that produced this run; staging is where the column becomes mandatory.
+        tests: [not_null]
+
+  - name: stg_trial_condition_mesh
+    description: >
+      One row per profile + NCT ID + run + MeSH browse identity (Issue #52).
+      Study-level: the registry derives terms for the whole record, not per
+      condition string. branch is null everywhere (no registry edge).
+    columns:
+      - name: nct_id
+        tests: [not_null]
+      - name: mesh_id
+        description: MeSH browse id (e.g. D000544); the condition identity join key.
+        tests: [not_null]
+      - name: mesh_term
+        tests: [not_null]
+      - name: is_ancestor
+        description: >
+          False for terms applied directly to the record, true for terms
+          reached through the registry-supplied ancestor closure.
+        tests: [not_null]
       - name: indication_profile_id
         description: Indication profile that produced this run; staging is where the column becomes mandatory.
         tests: [not_null]
