@@ -18,7 +18,8 @@ Importing the API package does not open a client or create a database. `CTI_CACH
 |---|---|
 | `cond` | `query.cond` |
 | `status` | `filter.overallStatus`; defaults to `RECRUITING\|NOT_YET_RECRUITING\|ACTIVE_NOT_RECRUITING\|ENROLLING_BY_INVITATION` |
-| `lat`, `lon`, `radius_mi` | `filter.geo=distance(lat,lon,radius_mi)` with the radius unit appended, for example `distance(37.7749,-122.4194,50.0mi)` |
+| `lat`, `lon`, `radius_mi` | `filter.geo=distance(lat,lon,radius_mi)` with the radius unit appended, for example `distance(37.7749,-122.4194,50.0mi)`. The upstream filter matches a study when *any* site of *any* status is inside the radius, so results are post-filtered in memory to trials with a `RECRUITING`/`NOT_YET_RECRUITING` site within the radius (same Haversine) |
+| `postal_code` | Resolved offline to coordinates from the Census Gazetteer ZCTA centroid file (`make gazetteer`; `CTI_GAZETTEER_DIR`), then passed as the `filter.geo` distance filter above — the registry does the geographic matching, and the same recruiting-site post-filter then applies. Unknown codes return 400 `UNKNOWN_POSTAL_CODE`; the parameter is mutually exclusive with `lat`/`lon` |
 | `limit` | `pageSize`; 1–100, default 20 |
 | `cursor` | Opaque upstream `pageToken` |
 | `min_age`, `max_age`, `sex`, `healthy_volunteers` | Filter the fetched page in memory; preserve unstated criteria |
@@ -27,15 +28,15 @@ Importing the API package does not open a client or create a database. `CTI_CACH
 | `sort` | Sort the fetched page in memory |
 | Internal | `countTotal=true`, `format=json` |
 
-Enums and numeric ranges follow the contract. Coordinates must be finite, within latitude/longitude bounds, and supplied together. The radius must be 1–500 miles, and ages must be 0–130 years. An inverted age range returns 400. `sort=distance` requires coordinates and otherwise returns 422. Invalid parameter types, enum values, and ranges return RFC 7807 400/422 problems before upstream dispatch.
+Enums and numeric ranges follow the contract. Coordinates must be finite, within latitude/longitude bounds, and supplied together. The radius must be 1–500 miles, and ages must be 0–130 years. An inverted age range returns 400. `sort=distance` requires a location (`lat`/`lon` or `postal_code`) and otherwise returns 422; a location query (postal or coordinates) without an explicit `sort` sorts by distance. Invalid parameter types, enum values, and ranges return RFC 7807 400/422 problems before upstream dispatch.
 
 Age filters compare stated bounds with the requested range; missing bounds do not exclude a study (Issue #62). Sex and healthy-volunteer filters also retain unspecified eligibility. A standard-age-group filter retains trials without declared groups; it never infers groups from numeric ages. Sponsor class requires an explicit matching class.
 
 ### Pagination and ordering limits
 
-**Eligibility, phase, standard-age-group and sponsor filters, and all sorts operate on one upstream page.** They do not produce a globally filtered or globally sorted cursor sequence. A page can contain fewer than `limit` items, including zero, while `has_more=true`. Continue using `next_cursor` to inspect later upstream pages; `has_more` means the registry supplied another cursor, not that a later page is guaranteed to contain an eligible result.
+**Eligibility, phase, standard-age-group and sponsor filters, and all sorts operate on one upstream page.** They do not produce a globally filtered or globally sorted cursor sequence. On a location search (`lat`/`lon` or `postal_code`) the recruiting-site radius post-filter runs on the same single page, so a page can contain fewer than `limit` items — including zero — while `has_more=true`. Continue using `next_cursor` to inspect later upstream pages; `has_more` means the registry supplied another cursor, not that a later page is guaranteed to contain an eligible result.
 
-`total_count` is `null` whenever an in-memory filter is requested or malformed studies were omitted. Otherwise it is the registry's total for the upstream condition/status/geography query. No approximation of a post-filtered total is claimed. A future index or upstream filtering implementation is needed for global eligibility pagination and ordering.
+`total_count` is `null` whenever an in-memory filter is requested (including the recruiting-site radius post-filter on every location search) or malformed studies were omitted. Otherwise it is the registry's total for the upstream condition/status/geography query — note that this upstream total counts trials matched by *any* site of any status, not the recruiting-only result set actually returned. No approximation of a post-filtered total is claimed. A future index or upstream filtering implementation is needed for global eligibility pagination and ordering.
 
 Distance uses the nearest listed site with valid coordinates and the Haversine formula:
 
@@ -45,7 +46,7 @@ a = sin²(Δlatitude / 2)
 distance_miles = 2 × 3958.8 × atan2(√a, √(1 − a))
 ```
 
-Angles are in radians. Sites without usable `geoPoint` values remain in detail responses with null coordinates/distance; they cannot supply the nearest-site distance. Missing distances sort last.
+Angles are in radians. In search results the nearest site is chosen among sites whose site-level status is `RECRUITING` or `NOT_YET_RECRUITING` — other statuses (and sites without coordinates) cannot make a trial "available near me", while the detail response continues to list every site with its status. On the live backend a location search additionally drops any trial without a `RECRUITING`/`NOT_YET_RECRUITING` site inside the radius, because the upstream distance filter matches any site of any status; pages and totals can therefore shrink after this post-filter (see the pagination limits above). In the warehouse backend, a site without a registry `geoPoint` falls back to the offline Census Gazetteer ZIP (ZCTA), then city centroid, and is flagged `coordinate_approximate: true`; the exact-vs-approximate coordinate mix is reported on the data-quality page (Issue #63). Missing distances sort last.
 
 ## Privacy and normalization
 

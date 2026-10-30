@@ -36,6 +36,10 @@ EARTH_RADIUS_MILES = 3958.8
 DEFAULT_ACTIVE_STATUSES = (
     "RECRUITING|NOT_YET_RECRUITING|ACTIVE_NOT_RECRUITING|ENROLLING_BY_INVITATION"
 )
+# Issue #63: only these site-level statuses count as "available near me"; the
+# nearest site in search results is chosen among them (the detail endpoint
+# still lists every site with its status). Matches the warehouse SQL rule.
+RECRUITING_SITE_STATUSES = frozenset({"RECRUITING", "NOT_YET_RECRUITING"})
 
 
 def haversine_distance_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -173,9 +177,12 @@ def normalize_study_summary(
         closest_facility: str | None = None
         closest_city: str | None = None
         closest_state: str | None = None
+        closest_status: str | None = None
 
         for loc in locations:
             if not isinstance(loc, dict):
+                continue
+            if loc.get("status") not in RECRUITING_SITE_STATUSES:
                 continue
             geo = loc.get("geoPoint")
             if isinstance(geo, dict) and "lat" in geo and "lon" in geo:
@@ -187,6 +194,7 @@ def normalize_study_summary(
                         closest_facility = loc.get("facility") or "UNKNOWN"
                         closest_city = loc.get("city") or "UNKNOWN"
                         closest_state = loc.get("state")
+                        closest_status = loc.get("status")
                 except (ValueError, TypeError):
                     continue
 
@@ -195,6 +203,8 @@ def normalize_study_summary(
                 facility_name=closest_facility,
                 city=closest_city,
                 state=closest_state,
+                location_status=closest_status,
+                coordinate_approximate=False,
                 distance_miles=round(closest_distance, 1),
             )
 
@@ -368,6 +378,7 @@ def normalize_study_detail(
                 country=country,
                 location_status=loc_status,
                 coordinates=coords,
+                coordinate_approximate=False,
                 distance_miles=distance_mi,
             )
         )
@@ -434,12 +445,32 @@ def filter_and_sort_summaries(
     std_age_group: str | None = None,
     sponsor_class: str | None = None,
     sort: str | None = "-updated",
+    max_distance_miles: float | None = None,
 ) -> list[TrialSummary]:
-    """Filter and sort normalized summaries in-memory."""
+    """Filter and sort normalized summaries in-memory.
+
+    Issue #63: when ``max_distance_miles`` is set (a lat/lon or postal_code
+    search), drop trials without a RECRUITING/NOT_YET_RECRUITING site within
+    that radius. The upstream ``filter.geo`` distance filter matches a study
+    when *any* site of *any* status is inside the radius; the nearest-site
+    distance on each summary is the haversine distance to the nearest
+    recruiting site, so it is the post-filter criterion.
+    """
     result: list[TrialSummary] = []
 
     for item in items:
         elig = item.structured_eligibility
+
+        # Issue #63: the upstream geo filter matches any site of any status;
+        # keep only trials whose nearest recruiting site is inside the radius.
+        if max_distance_miles is not None:
+            nearest = item.nearest_site
+            if (
+                nearest is None
+                or nearest.distance_miles is None
+                or nearest.distance_miles > max_distance_miles
+            ):
+                continue
 
         # Age bounds filtering (Issue #62: unstated bounds are never discarded)
         if min_age is not None:

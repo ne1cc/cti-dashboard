@@ -11,6 +11,7 @@ CONDITION   ?= Alzheimer Disease
 
 .PHONY: help setup init-dirs env ingest full-refresh ingest-full-catalog full-catalog-full-refresh \
         orchestrate orchestrate-full-refresh prune-data prune-data-dry \
+        gazetteer \
         transform dbt-deps dbt-seed dbt-run dbt-test \
         dbt-docs quality-report dashboard test lint format clean pipeline
 
@@ -61,6 +62,15 @@ prune-data: ## Delete run artifacts past the per-profile retention horizon
 
 prune-data-dry: ## Report what prune-data would delete
 	$(PYTHON) -m src.cli prune-data --dry-run
+
+GAZETTEER_YEAR ?= 2024
+GAZETTEER_BASE := https://www2.census.gov/geo/docs/maps-data/data/gazetteer/$(GAZETTEER_YEAR)_Gazetteer
+
+gazetteer: ## Download Census Gazetteer ZCTA/place centroids into data/reference/ (Issue #63)
+	mkdir -p data/reference
+	curl -fsSL $(GAZETTEER_BASE)/$(GAZETTEER_YEAR)_Gaz_zcta_national.zip | funzip > data/reference/gazetteer_zcta.csv
+	curl -fsSL $(GAZETTEER_BASE)/$(GAZETTEER_YEAR)_Gaz_place_national.zip | funzip > data/reference/gazetteer_place.csv
+	@echo "Gazetteer centroids written to data/reference/ ($(GAZETTEER_YEAR))."
 
 transform: ## Flatten bronze JSON into silver Parquet entities (Phase 3)
 	$(PYTHON) -m src.cli transform

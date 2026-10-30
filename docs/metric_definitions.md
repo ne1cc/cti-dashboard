@@ -66,7 +66,29 @@ mean is the opposite case: a one-point mean is honest, so
 | unique_nct_flag | silver rows == distinct NCT IDs |
 | flagged_record_share | trials with quality flag ≠ ok / all trials |
 | usable_location_share | locations with `usable_geography_flag` / all locations |
+| coordinates_exact_count / coordinates_exact_share | locations with registry geoPoint latitude and longitude (exact coordinates); share over all locations |
+| coordinates_fallback_eligible_count / coordinates_fallback_eligible_share | locations without geoPoint that carry the fields the offline Census Gazetteer fallback needs — a ZIP (first 5 digits) or a normalized city+state; share over all locations. Fallback-eligible rather than verified: the Gazetteer reference files are not part of the dbt build, so actual resolution (and the per-site `coordinate_approximate` flag) is decided at query time, making this an upper bound on approximate coordinates. Reported so the exact-vs-approximate coordinate mix behind distance search is visible |
 | low_confidence_condition_share | taxonomy fallback mappings / all condition rows |
+
+## Distance search (read API, Issue #63)
+- A patient's `postal_code` (5 digits) resolves to coordinates from the offline
+  Census Gazetteer ZCTA centroid file (`make gazetteer`); no geocoding API is
+  called and no address is stored.
+- "Available near me" counts only sites whose site-level `location_status` is
+  `RECRUITING` or `NOT_YET_RECRUITING`; sites with other or missing statuses
+  are inactive for the radius filter and never surface as the nearest site
+  (the detail endpoint lists every site with its status).
+- Site coordinates prefer the registry `geoPoint`; without one they fall back
+  to the Gazetteer ZIP, then city+state centroid, and the response flags
+  `coordinate_approximate: true`. Sites with no resolvable coordinates are
+  excluded from distance results. Their exact-vs-approximate mix is the
+  coordinate coverage reported above.
+- Known limitation of the city fallback: when several Gazetteer places share
+  the same normalized city+state name, the fallback resolves to one
+  deterministic centroid (lowest latitude, then longitude) rather than the
+  one closest to the user, and that centroid can be far from the actual site.
+  It is flagged `coordinate_approximate`; the ZIP fallback is the primary
+  approximate path.
 
 ## Registry Segments and Raw Feasibility Metrics (`mart_feasibility_priority_queue`)
 Purpose: **provide transparent, sortable raw registry signals for human feasibility review.** Not a forecast.

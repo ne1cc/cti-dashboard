@@ -159,6 +159,184 @@ def test_normalize_study_summary_conforms_to_schema(
     assert summary.registry_url == "https://clinicaltrials.gov/study/NCT04245644"
 
 
+def _study_with_site_statuses() -> dict[str, Any]:
+    """Study with a COMPLETED site ~0.2 mi from the user and a RECRUITING
+    site ~15 mi away (Issue #63: only the latter may be the nearest site)."""
+    return {
+        "protocolSection": {
+            "identificationModule": {"nctId": "NCT99999999"},
+            "statusModule": {"overallStatus": "RECRUITING"},
+            "designModule": {"studyType": "INTERVENTIONAL", "phases": ["PHASE3"]},
+            "sponsorCollaboratorsModule": {"leadSponsor": {"name": "Test Sponsor"}},
+            "conditionsModule": {"conditions": ["Dementia"]},
+            "eligibilityModule": {},
+            "contactsLocationsModule": {
+                "locations": [
+                    {
+                        "facility": "Closed Site",
+                        "city": "Seattle",
+                        "state": "WA",
+                        "status": "COMPLETED",
+                        "geoPoint": {"lat": 47.609, "lon": -122.3321},
+                    },
+                    {
+                        "facility": "Open Site",
+                        "city": "Bellevue",
+                        "state": "WA",
+                        "status": "RECRUITING",
+                        "geoPoint": {"lat": 47.61, "lon": -122.0},
+                    },
+                ]
+            },
+        }
+    }
+
+
+def test_live_nearest_site_counts_only_recruiting_statuses() -> None:
+    summary = normalize_study_summary(_study_with_site_statuses(), user_lat=47.61, user_lon=-122.33)
+
+    assert summary.nearest_site is not None
+    assert summary.nearest_site.facility_name == "Open Site"
+    assert summary.nearest_site.location_status == "RECRUITING"
+    assert summary.nearest_site.distance_miles is not None
+    assert summary.nearest_site.distance_miles > 1.0
+
+
+def test_live_nearest_site_none_when_only_inactive_sites() -> None:
+    study = _study_with_site_statuses()
+    study["protocolSection"]["contactsLocationsModule"]["locations"] = [
+        {
+            "facility": "Closed Site",
+            "city": "Seattle",
+            "state": "WA",
+            "status": "COMPLETED",
+            "geoPoint": {"lat": 47.609, "lon": -122.3321},
+        }
+    ]
+    summary = normalize_study_summary(study, user_lat=47.61, user_lon=-122.33)
+
+    assert summary.nearest_site is None
+
+
+def test_live_detail_still_lists_inactive_sites() -> None:
+    detail = normalize_study_detail(_study_with_site_statuses(), user_lat=47.61, user_lon=-122.33)
+
+    statuses = {s.facility_name: s.location_status for s in detail.sites}
+    assert statuses == {"Closed Site": "COMPLETED", "Open Site": "RECRUITING"}
+    closed = next(s for s in detail.sites if s.facility_name == "Closed Site")
+    assert closed.distance_miles is not None
+
+
+def _location_search_payload() -> dict[str, Any]:
+    """Studies the upstream geo filter matches via a COMPLETED Seattle site
+    (Issue #63 round 3: `filter.geo` matches any site of any status), so only
+    the post-filter can tell recruiting availability apart."""
+
+    def study(nct_id: str, locations: list[dict[str, Any]]) -> dict[str, Any]:
+        return {
+            "protocolSection": {
+                "identificationModule": {"nctId": nct_id},
+                "statusModule": {"overallStatus": "RECRUITING"},
+                "designModule": {"studyType": "INTERVENTIONAL", "phases": ["PHASE3"]},
+                "sponsorCollaboratorsModule": {"leadSponsor": {"name": "Test Sponsor"}},
+                "conditionsModule": {"conditions": ["Dementia"]},
+                "eligibilityModule": {},
+                "contactsLocationsModule": {"locations": locations},
+            }
+        }
+
+    completed_seattle = {
+        "facility": "Closed Site",
+        "city": "Seattle",
+        "state": "WA",
+        "status": "COMPLETED",
+        "geoPoint": {"lat": 47.609, "lon": -122.3321},
+    }
+    return {
+        "studies": [
+            # Only recruiting site is ~2,500 mi away in Boston: dropped.
+            study(
+                "NCT10000001",
+                [
+                    completed_seattle,
+                    {
+                        "facility": "Boston Site",
+                        "city": "Boston",
+                        "state": "MA",
+                        "status": "RECRUITING",
+                        "geoPoint": {"lat": 42.3601, "lon": -71.0589},
+                    },
+                ],
+            ),
+            # Only site is COMPLETED: dropped.
+            study("NCT10000002", [completed_seattle]),
+            # Nearby recruiting site (~15 mi): kept.
+            study(
+                "NCT10000003",
+                [
+                    {
+                        "facility": "Open Site",
+                        "city": "Bellevue",
+                        "state": "WA",
+                        "status": "RECRUITING",
+                        "geoPoint": {"lat": 47.61, "lon": -122.0},
+                    }
+                ],
+            ),
+            # Nearby not-yet-recruiting site (~25 mi): kept.
+            study(
+                "NCT10000004",
+                [
+                    {
+                        "facility": "Tacoma Site",
+                        "city": "Tacoma",
+                        "state": "WA",
+                        "status": "NOT_YET_RECRUITING",
+                        "geoPoint": {"lat": 47.2529, "lon": -122.4443},
+                    }
+                ],
+            ),
+        ],
+        "totalCount": 4,
+        "nextPageToken": None,
+    }
+
+
+def test_live_max_distance_filter_keeps_only_in_radius_trials() -> None:
+    payload = _location_search_payload()
+    summaries = [
+        normalize_study_summary(study, user_lat=47.61, user_lon=-122.33)
+        for study in payload["studies"]
+    ]
+
+    kept = filter_and_sort_summaries(summaries, sort="distance", max_distance_miles=50.0)
+
+    assert [s.nct_id for s in kept] == ["NCT10000003", "NCT10000004"]
+    first, second = kept
+    assert first.nearest_site is not None and second.nearest_site is not None
+    assert first.nearest_site.distance_miles is not None
+    assert second.nearest_site.distance_miles is not None
+    assert first.nearest_site.distance_miles <= second.nearest_site.distance_miles
+
+
+def test_live_location_search_drops_trials_without_recruiting_site_in_radius(
+    test_client: TestClient, test_container: APIContainer
+) -> None:
+    payload = _location_search_payload()
+    test_container.ctg_client.fetch_studies.return_value = (payload, json.dumps(payload))  # type: ignore[attr-defined]
+
+    result = test_client.get("/v1/trials?lat=47.61&lon=-122.33&radius_mi=50")
+    assert result.status_code == 200
+    data = result.json()
+
+    assert [item["nct_id"] for item in data["items"]] == ["NCT10000003", "NCT10000004"]
+    distances = [item["nearest_site"]["distance_miles"] for item in data["items"]]
+    assert distances == sorted(distances)
+    # The upstream totalCount (4) describes the any-status geo match, not the
+    # recruiting-only result set.
+    assert data["pagination"]["total_count"] is None
+
+
 def test_normalize_study_detail_conforms_to_schema(
     live_detail_fixture: dict[str, Any],
 ) -> None:

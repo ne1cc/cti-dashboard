@@ -2,6 +2,48 @@
 -- ADR 0065 strict compliance: zero investigator/coordinator contact PII.
 -- Directs inquiries to canonical registry via registry_contact_url.
 
+-- Issue #63: one row per site with effective coordinates. Registry geoPoint
+-- preferred; ZIP (ZCTA) then city Gazetteer centroids as flagged-approximate
+-- fallback. The place join can fan out (repeated city names within a state),
+-- so one deterministic row wins per site — the same dedup and tie-break as
+-- search.sql, so both endpoints report identical coordinates for a site.
+WITH site_fallback AS (
+    SELECT
+        loc.ingestion_run_id,
+        loc.nct_id,
+        loc.location_ordinal,
+        loc.facility_name,
+        loc.city,
+        COALESCE(loc.state_raw, loc.state_normalized) AS state,
+        loc.zip_code,
+        loc.country,
+        loc.location_status,
+        CASE
+            WHEN loc.latitude IS NOT NULL AND loc.longitude IS NOT NULL THEN loc.latitude
+            WHEN gz.zcta IS NOT NULL THEN gz.latitude
+            ELSE gp.latitude
+        END AS site_latitude,
+        CASE
+            WHEN loc.latitude IS NOT NULL AND loc.longitude IS NOT NULL THEN loc.longitude
+            WHEN gz.zcta IS NOT NULL THEN gz.longitude
+            ELSE gp.longitude
+        END AS site_longitude,
+        CASE
+            WHEN loc.latitude IS NOT NULL AND loc.longitude IS NOT NULL THEN FALSE
+            WHEN gz.zcta IS NOT NULL OR gp.state_usps IS NOT NULL THEN TRUE
+            ELSE NULL
+        END AS coordinate_approximate
+    FROM stg_trial_locations loc
+    LEFT JOIN gazetteer_zcta gz ON left(loc.zip_code, 5) = gz.zcta
+    LEFT JOIN gazetteer_place gp
+        ON gp.state_usps = loc.state_normalized
+       AND (gp.city_name = loc.city_normalized OR gp.city_name_stripped = loc.city_normalized)
+    QUALIFY row_number() OVER (
+        PARTITION BY loc.ingestion_run_id, loc.nct_id, loc.location_ordinal
+        ORDER BY CASE WHEN gz.zcta IS NOT NULL THEN 0 ELSE 1 END, gp.latitude, gp.longitude
+    ) = 1
+)
+
 SELECT
     st.nct_id,
     st.brief_title,
@@ -96,29 +138,30 @@ SELECT
     -- Sites (Strictly omitting investigator names/emails/phones)
     (
         SELECT list({
-            'facility_name': COALESCE(loc.facility_name, 'UNKNOWN'),
-            'city': COALESCE(loc.city, 'UNKNOWN'),
-            'state': COALESCE(loc.state_raw, loc.state_normalized),
-            'zip_code': loc.zip_code,
-            'country': COALESCE(loc.country, 'UNKNOWN'),
-            'location_status': loc.location_status,
-            'latitude': loc.latitude,
-            'longitude': loc.longitude,
+            'facility_name': COALESCE(s.facility_name, 'UNKNOWN'),
+            'city': COALESCE(s.city, 'UNKNOWN'),
+            'state': s.state,
+            'zip_code': s.zip_code,
+            'country': COALESCE(s.country, 'UNKNOWN'),
+            'location_status': s.location_status,
+            'latitude': s.site_latitude,
+            'longitude': s.site_longitude,
+            'coordinate_approximate': s.coordinate_approximate,
             'distance_miles': CASE
-                WHEN $lat IS NOT NULL AND $lon IS NOT NULL AND loc.latitude IS NOT NULL AND loc.longitude IS NOT NULL THEN
+                WHEN $lat IS NOT NULL AND $lon IS NOT NULL AND s.site_latitude IS NOT NULL AND s.site_longitude IS NOT NULL THEN
                     round(2 * 3958.8 * asin(sqrt(
                         greatest(0.0, least(1.0,
-                            power(sin(radians(loc.latitude - $lat) / 2.0), 2) +
-                            cos(radians($lat)) * cos(radians(loc.latitude)) *
-                            power(sin(radians(loc.longitude - $lon) / 2.0), 2)
+                            power(sin(radians(s.site_latitude - $lat) / 2.0), 2) +
+                            cos(radians($lat)) * cos(radians(s.site_latitude)) *
+                            power(sin(radians(s.site_longitude - $lon) / 2.0), 2)
                         ))
                     )), 1)
                 ELSE NULL
             END
-        } ORDER BY loc.location_ordinal, loc.facility_name)
-        FROM stg_trial_locations loc
-        WHERE loc.nct_id = st.nct_id
-          AND loc.ingestion_run_id = st.ingestion_run_id
+        } ORDER BY s.location_ordinal, s.facility_name)
+        FROM site_fallback s
+        WHERE s.nct_id = st.nct_id
+          AND s.ingestion_run_id = st.ingestion_run_id
     ) AS sites,
 
     -- Provenance

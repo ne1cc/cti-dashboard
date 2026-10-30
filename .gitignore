@@ -7,6 +7,8 @@ data/silver/*
 data/gold/*
 data/warehouse/*.duckdb
 data/warehouse/*.duckdb.wal
+# Downloaded reference files (make gazetteer) are generated, never committed.
+data/reference/*
 !data/**/.gitkeep
 
 # Environment / secrets

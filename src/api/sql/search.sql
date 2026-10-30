@@ -44,35 +44,85 @@ distinct_trials AS (
     LEFT JOIN active_trial_runs atr ON dt.nct_id = atr.nct_id
 ),
 
+-- Issue #63: only recruiting / not-yet-recruiting sites count as "available
+-- near me"; other site statuses are inactive here (the detail endpoint still
+-- lists them with their status). Registry geoPoint coordinates are preferred;
+-- sites missing them fall back to the offline Census Gazetteer ZIP (ZCTA) or
+-- city centroid and are flagged approximate. Gazetteer views always exist
+-- (empty when the reference files were never downloaded via `make gazetteer`).
+-- The place join can fan out (repeated city names within a state, sometimes
+-- hundreds of miles apart), so one deterministic row wins per site — ranked
+-- exactly like detail.sql, never by distance to the user.
 nearest_sites AS (
     SELECT
         nct_id,
         facility_name,
         city,
         state,
-        distance_miles,
-        ROW_NUMBER() OVER (PARTITION BY nct_id ORDER BY distance_miles ASC) AS site_rn
+        location_status,
+        coordinate_approximate,
+        location_ordinal,
+        -- Haversine in miles. DuckDB's least/greatest ignore NULLs, so the raw
+        -- expression would degrade to the antipodal distance when the user
+        -- point or the site's effective coordinates are missing; guard it so
+        -- distance propagates to NULL instead (same guard as detail.sql).
+        CASE
+            WHEN $lat IS NULL OR $lon IS NULL
+                 OR site_latitude IS NULL OR site_longitude IS NULL THEN NULL
+            ELSE 2 * 3958.8 * asin(sqrt(
+                greatest(0.0, least(1.0,
+                    power(sin(radians(site_latitude - $lat) / 2.0), 2) +
+                    cos(radians($lat)) * cos(radians(site_latitude)) *
+                    power(sin(radians(site_longitude - $lon) / 2.0), 2)
+                ))
+            ))
+        END AS distance_miles,
+        ROW_NUMBER() OVER (
+            PARTITION BY nct_id
+            ORDER BY distance_miles ASC NULLS LAST, location_ordinal ASC
+        ) AS site_rn
     FROM (
         SELECT
             loc.nct_id,
+            loc.ingestion_run_id,
+            loc.location_ordinal,
             loc.facility_name,
             loc.city,
             COALESCE(loc.state_raw, loc.state_normalized) AS state,
+            loc.location_status,
             CASE
-                WHEN $lat IS NOT NULL AND $lon IS NOT NULL AND loc.latitude IS NOT NULL AND loc.longitude IS NOT NULL THEN
-                    2 * 3958.8 * asin(sqrt(
-                        greatest(0.0, least(1.0,
-                            power(sin(radians(loc.latitude - $lat) / 2.0), 2) +
-                            cos(radians($lat)) * cos(radians(loc.latitude)) *
-                            power(sin(radians(loc.longitude - $lon) / 2.0), 2)
-                        ))
-                    ))
+                WHEN loc.latitude IS NOT NULL AND loc.longitude IS NOT NULL THEN loc.latitude
+                WHEN gz.zcta IS NOT NULL THEN gz.latitude
+                ELSE gp.latitude
+            END AS site_latitude,
+            CASE
+                WHEN loc.latitude IS NOT NULL AND loc.longitude IS NOT NULL THEN loc.longitude
+                WHEN gz.zcta IS NOT NULL THEN gz.longitude
+                ELSE gp.longitude
+            END AS site_longitude,
+            CASE
+                WHEN loc.latitude IS NOT NULL AND loc.longitude IS NOT NULL THEN FALSE
+                WHEN gz.zcta IS NOT NULL OR gp.state_usps IS NOT NULL THEN TRUE
                 ELSE NULL
-            END AS distance_miles
+            END AS coordinate_approximate
         FROM stg_trial_locations loc
         INNER JOIN active_trial_runs atr
             ON loc.nct_id = atr.nct_id AND loc.ingestion_run_id = atr.ingestion_run_id
-        WHERE ($lat IS NULL OR (loc.latitude IS NOT NULL AND loc.longitude IS NOT NULL))
+        LEFT JOIN gazetteer_zcta gz ON left(loc.zip_code, 5) = gz.zcta
+        LEFT JOIN gazetteer_place gp
+            ON gp.state_usps = loc.state_normalized
+           AND (gp.city_name = loc.city_normalized OR gp.city_name_stripped = loc.city_normalized)
+        WHERE upper(COALESCE(loc.location_status, '')) IN ('RECRUITING', 'NOT_YET_RECRUITING')
+          AND (
+              $lat IS NULL OR
+              (loc.latitude IS NOT NULL AND loc.longitude IS NOT NULL) OR
+              gz.zcta IS NOT NULL OR
+              gp.state_usps IS NOT NULL
+          )
+        QUALIFY row_number() OVER (
+            PARTITION BY loc.ingestion_run_id, loc.nct_id, loc.location_ordinal
+            ORDER BY CASE WHEN gz.zcta IS NOT NULL THEN 0 ELSE 1 END, gp.latitude, gp.longitude
+        ) = 1
     )
 ),
 
@@ -111,6 +161,8 @@ matched_candidates AS (
         ns.facility_name AS nearest_facility_name,
         ns.city AS nearest_city,
         ns.state AS nearest_state,
+        ns.location_status AS nearest_location_status,
+        ns.coordinate_approximate AS nearest_coordinate_approximate,
         round(ns.distance_miles, 1) AS nearest_distance_miles,
         ns.distance_miles AS raw_distance_miles,
         dt.registry_url

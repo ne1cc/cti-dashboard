@@ -31,6 +31,8 @@ st.dataframe(
             "quarantined_record_count",
             "flagged_record_share",
             "usable_location_share",
+            "coordinates_exact_share",
+            "coordinates_fallback_eligible_share",
             "low_confidence_condition_share",
             "ingestion_run_id",
         ]
@@ -52,6 +54,20 @@ st.dataframe(
         ),
         "usable_location_share": st.column_config.NumberColumn(
             "Usable US Locations", format="percent"
+        ),
+        "coordinates_exact_share": st.column_config.NumberColumn(
+            "Exact coordinates",
+            format="percent",
+            help="Sites with registry geoPoint latitude/longitude (exact coordinates).",
+        ),
+        "coordinates_fallback_eligible_share": st.column_config.NumberColumn(
+            "Approximate coordinates (eligible)",
+            format="percent",
+            help=(
+                "Sites without geoPoint that carry a ZIP or city+state the offline "
+                "Census Gazetteer fallback can use. Fallback-eligible only: actual "
+                "resolution happens at query time, so this is an upper bound."
+            ),
         ),
         "low_confidence_condition_share": st.column_config.NumberColumn(
             "Uncertain condition mapping", format="percent"
@@ -85,6 +101,22 @@ if not success.empty:
             "rather than exact taxonomy matches."
         ),
     )
+    geo_col1, geo_col2 = st.columns(2)
+    geo_col1.metric(
+        "Exact coordinates share",
+        f"{latest['coordinates_exact_share']:.1%}",
+        help=("Trial sites with registry geoPoint latitude/longitude (exact coordinates)."),
+    )
+    geo_col2.metric(
+        "Approximate coordinates (eligible)",
+        f"{latest['coordinates_fallback_eligible_share']:.1%}",
+        help=(
+            "Trial sites without geoPoint that carry a ZIP or city+state the "
+            "offline Census Gazetteer fallback can use (fallback-eligible, an "
+            "upper bound; actual resolution happens at query time and is "
+            "flagged per site as coordinate_approximate)."
+        ),
+    )
 
 st.subheader("Known limitations")
 st.markdown(
@@ -92,6 +124,9 @@ st.markdown(
 - The registry API serves **current records only**; history is built from
   this project's own snapshots and deepens over time.
 - Facility names are free text; site matching is best-effort.
+- Site coordinates are exact only when the registry publishes them; sites
+  without them use offline Census Gazetteer ZIP/city centroids, so their
+  distances are approximate (shares reported above).
 - Condition grouping is a deterministic, version-controlled taxonomy —
   low-confidence mappings are counted above, never hidden.
 - Nothing here measures patient availability or predicts enrollment.

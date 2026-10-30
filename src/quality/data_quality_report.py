@@ -61,7 +61,9 @@ def _reliability_rows(cfg: ProjectConfig) -> list[dict[str, Any]]:
                    manifest_record_count, trial_row_count,
                    manifest_reconciled_flag, unique_nct_flag,
                    quarantined_record_count, flagged_record_share,
-                   usable_location_share, low_confidence_condition_share
+                   usable_location_share, coordinates_exact_share,
+                   coordinates_fallback_eligible_share,
+                   low_confidence_condition_share
             from main_marts.mart_data_reliability
             order by snapshot_date desc, ingestion_run_id desc
             """
@@ -105,6 +107,8 @@ def build_report(cfg: ProjectConfig | None = None, output_path: Path | None = No
             "quarantined",
             "flagged share",
             "usable location share",
+            "exact coord. share",
+            "approx. coord. share (eligible)",
             "low-confidence cond. share",
         ]
         lines.append("| " + " | ".join(headers) + " |")
@@ -127,6 +131,8 @@ def build_report(cfg: ProjectConfig | None = None, output_path: Path | None = No
                         "quarantined_record_count",
                         "flagged_record_share",
                         "usable_location_share",
+                        "coordinates_exact_share",
+                        "coordinates_fallback_eligible_share",
                         "low_confidence_condition_share",
                     )
                 )

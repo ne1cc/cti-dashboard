@@ -29,7 +29,26 @@ location_stats as (
     select
         ingestion_run_id,
         count(*) as location_row_count,
-        count(*) filter (usable_geography_flag) as usable_location_count
+        count(*) filter (usable_geography_flag) as usable_location_count,
+        -- Issue #63 coordinate coverage: exact = registry geoPoint present;
+        -- fallback-eligible = missing geoPoint and carrying the fields the
+        -- offline Gazetteer fallback needs (a ZIP, or a normalized city+state).
+        -- Eligibility only: whether a fallback actually resolves is decided at
+        -- query time — the Gazetteer reference files are not part of the dbt
+        -- build — so this share is an upper bound on approximate coordinates.
+        count(*) filter (latitude is not null and longitude is not null)
+            as coordinates_exact_count,
+        count(*) filter (
+            latitude is null
+            and (
+                nullif(trim(cast(zip_code as varchar)), '') is not null
+                or (
+                    city_normalized is not null
+                    and state_normalized is not null
+                    and state_normalized != 'UNKNOWN'
+                )
+            )
+        ) as coordinates_fallback_eligible_count
     from {{ ref('stg_trial_locations') }}
     group by 1
 ),
@@ -82,6 +101,12 @@ select
     l.usable_location_count,
     {{ safe_divide('l.usable_location_count', 'l.location_row_count') }}
         as usable_location_share,
+    l.coordinates_exact_count,
+    l.coordinates_fallback_eligible_count,
+    {{ safe_divide('l.coordinates_exact_count', 'l.location_row_count') }}
+        as coordinates_exact_share,
+    {{ safe_divide('l.coordinates_fallback_eligible_count', 'l.location_row_count') }}
+        as coordinates_fallback_eligible_share,
     c.condition_row_count,
     c.low_confidence_condition_count,
     {{ safe_divide(
