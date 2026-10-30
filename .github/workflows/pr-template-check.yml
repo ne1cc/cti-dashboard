@@ -6,4 +6,4 @@ on:
 
 jobs:
   pr-template:
-    uses: ne1cc/.github/.github/workflows/pr-template-check.yml@main
+    uses: ne1cc/.github/.github/workflows/pr-template-check.yml@v1
