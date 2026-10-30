@@ -51,5 +51,5 @@ def format_priority_explanation(row: pd.Series) -> str:
         f"{growth}: {row['recent_growth_input']:.0f} · "
         f"Sponsors: {row['sponsor_count']:.0f} (HHI {row['sponsor_hhi']:.2f}) · "
         f"Trials sharing sites: {row['site_overlap_share']:.0%} · "
-        f"Completeness adjustment: {row['data_confidence_share']:.0%}"
+        f"Operational completeness: {row['operational_completeness_share']:.0%}"
     )
