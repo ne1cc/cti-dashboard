@@ -1,0 +1,182 @@
+{
+  "_provenance": {
+    "what_this_is": "Bronze-shaped page exercising derivedSection.conditionBrowseModule (Issue #52). Study scaffolding is synthetic (NCT9900000x) and follows tests/fixtures/bronze_snapshot conventions; it is not a verbatim registry page.",
+    "captured_from": "GET https://clinicaltrials.gov/api/v2/studies/NCT02253732",
+    "captured_at_utc": "2026-10-30T21:19:00Z",
+    "spec_checked": "https://clinicaltrials.gov/api/oas/v2 (openapi 3.0.3, info.version 2.0.5): DerivedSection.conditionBrowseModule is a BrowseModule with meshes[] and ancestors[] of Mesh {id, term}; browseBranches is an optional [{abbrev, name}] list with no edge to terms.",
+    "notes": "NCT99000001's conditionBrowseModule is the live NCT02253732 response verbatim (meshes and ancestors). NCT99000002's browse module is representative: real MeSH descriptors, ancestor set trimmed for brevity, and one ancestor repeated with a direct id to exercise silver deduplication. NCT99000003 deliberately omits derivedSection entirely to represent new/unprocessed records."
+  },
+  "studies": [
+    {
+      "protocolSection": {
+        "identificationModule": {
+          "nctId": "NCT99000001",
+          "briefTitle": "Mesh fixture: overlay-matched Alzheimer trial",
+          "officialTitle": "A Phase 3 Study of Donepezil Add-On Therapy in Mild Alzheimer Disease"
+        },
+        "statusModule": {
+          "overallStatus": "RECRUITING",
+          "lastKnownStatus": "RECRUITING",
+          "statusVerifiedDate": "2026-07-01",
+          "startDateStruct": {"date": "2025-02-01"},
+          "primaryCompletionDateStruct": {"date": "2027-06-30"},
+          "completionDateStruct": {"date": "2027-12-31"},
+          "studyFirstPostDateStruct": {"date": "2025-03-15"},
+          "lastUpdatePostDateStruct": {"date": "2026-07-15"}
+        },
+        "sponsorCollaboratorsModule": {
+          "leadSponsor": {"name": "NeuroPharm Inc", "class": "INDUSTRY"}
+        },
+        "designModule": {
+          "studyType": "INTERVENTIONAL",
+          "phases": ["PHASE3"],
+          "enrollmentInfo": {"count": 500, "type": "Anticipated"}
+        },
+        "conditionsModule": {
+          "conditions": ["Alzheimer Disease"]
+        },
+        "armsInterventionsModule": {
+          "interventions": [
+            {"name": "Donepezil 10mg", "type": "Drug", "description": "Once daily oral dose."}
+          ]
+        },
+        "outcomesModule": {
+          "primaryOutcomes": [
+            {"measure": "ADAS-Cog13 change from baseline", "timeFrame": "78 weeks"}
+          ]
+        },
+        "eligibilityModule": {
+          "healthyVolunteers": false,
+          "minimumAge": "55 Years",
+          "maximumAge": "85 Years",
+          "sex": "ALL"
+        }
+      },
+      "derivedSection": {
+        "conditionBrowseModule": {
+          "meshes": [
+            {"id": "D060825", "term": "Cognitive Dysfunction"},
+            {"id": "D000544", "term": "Alzheimer Disease"},
+            {"id": "D010300", "term": "Parkinson Disease"},
+            {"id": "D009043", "term": "Motor Activity"}
+          ],
+          "ancestors": [
+            {"id": "D003072", "term": "Cognition Disorders"},
+            {"id": "D019965", "term": "Neurocognitive Disorders"},
+            {"id": "D001523", "term": "Mental Disorders"},
+            {"id": "D003704", "term": "Dementia"},
+            {"id": "D001927", "term": "Brain Diseases"},
+            {"id": "D002493", "term": "Central Nervous System Diseases"},
+            {"id": "D009422", "term": "Nervous System Diseases"},
+            {"id": "D024801", "term": "Tauopathies"},
+            {"id": "D019636", "term": "Neurodegenerative Diseases"},
+            {"id": "D020734", "term": "Parkinsonian Disorders"},
+            {"id": "D001480", "term": "Basal Ganglia Diseases"},
+            {"id": "D009069", "term": "Movement Disorders"},
+            {"id": "D000080874", "term": "Synucleinopathies"},
+            {"id": "D001519", "term": "Behavior"}
+          ]
+        }
+      },
+      "hasResults": false
+    },
+    {
+      "protocolSection": {
+        "identificationModule": {
+          "nctId": "NCT99000002",
+          "briefTitle": "Mesh fixture: condition absent from every taxonomy overlay",
+          "officialTitle": "A Phase 2 Study of an Intervention in Friedreich Ataxia"
+        },
+        "statusModule": {
+          "overallStatus": "RECRUITING",
+          "lastKnownStatus": "RECRUITING",
+          "statusVerifiedDate": "2026-07-01",
+          "startDateStruct": {"date": "2025-06-01"},
+          "primaryCompletionDateStruct": {"date": "2027-06-30"},
+          "completionDateStruct": {"date": "2027-12-31"},
+          "studyFirstPostDateStruct": {"date": "2025-07-15"},
+          "lastUpdatePostDateStruct": {"date": "2026-07-15"}
+        },
+        "sponsorCollaboratorsModule": {
+          "leadSponsor": {"name": "Ataxia Research Group", "class": "OTHER"}
+        },
+        "designModule": {
+          "studyType": "INTERVENTIONAL",
+          "phases": ["PHASE2"],
+          "enrollmentInfo": {"count": 80, "type": "Anticipated"}
+        },
+        "conditionsModule": {
+          "conditions": ["Friedreich Ataxia"]
+        },
+        "armsInterventionsModule": {
+          "interventions": [
+            {"name": "Study Intervention A", "type": "Drug"}
+          ]
+        },
+        "outcomesModule": {
+          "primaryOutcomes": [
+            {"measure": "FARS score change", "timeFrame": "52 weeks"}
+          ]
+        },
+        "eligibilityModule": {
+          "healthyVolunteers": false,
+          "minimumAge": "12 Years",
+          "maximumAge": "60 Years",
+          "sex": "ALL"
+        }
+      },
+      "derivedSection": {
+        "conditionBrowseModule": {
+          "meshes": [
+            {"id": "D005662", "term": "Friedreich Ataxia"},
+            {"id": "D010300", "term": "Parkinson Disease"}
+          ],
+          "ancestors": [
+            {"id": "D013199", "term": "Spinocerebellar Degenerations"},
+            {"id": "D005662", "term": "Friedreich Ataxia"},
+            {"id": "D019636", "term": "Neurodegenerative Diseases"},
+            {"id": "D009422", "term": "Nervous System Diseases"}
+          ]
+        }
+      },
+      "hasResults": false
+    },
+    {
+      "protocolSection": {
+        "identificationModule": {
+          "nctId": "NCT99000003",
+          "briefTitle": "Mesh fixture: no derived section (new or unprocessed record)",
+          "officialTitle": "An Observational Study in Frontotemporal Dementia"
+        },
+        "statusModule": {
+          "overallStatus": "ACTIVE_NOT_RECRUITING",
+          "lastKnownStatus": "ACTIVE_NOT_RECRUITING",
+          "statusVerifiedDate": "2026-07-01",
+          "startDateStruct": {"date": "2025-01-15"},
+          "primaryCompletionDateStruct": {"date": "2026-12-31"},
+          "completionDateStruct": {"date": "2027-06-30"},
+          "studyFirstPostDateStruct": {"date": "2025-02-20"},
+          "lastUpdatePostDateStruct": {"date": "2026-07-15"}
+        },
+        "sponsorCollaboratorsModule": {
+          "leadSponsor": {"name": "Dementia Care Network", "class": "NETWORK"}
+        },
+        "designModule": {
+          "studyType": "OBSERVATIONAL",
+          "enrollmentInfo": {"count": 120, "type": "Actual"}
+        },
+        "conditionsModule": {
+          "conditions": ["Frontotemporal Dementia"]
+        },
+        "eligibilityModule": {
+          "healthyVolunteers": false,
+          "minimumAge": "40 Years",
+          "maximumAge": "80 Years",
+          "sex": "ALL"
+        }
+      },
+      "hasResults": false
+    }
+  ],
+  "totalCount": 3
+}

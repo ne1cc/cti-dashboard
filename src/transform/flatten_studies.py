@@ -1,9 +1,18 @@
-"""Flatten nested ClinicalTrials.gov study JSON into the six silver entities.
+"""Flatten nested ClinicalTrials.gov study JSON into the silver entities.
 
-Grounded in the actual API v2 structure (verified against saved bronze pages):
+Grounded in the actual API v2 structure (verified against saved bronze pages
+and the v2 OpenAPI spec, https://clinicaltrials.gov/api/oas/v2, version 2.0.5):
 protocolSection.{identification,status,sponsorCollaborators,design,conditions,
 armsInterventions,outcomes,eligibility,contactsLocations}Module + top-level
-hasResults. Location contact/investigator fields are deliberately not extracted.
+hasResults + derivedSection.conditionBrowseModule. Location contact/investigator
+fields are deliberately not extracted.
+
+MeSH browse modules (Issue #52): derivedSection.conditionBrowseModule carries
+study-level `meshes` (direct terms) and `ancestors` (hierarchy closure) as
+{id, term} pairs. The registry supplies no per-condition-text edge and no
+branch-to-term edge (browseBranches is an unlinked {abbrev, name} list), so
+rows are study-level and `branch` stays NULL; a condition's MeSH identity is
+joined at trial grain, not per condition string.
 """
 
 import json
@@ -16,6 +25,34 @@ from src.transform.normalize_locations import GeographyRules
 from src.utils.dates import parse_partial_date
 from src.utils.hashing import sha256_json
 from src.utils.text import normalize_text
+
+# Group identity for profiles with no condition taxonomy: conditions keep
+# their raw text, every row falls back, and MeSH rows carry the browsable
+# identity (Issue #52). Snake_case like the taxonomy group slugs.
+UNMAPPED_CONDITION_GROUP = "unmapped"
+
+
+def extract_condition_mesh(study: dict[str, Any]) -> list[dict[str, str | bool]]:
+    """Return deduplicated {id, term, is_ancestor} MeSH rows for a study.
+
+    Direct terms win over ancestors for the same id (a term both applied
+    directly and reached as an ancestor is one direct identity, not two).
+    Registry order is otherwise preserved. Rows missing id or term are
+    dropped: mesh_id is the join identity and an unlabelled node is not
+    browsable.
+    """
+    module = dig(study, "derivedSection", "conditionBrowseModule") or {}
+    rows: list[dict[str, str | bool]] = []
+    seen: set[str] = set()
+    for is_ancestor, key in ((False, "meshes"), (True, "ancestors")):
+        for mesh in module.get(key) or []:
+            mesh_id = mesh.get("id")
+            term = mesh.get("term")
+            if not mesh_id or not term or mesh_id in seen:
+                continue
+            seen.add(mesh_id)
+            rows.append({"id": mesh_id, "term": term, "is_ancestor": is_ancestor})
+    return rows
 
 
 def dig(obj: Any, *keys: str) -> Any:
@@ -67,7 +104,7 @@ def flatten_study(
     study: dict[str, Any],
     ingestion_run_id: str,
     snapshot_timestamp_utc: str,
-    taxonomy: ConditionTaxonomy,
+    taxonomy: ConditionTaxonomy | None,
     geography: GeographyRules,
     indication_profile_id: str = "adrd",
     retrieved_at_utc: str | None = None,
@@ -77,6 +114,10 @@ def flatten_study(
     """One study → rows for each silver entity.
 
     Args:
+        taxonomy: The profile's condition taxonomy overlay. None means the
+            profile has none (Issue #52): condition rows fall back
+            (mapping_source text_fallback, group "unmapped") and the MeSH
+            browse module carries the condition identity.
         indication_profile_id: Profile that produced this run. Written to every
             silver entity row so the shared silver/gold tables can be filtered or
             partitioned by indication. Defaults to "adrd" for backward compatibility
@@ -145,17 +186,47 @@ def flatten_study(
 
     conditions = []
     for condition_raw in dig(protocol, "conditionsModule", "conditions") or []:
-        mapping = taxonomy.map_condition(condition_raw)
+        if taxonomy is not None:
+            mapping = taxonomy.map_condition(condition_raw)
+            # "low" confidence is the taxonomy's unmatched fallback; high/medium
+            # mean a YAML overlay rule matched (exact → substring).
+            mapping_source = (
+                "yaml_overlay" if mapping.mapping_confidence != "low" else "text_fallback"
+            )
+        else:
+            mapping = None
+            mapping_source = "text_fallback"
         conditions.append(
             {
                 **base,
                 "condition_raw": condition_raw,
-                "condition_normalized": mapping.condition_normalized,
-                "condition_group": mapping.condition_group,
-                "dementia_relevance_flag": mapping.dementia_relevance_flag,
-                "mapping_confidence": mapping.mapping_confidence,
+                # Normalization is a text utility, not taxonomy state: rows
+                # keep it even when no overlay exists, so downstream text
+                # consumers see one behaviour across profiles.
+                "condition_normalized": (
+                    mapping.condition_normalized if mapping else normalize_text(condition_raw)
+                ),
+                "condition_group": (
+                    mapping.condition_group if mapping else UNMAPPED_CONDITION_GROUP
+                ),
+                "dementia_relevance_flag": (mapping.dementia_relevance_flag if mapping else False),
+                "mapping_confidence": mapping.mapping_confidence if mapping else "low",
+                "mapping_source": mapping_source,
             }
         )
+
+    condition_mesh = [
+        {
+            **base,
+            "mesh_id": mesh["id"],
+            "mesh_term": mesh["term"],
+            "is_ancestor": mesh["is_ancestor"],
+            # browseBranches carries {abbrev, name} with no edge to terms, so
+            # the registry supplies no branch attribution to copy (Issue #52).
+            "branch": None,
+        }
+        for mesh in extract_condition_mesh(study)
+    ]
 
     interventions = []
     for item in dig(protocol, "armsInterventionsModule", "interventions") or []:
@@ -242,6 +313,7 @@ def flatten_study(
     return {
         "silver_trials": [trial],
         "silver_trial_conditions": conditions,
+        "silver_trial_condition_mesh": condition_mesh,
         "silver_trial_interventions": interventions,
         "silver_trial_sponsors": sponsors,
         "silver_trial_locations": locations,

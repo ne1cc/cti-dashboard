@@ -47,6 +47,10 @@ with tokens as (
     inner join {{ ref('int_trial_comparability_features') }} as features
         on bridge.indication_profile_id = features.indication_profile_id
         and bridge.nct_id = features.nct_id
+    -- Ancestor-closure edges excluded, matching the same_condition input in
+    -- int_trial_comparability_features: a shared tree ancestor would make the
+    -- token index registry-wide instead of per-condition (Issue #52).
+    where not bridge.is_ancestor
 ),
 
 token_frequency as (

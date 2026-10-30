@@ -888,8 +888,8 @@ def test_shared_dimensions_are_per_profile(fixture_project_root: Path) -> None:
       That leaves the four fixture-shape literals below as literals about *this*
       warehouse, which is the point of building a second one rather than
       re-dating this: ``(14, 7)`` / ``(18, 9)``, ``dupes == [(7,)]`` /
-      ``[(9,)]``, dim_condition's ``[("adrd", 10), ("oncology_nsclc", 11)]``
-      partition with its ``(21, 21, 2)`` rows/keys/profiles triple, and the
+      ``[(9,)]``, dim_condition's ``[("adrd", 6), ("oncology_nsclc", 4)]``
+      partition with its ``(10, 10, 2)`` rows/keys/profiles triple, and the
       ``[(10,)]`` cross-profile dim_trial self-join. All four were re-checked on
       2026-09-06 after the divergent fixture landed and all four still hold --
       none of them was ever a prediction about Task 12's fixture, only
@@ -897,13 +897,15 @@ def test_shared_dimensions_are_per_profile(fixture_project_root: Path) -> None:
       future model change makes the base fixture's membership asymmetric, it
       goes red and the non-discrimination argument two sentences up has to be
       re-made rather than inherited.
-    * dim_condition is excluded from the multiplicity loop by measurement: 21
-      rows, 21 distinct condition_normalized, 0 entities listed by both
-      profiles. condition_normalized is taxonomy-free text (normalize_text of
-      the raw string) and the two bronze fixtures describe different
-      conditions, so the entity sets are disjoint and ``count(*) >
-      count(distinct entity)`` is false for a reason unrelated to this task.
-      Its profile partition and composite-key uniqueness are asserted instead.
+    * dim_condition is excluded from the multiplicity loop by measurement: 10
+      rows, 10 distinct condition_key, 0 nodes listed by both profiles.
+      Issue #52 re-grained it from profile x condition_normalized (21 rows on
+      this fixture) to profile x condition node (taxonomy group or MeSH
+      identity); neither bronze fixture carries a derived section, so its rows
+      are the collapsed group nodes -- 6 ADRD taxonomy groups and 4 NSCLC
+      groups. Its profile partition and composite-key uniqueness are asserted
+      instead; the mesh half of the grain is pinned in
+      tests/test_condition_mesh.py, which is where a derived section exists.
     """
     shapes = {
         "dim_sponsor": ("sponsor_normalized", 14, 7),
@@ -927,12 +929,12 @@ def test_shared_dimensions_are_per_profile(fixture_project_root: Path) -> None:
         fixture_project_root,
         "select indication_profile_id, count(*) from main_marts.dim_condition"
         " group by 1 order by 1",
-    ) == [("adrd", 10), ("oncology_nsclc", 11)]
+    ) == [("adrd", 6), ("oncology_nsclc", 4)]
     assert _rows(
         fixture_project_root,
         "select count(*), count(distinct condition_key), count(distinct indication_profile_id)"
         " from main_marts.dim_condition",
-    ) == [(21, 21, 2)]
+    ) == [(10, 10, 2)]
 
     # Step 2's key change, asserted where it bites: the bridge and the dimension
     # must hash the same two inputs. Measured counterfactual -- re-hashing the

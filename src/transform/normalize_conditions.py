@@ -1,7 +1,12 @@
-"""Config-driven ADRD condition taxonomy mapping.
+"""Config-driven condition taxonomy overlay mapping.
 
-Deterministic, version-controlled YAML rules (config/condition_taxonomy.yml).
+Deterministic, version-controlled YAML rules (config/condition_taxonomy*.yml).
 No runtime LLM classification. Groups are evaluated in order; first match wins.
+
+Since Issue #52 the YAML taxonomies are optional overlays on top of the
+registry's MeSH browse terms (silver_trial_condition_mesh): rows matched by a
+taxonomy rule carry mapping_source yaml_overlay, everything else falls back
+(text_fallback) and MeSH identity carries the browsable condition grouping.
 """
 
 from dataclasses import dataclass

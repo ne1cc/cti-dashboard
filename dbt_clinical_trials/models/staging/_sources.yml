@@ -17,7 +17,17 @@ sources:
           run_id=<id>/page=00001.json, with zero-based raw_study_ordinal
           and canonical source_json_hash identifying the original record.
       - name: silver_trial_conditions
-        description: One row per NCT ID + raw condition + run, with taxonomy mapping.
+        description: >
+          One row per NCT ID + raw condition + run, with taxonomy overlay
+          mapping and mapping_source (yaml_overlay | text_fallback).
+      - name: silver_trial_condition_mesh
+        description: >
+          One row per NCT ID + MeSH browse identity + run (Issue #52), from
+          derivedSection.conditionBrowseModule: direct terms (is_ancestor
+          false) and supplied ancestors (true), deduplicated with direct
+          winning. Study-level — the registry supplies no per-condition-text
+          edge. branch is null: browseBranches carries {abbrev, name} with no
+          edge to terms, so no branch attribution exists to copy.
       - name: silver_trial_interventions
         description: One row per NCT ID + intervention + run.
       - name: silver_trial_sponsors
