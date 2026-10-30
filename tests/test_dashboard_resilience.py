@@ -445,6 +445,9 @@ def test_registry_link_guidance_names_canonical_url_and_fallback():
     assert "https://clinicaltrials.gov/search" in guidance
     assert "NCT ID" in guidance
     assert "403" in guidance
+    assert "private window or another browser" in guidance
+    assert "cannot determine why" in guidance
+    assert "not a broken record" not in guidance
 
 
 def test_clinicaltrials_gov_search_url():
