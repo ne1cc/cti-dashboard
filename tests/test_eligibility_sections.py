@@ -605,3 +605,138 @@ def test_numbered_and_dash_headings_recognized() -> None:
     assert parsed2.parsed is True
     assert parsed2.exclusion == ["Item 1"]
     assert parsed2.sections[0].heading_raw == "Exclusion Criteria"
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "Non- inclusion Criteria:",
+        "Non-  Inclusion Criteria",
+        "NON -inclusion criteria:",
+        "Inclusion Criteria for Nurses (no exclusion criteria):",
+        "Inclusion Criteria and Exclusion Criteria:",
+        "Inclusion-Exclusion Criteria:",
+        "Inclusion, Exclusion Criteria:",
+        "Inclusion and Key Exclusion Criteria:",
+        "Post- inclusion criteria:",
+    ],
+)
+def test_heading_that_cannot_name_one_list_is_unclassified(heading: str) -> None:
+    parsed = split_eligibility_sections(f"{heading}\n* first item\n* second item")
+
+    assert parsed is not None
+    assert parsed.parsed is False
+    assert [(s.kind, s.heading_raw) for s in parsed.sections] == [("unclassified", heading)]
+    assert parsed.unclassified == ["first item", "second item"]
+
+
+def test_temporal_compound_is_not_a_mention_of_the_other_list() -> None:
+    parsed = split_eligibility_sections("Exclusion Criteria (post-inclusion):\n* first item")
+
+    assert parsed is not None
+    assert parsed.exclusion == ["first item"]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "Medical staff: No exclusion criteria",
+        "Medical staff: Any exclusion criteria",
+        "Any exclusion criteria",
+        "* No exclusion criteria",
+        "* Does not meet any exclusion criteria",
+        "* Absence of exclusion criteria",
+        "* Meeting exclusion criteria:",
+        "* Diabetes (see exclusion criteria:",
+        "* Mentions exclusion criteria elsewhere in prose",
+    ],
+)
+def test_statement_about_criteria_stays_in_the_open_inclusion_section(line: str) -> None:
+    text = f"Inclusion Criteria:\n{line}\n* later item"
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert [s.kind for s in parsed.sections] == ["inclusion"]
+    assert parsed.inclusion[-1] == "later item"
+    assert reconstruct(parsed).split() == _tokens_after_marker_strip(text)
+
+
+@pytest.mark.parametrize(
+    ("line", "kept_in_inclusion", "heading", "first_unclassified"),
+    [
+        ("* 6 months Exclusion Criteria", [], "6 months Exclusion Criteria", "next"),
+        ("* Has consent. Exclusion Criteria", ["Has consent."], "Exclusion Criteria", "next"),
+        ("1. Has consent. Exclusion Criteria", ["Has consent."], "Exclusion Criteria", "next"),
+        (
+            "* Insured (social) Non inclusion criteria",
+            ["Insured (social)"],
+            "Non inclusion criteria",
+            "next",
+        ),
+        (
+            "Inclusion Criteria: age 18. Exclusion criteria",
+            ["age 18."],
+            "Exclusion criteria",
+            "next",
+        ),
+        ("General Study Exclusion Criteria", [], "General Study Exclusion Criteria", "next"),
+        ("* Study Exclusion Criteria：", [], "Study Exclusion Criteria：", "next"),
+        ("* **Study Exclusion Criteria**", [], "**Study Exclusion Criteria**", "next"),
+        ("6 months Exclusion Criteria: pregnant", [], "6 months Exclusion Criteria:", "pregnant"),
+        ("General Exclusion Criteria 2. History", [], "General Exclusion Criteria", "2. History"),
+        ("Criteria for Exclusion", [], "Criteria for Exclusion", "next"),
+        ("Criteria for non inclusion：", [], "Criteria for non inclusion：", "next"),
+        (
+            "Criteria for exclusion were as follows:",
+            [],
+            "Criteria for exclusion were as follows:",
+            "next",
+        ),
+        ("* Exclusion Criteria of Child:", [], "Exclusion Criteria of Child:", "next"),
+    ],
+)
+def test_unrecognized_exclusion_heading_closes_the_inclusion_section(
+    line: str, kept_in_inclusion: list[str], heading: str, first_unclassified: str
+) -> None:
+    text = f"Inclusion Criteria:\n{line}\n* next"
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is True
+    assert parsed.inclusion == kept_in_inclusion
+    assert parsed.exclusion == []
+    assert parsed.sections[-1].kind == "unclassified"
+    assert parsed.sections[-1].heading_raw == heading
+    assert parsed.unclassified[0] == first_unclassified
+    assert parsed.unclassified[-1] == "next"
+    assert reconstruct(parsed).split() == _tokens_after_marker_strip(text)
+
+
+def test_unrecognized_heading_does_not_reopen_an_exclusion_section() -> None:
+    parsed = split_eligibility_sections("Exclusion Criteria:\n* a Non inclusion criteria\n* b")
+
+    assert parsed is not None
+    assert parsed.exclusion == ["a Non inclusion criteria", "b"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Exclusion Criteria：\n* pregnant",
+        "* Exclusion Criteria：\n* pregnant",
+        "Exclusion Criteria： pregnant",
+        "Inclusion Criteria:\n* adult. Exclusion Criteria： pregnant",
+    ],
+)
+def test_fullwidth_colon_is_an_exact_heading_colon(text: str) -> None:
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.exclusion == ["pregnant"]
+
+
+def test_repeated_bold_markers_after_inline_heading_are_not_item_text() -> None:
+    parsed = split_eligibility_sections("Exclusion Criteria: ** **pregnant")
+
+    assert parsed is not None
+    assert parsed.exclusion == ["pregnant"]

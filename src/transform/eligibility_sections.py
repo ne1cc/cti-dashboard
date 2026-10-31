@@ -24,8 +24,9 @@ _BULLET_RE = re.compile(rf"^\s*(?P<marker>{_BULLET_PATTERN})")
 
 # Negative, lead-in, and note words that indicate a criterion or preamble
 # rather than a section heading (e.g. '* No exclusion criteria', 'Meets inclusion criteria...').
+_LEAD_WORDS = r"(?:No|None|Not|Any|Meets?|Fails?|Prior|Previous|Note|Without)\b"
 _DISALLOWED_LEAD_RE = re.compile(
-    rf"^\s*(?:{_BULLET_PATTERN})?\**\s*(?:No|None|Not|Meets?|Fails?|Prior|Previous|Note|Without)\b",
+    rf"^\s*(?:{_BULLET_PATTERN})?\**\s*{_LEAD_WORDS}",
     re.IGNORECASE,
 )
 
@@ -35,30 +36,33 @@ _CANONICAL_QUALIFIERS = (
     r"Clinical|Angiographic|Ocular|Healthy|Common|Patient|Participant|Cohort|Part\s+[A-Za-z0-9]+)"
 )
 
-# Combined headings mentioning both inclusion and exclusion
-# (e.g. 'Inclusion and Exclusion Criteria:').
-_COMBINED_HEADING_RE = re.compile(
-    r"\b(?:inclusions?[\s/&]+(?:and|or)?[\s/&]*exclusions?|exclusions?[\s/&]+(?:and|or)?[\s/&]*inclusions?)\b",
-    re.IGNORECASE,
-)
+_COLON = "[:：]"
+_NON_INCLUSION = r"non[-\s]*inclusions?"
+_KEYWORD = rf"(?:{_NON_INCLUSION}|inclusions?|exclusions?)"
+
+# Timing compounds such as 'Exclusion Criteria (post-inclusion):' name a study phase,
+# not a second criteria list, so they do not count as mentioning that list.
+_TEMPORAL_COMPOUND_RE = re.compile(r"\b(?:pre|post)[-\s]*(?:inclusions?|exclusions?)\b")
 
 # Standalone heading lines: the whole line is the heading. Qualifier prefixes
 # must end with a colon, and tails are limited to "for ..." phrases or parentheticals
-# or colon-terminated descriptors.
+# or colon-terminated descriptors. The lead-word lookahead keeps
+# 'Medical staff: No exclusion criteria' from passing through the prefix path.
 _HEADING_RE = re.compile(
-    r"""^\s*
+    rf"""^\s*
     \**\s*
-    (?:[A-Za-z][\w ()'&/,.-]{0,40}?:\s*)?   # Prefix like 'Extension Phase:'
-    (?:[A-Za-z][\w-]{0,14}\s+)?             # single-word qualifier
+    (?:[A-Za-z][\w ()'&/,.-]{{0,40}}?{_COLON}\s*)?   # Prefix like 'Extension Phase:'
+    (?!\**\s*{_LEAD_WORDS})
+    (?:[A-Za-z][\w-]{{0,14}}\s+)?             # single-word qualifier
     \**\s*
-    (?P<keyword>(?:non[- ]?)?(?:inclusions?|exclusions?))\b
+    (?P<keyword>{_KEYWORD})\b
     \s*(?:\bcriteria\b)?\b
     (?:
-        \s+for\b[^.!?,;:]{0,50}
-      | \s*\([^)!?,;]{0,60}\)
+        \s+for\b[^.!?,;:：]{{0,50}}
+      | \s*\([^)!?,;]{{0,60}}\)
     )?
     (?:
-        (?:\s*[,;:-]?\s*[^.!?:]{0,80})?:
+        (?:\s*[,;:：-]?\s*[^.!?:：]{{0,80}})?{_COLON}
       | \s*$
     )
     \s*(?:\*\*)?\s*$""",
@@ -72,18 +76,19 @@ _BULLETED_HEADING_RE = re.compile(
     rf"""^\s*
     (?:{_BULLET_PATTERN})?
     \**\s*
-    (?:[A-Za-z][\w ()'&/,.-]{{0,40}}?:\s*)?
+    (?:[A-Za-z][\w ()'&/,.-]{{0,40}}?{_COLON}\s*)?
+    (?!\**\s*{_LEAD_WORDS})
     (?:{_CANONICAL_QUALIFIERS}\s+)?
     \**\s*
-    (?P<keyword>(?:non[- ]?)?(?:inclusions?|exclusions?))\b
+    (?P<keyword>{_KEYWORD})\b
     (?:
         \s+\bcriteria\b
         (?:\s*\([^)!?,;]{{0,60}}\))?
-        \s*:?
+        \s*{_COLON}?
       |
         (?:\s*\bcriteria\b)?
         (?:\s*\([^)!?,;]{{0,60}}\))?
-        \s*:
+        \s*{_COLON}
     )
     \s*(?:\*\*)?\s*$""",
     re.IGNORECASE | re.VERBOSE,
@@ -91,16 +96,16 @@ _BULLETED_HEADING_RE = re.compile(
 
 # Inline headings: 'Inclusion Criteria: first criterion text...'. The colon
 # must follow the keyword/criteria phrase (a parenthetical qualifier
-# such as '(PCP)' may sit in between). Trailing bold markers are stripped.
+# such as '(PCP)' may sit in between). Bold markers after the colon are not text.
 _INLINE_HEADING_RE = re.compile(
     rf"""^\s*
     (?:{_BULLET_PATTERN})?
     \**\s*
-    (?P<keyword>(?:non[- ]?)?(?:inclusions?|exclusions?))\b
+    (?P<keyword>{_KEYWORD})\b
     \s*(?:\bcriteria\b)?\b
     (?:\s*\([^)!?,;]{{0,60}}\))?
     \**\s*
-    :(?:\**\s*)?(?P<rest>.+)$""",
+    {_COLON}[\s*]*(?P<rest>.+)$""",
     re.IGNORECASE | re.VERBOSE,
 )
 
@@ -109,16 +114,42 @@ _INLINE_HEADING_RE = re.compile(
 # punctuation ([.;:\)]) and mandatory word 'criteria' with colon, ensuring prose
 # mentioning the bare words (e.g. '; Inclusion: allowed') is never split.
 _MIDLINE_HEADING_RE = re.compile(
-    r"""(?<=[.;:\)])\s+
+    rf"""(?<=[.;:：\)])\s+
     (?P<heading>
         \**\s*
-        (?P<keyword>(?:non[- ]?)?(?:inclusions?|exclusions?))\b
+        (?P<keyword>{_KEYWORD})\b
         \s+(?:criteria)\b
-        (?:\s*\([^)!?,;]{0,60}\))?
+        (?:\s*\([^)!?,;]{{0,60}}\))?
         \**\s*
-        :
+        {_COLON}[\s*]*
     )""",
     re.IGNORECASE | re.VERBOSE,
+)
+
+# An exclusion or non-inclusion phrase that looks like a heading but is not an exact one:
+# it ends the line ('6 months Exclusion Criteria'), takes a colon or a numbered item
+# ('General Exclusion Criteria 2. History...'), or leads a short descriptor line
+# ('Criteria for exclusion from the study were as follows:').
+_NOT_INCLUSION = rf"(?:{_NON_INCLUSION}|exclusions?)"
+_UNRECOGNIZED_HEADING_RE = re.compile(
+    rf"""\b(?:
+        {_NOT_INCLUSION}\s+criteri(?:a|on)\b
+        (?:
+            \**\s*(?:{_COLON}[\s*]*|$|(?=\d{{1,3}}\\?[.)]\s))
+          | \s+(?:of|for)\b[^.!?:：]{{0,60}}{_COLON}\**\s*$
+        )
+      | criteria\s+for\s+(?:the\s+)?{_NOT_INCLUSION}\b[^.!?:：]{{0,60}}(?:{_COLON}\**)?\s*$
+    )""",
+    re.IGNORECASE | re.VERBOSE,
+)
+_SENTENCE_END_RE = re.compile(r"[.;:：)]\s+")
+
+# Words before the phrase that make it a statement about the criteria, not a heading
+# ('No exclusion criteria', 'does not meet any exclusion criteria', '(see exclusion criteria:').
+_NOT_A_HEADING_RE = re.compile(
+    r"\b(?:no|none|not|nor|neither|any|without|absence|lack|free|see|per|"
+    r"meets?|meeting|met|fulfil\w*|satisf\w*)\b",
+    re.IGNORECASE,
 )
 
 
@@ -185,21 +216,20 @@ class _SectionBuilder:
         )
 
 
-def _classify_heading_text(text: str) -> str | None:
+def _classify_heading_text(text: str) -> str:
     """Determine section kind.
 
-    Falls back to unclassified for combined or non-inclusion headings.
+    Falls back to unclassified for non-inclusion headings and for headings
+    mentioning both lists, because neither can be asserted as one list.
     """
-    if _COMBINED_HEADING_RE.search(text):
+    lower = _TEMPORAL_COMPOUND_RE.sub(" ", text.lower())
+    mentions_exclusion = re.search(r"\bexclusions?\b", lower) is not None
+    mentions_inclusion = re.search(r"\binclusions?\b", lower) is not None
+    if re.search(rf"\b{_NON_INCLUSION}\b", lower) or (mentions_exclusion and mentions_inclusion):
         return _KIND_UNCLASSIFIED
-    lower = text.lower()
-    if re.search(r"\bnon[- ]?inclusions?\b", lower):
-        return _KIND_UNCLASSIFIED
-    if re.search(r"\bexclusions?\b", lower):
+    if mentions_exclusion:
         return _KIND_EXCLUSION
-    if re.search(r"\binclusions?\b", lower):
-        return _KIND_INCLUSION
-    return None
+    return _KIND_INCLUSION if mentions_inclusion else _KIND_UNCLASSIFIED
 
 
 def _heading_kind(line: str) -> str | None:
@@ -222,21 +252,34 @@ def _inline_heading(line: str) -> tuple[str, str, str] | None:
     if match is None:
         return None
     heading_part = line[: match.start("rest")].rstrip()
-    kind = _classify_heading_text(heading_part)
-    if kind is None:
-        return None
-    rest = match.group("rest").strip()
-    if rest.startswith("**"):
-        rest = rest.lstrip("*").strip()
-    return kind, rest, heading_part
+    return _classify_heading_text(heading_part), match.group("rest").strip(), heading_part
 
 
-def _split_midline_heading(line: str) -> tuple[str, str] | None:
-    """Split 'text Exclusion Criteria: rest' at a mid-line heading phrase."""
+def _split_midline_heading(line: str) -> tuple[str, str, str] | None:
+    """Split 'text. Exclusion Criteria: rest' into (text, heading, rest)."""
     match = _MIDLINE_HEADING_RE.search(line)
-    if match is None or match.start() <= 0:
+    if match is None:
         return None
-    return line[: match.start()].strip(), line[match.start("heading") :].strip()
+    return line[: match.start()].strip(), match.group("heading").strip(), line[match.end() :]
+
+
+def _split_unrecognized_heading(line: str) -> tuple[str, str, str] | None:
+    """Split a heading-like line into (text before, heading, text after).
+
+    The text before it stops at the last sentence end, so '... records. Exclusion
+    Criteria' keeps its first sentence; otherwise the whole line is the heading.
+    """
+    body = _strip_bullet(line)
+    match = _UNRECOGNIZED_HEADING_RE.search(body)
+    if match is None:
+        return None
+    sentence_ends = list(_SENTENCE_END_RE.finditer(body, 0, match.start()))
+    start = sentence_ends[-1].end() if sentence_ends else 0
+    if _NOT_A_HEADING_RE.search(body, start, match.start()):
+        return None
+    marker_length = len(line) - len(body)
+    before = line[: marker_length + start].strip() if start else ""
+    return before, body[start : match.end()].strip(), body[match.end() :].strip()
 
 
 def _strip_bullet(line: str) -> str:
@@ -268,6 +311,13 @@ def split_eligibility_sections(text: str | None) -> ParsedEligibilitySections | 
         else:
             current.start_item(content_line)
 
+    def _open_section(kind: str, heading: str) -> None:
+        nonlocal current, found_heading
+        builders.append(current)
+        current = _SectionBuilder(kind, heading)
+        if kind in (_KIND_INCLUSION, _KIND_EXCLUSION):
+            found_heading = True
+
     for raw_line in text.splitlines():
         line = raw_line.strip()
         if not line:
@@ -275,49 +325,38 @@ def split_eligibility_sections(text: str | None) -> ParsedEligibilitySections | 
 
         hk = _heading_kind(line)
         if hk is not None:
-            builders.append(current)
-            current = _SectionBuilder(hk, _strip_bullet(line))
-            if hk in (_KIND_INCLUSION, _KIND_EXCLUSION):
-                found_heading = True
+            _open_section(hk, _strip_bullet(line))
             continue
 
         inline = _inline_heading(line)
         if inline is not None:
             kind, rest, heading_part = inline
-            builders.append(current)
-            current = _SectionBuilder(kind, _strip_bullet(heading_part))
-            if kind in (_KIND_INCLUSION, _KIND_EXCLUSION):
-                found_heading = True
+            _open_section(kind, _strip_bullet(heading_part))
             remainder = rest
         else:
             remainder = line
 
         while remainder:
             midline = _split_midline_heading(remainder)
-            if midline is None:
-                if remainder.strip():
-                    _add_content(remainder.strip())
-                break
-            before, after = midline
-            if before.strip():
-                _add_content(before.strip())
-            hk_after = _heading_kind(after)
-            if hk_after is not None:
-                builders.append(current)
-                current = _SectionBuilder(hk_after, _strip_bullet(after))
-                if hk_after in (_KIND_INCLUSION, _KIND_EXCLUSION):
-                    found_heading = True
-                break
-            inline_after = _inline_heading(after)
-            if inline_after is not None:
-                kind2, rest2, heading_part2 = inline_after
-                builders.append(current)
-                current = _SectionBuilder(kind2, _strip_bullet(heading_part2))
-                if kind2 in (_KIND_INCLUSION, _KIND_EXCLUSION):
-                    found_heading = True
-                remainder = rest2
+            if midline is not None:
+                before, heading, remainder = midline
+                if before:
+                    _add_content(before)
+                _open_section(_classify_heading_text(heading), _strip_bullet(heading))
                 continue
-            _add_content(after)
+            closing = (
+                _split_unrecognized_heading(remainder) if current.kind == _KIND_INCLUSION else None
+            )
+            if closing is None:
+                _add_content(remainder)
+                break
+            # Not an exact heading, so nothing after it can be asserted as either list.
+            before, heading, after = closing
+            if before:
+                _add_content(before)
+            _open_section(_KIND_UNCLASSIFIED, heading)
+            if after:
+                current.start_item(after)
             break
 
     builders.append(current)

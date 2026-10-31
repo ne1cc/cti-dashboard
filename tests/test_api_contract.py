@@ -53,6 +53,22 @@ def _resolve_ref(doc: dict[str, Any], ref: str) -> dict[str, Any]:
     return curr
 
 
+def test_eligibility_sections_null_is_valid_under_openapi_31_semantics(
+    openapi_doc: dict[str, Any],
+) -> None:
+    """Keywords beside $ref all apply in 3.1, so $ref-preserving validation must accept null."""
+    validator = jsonschema.Draft202012Validator(
+        {
+            **openapi_doc,
+            "$ref": "#/components/schemas/StructuredEligibility/properties/eligibility_sections",
+        }
+    )
+
+    assert list(validator.iter_errors(None)) == []
+    assert list(validator.iter_errors({"parsed": True})) == []
+    assert not validator.is_valid("not an object")
+
+
 def _dereference_schema(doc: dict[str, Any], schema: Any) -> Any:
     """Recursively dereference $ref nodes for validation with jsonschema."""
     if isinstance(schema, dict):
@@ -196,8 +212,6 @@ def test_issue_62_structured_eligibility_fields(openapi_doc: dict[str, Any]) -> 
     )
     # Finding 8: wording must cover blank, not just absent, criteria_text.
     assert "absent or blank" in props["eligibility_sections"].get("description", "")
-    # Round 3 finding 6: eligibility_sections schema must accept null.
-    assert "null" in props["eligibility_sections"].get("type", [])
 
     # Round 3 finding 6: criteria_text example must parse to match eligibility_sections example.
     from src.transform.eligibility_sections import split_eligibility_sections

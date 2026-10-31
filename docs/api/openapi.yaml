@@ -1230,10 +1230,9 @@ components:
           description: Full unstructured eligibility criteria narrative block from protocol.
           example: "Inclusion Criteria:\n\n* Age 55 to 85.\n* Confirmed biomarker evidence of amyloid.\n\nExclusion Criteria:\n\n* Current significant psychiatric disorder."
         eligibility_sections:
-          type:
-            - object
-            - 'null'
-          $ref: '#/components/schemas/EligibilitySections'
+          anyOf:
+            - $ref: '#/components/schemas/EligibilitySections'
+            - type: 'null'
           description: |
             Structural split of criteria_text into inclusion/exclusion sections
             (Issue #67). These are the study's own criteria: review them with a

@@ -8,6 +8,7 @@ path, and retrieval date are recorded once at corpus level in the fixture's
 """
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,34 @@ CORPUS_PATH = (
     Path(__file__).resolve().parent / "fixtures" / "criteria_corpus" / "criteria_corpus.json"
 )
 
+FROZEN_PATH = CORPUS_PATH.with_name("frozen_regression_records.json")
+
+# Pattern scan for an exclusion-style heading left inside the inclusion list. It finds only
+# these shapes, so its count is a lower bound on wrong-list errors, not a full measure.
+_WRONG_LIST_SCAN_RE = re.compile(
+    r"(?:exclusions?|non[-\s]*inclusions?)\s+criteri(?:a|on)"
+    r"(?:\s*[:：]?\**\s*$|\s+\d{1,3}\\?[.)]\s|\s+(?:of|for)\b.*[:：]\s*$)"
+    r"|^\W*criteria\s+for\s+(?:the\s+)?(?:exclusions?|non[-\s]*inclusions?)\b",
+    re.IGNORECASE,
+)
+_WRONG_LIST_SCAN_GUARD_RE = re.compile(r"\b(?:no|not|any|without)\b", re.IGNORECASE)
+
+
+def _wrong_list_hits(samples: list[dict[str, Any]]) -> list[str]:
+    """Return NCT IDs with an exclusion-style heading among their inclusion items."""
+    hits = []
+    for sample in samples:
+        parsed = split_eligibility_sections(sample["criteria_text"])
+        assert parsed is not None
+        lines = [line for item in parsed.inclusion for line in item.splitlines()]
+        if any(
+            _WRONG_LIST_SCAN_RE.search(line) and not _WRONG_LIST_SCAN_GUARD_RE.search(line)
+            for line in lines
+        ):
+            hits.append(sample["nct_id"])
+    return hits
+
+
 # Regression floor: the measured rate on 2026-10-28 was 99.0% (198/200).
 # The floor leaves headroom without letting a splitter regression slip by.
 PARSE_RATE_FLOOR = 0.90
@@ -33,6 +62,12 @@ def corpus() -> list[dict[str, Any]]:
     doc = json.loads(CORPUS_PATH.read_text(encoding="utf-8"))
     samples: list[dict[str, Any]] = doc["samples"]
     return samples
+
+
+@pytest.fixture(scope="module")
+def frozen_records() -> dict[str, dict[str, Any]]:
+    doc = json.loads(FROZEN_PATH.read_text(encoding="utf-8"))
+    return {sample["nct_id"]: sample for sample in doc["samples"]}
 
 
 def test_corpus_has_provenance_and_100_distinct_real_samples(corpus: list[dict[str, Any]]) -> None:
@@ -61,7 +96,9 @@ def test_corpus_sample_is_lossless(corpus: list[dict[str, Any]], sample_index: i
     assert reconstructed == original, f"Text dropped or invented for {sample['nct_id']}"
 
 
-def test_corpus_parse_rate_meets_floor_and_report(corpus: list[dict[str, Any]]) -> None:
+def test_corpus_parse_rate_meets_floor_and_report(
+    corpus: list[dict[str, Any]], frozen_records: dict[str, dict[str, Any]]
+) -> None:
     parsed_count = 0
     misses: list[str] = []
     for sample in corpus:
@@ -73,12 +110,18 @@ def test_corpus_parse_rate_meets_floor_and_report(corpus: list[dict[str, Any]]) 
             misses.append(sample["nct_id"])
 
     rate = parsed_count / len(corpus)
+    corpus_hits = _wrong_list_hits(corpus)
+    frozen_hits = _wrong_list_hits(list(frozen_records.values()))
     print(
         f"\nEligibility section parse rate: {parsed_count}/{len(corpus)} = {rate:.1%} "
         f"(floor {PARSE_RATE_FLOOR:.0%}; measures heading recognition, not list assignment); "
-        f"unparsed NCT IDs: {misses}"
+        f"unparsed NCT IDs: {misses}; "
+        f"wrong-list scan hits (lower bound): corpus {len(corpus_hits)}/{len(corpus)}, "
+        f"frozen set {len(frozen_hits)}/{len(frozen_records)}"
     )
     assert rate >= PARSE_RATE_FLOOR, f"Parse rate {rate:.1%} below floor {PARSE_RATE_FLOOR:.0%}"
+    assert corpus_hits == []
+    assert frozen_hits == []
 
 
 @pytest.mark.parametrize(
@@ -257,3 +300,218 @@ def test_frozen_regression_suite_cited_registry_cases() -> None:
     assert p_1997346 is not None
     assert p_1997346.parsed is True
     assert any(s.kind == "exclusion" and "N/A" in " ".join(s.items) for s in p_1997346.sections)
+
+
+def test_frozen_records_are_real_and_outside_the_corpus(
+    corpus: list[dict[str, Any]], frozen_records: dict[str, dict[str, Any]]
+) -> None:
+    doc = json.loads(FROZEN_PATH.read_text(encoding="utf-8"))
+    assert doc["provenance"]["api_endpoint"].startswith("https://clinicaltrials.gov/api/v2/")
+    assert len(frozen_records) == 20
+    assert not set(frozen_records) & {sample["nct_id"] for sample in corpus}
+
+
+@pytest.mark.parametrize(
+    ("nct_id", "expected_sections", "not_in_inclusion"),
+    [
+        # Round 4 finding 1: unrecognized exclusion or non-inclusion heading in open inclusion.
+        (
+            "NCT07444697",
+            [
+                ("inclusion", "Inclusion Criteria", 11),
+                ("unclassified", "6 months Exclusion Criteria", 21),
+            ],
+            "Known malignancy",
+        ),
+        (
+            "NCT07752485",
+            [("inclusion", "Inclusion Criteria", 8), ("unclassified", "Exclusion Criteria", 8)],
+            None,
+        ),
+        (
+            "NCT01606826",
+            [
+                ("unclassified", None, 1),
+                ("inclusion", "Inclusion Criteria:", 5),
+                ("exclusion", "Exclusion Criteria:", 10),
+                ("inclusion", "Inclusion criteria:", 1),
+                ("unclassified", "Exclusion criteria", 7),
+            ],
+            "Pregnancy,",
+        ),
+        (
+            "NCT06780761",
+            [
+                ("inclusion", "Inclusion Criteria:", 2),
+                ("unclassified", "Criteria for exclusion from the study were as follows:", 2),
+            ],
+            None,
+        ),
+        (
+            "NCT05504564",
+            [
+                ("inclusion", "Inclusion Criteria:", 2),
+                ("exclusion", "Exclusion Criteria:", 6),
+                ("inclusion", "Inclusion Criteria of Child with language disorder:", 3),
+                ("unclassified", "Exclusion Criteria of Child with language disorder:", 1),
+                ("inclusion", "Inclusion Criteria of Adult:", 1),
+            ],
+            None,
+        ),
+        (
+            "NCT02603185",
+            [("inclusion", "Inclusion Criteria:", 15), ("exclusion", "Exclusion Criteria：", 20)],
+            None,
+        ),
+        (
+            "NCT05785754",
+            [
+                ("inclusion", "Selected Inclusion Criteria:", 40),
+                ("unclassified", "Criteria for Exclusion:", 25),
+            ],
+            None,
+        ),
+        (
+            "NCT00099255",
+            [
+                ("inclusion", "Inclusion Criteria", 12),
+                ("unclassified", "Criteria for Exclusion", 11),
+            ],
+            None,
+        ),
+        (
+            "NCT07899606",
+            [
+                ("unclassified", None, 1),
+                ("inclusion", "Inclusion Criteria", 8),
+                ("unclassified", "Exclusion Criteria", 12),
+            ],
+            None,
+        ),
+        (
+            "NCT03359850",
+            [
+                ("inclusion", "Inclusion Criteria:", 30),
+                ("unclassified", "Criteria for Exclusion:", 24),
+            ],
+            None,
+        ),
+        (
+            "NCT05000216",
+            [
+                ("unclassified", None, 5),
+                ("inclusion", "Inclusion Criteria:", 9),
+                ("unclassified", "Adult General Exclusion Criterion", 16),
+            ],
+            "Inability or unwillingness of a participant",
+        ),
+        (
+            "NCT01202721",
+            [
+                ("inclusion", "Inclusion Criteria:", 3),
+                ("unclassified", "General Study Exclusion Criteria", 13),
+                ("exclusion", "Additional Exclusion Criteria for BB arm only", 6),
+                ("exclusion", "Additional Exclusion Criteria for ARB arm only", 7),
+            ],
+            None,
+        ),
+        (
+            "NCT01022515",
+            [
+                ("unclassified", None, 1),
+                ("inclusion", "Inclusion criteria :", 6),
+                ("unclassified", "Non inclusion criteria", 12),
+            ],
+            None,
+        ),
+        (
+            "NCT02557464",
+            [
+                ("inclusion", "Inclusion Criteria:", 1),
+                ("inclusion", "Inclusion criteria", 8),
+                ("unclassified", "Non-inclusion criteria", 4),
+                ("inclusion", "Inclusion criteria", 7),
+                ("unclassified", "Non-inclusion criteria", 7),
+            ],
+            None,
+        ),
+        # Round 4 finding 2: heading text classified as the wrong kind.
+        (
+            "NCT02816151",
+            [
+                ("inclusion", "inclusion criteria", 8),
+                ("unclassified", "non- inclusion criteria", 9),
+            ],
+            "Toxin Botulinic",
+        ),
+        (
+            "NCT05420623",
+            [
+                ("inclusion", "Inclusion Criteria (Amputees patients):", 5),
+                ("unclassified", "Non-inclusion Criteria (Amputees patients):", 6),
+                ("inclusion", "Inclusion Criteria (Healthy volunteers):", 1),
+                ("unclassified", "Non- Inclusion Criteria (Healthy volunteers):", 6),
+            ],
+            None,
+        ),
+        (
+            "NCT03913390",
+            [
+                ("inclusion", "Inclusion criteria for the quantitative sample:", 3),
+                ("unclassified", "Non- inclusion criteria:", 5),
+            ],
+            None,
+        ),
+        (
+            "NCT06348719",
+            [
+                ("unclassified", None, 1),
+                ("inclusion", "Inclusion Criteria:", 5),
+                ("unclassified", "Non Inclusion Criteria:", 9),
+                ("exclusion", "Exclusion criteria :", 2),
+                ("inclusion", "Inclusion Criteria:", 11),
+                ("unclassified", "Non Inclusion Criteria:", 4),
+                ("exclusion", "Exclusion criteria :", 2),
+                ("inclusion", "Inclusion Criteria:", 4),
+                ("unclassified", "Non Inclusion Criteria:", 2),
+                ("inclusion", "Inclusion Criteria:", 2),
+                ("unclassified", "Non- inclusion Criteria:", 1),
+                ("inclusion", "Inclusion Criteria:", 2),
+                ("unclassified", "Non- inclusion Criteria:", 1),
+            ],
+            None,
+        ),
+        (
+            "NCT02758938",
+            [
+                ("inclusion", "Inclusion Criteria for Peer Focus Group:", 1),
+                ("inclusion", "Inclusion Criteria for Patients:", 3),
+                ("exclusion", "Exclusion Criteria for Patients:", 2),
+                ("unclassified", "Inclusion Criteria for Nurses (no exclusion criteria):", 1),
+                ("unclassified", "Inclusion Criteria for Physician (no exclusion criteria):", 1),
+            ],
+            None,
+        ),
+        (
+            "NCT03387189",
+            [("inclusion", "Inclusion Criteria:", 1), ("exclusion", "Exclusion Criteria:", 1)],
+            None,
+        ),
+    ],
+)
+def test_frozen_record_keeps_exclusion_text_out_of_inclusion(
+    frozen_records: dict[str, dict[str, Any]],
+    nct_id: str,
+    expected_sections: list[tuple[str, str | None, int]],
+    not_in_inclusion: str | None,
+) -> None:
+    text = frozen_records[nct_id]["criteria_text"]
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.parsed is True
+    assert [(s.kind, s.heading_raw, len(s.items)) for s in parsed.sections] == expected_sections
+    assert reconstruct(parsed).split() == strip_bullet_markers(text).split()
+    if not_in_inclusion is not None:
+        assert not_in_inclusion not in " ".join(parsed.inclusion)
+        assert not_in_inclusion in " ".join(parsed.unclassified)
