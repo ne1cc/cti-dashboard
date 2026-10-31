@@ -13,10 +13,18 @@ def test_load_config():
     assert get_config() is not None
 
 
-def test_default_config_resolves_adrd_profile():
+def test_default_config_resolves_full_catalog_profile():
     cfg = load_config()
-    assert cfg.default_profile == "adrd"
+    assert cfg.default_profile == "full_catalog"
+    assert cfg.api.query_params == {}
+    assert cfg.scope["statuses"] == []
 
+
+def test_adrd_profile_resolves_adrd_scope():
+    from src.profiles import load_profile
+
+    adrd = load_profile("config/profiles/adrd.yml")
+    cfg = adrd.config
     expected_statuses = {
         "RECRUITING",
         "ACTIVE_NOT_RECRUITING",

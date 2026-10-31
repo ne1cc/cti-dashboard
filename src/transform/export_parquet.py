@@ -226,6 +226,18 @@ class SilverRunWriter:
             if len(buffer) >= self.flush_rows:
                 self._flush(entity)
 
+    def add_table(self, entity: str, table: pa.Table) -> None:
+        """Append a pre-built Arrow table (e.g. an incremental run carrying
+        unchanged rows forward from the previous snapshot). Column order and
+        types must be compatible with the entity schema; extra or missing
+        columns are reconciled by cast against it."""
+        schema = ENTITY_ARROW_SCHEMAS[entity]
+        table = table.cast(schema)
+        if table.num_rows == 0:
+            return
+        self._writer(entity).write_table(table)
+        self.row_counts[entity] += table.num_rows
+
     def close(self) -> dict[str, int]:
         if self._closed:
             return dict(self.row_counts)

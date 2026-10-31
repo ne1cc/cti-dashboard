@@ -8,6 +8,7 @@ fingerprints httpx's TLS/HTTP handshake and rejects it with 403 even for
 otherwise-identical requests, while requests (built on urllib3) is unaffected.
 """
 
+import time
 from typing import Any
 
 import requests
@@ -26,11 +27,16 @@ class CTGClient:
         self._client = client or requests.Session()
         self._client.headers.update({"Accept": "application/json", "User-Agent": USER_AGENT})
         self._retryer = build_retryer(api_config.http)
+        self._last_request_at: float | None = None
 
     def build_params(self, condition: str | None = None) -> dict[str, str]:
         params: dict[str, str] = {}
         for key, value in self.api.query_params.items():
             params[key] = "|".join(str(v) for v in value) if isinstance(value, list) else str(value)
+        if self.api.fields:
+            # `fields` is a pipe-delimited list per the OpenAPI spec
+            # (style: pipeDelimited); branch names carry all descendants.
+            params["fields"] = "|".join(self.api.fields)
         if condition:
             params["query.cond"] = condition
         params["format"] = self.api.format
@@ -51,6 +57,7 @@ class CTGClient:
 
     def _fetch(self, url: str, params: dict[str, str] | None = None) -> tuple[dict[str, Any], str]:
         def _request() -> requests.Response:
+            self._throttle()
             response = self._client.get(url, params=params, timeout=self._http.timeout_seconds)
             if response.status_code in self._http.retry_on_status:
                 raise RetryableHTTPStatusError(response.status_code, url)
@@ -59,6 +66,21 @@ class CTGClient:
 
         response = self._retryer(_request)
         return response.json(), response.text
+
+    def _throttle(self) -> None:
+        """Space requests at least min_request_interval_seconds apart.
+
+        Applies to every attempt including retries, because a retry is a
+        request the server sees too."""
+        interval = self.api.min_request_interval_seconds
+        if interval <= 0:
+            return
+        now = time.monotonic()
+        if self._last_request_at is not None:
+            wait = interval - (now - self._last_request_at)
+            if wait > 0:
+                time.sleep(wait)
+        self._last_request_at = time.monotonic()
 
     def fetch_studies(self, params: dict[str, Any]) -> tuple[dict[str, Any], str]:
         """Fetch studies with arbitrary parameters; returns (parsed payload, raw text)."""

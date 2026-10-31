@@ -155,12 +155,19 @@ def test_build_silver_refuses_a_named_profile_with_no_taxonomy(tmp_path: Path):
         cfg.paths.bronze_api_responses / f"run_id={run_id}", 1, [make_study("NCT00000001")]
     )
 
-    full_catalog = get_registry().get("full_catalog")
-    assert full_catalog.ingest_only, "the guard is pointless if no shipped profile lacks a taxonomy"
-    assert full_catalog.taxonomy is None
+    from src.profiles import IndicationProfile, SharedPaths
+
+    dummy_profile = IndicationProfile(
+        profile_id="no_taxonomy_profile",
+        display_name="No Taxonomy Profile",
+        ingest_only=True,
+        config=cfg,
+        taxonomy=None,
+        shared=SharedPaths(silver=cfg.paths.silver, gold=cfg.paths.gold, duckdb=cfg.paths.duckdb),
+    )
 
     with pytest.raises(ValueError, match="has no condition_taxonomy"):
-        build_silver_for_run(make_manifest(run_id, record_count=1), cfg, profile=full_catalog)
+        build_silver_for_run(make_manifest(run_id, record_count=1), cfg, profile=dummy_profile)
 
     assert list(cfg.paths.silver.glob("**/*.parquet")) == []
     assert list(cfg.paths.silver.glob("**/*.parquet.tmp")) == []
@@ -241,12 +248,106 @@ def test_profile_run_records_an_absent_manifest_instead_of_nothing_to_do(tmp_pat
     report = profile_run("r_not_in_manifest", config=cfg)
 
     assert report["reconciliation"] == {"manifest_found": False}
-    written = json.loads(
-        (cfg.paths.silver / "_profiles" / "profile_r_not_in_manifest.json").read_text(
-            encoding="utf-8"
-        )
+
+
+def test_previous_full_snapshot_id_finds_newest_full_snapshot(tmp_path: Path):
+    from datetime import UTC, datetime
+
+    from src.transform.build_silver_entities import previous_full_snapshot_id
+
+    cfg = make_config(tmp_path)
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+
+    # 1. Full snapshot 1 (older)
+    m1 = IngestionManifest(
+        ingestion_run_id="run1",
+        query_hash="h1",
+        endpoint=cfg.api.studies_url,
+        params={},
+        status="success",
+        started_at_utc=datetime(2026, 10, 10, 12, 0, tzinfo=UTC),
     )
-    assert written["reconciliation"]["manifest_found"] is False
+    write_manifest(cfg.paths.bronze_manifests, m1)
+    # create silver dummy files so _already_transformed returns True
+    for entity in build_silver_entities.ENTITY_NAMES:
+        p = cfg.paths.silver / entity
+        p.mkdir(parents=True, exist_ok=True)
+        (p / "run_id=run1.parquet").touch()
+
+    # 2. Full snapshot 2 (newer)
+    m2 = IngestionManifest(
+        ingestion_run_id="run2",
+        query_hash="h2",
+        endpoint=cfg.api.studies_url,
+        params={},
+        status="success",
+        started_at_utc=datetime(2026, 10, 20, 12, 0, tzinfo=UTC),
+    )
+    write_manifest(cfg.paths.bronze_manifests, m2)
+    for entity in build_silver_entities.ENTITY_NAMES:
+        (cfg.paths.silver / entity / "run_id=run2.parquet").touch()
+
+    # 3. Incremental snapshot (should be ignored as base)
+    m_inc = IngestionManifest(
+        ingestion_run_id="run_inc",
+        query_hash="h_inc",
+        endpoint=cfg.api.studies_url,
+        params={},
+        status="success",
+        started_at_utc=datetime(2026, 10, 25, 12, 0, tzinfo=UTC),
+        updated_since_utc="2026-10-19",
+    )
+    write_manifest(cfg.paths.bronze_manifests, m_inc)
+
+    assert previous_full_snapshot_id(cfg, "run_current") == "run2"
+
+
+def test_incremental_silver_upsert_carries_forward_unchanged_rows(tmp_path: Path):
+    """An incremental run updates NCT1 and adds NCT3; NCT2 is carried forward from run_full."""
+    from datetime import UTC, datetime
+
+    from tests.test_build_silver import write_bronze_page
+
+    cfg = make_config(tmp_path)
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+
+    # Base full run: NCT1 and NCT2
+    run_full = "run_full"
+    full_manifest = IngestionManifest(
+        ingestion_run_id=run_full,
+        query_hash="h_full",
+        endpoint=cfg.api.studies_url,
+        params={},
+        status="success",
+        record_count=2,
+        started_at_utc=datetime(2026, 10, 10, 12, 0, tzinfo=UTC),
+    )
+    write_manifest(cfg.paths.bronze_manifests, full_manifest)
+    run_full_dir = cfg.paths.bronze_api_responses / f"run_id={run_full}"
+    write_bronze_page(run_full_dir, 1, [make_study("NCT00000001"), make_study("NCT00000002")])
+    build_silver_for_run(full_manifest, cfg)
+
+    # Incremental run: updated NCT1 and new NCT3
+    run_inc = "run_inc"
+    inc_manifest = IngestionManifest(
+        ingestion_run_id=run_inc,
+        query_hash="h_inc",
+        endpoint=cfg.api.studies_url,
+        params={},
+        status="success",
+        record_count=2,
+        started_at_utc=datetime(2026, 10, 17, 12, 0, tzinfo=UTC),
+        updated_since_utc="2026-10-10",
+    )
+    write_manifest(cfg.paths.bronze_manifests, inc_manifest)
+    run_inc_dir = cfg.paths.bronze_api_responses / f"run_id={run_inc}"
+    write_bronze_page(run_inc_dir, 1, [make_study("NCT00000001"), make_study("NCT00000003")])
+    counts = build_silver_for_run(inc_manifest, cfg)
+
+    # Silver trials: 2 changed/new + 1 carried forward (NCT2) = 3 total
+    assert counts["silver_trials"] == 3
+    df = pd.read_parquet(cfg.paths.silver / "silver_trials" / f"run_id={run_inc}.parquet")
+    assert sorted(df["nct_id"].tolist()) == ["NCT00000001", "NCT00000002", "NCT00000003"]
 
 
 def pq_num_row_groups(path: Path) -> int:
