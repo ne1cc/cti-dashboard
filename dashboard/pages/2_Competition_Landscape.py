@@ -17,7 +17,7 @@ data.require_warehouse(profile_id)
 render_page_guide("competition_landscape", profile_id)
 
 competition = data.recruiting_competition(profile_id)
-filtered = segment_filters(competition)
+filtered = segment_filters(competition, profile_id=profile_id)
 
 col1, col2, col3 = st.columns(3)
 col1.metric(
@@ -80,7 +80,9 @@ table_df = filtered.sort_values(
         "competition_signal_band",
     ]
 ].copy()
-table_df["condition_group"] = table_df["condition_group"].apply(format_condition_group)
+table_df["condition_group"] = table_df["condition_group"].apply(
+    lambda g: format_condition_group(g, profile_id)
+)
 table_df["phase_normalized"] = table_df["phase_normalized"].map(format_phase)
 table_df["competition_signal_band"] = table_df["competition_signal_band"].str.capitalize()
 

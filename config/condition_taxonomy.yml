@@ -15,10 +15,12 @@ version: 1
 
 default:
   condition_group: non_dementia_other
+  display_name: Other Conditions
   dementia_relevance: false
 
 groups:
   - condition_group: alzheimers_disease
+    display_name: Alzheimer's Disease
     dementia_relevance: true
     exact:
       - alzheimer disease
@@ -29,6 +31,7 @@ groups:
       - alzheimer
 
   - condition_group: mild_cognitive_impairment
+    display_name: Mild Cognitive Impairment (MCI)
     dementia_relevance: true
     exact:
       - mci
@@ -37,12 +40,14 @@ groups:
       - amnestic mild cognitive
 
   - condition_group: lewy_body_dementia
+    display_name: Lewy Body Dementia (LBD)
     dementia_relevance: true
     exact: []
     substrings:
       - lewy
 
   - condition_group: frontotemporal_dementia
+    display_name: Frontotemporal Dementia (FTD)
     dementia_relevance: true
     exact: []
     substrings:
@@ -52,6 +57,7 @@ groups:
       - picks disease
 
   - condition_group: vascular_dementia
+    display_name: Vascular Dementia (VaD)
     dementia_relevance: true
     exact: []
     substrings:
@@ -59,6 +65,7 @@ groups:
       - vascular cognitive
 
   - condition_group: parkinsons_disease_dementia
+    display_name: Parkinson's Disease Dementia (PDD)
     dementia_relevance: true
     exact:
       - pdd
@@ -68,6 +75,7 @@ groups:
 
   # Catch-all for dementia mentions not matched by a specific group above.
   - condition_group: dementia_unspecified
+    display_name: Dementia (Unspecified)
     dementia_relevance: true
     exact: []
     substrings:
@@ -76,6 +84,7 @@ groups:
   # Cognitive symptoms without an explicit dementia diagnosis. Kept separate
   # and conservatively flagged NOT dementia-relevant to avoid over-claiming.
   - condition_group: cognitive_impairment_other
+    display_name: Cognitive Symptoms (Non-Dementia)
     dementia_relevance: false
     exact: []
     substrings:

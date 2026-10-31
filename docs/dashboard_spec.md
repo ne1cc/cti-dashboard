@@ -51,12 +51,10 @@ workload/performance.
 Top lead sponsors by recruiting listings (colored by registry sponsor
 class), full table, "not market share" caption.
 
-### 6 · Data Reliability & Assumptions
+### 6 · Data Reliability
 Run reliability table (success + partial runs shown; only success feeds
-analytics), latest-run confidence metrics, known limitations, and the
-**illustrative scenario explorer**: sliders adjust session-only copies of
-`config/roi_assumptions.yml`; the disclaimer always renders above results
-and the file is never written.
+analytics), latest-run confidence metrics, data reconciliation status,
+and known limitations.
 
 ### 7 · Trial Explorer
 Individual registry records with status/phase filters and free-text
