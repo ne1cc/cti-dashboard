@@ -1,4 +1,4 @@
-"""Geography Trends — state-level listing activity (choropleth + monthly)."""
+"""Show state listing activity; retained pre-population marts use labelled raw counts."""
 
 import plotly.express as px
 import streamlit as st
@@ -15,6 +15,15 @@ data.require_warehouse(profile_id)
 render_page_guide("geography_trends", profile_id)
 
 trends = data.condition_geography_trends(profile_id)
+
+# 1. Keep retained warehouses usable without inventing population-adjusted rates.
+population_ready = "recruiting_trials_per_100k" in trends.columns
+if not population_ready:
+    trends = trends.assign(recruiting_trials_per_100k=float("nan"))
+    st.warning(
+        "Saved data predates population normalization. Showing raw counts; "
+        "rebuild the warehouse to enable per-100k rates."
+    )
 
 condition_options = sorted(trends["condition_group"].dropna().unique())
 default_index = (
@@ -36,7 +45,7 @@ latest = scoped[scoped["activity_month"] == latest_month]
 
 view_mode = st.radio(
     "Listing metric",
-    ["Per 100k residents", "Raw count"],
+    ["Per 100k residents", "Raw count"] if population_ready else ["Raw count"],
     index=0,
     horizontal=True,
     help="Toggle between population-normalized listings per 100k residents and raw trial counts.",
@@ -44,9 +53,10 @@ view_mode = st.radio(
 
 unknown_rates = int(latest["recruiting_trials_per_100k"].isna().sum())
 unknown_rate_note = (
-    f" {unknown_rates} state(s)/territory(ies) with unknown population rates "
-    "remain listed in the table and raw view even if uncolored on the rate map."
-    if unknown_rates > 0
+    f" {unknown_rates} state(s)/territory(ies) have unknown population rates "
+    "and may be uncolored on the rate map. The table shows only the top 20 rows "
+    "for the selected measure."
+    if population_ready and unknown_rates > 0
     else ""
 )
 
@@ -188,6 +198,9 @@ render_metric_audit(
             "territories without Vintage 2024 population estimates have null rates. "
             "Neither raw counts nor population-normalized rates measure patient access "
             "or clinical need."
+            if population_ready
+            else "Population-adjusted rates are unavailable in this retained warehouse. "
+            "The page shows raw counts until a rebuild adds the population denominators."
         ),
     },
     key="geography",
