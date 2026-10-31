@@ -356,6 +356,39 @@ def test_normalize_study_detail_conforms_to_schema(
     assert detail.sites[0].distance_miles is not None
 
 
+def test_normalize_study_detail_splits_eligibility_sections(
+    live_detail_fixture: dict[str, Any],
+) -> None:
+    """Issue #67: live detail responses carry the lossless section split."""
+    detail = normalize_study_detail(live_detail_fixture)
+
+    sections = detail.eligibility.eligibility_sections
+    assert sections is not None
+    assert sections.parsed is True
+    assert sections.inclusion == [
+        "Age 55 to 85 years at screening.",
+        "Meets NIA-AA criteria for probable Alzheimer disease.",
+    ]
+    assert sections.exclusion == ["Non-Alzheimer neurodegenerative disorder."]
+    assert sections.unclassified == []
+    # Ordered groups carry the verbatim headings on the live backend too.
+    assert [(s.kind, s.heading) for s in sections.sections] == [
+        ("inclusion", "Inclusion Criteria:"),
+        ("exclusion", "Exclusion Criteria:"),
+    ]
+
+
+def test_normalize_study_detail_without_criteria_has_null_sections(
+    source_capture_fixture: dict[str, Any],
+) -> None:
+    """Absent criteria text yields null sections instead of empty lists."""
+    study = source_capture_fixture["edge_case_studies"][1]
+    detail = normalize_study_detail(study)
+
+    assert detail.eligibility.criteria_text is None
+    assert detail.eligibility.eligibility_sections is None
+
+
 # --- Issue #62 Structured Eligibility & Unstated Ages ---
 
 

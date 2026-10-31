@@ -53,6 +53,22 @@ def _resolve_ref(doc: dict[str, Any], ref: str) -> dict[str, Any]:
     return curr
 
 
+def test_eligibility_sections_null_is_valid_under_openapi_31_semantics(
+    openapi_doc: dict[str, Any],
+) -> None:
+    """Keywords beside $ref all apply in 3.1, so $ref-preserving validation must accept null."""
+    validator = jsonschema.Draft202012Validator(
+        {
+            **openapi_doc,
+            "$ref": "#/components/schemas/StructuredEligibility/properties/eligibility_sections",
+        }
+    )
+
+    assert list(validator.iter_errors(None)) == []
+    assert list(validator.iter_errors({"parsed": True})) == []
+    assert not validator.is_valid("not an object")
+
+
 def _dereference_schema(doc: dict[str, Any], schema: Any) -> Any:
     """Recursively dereference $ref nodes for validation with jsonschema."""
     if isinstance(schema, dict):
@@ -179,6 +195,33 @@ def test_issue_62_structured_eligibility_fields(openapi_doc: dict[str, Any]) -> 
     ]
     for prop in expected_props:
         assert prop in props, f"Issue #62 field '{prop}' missing in StructuredEligibility"
+
+    # Issue #67: eligibility section split (additive field)
+    schemas_full = openapi_doc.get("components", {}).get("schemas", {})
+    assert "EligibilitySections" in schemas_full, "EligibilitySections schema must be defined"
+    sections_schema = schemas_full["EligibilitySections"]
+    sections_props = sections_schema.get("properties", {})
+    for prop in ["parsed", "sections", "inclusion", "exclusion", "unclassified"]:
+        assert prop in sections_props, f"Issue #67 field '{prop}' missing in EligibilitySections"
+    assert "EligibilitySection" in schemas_full, "EligibilitySection schema must be defined"
+    section_props = schemas_full["EligibilitySection"].get("properties", {})
+    for prop in ["kind", "heading", "items"]:
+        assert prop in section_props, f"Issue #67 field '{prop}' missing in EligibilitySection"
+    assert "eligibility_sections" in props, (
+        "Issue #67 field 'eligibility_sections' missing in StructuredEligibility"
+    )
+    # Finding 8: wording must cover blank, not just absent, criteria_text.
+    assert "absent or blank" in props["eligibility_sections"].get("description", "")
+
+    # Round 3 finding 6: criteria_text example must parse to match eligibility_sections example.
+    from src.transform.eligibility_sections import split_eligibility_sections
+
+    example_text = props["criteria_text"]["example"]
+    parsed_example = split_eligibility_sections(example_text)
+    assert parsed_example is not None
+    assert parsed_example.inclusion == sections_props["inclusion"]["example"]
+    assert parsed_example.exclusion == sections_props["exclusion"]["example"]
+    assert parsed_example.unclassified == sections_props["unclassified"]["example"]
 
     # Search filter parameters check in GET /v1/trials
     trials_op = openapi_doc["paths"]["/v1/trials"]["get"]
