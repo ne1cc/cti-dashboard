@@ -32,7 +32,7 @@ group_nodes as (
         cast(null as varchar) as mesh_id,
         false as is_ancestor,
         min(condition_raw) as condition_raw,
-        bool_or(dementia_relevance_flag) as dementia_relevance_flag,
+        coalesce(bool_or(dementia_relevance_flag), false) as dementia_relevance_flag,
         min(mapping_confidence) as mapping_confidence,
         case
             when bool_or(mapping_source = 'yaml_overlay') then 'yaml_overlay'
@@ -45,24 +45,52 @@ group_nodes as (
 
 -- Registry MeSH nodes, direct terms and ancestor closure alike
 -- (is_ancestor is true only where every membership edge is a closure edge).
-mesh_nodes as (
+-- Grouped solely by mesh_id per profile so term renames across runs do not
+-- split nodes; deterministic label chosen from the latest run (Issue #52 review).
+current_mesh_rows as (
     select
-        s.mesh_id as node_id,
         s.indication_profile_id,
-        s.mesh_term as node_label,
         s.mesh_id,
-        bool_and(s.is_ancestor) as is_ancestor,
-        cast(null as varchar) as condition_raw,
-        false as dementia_relevance_flag,
-        cast(null as varchar) as mapping_confidence,
-        'mesh' as mapping_source,
-        count(distinct s.nct_id) as trial_count
+        s.mesh_term,
+        s.is_ancestor,
+        s.nct_id,
+        s.ingestion_run_id
     from {{ ref('stg_trial_condition_mesh') }} s
     inner join current_runs r
         on s.ingestion_run_id = r.ingestion_run_id
         and s.indication_profile_id = r.indication_profile_id
         and s.nct_id = r.nct_id
-    group by s.indication_profile_id, s.mesh_id, s.mesh_term
+),
+
+mesh_labels as (
+    select
+        indication_profile_id,
+        mesh_id,
+        mesh_term as node_label
+    from current_mesh_rows
+    qualify row_number() over (
+        partition by indication_profile_id, mesh_id
+        order by ingestion_run_id desc, mesh_term asc
+    ) = 1
+),
+
+mesh_nodes as (
+    select
+        c.mesh_id as node_id,
+        c.indication_profile_id,
+        l.node_label,
+        c.mesh_id,
+        bool_and(c.is_ancestor) as is_ancestor,
+        cast(null as varchar) as condition_raw,
+        cast(null as boolean) as dementia_relevance_flag,
+        cast(null as varchar) as mapping_confidence,
+        'mesh' as mapping_source,
+        count(distinct c.nct_id) as trial_count
+    from current_mesh_rows c
+    inner join mesh_labels l
+        on c.indication_profile_id = l.indication_profile_id
+        and c.mesh_id = l.mesh_id
+    group by c.indication_profile_id, c.mesh_id, l.node_label
 ),
 
 nodes as (
@@ -82,7 +110,7 @@ select
     mesh_id,
     is_ancestor,
     mapping_source,
-    coalesce(dementia_relevance_flag, false) as dementia_relevance_flag,
+    dementia_relevance_flag,
     mapping_confidence,
     trial_count
 from nodes

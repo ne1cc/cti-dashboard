@@ -104,6 +104,10 @@ models:
       - name: sex_eligibility_unknown_flag
         data_type: BOOLEAN
         description: True when sex eligibility is unstated, empty, or unknown.
+      - name: has_derived_mesh
+        data_type: BOOLEAN
+        description: True when the registry record supplied a derivedSection.conditionBrowseModule (Issue #52).
+        tests: [not_null]
 
   - name: dim_condition
     description: >
@@ -375,9 +379,9 @@ models:
       taxonomy condition_group (node_id "group:<slug>", how every existing
       group-based view consumes the bridge) or a registry MeSH browse identity
       (node_id = mesh id). MeSH rows carry the registry's ancestor closure
-      (is_ancestor), so any tree node is selectable; count metrics and
-      similarity keep their pre-MeSH semantics by filtering is_ancestor =
-      false (similarity further excludes direct mesh rows).
+      (is_ancestor), so any tree node is selectable; count marts read
+      int_trial_condition_mapping (group-only), and similarity excludes all
+      MeSH rows (mesh_id is null).
     contract:
       enforced: true
     columns:

@@ -1,4 +1,6 @@
+import dataclasses
 import json
+import shutil
 from pathlib import Path
 
 import duckdb
@@ -137,17 +139,27 @@ def test_build_silver_publishes_nothing_when_a_study_raises(tmp_path: Path, monk
     assert _already_transformed(cfg, run_id)
 
 
-def test_build_silver_allows_a_named_profile_with_no_taxonomy(tmp_path: Path):
-    """A profile without a taxonomy overlay still transforms (Issue #52).
+def test_build_silver_refuses_ingest_only_profile(tmp_path: Path):
+    """An ingest_only profile must never be transformed into the shared silver tree."""
+    cfg = make_config(tmp_path)
+    run_id = "r_ingest_only"
+    study = make_study("NCT00000001")
+    write_bronze_page(cfg.paths.bronze_api_responses / f"run_id={run_id}", 1, [study])
 
-    Through Issue #51's fix this raised, because a falsy taxonomy borrowed the
-    global ADRD singleton and wrote ADRD-shaped claims under the profile's own
-    indication_profile_id. Issue #52 made the taxonomy an optional overlay:
-    the same input now transforms with every condition row marked
-    text_fallback into the profile's own group namespace ("unmapped") — no
-    borrowed ADRD groups — while the registry MeSH browse module carries the
-    condition identity. The shipped ingest_only profile is used because it is
-    the one that has no taxonomy.
+    full_catalog = get_registry().get("full_catalog")
+    assert full_catalog.ingest_only
+    assert full_catalog.taxonomy is None
+
+    with pytest.raises(ValueError, match="is ingest_only"):
+        build_silver_for_run(make_manifest(run_id, record_count=1), cfg, profile=full_catalog)
+    assert list(cfg.paths.silver.glob("**/*.parquet")) == []
+
+
+def test_build_silver_allows_a_named_profile_with_no_taxonomy_when_not_ingest_only(tmp_path: Path):
+    """A non-ingest-only profile without a taxonomy overlay transforms cleanly (Issue #52).
+
+    Condition text rows fall back to unmapped (mapping_source text_fallback)
+    while the registry's MeSH browse module carries condition identity.
     """
     cfg = make_config(tmp_path)
     run_id = "r_no_taxonomy"
@@ -156,15 +168,15 @@ def test_build_silver_allows_a_named_profile_with_no_taxonomy(tmp_path: Path):
     write_bronze_page(cfg.paths.bronze_api_responses / f"run_id={run_id}", 1, [study])
 
     full_catalog = get_registry().get("full_catalog")
-    assert full_catalog.ingest_only, "the shipped profile without a taxonomy changed shape"
     assert full_catalog.taxonomy is None
+    # Simulate a profile that is NOT ingest_only and has no taxonomy
+    non_ingest_profile = dataclasses.replace(full_catalog, ingest_only=False)
 
     row_counts = build_silver_for_run(
-        make_manifest(run_id, record_count=1), cfg, profile=full_catalog
+        make_manifest(run_id, record_count=1), cfg, profile=non_ingest_profile
     )
     assert row_counts["silver_trials"] == 1
     assert row_counts["silver_trial_conditions"] == 1
-    import pandas as pd
 
     conditions = pd.read_parquet(
         cfg.paths.silver / "silver_trial_conditions" / f"run_id={run_id}.parquet"
@@ -173,6 +185,36 @@ def test_build_silver_allows_a_named_profile_with_no_taxonomy(tmp_path: Path):
     assert conditions["condition_group"].tolist() == ["unmapped"]
     assert conditions["condition_normalized"].tolist() == ["some condition"]
     assert list(cfg.paths.silver.glob("**/*.parquet.tmp")) == []
+
+
+def test_run_transform_skips_a_retained_run_whose_bronze_was_pruned(tmp_path: Path):
+    """A pipeline upgrade must not fail on retained pre-feature silver (Finding 1).
+
+    Adding silver_trial_condition_mesh to ENTITY_NAMES marks every pre-upgrade run as
+    not-yet-transformed, but a run whose bronze was pruned (bronze_runs_to_keep: 1)
+    can never be rebuilt: run_transform must skip it and keep its silver
+    exactly as written instead of raising FileNotFoundError.
+    """
+    cfg = make_config(tmp_path)
+    run_id = "r_upgraded_volume"
+    run_dir = cfg.paths.bronze_api_responses / f"run_id={run_id}"
+    write_bronze_page(run_dir, 1, [make_study("NCT00000001")])
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+    write_manifest(cfg.paths.bronze_manifests, make_manifest(run_id, record_count=1))
+    build_silver_for_run(make_manifest(run_id, record_count=1), cfg)
+
+    # Rewind to pre-upgrade shape: delete the new silver_trial_condition_mesh file and prune bronze
+    trials_path = cfg.paths.silver / "silver_trials" / f"run_id={run_id}.parquet"
+    (cfg.paths.silver / "silver_trial_condition_mesh" / f"run_id={run_id}.parquet").unlink()
+    shutil.rmtree(run_dir)
+    before = pd.read_parquet(trials_path)
+
+    # run_transform must safely skip the pruned run rather than raising FileNotFoundError
+    assert build_silver_entities.run_transform(config=cfg) == []
+
+    after = pd.read_parquet(trials_path)
+    assert list(after.columns) == list(before.columns)
+    assert after["nct_id"].tolist() == before["nct_id"].tolist()
 
 
 def test_build_silver_still_transforms_a_named_profile_with_a_taxonomy(tmp_path: Path):

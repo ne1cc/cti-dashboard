@@ -50,6 +50,12 @@
           "minimumAge": "55 Years",
           "maximumAge": "85 Years",
           "sex": "ALL"
+        },
+        "contactsLocationsModule": {
+          "locations": [
+            { "facility": "Duke Memory Center", "city": "Durham", "state": "North Carolina", "zip": "27710", "country": "United States", "status": "RECRUITING" },
+            { "facility": "UCSF Memory Clinic", "city": "San Francisco", "state": "CA", "zip": "94143", "country": "United States", "status": "RECRUITING" }
+          ]
         }
       },
       "derivedSection": {

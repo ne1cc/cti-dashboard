@@ -197,8 +197,8 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         if indication_profile.ingest_only:
             log.error(
-                "Profile '{}' is ingest_only: no condition taxonomy, so bronze "
-                "cannot be transformed. Use 'orchestrate' for the refreshable profiles.",
+                "Profile '{}' is ingest_only: bronze cannot be transformed into the "
+                "shared silver tree. Use 'orchestrate' for the refreshable profiles.",
                 indication_profile.profile_id,
             )
             return 2
@@ -274,8 +274,8 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
             if profiles[0].ingest_only:
                 log.error(
-                    "Profile '{}' is ingest_only: it has no taxonomy, so it can never be "
-                    "transformed. Use 'orchestrate' without --profile for the refreshable "
+                    "Profile '{}' is ingest_only: it can never be transformed into the "
+                    "shared silver tree. Use 'orchestrate' without --profile for the refreshable "
                     "profiles.",
                     profiles[0].profile_id,
                 )

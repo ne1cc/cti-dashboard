@@ -12,9 +12,9 @@
 --
 -- New-condition browsing reads mesh rows; existing group-based views filter
 -- on condition_group slugs, which MeSH term labels never collide with.
--- Count marts and similarity keep their overlay-only semantics by filtering
--- is_ancestor = false (and similarity additionally excludes direct mesh rows
--- so its weighting is unchanged this release).
+-- Count marts read int_trial_condition_mapping (which contains only taxonomy
+-- condition groups), and similarity explicitly filters mesh_id is null so
+-- its scoring, pair discovery, and weighting remain unchanged.
 with current_trials as (
     select nct_id, indication_profile_id, ingestion_run_id
     from {{ ref('int_current_trial_status') }}

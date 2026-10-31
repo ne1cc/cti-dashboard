@@ -2,6 +2,11 @@
 -- that profile's latest snapshot). trial_key hashes the full grain: the same
 -- registry record observed through two query scopes is two dimension rows, and
 -- collapsing them would attribute one profile's status to the other.
+with current_mesh as (
+    select distinct ingestion_run_id, indication_profile_id, nct_id
+    from {{ ref('stg_trial_condition_mesh') }}
+)
+
 select
     {{ generate_surrogate_key(['c.nct_id', 'c.indication_profile_id']) }} as trial_key,
     c.nct_id,
@@ -46,9 +51,14 @@ select
     case when t.minimum_age_years is null then true else false end as has_unspecified_min_age,
     case when t.maximum_age_years is null then true else false end as has_unspecified_max_age,
     case when t.healthy_volunteers is null then true else false end as healthy_volunteers_unknown_flag,
-    case when t.sex is null or upper(trim(t.sex)) in ('', 'UNKNOWN') then true else false end as sex_eligibility_unknown_flag
+    case when t.sex is null or upper(trim(t.sex)) in ('', 'UNKNOWN') then true else false end as sex_eligibility_unknown_flag,
+    case when m.nct_id is not null then true else false end as has_derived_mesh
 from {{ ref('int_current_trial_status') }} c
 inner join {{ ref('stg_trials') }} t
     on c.ingestion_run_id = t.ingestion_run_id
     and c.nct_id = t.nct_id
     and c.indication_profile_id = t.indication_profile_id
+left join current_mesh m
+    on c.ingestion_run_id = m.ingestion_run_id
+    and c.nct_id = m.nct_id
+    and c.indication_profile_id = m.indication_profile_id
