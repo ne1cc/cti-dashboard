@@ -1587,7 +1587,7 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
 
     ``test_marts_contracts_enforced`` proves every mart has an enforced contract
     and never proves *which* columns are in it, so it stays green whether or not
-    ``indication_profile_id`` is declared. This closes that gap over the 15
+    ``indication_profile_id`` is declared. This closes that gap over the
     trial-grain marts; ``dim_date`` is excluded because the calendar spine is
     global on purpose (Task 11). Read from ``_marts.yml`` rather than the built
     manifest so the not_null test is checked where it is authored.
@@ -1614,7 +1614,7 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
     # Membership, not just cardinality: a pin on len() alone stays green if a
     # mart is renamed or dim_date's exclusion clause goes stale, because the set
     # keeps its size while iterating something else. Names taken from
-    # _marts.yml's 16 model blocks minus dim_date, 2026-09-06.
+    # _marts.yml's 19 model blocks minus dim_date, 2026-10-31.
     assert trial_grain == {
         "bridge_trial_condition",
         "bridge_trial_sponsor",
@@ -1624,6 +1624,7 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
         "dim_trial",
         "fct_trial_site",
         "fct_trial_snapshot",
+        "mart_baseline_demographics_coverage",
         "mart_condition_geography_trends",
         "mart_data_reliability",
         "mart_feasibility_priority_queue",

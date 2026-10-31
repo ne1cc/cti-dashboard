@@ -120,5 +120,54 @@ models:
         description: Indication profile that produced this run; staging is where the column becomes mandatory.
         tests: [not_null]
 
+  - name: stg_trial_baseline_demographics
+    description: >
+      One row per profile + NCT ID + baseline measure + class + category + group
+      measurement + run. Labels are kept as reported; dimension classification
+      and OMB race/ethnicity mapping happen here via the
+      omb_race_ethnicity_mapping seed, and unresolvable combined
+      race/ethnicity labels are flagged instead of guessed.
+    columns:
+      - name: nct_id
+        tests: [not_null]
+      - name: measure_index
+        tests: [not_null]
+      - name: measure_title
+        tests: [not_null]
+      - name: dimension
+        description: >
+          Measure-title classification: sex, age, race, ethnicity,
+          race_ethnicity_combined, race_ethnicity_not_collected, or other.
+        tests:
+          - accepted_values:
+              values:
+                [
+                  sex,
+                  age,
+                  race,
+                  ethnicity,
+                  race_ethnicity_combined,
+                  race_ethnicity_not_collected,
+                  other,
+                ]
+      - name: resolved_dimension
+        description: >
+          Race or ethnicity once the row's dimension is certain (from the
+          measure title, a Race:/Ethnicity: label prefix, or the reviewed seed
+          row); null for sex/age/other rows and unresolvable combined rows.
+        tests:
+          - accepted_values:
+              values: [race, ethnicity]
+              config:
+                severity: warn
+      - name: mapping_confidence
+        description: Confidence from the omb_race_ethnicity_mapping seed; null when unmapped.
+        tests:
+          - accepted_values:
+              values: [high, medium, low]
+      - name: indication_profile_id
+        description: Indication profile that produced this run; staging is where the column becomes mandatory.
+        tests: [not_null]
+
   - name: stg_trial_contacts
     description: Deliberately empty (privacy guardrail) — contacts are never extracted.

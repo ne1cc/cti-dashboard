@@ -382,6 +382,25 @@ UNSTAMPED_NSCLC_RUN = FixtureRun(
     manifest_profile=UNSTAMPED_MANIFEST_PROFILE,
 )
 
+# Issue #74: a third ADRD run whose five studies (tests/fixtures/
+# bronze_snapshot_results) carry resultsSection.baselineCharacteristicsModule
+# with the messy label shapes the registry really contains — canonical NIH/OMB
+# categories, a combined "Race/Ethnicity, Customized" table labelled in
+# category titles, two combined tables labelled in class titles, an explicit
+# "Race and Ethnicity Not Collected" marker, and "Race:/Ethnicity:"-prefixed
+# custom labels. New NCT IDs and the base pages stay untouched so every pinned
+# cardinality on the other warehouses holds.
+DEMOGRAPHICS_RUN_ID = "20260901T120002Z_fixture05"
+DEMOGRAPHICS_RUN_AT = FIXTURE_SNAPSHOT_DAY + timedelta(hours=12)
+
+DEMOGRAPHICS_ADRD_RUN = FixtureRun(
+    profile="adrd",
+    run_id=DEMOGRAPHICS_RUN_ID,
+    started_at=DEMOGRAPHICS_RUN_AT,
+    condition=ADRD_CONDITION,
+    fixture_dir="bronze_snapshot_results",
+)
+
 
 # The similarity-mart fixtures (tests/test_similarity_candidates.py). The ADRD
 # run is the dense one: 52 cloned listings sharing "Alzheimer Disease",
@@ -479,6 +498,23 @@ def fixture_project_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
         tmp_path_factory,
         "fixture_project",
         [_base_adrd_run(), _base_nsclc_run()],
+    )
+
+
+@pytest.fixture(scope="session")
+def demographics_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """The base warehouse plus DEMOGRAPHICS_ADRD_RUN (issue #74).
+
+    Built lazily and session-scoped like the other roots: only the baseline-
+    demographics tests request it, so a run of the suite that touches neither
+    pays no third `dbt build`. The base two runs are included so the coverage
+    mart's denominator logic can be seen against trials that have no results
+    section at all.
+    """
+    return _build_fixture_root(
+        tmp_path_factory,
+        "fixture_demographics",
+        [_base_adrd_run(), _base_nsclc_run(), DEMOGRAPHICS_ADRD_RUN],
     )
 
 

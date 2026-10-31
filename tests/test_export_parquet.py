@@ -202,6 +202,36 @@ FULL_STUDY = {
             "otherOutcomes": [{"measure": "m3", "description": "d", "timeFrame": "t"}],
         },
     },
+    "resultsSection": {
+        "baselineCharacteristicsModule": {
+            "groups": [{"id": "BG000", "title": "Arm A", "description": None}],
+            "denoms": [{"units": "Participants", "counts": [{"groupId": "BG000", "value": "12"}]}],
+            "measures": [
+                {
+                    "title": "Sex: Female, Male",
+                    "paramType": "COUNT_OF_PARTICIPANTS",
+                    "unitOfMeasure": "Participants",
+                    "classes": [
+                        {
+                            "title": None,
+                            "categories": [
+                                {
+                                    "title": "Female",
+                                    "measurements": [
+                                        {"groupId": "BG000", "value": "7", "spread": None}
+                                    ],
+                                },
+                                {
+                                    "title": "Male",
+                                    "measurements": [{"groupId": "BG000", "value": "5"}],
+                                },
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+    },
 }
 
 

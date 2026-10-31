@@ -1,9 +1,16 @@
-"""Flatten nested ClinicalTrials.gov study JSON into the six silver entities.
+"""Flatten nested ClinicalTrials.gov study JSON into the seven silver entities.
 
 Grounded in the actual API v2 structure (verified against saved bronze pages):
 protocolSection.{identification,status,sponsorCollaborators,design,conditions,
-armsInterventions,outcomes,eligibility,contactsLocations}Module + top-level
-hasResults. Location contact/investigator fields are deliberately not extracted.
+armsInterventions,outcomes,eligibility,contactsLocations}Module, top-level
+hasResults, and resultsSection.baselineCharacteristicsModule (who actually
+enrolled: per-group counts for sex, age, race, and ethnicity measures).
+Location contact/investigator fields are deliberately not extracted.
+
+Baseline demographics rows keep labels exactly as sponsors reported them;
+mapping those labels onto OMB race/ethnicity categories happens downstream in
+dbt (seeds/omb_race_ethnicity_mapping.csv), where the decisions are versioned
+and reviewable.
 """
 
 import json
@@ -45,6 +52,101 @@ def normalize_phases(phases: list[str] | None) -> tuple[str | None, str]:
     raw = "|".join(phases)
     normalized = [("NOT_APPLICABLE" if p == "NA" else p) for p in phases]
     return raw, "/".join(normalized)
+
+
+_COUNT_PARTICIPANTS = "participants"
+
+
+def _participant_count(param_type: Any, unit_of_measure: Any, value: Any) -> int | None:
+    """Parse a measurement value as a participant head-count, else None.
+
+    Only numeric participant-unit values from count-type measures count;
+    "79.5" (median age) or "68" with unit "years" must never become a count.
+    """
+    if param_type not in ("COUNT_OF_PARTICIPANTS", "NUMBER"):
+        return None
+    if (
+        not isinstance(unit_of_measure, str)
+        or unit_of_measure.strip().lower() != _COUNT_PARTICIPANTS
+    ):
+        return None
+    text = str(value).strip() if value is not None else ""
+    return int(text) if text.isdigit() else None
+
+
+def _baseline_demographics_rows(
+    study: dict[str, Any], base: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Extract resultsSection.baselineCharacteristicsModule into flat rows.
+
+    Grain: one row per (measure, class, category, group) measurement. Labels are
+    stored exactly as reported — combined race/ethnicity tables often carry the
+    label in class.title rather than category.title, so the pair is preserved
+    and disambiguation is left to the dbt mapping layer.
+    """
+    module = dig(study, "resultsSection", "baselineCharacteristicsModule")
+    if not isinstance(module, dict):
+        return []
+    group_titles = {
+        group.get("id"): group.get("title")
+        for group in module.get("groups") or []
+        if isinstance(group, dict) and group.get("id")
+    }
+    denominators: dict[str, int | None] = {}
+    for denom in module.get("denoms") or []:
+        if not isinstance(denom, dict):
+            continue
+        for count in denom.get("counts") or []:
+            if isinstance(count, dict) and count.get("groupId"):
+                value = count.get("value")
+                text = str(value).strip() if value is not None else ""
+                denominators.setdefault(count["groupId"], int(text) if text.isdigit() else None)
+    rows = []
+    for measure_index, measure in enumerate(module.get("measures") or []):
+        if not isinstance(measure, dict):
+            continue
+        for class_index, cls in enumerate(measure.get("classes") or []):
+            if not isinstance(cls, dict):
+                continue
+            for category_index, category in enumerate(cls.get("categories") or []):
+                if not isinstance(category, dict):
+                    continue
+                measurements = category.get("measurements") or [None]
+                for measurement in measurements:
+                    if measurement is not None and not isinstance(measurement, dict):
+                        continue
+                    group_id = measurement.get("groupId") if measurement else None
+                    value = measurement.get("value") if measurement else None
+                    rows.append(
+                        {
+                            **base,
+                            "measure_index": measure_index,
+                            "measure_title": measure.get("title"),
+                            "param_type": measure.get("paramType"),
+                            "unit_of_measure": measure.get("unitOfMeasure"),
+                            "class_index": class_index,
+                            "class_title": cls.get("title"),
+                            "category_index": category_index,
+                            "category_title": category.get("title"),
+                            "group_id": group_id,
+                            "group_title": group_titles.get(group_id),
+                            "group_denominator": (
+                                denominators.get(group_id) if isinstance(group_id, str) else None
+                            ),
+                            "participant_count": _participant_count(
+                                measure.get("paramType"),
+                                measure.get("unitOfMeasure"),
+                                value,
+                            ),
+                            "value_raw": str(value) if value is not None else None,
+                            "value_spread": (
+                                str(measurement.get("spread"))
+                                if measurement and measurement.get("spread") is not None
+                                else None
+                            ),
+                        }
+                    )
+    return rows
 
 
 def trial_quality_flags(row: dict[str, Any]) -> str:
@@ -253,6 +355,7 @@ def flatten_study(
         "silver_trial_sponsors": sponsors,
         "silver_trial_locations": locations,
         "silver_trial_outcomes": outcomes,
+        "silver_trial_baseline_demographics": _baseline_demographics_rows(study, base),
     }
 
 
