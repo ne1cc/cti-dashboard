@@ -26,26 +26,26 @@ CORPUS_PATH = (
 
 FROZEN_PATH = CORPUS_PATH.with_name("frozen_regression_records.json")
 
-# Pattern scan for an exclusion-style heading left inside the inclusion list. It finds only
-# these shapes, so its count is a lower bound on wrong-list errors, not a full measure.
-_WRONG_LIST_SCAN_RE = re.compile(
+# Shape guard for a few exclusion-style headings left inside inclusion items. Hits need
+# human reading: this misses other shapes and can flag statements such as 'Absence of...'.
+_HEADING_SHAPE_SCAN_RE = re.compile(
     r"(?:exclusions?|non[-\s]*inclusions?)\s+criteri(?:a|on)"
     r"(?:\s*[:：]?\**\s*$|\s+\d{1,3}\\?[.)]\s|\s+(?:of|for)\b.*[:：]\s*$)"
     r"|^\W*criteria\s+for\s+(?:the\s+)?(?:exclusions?|non[-\s]*inclusions?)\b",
     re.IGNORECASE,
 )
-_WRONG_LIST_SCAN_GUARD_RE = re.compile(r"\b(?:no|not|any|without)\b", re.IGNORECASE)
+_HEADING_SHAPE_SCAN_GUARD_RE = re.compile(r"\b(?:no|not|any|without)\b", re.IGNORECASE)
 
 
-def _wrong_list_hits(samples: list[dict[str, Any]]) -> list[str]:
-    """Return NCT IDs with an exclusion-style heading among their inclusion items."""
+def _heading_shape_hits(samples: list[dict[str, Any]]) -> list[str]:
+    """Return candidate IDs for a narrow shape guard, not measured wrong-list errors."""
     hits = []
     for sample in samples:
         parsed = split_eligibility_sections(sample["criteria_text"])
         assert parsed is not None
         lines = [line for item in parsed.inclusion for line in item.splitlines()]
         if any(
-            _WRONG_LIST_SCAN_RE.search(line) and not _WRONG_LIST_SCAN_GUARD_RE.search(line)
+            _HEADING_SHAPE_SCAN_RE.search(line) and not _HEADING_SHAPE_SCAN_GUARD_RE.search(line)
             for line in lines
         ):
             hits.append(sample["nct_id"])
@@ -110,13 +110,13 @@ def test_corpus_parse_rate_meets_floor_and_report(
             misses.append(sample["nct_id"])
 
     rate = parsed_count / len(corpus)
-    corpus_hits = _wrong_list_hits(corpus)
-    frozen_hits = _wrong_list_hits(list(frozen_records.values()))
+    corpus_hits = _heading_shape_hits(corpus)
+    frozen_hits = _heading_shape_hits(list(frozen_records.values()))
     print(
         f"\nEligibility section parse rate: {parsed_count}/{len(corpus)} = {rate:.1%} "
         f"(floor {PARSE_RATE_FLOOR:.0%}; measures heading recognition, not list assignment); "
         f"unparsed NCT IDs: {misses}; "
-        f"wrong-list scan hits (lower bound): corpus {len(corpus_hits)}/{len(corpus)}, "
+        f"heading-shape guard hits (not semantic errors): corpus {len(corpus_hits)}/{len(corpus)}, "
         f"frozen set {len(frozen_hits)}/{len(frozen_records)}"
     )
     assert rate >= PARSE_RATE_FLOOR, f"Parse rate {rate:.1%} below floor {PARSE_RATE_FLOOR:.0%}"
@@ -307,7 +307,7 @@ def test_frozen_records_are_real_and_outside_the_corpus(
 ) -> None:
     doc = json.loads(FROZEN_PATH.read_text(encoding="utf-8"))
     assert doc["provenance"]["api_endpoint"].startswith("https://clinicaltrials.gov/api/v2/")
-    assert len(frozen_records) == 20
+    assert len(frozen_records) == 25
     assert not set(frozen_records) & {sample["nct_id"] for sample in corpus}
 
 
@@ -515,3 +515,33 @@ def test_frozen_record_keeps_exclusion_text_out_of_inclusion(
     if not_in_inclusion is not None:
         assert not_in_inclusion not in " ".join(parsed.inclusion)
         assert not_in_inclusion in " ".join(parsed.unclassified)
+
+
+@pytest.mark.parametrize(
+    ("nct_id", "exclusion_text", "unclassified_count"),
+    [
+        ("NCT01911104", "Resting blood pressure", 40),
+        ("NCT02093390", "The subject has a history of drug abuse", 11),
+        ("NCT06235385", "History of prior valve surgery", 4),
+        ("NCT03190577", "Patients under legal supervision", 1),
+        ("NCT00111098", "Prior recipient or scheduled to receive a kidney transplant", 1),
+    ],
+)
+def test_followup_frozen_records_close_inclusion_before_exclusion_prose(
+    frozen_records: dict[str, dict[str, Any]],
+    nct_id: str,
+    exclusion_text: str,
+    unclassified_count: int,
+) -> None:
+    """Pin all five reviewed leaks with verbatim records, without runtime fetching."""
+    text = frozen_records[nct_id]["criteria_text"]
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None and parsed.parsed
+    assert exclusion_text not in " ".join(parsed.inclusion)
+    assert exclusion_text in " ".join(parsed.unclassified)
+    assert len(parsed.sections[-1].items) == unclassified_count
+    # Inline headings can expose a leading '-' item marker, also stripped by design.
+    assert [t for t in reconstruct(parsed).split() if t != "-"] == [
+        t for t in strip_bullet_markers(text).split() if t != "-"
+    ]

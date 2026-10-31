@@ -40,9 +40,10 @@ _COLON = "[:：]"
 _NON_INCLUSION = r"non[-\s]*inclusions?"
 _KEYWORD = rf"(?:{_NON_INCLUSION}|inclusions?|exclusions?)"
 
-# Timing compounds such as 'Exclusion Criteria (post-inclusion):' name a study phase,
-# not a second criteria list, so they do not count as mentioning that list.
+# Only inside a parenthetical after the first keyword can a timing compound name
+# a study phase rather than a second list ('Exclusion Criteria (post-inclusion):').
 _TEMPORAL_COMPOUND_RE = re.compile(r"\b(?:pre|post)[-\s]*(?:inclusions?|exclusions?)\b")
+_PARENTHETICAL_RE = re.compile(r"\([^)]*\)")
 
 # Standalone heading lines: the whole line is the heading. Qualifier prefixes
 # must end with a colon, and tails are limited to "for ..." phrases or parentheticals
@@ -127,28 +128,33 @@ _MIDLINE_HEADING_RE = re.compile(
 )
 
 # An exclusion or non-inclusion phrase that looks like a heading but is not an exact one:
-# it ends the line ('6 months Exclusion Criteria'), takes a colon or a numbered item
+# it starts the line with an optional short qualifier (regardless of trailing prose),
+# ends the line ('6 months Exclusion Criteria'), takes a colon or a numbered item
 # ('General Exclusion Criteria 2. History...'), or leads a short descriptor line
 # ('Criteria for exclusion from the study were as follows:').
 _NOT_INCLUSION = rf"(?:{_NON_INCLUSION}|exclusions?)"
 _UNRECOGNIZED_HEADING_RE = re.compile(
-    rf"""\b(?:
+    rf"""(?:\b(?:
         {_NOT_INCLUSION}\s+criteri(?:a|on)\b
         (?:
             \**\s*(?:{_COLON}[\s*]*|$|(?=\d{{1,3}}\\?[.)]\s))
           | \s+(?:of|for)\b[^.!?:：]{{0,60}}{_COLON}\**\s*$
         )
+      | ^\**\s*(?:[A-Za-z][\w-]{{0,14}}\s+)?\**\s*
+        (?P<leading_phrase>{_NOT_INCLUSION}\s+criteri(?:a|on)\b)
+        \**\s*(?:{_COLON}[\s*]*)?
       | criteria\s+for\s+(?:the\s+)?{_NOT_INCLUSION}\b[^.!?:：]{{0,60}}(?:{_COLON}\**)?\s*$
+        )
     )""",
     re.IGNORECASE | re.VERBOSE,
 )
 _SENTENCE_END_RE = re.compile(r"[.;:：)]\s+")
 
-# Words before the phrase that make it a statement about the criteria, not a heading
+# Words immediately before the phrase that make it a statement, not a heading
 # ('No exclusion criteria', 'does not meet any exclusion criteria', '(see exclusion criteria:').
 _NOT_A_HEADING_RE = re.compile(
     r"\b(?:no|none|not|nor|neither|any|without|absence|lack|free|see|per|"
-    r"meets?|meeting|met|fulfil\w*|satisf\w*)\b",
+    r"meets?|meeting|met|mention\w*|fulfil\w*|satisf\w*)(?:\s+(?:of|other))?\s*$",
     re.IGNORECASE,
 )
 
@@ -222,7 +228,19 @@ def _classify_heading_text(text: str) -> str:
     Falls back to unclassified for non-inclusion headings and for headings
     mentioning both lists, because neither can be asserted as one list.
     """
-    lower = _TEMPORAL_COMPOUND_RE.sub(" ", text.lower())
+    # 1. Keep both-list headings ambiguous; exempt timing only in later parentheses.
+    lower = text.lower()
+    first_keyword = re.search(rf"\b{_KEYWORD}\b", lower)
+    if first_keyword is not None:
+        prefix = lower[: first_keyword.start()]
+        if re.search(r"\b(?:pre|post)[-\s]*$", prefix):
+            return _KIND_UNCLASSIFIED
+        end = first_keyword.end()
+        lower = lower[:end] + _PARENTHETICAL_RE.sub(
+            lambda match: _TEMPORAL_COMPOUND_RE.sub(" ", match.group()),
+            lower[end:],
+        )
+    # 2. Non-inclusion and headings still naming both lists cannot assert one list.
     mentions_exclusion = re.search(r"\bexclusions?\b", lower) is not None
     mentions_inclusion = re.search(r"\binclusions?\b", lower) is not None
     if re.search(rf"\b{_NON_INCLUSION}\b", lower) or (mentions_exclusion and mentions_inclusion):
@@ -275,7 +293,8 @@ def _split_unrecognized_heading(line: str) -> tuple[str, str, str] | None:
         return None
     sentence_ends = list(_SENTENCE_END_RE.finditer(body, 0, match.start()))
     start = sentence_ends[-1].end() if sentence_ends else 0
-    if _NOT_A_HEADING_RE.search(body, start, match.start()):
+    phrase_start = match.start("leading_phrase") if match.group("leading_phrase") else match.start()
+    if _NOT_A_HEADING_RE.search(body, start, phrase_start):
         return None
     marker_length = len(line) - len(body)
     before = line[: marker_length + start].strip() if start else ""
@@ -318,6 +337,25 @@ def split_eligibility_sections(text: str | None) -> ParsedEligibilitySections | 
         if kind in (_KIND_INCLUSION, _KIND_EXCLUSION):
             found_heading = True
 
+    def _add_with_closing_check(content: str) -> None:
+        """Add text, closing open inclusion on an uncertain exclusion heading.
+
+        Returns nothing; preserves before/heading/after text exactly once.
+        Limits: closing is one-way and may move inclusion prose to unclassified.
+        """
+        # 1. Only inclusion needs this safe close; other sections keep their content.
+        closing = _split_unrecognized_heading(content) if current.kind == _KIND_INCLUSION else None
+        if closing is None:
+            _add_content(content)
+            return
+        # 2. Keep the earlier sentence, then retain uncertain heading and tail separately.
+        before, heading, after = closing
+        if before:
+            _add_content(before)
+        _open_section(_KIND_UNCLASSIFIED, heading)
+        if after:
+            current.start_item(after)
+
     for raw_line in text.splitlines():
         line = raw_line.strip()
         if not line:
@@ -341,22 +379,10 @@ def split_eligibility_sections(text: str | None) -> ParsedEligibilitySections | 
             if midline is not None:
                 before, heading, remainder = midline
                 if before:
-                    _add_content(before)
+                    _add_with_closing_check(before)
                 _open_section(_classify_heading_text(heading), _strip_bullet(heading))
                 continue
-            closing = (
-                _split_unrecognized_heading(remainder) if current.kind == _KIND_INCLUSION else None
-            )
-            if closing is None:
-                _add_content(remainder)
-                break
-            # Not an exact heading, so nothing after it can be asserted as either list.
-            before, heading, after = closing
-            if before:
-                _add_content(before)
-            _open_section(_KIND_UNCLASSIFIED, heading)
-            if after:
-                current.start_item(after)
+            _add_with_closing_check(remainder)
             break
 
     builders.append(current)

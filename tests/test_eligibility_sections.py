@@ -619,6 +619,9 @@ def test_numbered_and_dash_headings_recognized() -> None:
         "Inclusion, Exclusion Criteria:",
         "Inclusion and Key Exclusion Criteria:",
         "Post- inclusion criteria:",
+        "Pre inclusion and exclusion criteria:",
+        "Post- inclusion and exclusion criteria:",
+        "Pre- inclusion/exclusion criteria:",
     ],
 )
 def test_heading_that_cannot_name_one_list_is_unclassified(heading: str) -> None:
@@ -646,6 +649,7 @@ def test_temporal_compound_is_not_a_mention_of_the_other_list() -> None:
         "* No exclusion criteria",
         "* Does not meet any exclusion criteria",
         "* Absence of exclusion criteria",
+        "* No other exclusion criteria",
         "* Meeting exclusion criteria:",
         "* Diabetes (see exclusion criteria:",
         "* Mentions exclusion criteria elsewhere in prose",
@@ -665,6 +669,19 @@ def test_statement_about_criteria_stays_in_the_open_inclusion_section(line: str)
     ("line", "kept_in_inclusion", "heading", "first_unclassified"),
     [
         ("* 6 months Exclusion Criteria", [], "6 months Exclusion Criteria", "next"),
+        ("* 2 mg per day Exclusion Criteria", [], "2 mg per day Exclusion Criteria", "next"),
+        (
+            "* No missed doses in this period Exclusion Criteria",
+            [],
+            "No missed doses in this period Exclusion Criteria",
+            "next",
+        ),
+        (
+            "General Exclusion Criteria arbitrary trailing prose",
+            [],
+            "General Exclusion Criteria",
+            "arbitrary trailing prose",
+        ),
         ("* Has consent. Exclusion Criteria", ["Has consent."], "Exclusion Criteria", "next"),
         ("1. Has consent. Exclusion Criteria", ["Has consent."], "Exclusion Criteria", "next"),
         (
@@ -717,6 +734,32 @@ def test_unrecognized_heading_does_not_reopen_an_exclusion_section() -> None:
 
     assert parsed is not None
     assert parsed.exclusion == ["a Non inclusion criteria", "b"]
+
+
+def test_closing_heading_in_text_before_a_midline_heading() -> None:
+    """Keep exclusion text out of inclusion even before a later recognized heading."""
+    text = "Inclusion Criteria:\n6 months Exclusion Criteria: pregnant. Inclusion Criteria: child"
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.inclusion == ["child"]
+    assert parsed.unclassified == ["pregnant."]
+    assert reconstruct(parsed).split() == _tokens_after_marker_strip(text)
+
+
+def test_safe_close_can_move_an_inclusion_statement_to_unclassified() -> None:
+    """Pin the disclosed over-eager close without assigning the opposite list."""
+    text = (
+        "Inclusion Criteria:\nPatients eligible according to inclusion and exclusion criteria\n"
+        "* later inclusion item"
+    )
+    parsed = split_eligibility_sections(text)
+
+    assert parsed is not None
+    assert parsed.inclusion == []
+    assert parsed.exclusion == []
+    assert parsed.unclassified == ["later inclusion item"]
+    assert reconstruct(parsed).split() == _tokens_after_marker_strip(text)
 
 
 @pytest.mark.parametrize(
