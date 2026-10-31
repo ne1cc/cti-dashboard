@@ -76,6 +76,17 @@ def load_taxonomy(path: str | Path | None = None) -> ConditionTaxonomy:
     )
 
 
+# The registry-wide profile (full_catalog) has no indication taxonomy: every
+# condition maps to "uncategorized" with no dementia flag. Keeping this as a
+# taxonomy — not a special case in flatten — is what lets one silver path serve
+# both indication profiles and the whole registry (issue #53).
+REGISTRY_TAXONOMY = ConditionTaxonomy(
+    groups=(),
+    default_group="uncategorized",
+    default_dementia_relevance=False,
+)
+
+
 @lru_cache(maxsize=1)
 def get_taxonomy() -> ConditionTaxonomy:
     return load_taxonomy()

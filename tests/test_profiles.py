@@ -257,15 +257,19 @@ def test_registry_active_is_gone() -> None:
 def test_normalize_profile_id_covers_the_legacy_aliases() -> None:
     from src.profiles import normalize_profile_id
 
-    assert normalize_profile_id("default") == "adrd"
+    # 'default' is the registry-wide profile since issue #53: ingesting must
+    # not require an indication profile.
+    assert normalize_profile_id("default") == "full_catalog"
     assert normalize_profile_id("full-catalog") == "full_catalog"
     assert normalize_profile_id("adrd") == "adrd"
     assert normalize_profile_id("oncology_nsclc") == "oncology_nsclc"
 
 
 def test_real_registry_advertises_both_refreshable_profiles() -> None:
-    """config/profiles/oncology_nsclc.yml exists and is ingest_only: false; a
-    regression here means the deployed refresh silently stays single-profile."""
+    """config/profiles/oncology_nsclc.yml exists and is orchestrated; a
+    regression here means the deployed refresh silently stays single-profile.
+    full_catalog transforms but is orchestrated nowhere (orchestrate: false):
+    its weekly refresh runs on its own command."""
     from src.profiles import get_registry
 
     get_registry.cache_clear()
@@ -273,6 +277,39 @@ def test_real_registry_advertises_both_refreshable_profiles() -> None:
     assert {"adrd", "oncology_nsclc"} <= ids
     assert "full_catalog" not in ids
     get_registry.cache_clear()
+
+
+def test_registry_profile_is_transformable_but_not_orchestrated() -> None:
+    """The whole-registry profile carries REGISTRY_TAXONOMY so its silver
+    builds, yet stays out of refreshable() — the dashboard scopes and the
+    multi-profile loop remain indication-level (epic #43)."""
+    from src.profiles import get_registry
+
+    get_registry.cache_clear()
+    registry_profile = get_registry().get("full_catalog")
+    assert registry_profile.ingest_only is False
+    assert registry_profile.orchestrate is False
+    assert registry_profile.taxonomy is not None
+    assert registry_profile.taxonomy.map_condition("Breast Cancer").condition_group == (
+        "uncategorized"
+    )
+    get_registry.cache_clear()
+
+
+def test_refreshable_excludes_non_orchestrated_profiles(
+    tmp_profiles_dir: Path, tmp_shared_paths: Path
+) -> None:
+    """orchestrate: false opts a refreshable pipeline out of the loop."""
+    raw = yaml.safe_load(MINIMAL_PROFILE_YAML)
+    raw["profile"] = dict(raw["profile"])
+    raw["profile"]["id"] = "registry_like"
+    raw["profile"]["ingest_only"] = False
+    raw["profile"]["orchestrate"] = False
+    (tmp_profiles_dir / "registry_like.yml").write_text(yaml.dump(raw))
+
+    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths_file=tmp_shared_paths)
+    assert [p.profile_id for p in registry.refreshable()] == []
+    assert {p.profile_id for p in registry.all()} == {"registry_like", "test_ind"}
 
 
 # ---------------------------------------------------------------------------
@@ -367,30 +404,35 @@ def test_build_silver_dedup_key_uses_profile_id(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_default_config_bronze_paths_match_the_adrd_profile() -> None:
-    """Guard the ingest/transform pairing that `make pipeline` depends on.
+def test_default_config_bronze_paths_match_the_default_profile() -> None:
+    """Guard the ingest/transform pairing that the default path depends on.
 
-    `ingest --profile default` resolves through the registry to the adrd profile
-    and writes profile-scoped bronze, while `transform` and the quality readers
-    load the global config. If the two disagree, `make pipeline` ingests
-    snapshots the transform never sees and exits 0 with "No runs to transform",
-    so the warehouse goes stale silently.
-
-    With adrd.yml established as the single source of truth for scope, the
-    complete query parameters dictionary and documented scope must also match.
+    Since issue #53 `default_profile: full_catalog` makes the default config
+    the registry-wide one: `ingest` (bare) and `transform` (bare) both resolve
+    through the registry to full_catalog and write/read its profile-scoped
+    bronze. If the two disagree, a default ingest writes snapshots the default
+    transform never sees and exits 0 with "No runs to transform", so the
+    warehouse goes stale silently. The complete query parameter dictionary and
+    documented scope must match too.
     """
     from src.config import load_config
     from src.profiles import get_registry
 
     default = load_config()
+    registry_profile = get_registry().get("full_catalog").config
+
+    assert default.paths.bronze_manifests == registry_profile.paths.bronze_manifests
+    assert default.paths.bronze_api_responses == registry_profile.paths.bronze_api_responses
+    assert default.paths.quarantine == registry_profile.paths.quarantine
+    assert default.api.query_params == registry_profile.api.query_params
+    assert default.scope == registry_profile.scope
+    assert default.api.fields == registry_profile.api.fields
+    assert default.api.page_size == registry_profile.api.page_size
+
+    # The registry query is the absence of scope filters; the ADRD profile
+    # keeps its own eight-status filter when named explicitly.
+    assert default.api.query_params == {}
     adrd = get_registry().get("adrd").config
-
-    assert default.paths.bronze_manifests == adrd.paths.bronze_manifests
-    assert default.paths.bronze_api_responses == adrd.paths.bronze_api_responses
-    assert default.paths.quarantine == adrd.paths.quarantine
-    assert default.api.query_params == adrd.api.query_params
-    assert default.scope == adrd.scope
-
     expected_statuses = {
         "RECRUITING",
         "ACTIVE_NOT_RECRUITING",
@@ -401,8 +443,8 @@ def test_default_config_bronze_paths_match_the_adrd_profile() -> None:
         "SUSPENDED",
         "ENROLLING_BY_INVITATION",
     }
-    assert set(default.api.query_params["filter.overallStatus"]) == expected_statuses
-    assert set(default.scope["statuses"]) == expected_statuses
+    assert set(adrd.api.query_params["filter.overallStatus"]) == expected_statuses
+    assert set(adrd.scope["statuses"]) == expected_statuses
 
 
 def test_editing_referenced_profile_updates_default_api_and_scope_dynamically(

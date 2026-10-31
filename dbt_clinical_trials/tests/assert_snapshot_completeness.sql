@@ -2,10 +2,13 @@
 -- manifest record count, with unique NCT IDs. Warn severity: a mismatch means
 -- "investigate", not "block the pipeline".
 --
--- ingest_only profiles (full_catalog) are excluded: they are bronze-only by
--- design, so their trial_row_count is legitimately null and their
--- manifest_reconciled_flag would fail forever. The var is asserted to match the
--- Python registry by tests/test_profiles.py::test_dbt_ingest_only_var_matches_registry.
+-- ingest_only profiles are excluded: they are bronze-only by design, so their
+-- trial_row_count is legitimately null and their manifest_reconciled_flag would
+-- fail forever. The var is asserted to match the Python registry by
+-- tests/test_profiles.py::test_dbt_ingest_only_var_matches_registry, and is
+-- EMPTY since issue #53 (the registry-wide profile transforms via
+-- REGISTRY_TAXONOMY). An empty list renders `not in ('')`, which every real
+-- profile_id passes — `not in ()` would be a DuckDB parser error.
 --
 -- The members are quoted by a loop, not by `| map('repr')`: dbt's Jinja
 -- environment registers no `repr` filter, and the plan's form fails to compile
@@ -24,6 +27,7 @@ where status = 'success'
     {%- for profile_id in var('ingest_only_profiles') %}
     '{{ profile_id }}'{{ "," if not loop.last }}
     {%- endfor %}
+    {%- if not var('ingest_only_profiles') %} '' {%- endif %}
   )
   and (
       not coalesce(manifest_reconciled_flag, false)

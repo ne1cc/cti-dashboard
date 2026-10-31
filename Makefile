@@ -9,7 +9,8 @@ CONDITION   ?= Alzheimer Disease
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup init-dirs env ingest full-refresh ingest-full-catalog full-catalog-full-refresh \
+.PHONY: help setup init-dirs env ingest full-refresh ingest-registry ingest-registry-incremental transform-registry \
+        ingest-full-catalog full-catalog-full-refresh \
         orchestrate orchestrate-full-refresh prune-data prune-data-dry \
         gazetteer \
         transform dbt-deps dbt-seed dbt-run dbt-test \
@@ -33,11 +34,20 @@ setup: ## Install dependencies and prepare local environment
 init-dirs: ## Create every profile's data directories from config/profiles/
 	$(PYTHON) -m src.cli init-data-dirs
 
-ingest: ## Run an incremental ingestion snapshot from ClinicalTrials.gov (Phase 2)
-	$(PYTHON) -m src.cli ingest --condition "$(CONDITION)"
+ingest: ## Ingest ADRD studies (--condition keeps this condition-scoped; the bare CLI default is registry-wide)
+	$(PYTHON) -m src.cli ingest --profile adrd --condition "$(CONDITION)"
 
-full-refresh: ## Re-ingest all pages ignoring incremental state (Phase 2)
-	$(PYTHON) -m src.cli ingest --condition "$(CONDITION)" --full-refresh
+full-refresh: ## Force-re-ingest ADRD pages ignoring incremental state
+	$(PYTHON) -m src.cli ingest --profile adrd --condition "$(CONDITION)" --full-refresh
+
+ingest-registry: ## Snapshot the whole registry (all conditions, worldwide) into bronze
+	$(PYTHON) -m src.cli ingest
+
+ingest-registry-incremental: ## Weekly refresh: fetch only studies updated since the last run
+	$(PYTHON) -m src.cli ingest --incremental-refresh
+
+transform-registry: ## Flatten registry bronze into silver Parquet entities
+	$(PYTHON) -m src.cli transform
 
 ingest-nsclc: ## Snapshot Non-Small Cell Lung Cancer studies into bronze
 	$(PYTHON) -m src.cli ingest --profile oncology_nsclc
