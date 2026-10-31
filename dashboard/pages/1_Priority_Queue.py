@@ -210,7 +210,8 @@ if selected_rows:
     st.caption(segment["priority_explanation"])
 
     st.subheader(
-        f"Constituent Clinical Trials — {format_condition_group(segment['condition_group'])} · "
+        "Constituent Clinical Trials — "
+        f"{format_condition_group(segment['condition_group'], profile_id)} · "
         f"{segment['state_normalized']} · {segment['phase_normalized']}"
     )
     st.caption(

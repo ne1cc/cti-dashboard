@@ -114,7 +114,8 @@ render_metric_audit(
             "Posting proxy requires first-post month equal to snapshot month. "
             "Growth = (current monthly recruiting count - earliest recruiting count "
             "in the inclusive preceding three-calendar-month range)/earliest count; "
-            "empty history yields proxy flag."
+            "null with fewer than two months or zero baseline. State sums may repeat "
+            "studies. This panel audits window counts; deltas remain warehouse calculations."
         )
     },
     key="geography",

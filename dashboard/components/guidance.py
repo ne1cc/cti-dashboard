@@ -306,16 +306,15 @@ PAGE_GUIDANCE: dict[str, dict[str, Any]] = {
         "how_to_analyze": ("Transitions from aggregate indicators to specific protocol records."),
     },
     "trial_similarity": {
-        "title": "Trial Similarity: Protocol Design Comparability",
+        "title": "Trial Similarity: Registry Metadata Comparability",
         "what": (
-            "Pairwise protocol design similarity scores (0.0 to 1.0) benchmarking a "
-            "selected trial against other trials in the profile across structural "
-            "design attributes."
+            "Pairwise registry similarity scores (0.0 to 1.0) comparing a selected "
+            "trial with other trials in the profile across recorded attributes."
         ),
         "why": (
-            "Evaluates seven categorical protocol attributes: Phase, Study Type, "
-            "Allocation, Intervention Model, Masking, Primary Purpose, and Condition "
-            "Group. Scores reflect structural design alignment only."
+            "Uses seven components: condition group, phase, listed geography, "
+            "intervention types, study design, eligibility compatibility, and "
+            "enrollment band. Scores compare recorded attributes only."
         ),
         "how_to_verify": (
             "Similarity scores reflect shared categorical registry metadata, not "
@@ -323,12 +322,8 @@ PAGE_GUIDANCE: dict[str, dict[str, Any]] = {
             "populations. Confirm protocol compatibility by reviewing full "
             "inclusion/exclusion criteria."
         ),
-        "what_it_shows": (
-            "Pairwise protocol design similarity scores across structural attributes."
-        ),
-        "how_to_analyze": (
-            "Benchmarks protocol design alignment against other trials in the warehouse."
-        ),
+        "what_it_shows": ("Pairwise registry similarity scores across recorded attributes."),
+        "how_to_analyze": ("Compares recorded attributes against other trials in the warehouse."),
     },
 }
 
