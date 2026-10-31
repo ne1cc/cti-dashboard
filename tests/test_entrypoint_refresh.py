@@ -1,4 +1,4 @@
-"""Exercise the real supervisor with local command stubs; never touch /app or Fly."""
+"""Exercise the real supervisor with local command stubs; never touch /app or the network."""
 
 import json
 import os
@@ -14,11 +14,22 @@ from tests.test_freshness import marker_payload
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# Scoped schema upgrades must never advance the refresh marker or trigger a full
+# pipeline, so rebuild tests use an interval no elapsed time can reach.
+NO_REFRESH_INTERVAL = "100000000000"
+
 
 def executable(path, contents):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(contents)
     path.chmod(0o755)
+
+
+def make_mart_stale(root, mart):
+    stale = root / "stale-marts"
+    marts = set(stale.read_text().split()) if stale.exists() else set()
+    marts.add(mart)
+    stale.write_text(" ".join(sorted(marts)) + "\n")
 
 
 @pytest.fixture
@@ -44,7 +55,14 @@ def supervisor(tmp_path):
         "elif '--record-success' in args:\n"
         " sys.exit(int(os.environ.get('MARKER_FAIL', '0')))\n"
         "elif '--record-failure' in args:\n"
-        " (root / 'attempt-failed').touch()\n",
+        " (root / 'attempt-failed').touch()\n"
+        "elif args[0] == '-':\n"
+        " script = sys.stdin.read()\n"
+        " stale_file = root / 'stale-marts'\n"
+        " stale = set(stale_file.read_text().split()) if stale_file.exists() else set()\n"
+        " marts = ('mart_feasibility_priority_queue', 'mart_trial_similarity')\n"
+        " checked = next((m for m in marts if m in script), '')\n"
+        " sys.exit(1 if checked in stale else 0)\n",
     )
     executable(
         tmp_path / ".venv/bin/streamlit",
@@ -61,15 +79,35 @@ def supervisor(tmp_path):
     executable(
         tmp_path / "bin/make",
         "#!/bin/bash\n"
-        "echo 'pipeline stdout sentinel'\n"
-        "echo 'pipeline stderr sentinel' >&2\n"
-        'touch "$CTI_PROJECT_ROOT/pipeline-ran"\n'
-        'exit "${PIPELINE_FAIL:-0}"\n',
+        'case "$1" in\n'
+        "  pipeline)\n"
+        "    echo 'pipeline stdout sentinel'\n"
+        "    echo 'pipeline stderr sentinel' >&2\n"
+        '    touch "$CTI_PROJECT_ROOT/pipeline-ran"\n'
+        '    exit "${PIPELINE_FAIL:-0}" ;;\n'
+        "  dbt-seed)\n"
+        '    touch "$CTI_PROJECT_ROOT/dbt-seed-ran" ;;\n'
+        "esac\n",
+    )
+    executable(
+        tmp_path / "bin/uv",
+        f"#!{sys.executable}\n"
+        "import os, pathlib, sys\n"
+        "root = pathlib.Path(os.environ['CTI_PROJECT_ROOT'])\n"
+        "with (root / 'uv-invocations.log').open('a') as f:\n"
+        " f.write(' '.join(sys.argv[1:]) + '\\n')\n"
+        "mart = next((a[1:] for a in sys.argv[1:] if a.startswith('+')), '')\n"
+        "if os.environ.get('REBUILD_FAIL_' + mart) == '1':\n"
+        " sys.exit(1)\n"
+        "stale = root / 'stale-marts'\n"
+        "if stale.exists() and mart:\n"
+        " marts = [m for m in stale.read_text().split() if m != mart]\n"
+        " stale.write_text(' '.join(marts) + ('\\n' if marts else ''))\n",
     )
     return tmp_path
 
 
-def run_supervisor(root, env, ready):
+def run_supervisor(root, env, ready, expect_exit=False):
     output = root / "stdout.log"
     with output.open("w") as sink:
         process = subprocess.Popen(
@@ -87,7 +125,19 @@ def run_supervisor(root, env, ready):
             start_new_session=True,
         )
         try:
-            deadline = time.monotonic() + 15
+            # The real-python variants import duckdb several times per boot;
+            # 30s keeps them stable on loaded machines.
+            deadline = time.monotonic() + 30
+            if expect_exit:
+                while time.monotonic() < deadline:
+                    if process.poll() is not None:
+                        assert process.returncode != 0, (
+                            "Supervisor exited 0 but was expected to refuse "
+                            f"startup: {output.read_text()}"
+                        )
+                        return output.read_text()
+                    time.sleep(0.02)
+                pytest.fail(f"Supervisor did not exit: {output.read_text()}")
             while time.monotonic() < deadline:
                 text = output.read_text()
                 if ready(text):
@@ -259,3 +309,109 @@ def test_real_low_disk_replaces_previous_reconciliation_error(supervisor, projec
     assert checked["metadata"]["error"] == after["error"]
     assert after["error"] in checked["errors"]
     assert previous["error"] not in checked["errors"]
+
+
+def test_stale_priority_queue_schema_rebuilds_before_serving(supervisor):
+    make_mart_stale(supervisor, "mart_feasibility_priority_queue")
+    text = run_supervisor(
+        supervisor,
+        {"CTI_REFRESH_INTERVAL_SECONDS": NO_REFRESH_INTERVAL},
+        lambda text: "dashboard serving (pid=" in text and (supervisor / "serving").exists(),
+    )
+    assert "priority queue mart schema is outdated" in text
+    assert "Priority Queue schema rebuild succeeded" in text
+    assert (
+        "--select +mart_feasibility_priority_queue"
+        in (supervisor / "uv-invocations.log").read_text()
+    )
+    assert "mart_trial_similarity" not in (supervisor / "uv-invocations.log").read_text()
+    assert (supervisor / "dbt-seed-ran").exists()
+    assert (supervisor / "serving").exists()
+    # Scoped upgrade only: full refresh state and warehouse data untouched.
+    assert not (supervisor / "pipeline-ran").exists()
+    assert (supervisor / "data/.last_pipeline_run").read_text() == "1\n"
+    assert not (supervisor / "attempt-failed").exists()
+    assert (supervisor / "data/warehouse/clinical_trials.duckdb").read_bytes() == (
+        b"previous serving warehouse"
+    )
+
+
+def test_current_schemas_skip_all_rebuilds(supervisor):
+    text = run_supervisor(
+        supervisor,
+        {"CTI_REFRESH_INTERVAL_SECONDS": NO_REFRESH_INTERVAL},
+        lambda text: "dashboard serving (pid=" in text and (supervisor / "serving").exists(),
+    )
+    assert "schema is outdated" not in text
+    assert not (supervisor / "uv-invocations.log").exists()
+    assert not (supervisor / "dbt-seed-ran").exists()
+    assert (supervisor / "serving").exists()
+
+
+def test_both_marts_stale_rebuilds_each_before_serving(supervisor):
+    make_mart_stale(supervisor, "mart_feasibility_priority_queue")
+    make_mart_stale(supervisor, "mart_trial_similarity")
+    text = run_supervisor(
+        supervisor,
+        {"CTI_REFRESH_INTERVAL_SECONDS": NO_REFRESH_INTERVAL},
+        lambda text: "dashboard serving (pid=" in text and (supervisor / "serving").exists(),
+    )
+    uv_log = (supervisor / "uv-invocations.log").read_text()
+    assert "--select +mart_feasibility_priority_queue" in uv_log
+    assert "--select +mart_trial_similarity" in uv_log
+    assert "Priority Queue schema rebuild succeeded" in text
+    assert "Trial Similarity schema rebuild succeeded" in text
+    assert (supervisor / "serving").exists()
+    assert not (supervisor / "pipeline-ran").exists()
+
+
+def test_failed_required_rebuild_refuses_to_serve(supervisor):
+    make_mart_stale(supervisor, "mart_feasibility_priority_queue")
+    text = run_supervisor(
+        supervisor,
+        {
+            "REBUILD_FAIL_mart_feasibility_priority_queue": "1",
+            "CTI_REFRESH_INTERVAL_SECONDS": NO_REFRESH_INTERVAL,
+        },
+        lambda text: False,
+        expect_exit=True,
+    )
+    assert "Priority Queue schema rebuild FAILED" in text
+    assert "refusing to serve an incompatible dashboard" in text
+    assert not (supervisor / "serving").exists()
+    assert not (supervisor / "pipeline-ran").exists()
+    assert (supervisor / "data/.last_pipeline_run").read_text() == "1\n"
+
+
+def test_denied_preflight_with_stale_schema_refuses_to_serve(supervisor):
+    make_mart_stale(supervisor, "mart_feasibility_priority_queue")
+    text = run_supervisor(
+        supervisor,
+        {"PREFLIGHT_FAIL": "1"},
+        lambda text: False,
+        expect_exit=True,
+    )
+    assert "disk preflight denied writes" in text
+    assert "refusing to serve an incompatible dashboard" in text
+    assert not (supervisor / "uv-invocations.log").exists()
+    assert not (supervisor / "dbt-seed-ran").exists()
+    assert not (supervisor / "serving").exists()
+
+
+def test_similarity_rebuild_failure_still_serves_independently(supervisor):
+    make_mart_stale(supervisor, "mart_trial_similarity")
+    text = run_supervisor(
+        supervisor,
+        {
+            "REBUILD_FAIL_mart_trial_similarity": "1",
+            "CTI_REFRESH_INTERVAL_SECONDS": NO_REFRESH_INTERVAL,
+        },
+        lambda text: "dashboard serving (pid=" in text and (supervisor / "serving").exists(),
+    )
+    assert "Trial Similarity schema rebuild FAILED" in text
+    assert "rebuild message for Trial Similarity" in text
+    assert (supervisor / "serving").exists()
+    assert (
+        "--select +mart_feasibility_priority_queue"
+        not in (supervisor / "uv-invocations.log").read_text()
+    )

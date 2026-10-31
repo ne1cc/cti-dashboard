@@ -88,15 +88,16 @@ run_pipeline() {
     return 1
 }
 
-run_similarity_rebuild() {
-    log "starting scoped Trial Similarity dbt build"
+run_scoped_rebuild() {
+    local mart="$1" label="$2"
+    log "starting scoped $label dbt build"
     mkdir -p "$DATA_DIR/tmp/dbt"
     if make dbt-seed >> "$LOG_DIR/pipeline.log" 2>&1 \
-        && uv run dbt build --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials/startup_profile --select +mart_trial_similarity --resource-type model --threads 1 >> "$LOG_DIR/pipeline.log" 2>&1; then
-        log "Trial Similarity schema rebuild succeeded"
+        && uv run dbt build --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials/startup_profile --select "+$mart" --resource-type model --threads 1 >> "$LOG_DIR/pipeline.log" 2>&1; then
+        log "$label schema rebuild succeeded"
         return 0
     fi
-    log "Trial Similarity schema rebuild FAILED"
+    log "$label schema rebuild FAILED"
     return 1
 }
 
@@ -123,6 +124,38 @@ except Exception:
     raise SystemExit(0)
 
 required = {"indication_profile_id", "nct_id_a", "nct_id_b", "similarity_rank"}
+raise SystemExit(0 if required <= columns else 1)
+PY
+}
+
+priority_queue_mart_is_current() {
+    [ -f "$WAREHOUSE" ] || return 1
+    "$PYTHON_BIN" - "$WAREHOUSE" <<'PY'
+import duckdb
+import sys
+
+try:
+    connection = duckdb.connect(sys.argv[1], read_only=True)
+    columns = {
+        row[0]
+        for row in connection.execute(
+            "select column_name from information_schema.columns "
+            "where table_schema = 'main_marts' and table_name = 'mart_feasibility_priority_queue'"
+        ).fetchall()
+    }
+    connection.close()
+except Exception:
+    # Unreadable or corrupt file: a scoped rebuild cannot fix it, and the next
+    # full pipeline refresh recreates the warehouse. Treat as current so the
+    # supervisor keeps serving instead of burning a doomed dbt build.
+    raise SystemExit(0)
+
+required = {
+    "priority_queue_key",
+    "indication_profile_id",
+    "active_recruiting_trials",
+    "operational_completeness_share",
+}
 raise SystemExit(0 if required <= columns else 1)
 PY
 }
@@ -165,9 +198,26 @@ if [ ! -f "$WAREHOUSE" ]; then
     else
         log "no warehouse found; cannot bootstrap under the disk floor; no previous warehouse exists"
     fi
-elif ! similarity_mart_is_current; then
-    log "trial similarity mart schema is outdated; rebuilding its dbt dependency graph before serving"
-    run_similarity_rebuild || log "schema rebuild failed; dashboard will show a rebuild message for Trial Similarity"
+else
+    # The Priority Queue pages crash against a stale schema, so this upgrade is
+    # required: without it, refuse to serve rather than boot known-broken pages.
+    if ! priority_queue_mart_is_current; then
+        if [ "$BOOT_PREFLIGHT_OK" -ne 1 ]; then
+            log "priority queue mart schema is outdated but the disk preflight denied writes; refusing to serve an incompatible dashboard"
+            exit 1
+        fi
+        log "priority queue mart schema is outdated; rebuilding its dbt dependency graph before serving"
+        if ! run_scoped_rebuild mart_feasibility_priority_queue "Priority Queue"; then
+            log "required schema rebuild FAILED; refusing to serve an incompatible dashboard"
+            exit 1
+        fi
+    fi
+    # Independent of the Priority Queue upgrade: the similarity page degrades
+    # to a rebuild message, so its rebuild stays best-effort.
+    if ! similarity_mart_is_current; then
+        log "trial similarity mart schema is outdated; rebuilding its dbt dependency graph before serving"
+        run_scoped_rebuild mart_trial_similarity "Trial Similarity" || log "schema rebuild failed; dashboard will show a rebuild message for Trial Similarity"
+    fi
 fi
 
 start_dashboard
