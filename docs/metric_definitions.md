@@ -99,7 +99,7 @@ Per ADR 0077, the composite priority score and categorical priority bands were r
 2. **Recent Growth (`new_recruiting_90d`, `recent_growth_input`):** `new_recruiting_90d` if multi-snapshot history exists, else `newly_posted_90d_proxy` (`growth_uses_registry_proxy_flag` exposes which source was used).
 3. **Sponsor Concentration (`sponsor_hhi`):** Herfindahl-Hirschman Index (Σ s_i²) measuring market concentration across segment sponsors, bounded in [0, 1.0].
 4. **Site Overlap Rate (`site_overlap_rate`, `site_overlap_share`):** Share of segment trials listing ≥1 facility that hosts multiple recruiting trials in this indication profile.
-5. **Operational Completeness Adjustment (`data_confidence_share`):** 0.5 × segment record-quality-ok share + 0.5 × run-level usable-location share. Reflects reporting and location usability; not scientific confidence.
+5. **Operational Completeness (`operational_completeness_share`):** 0.5 × segment record-quality-ok share + 0.5 × run-level usable-location share. The usable-location half is a run-level value from the profile's latest successful ingestion run, so it is constant across all segments of one profile. Reflects reporting and location usability; not scientific confidence.
 6. `priority_explanation` is assembled from fixed component phrases — the same inputs always yield the same sentence. Every row carries an `interpretation_note`.
 
 ## Scenario values (`src/analysis/roi_scenarios.py`)
@@ -205,9 +205,10 @@ non-recruiting status; 30/90-day windows include their lower boundary. A single
 captured date uses the explicitly labeled first-post ≥ snapshot minus 90 days proxy
 for the segment's growth input. Site overlap share is distinct recruiting segment
 trials listing any facility with >1 recruiting trial in the profile / distinct
-recruiting segment trials. The legacy operational completeness input is 0.5 ×
-segment record-quality-ok share + 0.5 × latest successful-run usable-location share;
-missing shares coalesce to zero. It is not scientific confidence.
+recruiting segment trials. The operational completeness input (`operational_completeness_share`)
+is 0.5 × segment record-quality-ok share + 0.5 × latest successful-run usable-location share;
+missing shares coalesce to zero. The usable-location half is a run-level value, constant
+across segments of one profile. It is not scientific confidence.
 
 Monthly counts use distinct NCT IDs across captured observations in the month.
 The three-calendar-month `RANGE` includes the current month and its three prior

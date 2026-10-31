@@ -748,9 +748,9 @@ models:
       - name: record_quality_ok_share
         data_type: DOUBLE
         description: Share of trials in this segment meeting baseline record quality criteria.
-      - name: data_confidence_share
+      - name: operational_completeness_share
         data_type: DOUBLE
-        description: Operational data completeness share (retained pending Issue #78).
+        description: Operational data completeness share (0.5 segment record-quality-ok share + 0.5 latest successful-run usable-location share; the usable-location half is constant across segments of one profile); display-only signal, not scientific confidence.
       - name: priority_explanation
         data_type: VARCHAR
         description: Plain-language summary of raw segment metrics for human review.

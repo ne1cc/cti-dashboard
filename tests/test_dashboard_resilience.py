@@ -567,3 +567,56 @@ def test_freshness_banner_uses_selected_capture_and_uncached_clock(
     monkeypatch.setattr(freshness, "utc_now", lambda: NOW + timedelta(days=8))
     fresh.run()
     assert any("stale" in warning.value.lower() for warning in fresh.warning)
+
+
+@pytest.mark.parametrize(
+    "page_script",
+    [
+        "dashboard/overview.py",
+        "dashboard/pages/1_Priority_Queue.py",
+    ],
+)
+def test_outdated_warehouse_missing_operational_completeness_stops_cleanly(
+    fixture_project_root: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    page_script: str,
+) -> None:
+    import shutil
+
+    import streamlit as st
+    from components import data
+    from streamlit.testing.v1 import AppTest
+
+    from src.config import get_config
+
+    dest = tmp_path / "stale_warehouse"
+    shutil.copytree(fixture_project_root, dest, symlinks=True)
+    db_file = dest / "data" / "warehouse" / "clinical_trials.duckdb"
+
+    con = duckdb.connect(str(db_file))
+    con.execute(
+        "create or replace table main_marts.mart_feasibility_priority_queue as "
+        "select * exclude (operational_completeness_share) "
+        "from main_marts.mart_feasibility_priority_queue"
+    )
+    con.close()
+
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(dest))
+    monkeypatch.chdir(dest)
+
+    get_config.cache_clear()
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    data._connection.clear()
+    data.query.clear()
+    data._table_exists.clear()
+    data._has_column.clear()
+
+    at = AppTest.from_file(str(ROOT / page_script), default_timeout=60).run()
+    assert not at.exception, at.exception[0].value if at.exception else ""
+    expected_msg = (
+        "Priority Queue is unavailable because the warehouse has an outdated "
+        "mart. Rebuild it with `make pipeline`."
+    )
+    assert any(expected_msg in str(err.value) for err in at.error)

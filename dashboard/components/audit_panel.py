@@ -31,9 +31,9 @@ PRIORITY_DERIVED_RULES = (
     "Growth sums daily recruiting entrants over 90 days, requiring a previous "
     "non-null non-recruiting status; with one captured date, first-post >= "
     "snapshot minus 90 days is the proxy. "
-    "data_confidence_share retains operational data completeness (0.5 segment "
+    "operational_completeness_share is operational data completeness (0.5 segment "
     "record-quality-ok share + 0.5 latest successful-run usable-location share; "
-    "missing shares coalesce to zero) as a quality signal pending Issue #78. "
+    "missing shares coalesce to zero). "
     "This panel audits count inputs and underlying study records; derived metric values "
     "remain warehouse calculations."
 )
@@ -171,11 +171,7 @@ def render_metric_audit(
                     & (segments.state_normalized == chosen_segment[1])
                     & (segments.phase_normalized == chosen_segment[2])
                 ]
-            display_context["displayed_metric_values"] = values.rename(
-                columns=lambda name: name.replace(
-                    "data_confidence", "legacy_operational_completeness"
-                )
-            ).to_dict("records")
+            display_context["displayed_metric_values"] = values.to_dict("records")
         if sponsors is not None:
             sponsor = st.selectbox(
                 "Audit sponsor",
