@@ -268,6 +268,35 @@ def test_run_transform_skips_a_retained_run_whose_bronze_was_pruned(tmp_path: Pa
     assert after["nct_id"].tolist() == before["nct_id"].tolist()
 
 
+def _pruned_bronze_run(tmp_path: Path, *, keep_silver: bool) -> tuple[ProjectConfig, str]:
+    cfg = make_config(tmp_path)
+    run_id = "r_pruned"
+    run_dir = cfg.paths.bronze_api_responses / f"run_id={run_id}"
+    write_bronze_page(run_dir, 1, [make_study("NCT00000001")])
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+    write_manifest(cfg.paths.bronze_manifests, make_manifest(run_id, record_count=1))
+    build_silver_for_run(make_manifest(run_id, record_count=1), cfg)
+    (cfg.paths.silver / "silver_trial_arms" / f"run_id={run_id}.parquet").unlink()
+    if not keep_silver:
+        (cfg.paths.silver / "silver_trials" / f"run_id={run_id}.parquet").unlink()
+    shutil.rmtree(run_dir)
+    return cfg, run_id
+
+
+def test_run_transform_explicit_rebuild_of_a_pruned_run_still_raises(tmp_path: Path):
+    cfg, run_id = _pruned_bronze_run(tmp_path, keep_silver=True)
+
+    with pytest.raises(FileNotFoundError, match="Bronze pages missing"):
+        build_silver_entities.run_transform(run_id=run_id, force=True, config=cfg)
+
+
+def test_run_transform_raises_for_a_run_with_no_silver_and_no_bronze(tmp_path: Path):
+    cfg, _ = _pruned_bronze_run(tmp_path, keep_silver=False)
+
+    with pytest.raises(FileNotFoundError, match="Bronze pages missing"):
+        build_silver_entities.run_transform(config=cfg)
+
+
 def test_profile_run_records_an_absent_manifest_instead_of_nothing_to_do(tmp_path: Path):
     """A run missing from the manifest directory must not read as reconcilable-clean.
 

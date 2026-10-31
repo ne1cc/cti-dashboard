@@ -376,3 +376,9 @@ def test_flatten_absent_design_fields_default_to_null_and_false():
     assert trial["brief_summary"] is None
     assert trial["primary_outcome_time_frame"] == "52 weeks"
     assert rows["silver_trial_arms"] == []
+
+
+def test_flatten_tolerates_explicit_null_description_module():
+    study = _study_with_design({"descriptionModule": None})
+    rows = flatten_study(study, "run1", "2026-10-02T00:00:00+00:00", TAXONOMY, GEOGRAPHY)
+    assert rows["silver_trials"][0]["brief_summary"] is None

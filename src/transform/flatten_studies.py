@@ -98,7 +98,7 @@ def flatten_study(
     identification = protocol.get("identificationModule", {})
     status = protocol.get("statusModule", {})
     design = protocol.get("designModule", {})
-    description = protocol.get("descriptionModule", {})
+    description = protocol.get("descriptionModule") or {}
     sponsors_module = protocol.get("sponsorCollaboratorsModule", {})
     eligibility = protocol.get("eligibilityModule", {})
     arm_groups = dig(protocol, "armsInterventionsModule", "armGroups")
