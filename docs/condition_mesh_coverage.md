@@ -11,10 +11,13 @@ v2 API (NSCLC) were reviewed and are documented below.
 - Spec: <https://clinicaltrials.gov/api/oas/v2> (OpenAPI 3.0.3, `info.version` 2.0.5),
   schemas `DerivedSection` → `BrowseModule` → `Mesh` / `BrowseLeaf` / `BrowseBranch`
 - Real-data sources:
-  - ADRD: local dev bronze snapshot `run_id=20260905T012941Z_fe9f104f` (2,618 studies, 2,523 with `conditionBrowseModule`)
+  - ADRD: local dev bronze snapshot `data/bronze/api_responses/run_id=20260905T012941Z_fe9f104f`
+    (2,618 studies, 2,523 with `conditionBrowseModule`) — captured 2026-09-05, not
+    committed to this repository; the reproduce block below accepts the path to
+    wherever a copy of that snapshot lives
   - NSCLC: live ClinicalTrials.gov API v2 query `query.cond=Non-small+cell+lung+cancer`
   - Committed fixture provenance: `GET /api/v2/studies/NCT02253732`, 2026-10-30
-- Report date: 2026-10-30 (updated Round 1 review)
+- Report date: 2026-10-31 (updated review rounds 1–2)
 
 ## Verified wire shape
 
@@ -61,26 +64,27 @@ Their condition grouping is completely independent of derived section presence:
 
 ### Real ADRD records (dev bronze run `20260905T012941Z_fe9f104f`)
 
-In a review of 500 studies from the dev bronze (where 2,523 of 2,618 studies have `conditionBrowseModule`),
-171 studies mapped at least one condition text to catch-all (`non_dementia_other`) or `unmapped`.
+In a review of the first 500 studies of the dev bronze (where 2,523 of 2,618 studies have `conditionBrowseModule`),
+171 studies mapped at least one condition text to the catch-all without a taxonomy rule above low confidence
+(`text_fallback` into `non_dementia_other`, or `unmapped`).
 Key patterns of disagreement:
 
 1. **Healthy volunteer / control cohorts (`NCT05532358`):**
    - Condition text: `['Healthy Volunteers']`.
    - YAML overlay: maps to `non_dementia_other` with low confidence.
-   - MeSH derived: `['Parkinson Disease', 'Alzheimer Disease', 'Multiple System Atrophy', 'Neurodegenerative Diseases', 'Tauopathies']`.
+   - MeSH derived (direct terms): `['Parkinson Disease 4, Autosomal Dominant Lewy Body', 'Multiple System Atrophy', 'Parkinson Disease', 'Alzheimer Disease', 'Neurodegenerative Diseases', 'Tauopathies']`.
    - Review: Because the trial evaluates healthy volunteers as a control group for neurodegenerative disease cohorts, the registry derives the underlying disease context from the full study record. MeSH restores discoverability that the text overlay lost.
 
 2. **Underlying syndrome and biomarker terms (`NCT05462106`):**
    - Condition text: `['Amyloid Plaque', 'Beta-Amyloid', 'DSAD', "Prodromal Alzheimer's Disease", "Alzheimer's Disease"]`.
-   - YAML overlay: maps `Alzheimer's Disease` to `alzheimers_disease`, but `Amyloid Plaque` and `DSAD` fall back to `non_dementia_other`.
-   - MeSH derived: `['Plaque, Amyloid', 'Alzheimer Disease', 'Dementia', 'Brain Diseases', 'Down Syndrome']`.
+   - YAML overlay: maps both Alzheimer's spellings to `alzheimers_disease`, but `Amyloid Plaque`, `Beta-Amyloid` and `DSAD` fall back to `non_dementia_other`.
+   - MeSH derived (direct terms): `['Plaque, Amyloid', 'Alzheimer Disease', 'Dementia', 'Brain Diseases', 'Central Nervous System Diseases', 'Down Syndrome']`.
    - Review: MeSH retains the Down Syndrome (DSAD) and amyloid pathology links, enabling cross-disease research across the MeSH hierarchy.
 
 3. **Multi-condition / brain injury studies (`NCT05446584`):**
-   - Condition text: `['Mild Cognitive Impairment', 'Amnestic Mild Cognitive Disorder', 'Mild Traumatic Brain Injury', 'Concussion, Brain']`.
-   - YAML overlay: maps MCI to `mild_cognitive_impairment` and sends concussion terms to `non_dementia_other`.
-   - MeSH derived: `['Cognitive Dysfunction', 'Brain Concussion']`.
+   - Condition text: `['Mild Cognitive Impairment', 'Amnestic Mild Cognitive Disorder', 'Amnestic Mild Cognitive Impairment', 'Mild Traumatic Brain Injury', 'Concussion, Brain']`.
+   - YAML overlay: maps all three MCI spellings to `mild_cognitive_impairment` and sends the brain-injury terms to `non_dementia_other`.
+   - MeSH derived (direct terms): `['Cognitive Dysfunction', 'Brain Concussion']`.
    - Review: MeSH accurately indexes both the cognitive and traumatic brain injury facets without bespoke taxonomy rules.
 
 ### Real NSCLC records (live ClinicalTrials.gov API v2)
@@ -88,14 +92,14 @@ Key patterns of disagreement:
 1. **Complication & symptom studies (`NCT03803787`):**
    - Condition text: `['Radiation Pneumonitis']`.
    - YAML overlay: maps to catch-all `other_thoracic_oncology` (low confidence).
-   - MeSH derived: `['Radiation Pneumonitis', 'Carcinoma, Non-Small-Cell Lung', 'Thoracic Neoplasms', 'Lung Diseases']`.
+   - MeSH derived (direct terms): `['Radiation Pneumonitis', 'Carcinoma, Non-Small-Cell Lung', 'Respiratory Tract Neoplasms', 'Radiation Fibrosis Syndrome', 'Thoracic Neoplasms', 'Lung Diseases', 'Lung Injury']`.
    - Review: A trial investigating radiation pneumonitis in lung cancer patients is linked directly to `Carcinoma, Non-Small-Cell Lung` in MeSH, making it discoverable under both lung cancer and radiation injury trees.
 
 2. **Basket and multi-indication trials (`NCT03836352`):**
-   - Condition text: `['Ovarian Cancer', 'Hepatocellular Carcinoma', 'Non-small Cell Lung Cancer', 'Bladder Cancer']`.
-   - YAML overlay: maps `Non-small Cell Lung Cancer` to `nsclc_unspecified` and sends the other three tumor types to `other_thoracic_oncology`.
-   - MeSH derived: `['Carcinoma, Non-Small-Cell Lung', 'Ovarian Neoplasms', 'Carcinoma, Hepatocellular', 'Urinary Bladder Neoplasms']`.
-   - Review: The YAML overlay is blind to non-NSCLC malignancies; MeSH indexes all four distinct tumor types faithfully.
+   - Condition text: `['Ovarian Cancer', 'Hepatocellular Carcinoma', 'Non-small Cell Lung Cancer', 'Bladder Cancer', 'Microsatellite Instability-High']`.
+   - YAML overlay: maps `Non-small Cell Lung Cancer` to `nsclc_unspecified` and sends the other tumor types to `other_thoracic_oncology`.
+   - MeSH derived (direct terms): `['Ovarian Neoplasms', 'Carcinoma, Hepatocellular', 'Carcinoma, Non-Small-Cell Lung', 'Urinary Bladder Neoplasms']`.
+   - Review: The YAML overlay is blind to non-NSCLC malignancies; MeSH indexes the four distinct tumor types faithfully.
 
 3. **Broad terminology (`NCT00080509`):**
    - Condition text: `['Lung Cancer']`.
@@ -112,26 +116,143 @@ Existing ADRD and NSCLC views continue rendering through the YAML overlays:
 
 ## How to reproduce
 
+Run from the repository root. Steps 1–2 rebuild the fixture table rows with
+`dbt build` (they are not prepare-only), and step 3 re-derives the real-record
+counts and the disagreement selection. The fixture warehouses reproduce only
+the fixture numbers: the real-record evidence needs the local ADRD bronze
+snapshot listed under "Real-data sources" (not committed to this repository)
+and network access for the live NSCLC records.
+
 ```bash
 TMP_DIR=$(mktemp -d)
 
-# 1. Base fixtures (ADRD and NSCLC base snapshot runs)
-uv run python -m tests.fixture_warehouse --root "${TMP_DIR}/base_db" --prepare-only
+# 1. Base fixture warehouse, both profiles, built end to end
+#    (table rows "ADRD base fixture" and "NSCLC base fixture").
+uv run python -m tests.fixture_warehouse --root "${TMP_DIR}/base_db"
 
-# 2. Build fixture warehouse with MeSH fixture for ADRD and NSCLC
-python -c "
-import os
+# 2. MeSH fixture warehouses for both profiles, built end to end
+#    (table rows "ADRD x mesh fixture" and "NSCLC x mesh fixture").
+uv run python - "${TMP_DIR}" <<'PY'
+import sys
 from pathlib import Path
-from tests.fixture_warehouse import build_fixture_warehouse, FixtureRun
-from tests.test_condition_mesh import mesh_run
 
-tmp = Path(os.environ['TMP_DIR'])
-build_fixture_warehouse(tmp / 'mesh_db', runs=[mesh_run()])
-"
+from tests.fixture_warehouse import build_fixture_warehouse
+from tests.test_condition_mesh import mesh_run, nsclc_mesh_run
 
-# 3. Inspect warehouse in DuckDB
-cd "${TMP_DIR}/mesh_db" && uv run duckdb data/warehouse/clinical_trials.duckdb
+root = Path(sys.argv[1])
+build_fixture_warehouse(root / "mesh_db_adrd", runs=[mesh_run()])
+build_fixture_warehouse(root / "mesh_db_nsclc", runs=[nsclc_mesh_run()])
+PY
+
+# 3a. Real ADRD records. Reads the local dev bronze snapshot — provenance
+#     under "Real-data sources"; pass the path to your copy as the argument.
+#     Prints the totals quoted above, one line per text_fallback study in the
+#     first 500 records (the disagreement selection pool), and the three
+#     reviewed studies with their overlay/MeSH split.
+uv run python - data/bronze/api_responses/run_id=20260905T012941Z_fe9f104f <<'PY'
+import json
+import sys
+from pathlib import Path
+
+from src.transform.normalize_conditions import get_taxonomy
+
+run_dir = Path(sys.argv[1])
+pages = sorted(run_dir.glob("page=*.json"))
+if not pages:
+    raise SystemExit(
+        f"no bronze pages under {run_dir} — pass the path to your copy of the "
+        "run_id=20260905T012941Z_fe9f104f snapshot (see Real-data sources)"
+    )
+
+tax = get_taxonomy()
+
+
+def split_conditions(texts):
+    # Mirrors the silver rule (flatten_studies): a taxonomy match with
+    # confidence above low is yaml_overlay, everything else text_fallback.
+    return [
+        (
+            text,
+            tax.map_condition(text).condition_group,
+            "yaml_overlay" if tax.map_condition(text).mapping_confidence != "low"
+            else "text_fallback",
+            tax.map_condition(text).condition_normalized is not None,
+        )
+        for text in texts
+    ]
+
+
+records = modules = fallback_studies = 0
+seen = 0
+for page in pages:
+    for study in json.loads(page.read_text(encoding="utf-8"))["studies"]:
+        records += 1
+        if "conditionBrowseModule" in study.get("derivedSection", {}):
+            modules += 1
+        nct = study["protocolSection"]["identificationModule"]["nctId"]
+        rows = split_conditions(
+            study["protocolSection"].get("conditionsModule", {}).get("conditions", [])
+        )
+        fallback = [t for t, _, s, known in rows if s == "text_fallback" and known]
+        if seen < 500 and fallback:
+            fallback_studies += 1
+            print("FALLBACK", nct, fallback)
+        if seen < 500 and nct in {"NCT05532358", "NCT05462106", "NCT05446584"}:
+            mesh = [
+                m["term"]
+                for m in study.get("derivedSection", {})
+                .get("conditionBrowseModule", {})
+                .get("meshes", [])
+            ]
+            print("REVIEW", nct, [(t, g, s) for t, g, s, _ in rows], mesh)
+        seen += 1
+print(
+    f"records={records} with_conditionBrowseModule={modules} "
+    f"text_fallback_studies_in_first_500={fallback_studies}"
+)
+PY
+
+# 3b. Real NSCLC records (live ClinicalTrials.gov API v2, needs network).
+#     Prints the three reviewed studies with their overlay mapping and
+#     direct MeSH terms.
+uv run python - <<'PY'
+import json
+import urllib.request
+
+from src.transform.normalize_conditions import load_taxonomy
+
+nsclc = load_taxonomy("config/condition_taxonomy_nsclc.yml")
+for nct in ("NCT03803787", "NCT03836352", "NCT00080509"):
+    with urllib.request.urlopen(f"https://clinicaltrials.gov/api/v2/studies/{nct}") as r:
+        study = json.load(r)
+    rows = [
+        (t, nsclc.map_condition(t).condition_group, nsclc.map_condition(t).mapping_confidence)
+        for t in study["protocolSection"].get("conditionsModule", {}).get("conditions", [])
+    ]
+    module = study.get("derivedSection", {}).get("conditionBrowseModule", {})
+    print("REVIEW", nct, rows, [m["term"] for m in module.get("meshes", [])])
+PY
+
+# 4. Inspect any of the three warehouses.
+cd "${TMP_DIR}/base_db" && uv run duckdb data/warehouse/clinical_trials.duckdb
+cd "${TMP_DIR}/mesh_db_adrd" && uv run duckdb data/warehouse/clinical_trials.duckdb
+cd "${TMP_DIR}/mesh_db_nsclc" && uv run duckdb data/warehouse/clinical_trials.duckdb
 ```
+
+Expected outputs:
+
+- Step 1 `base_db`: the two base-fixture table rows — 10 trials per profile,
+  0 with `conditionBrowseModule`, 7 overlay-mapped trials per profile and
+  4 (ADRD) / 6 (NSCLC) trials with a fallback row — one ADRD trial and three
+  NSCLC trials carry both an overlay row and a fallback row, which is why the
+  per-row buckets exceed 10.
+- Step 2 `mesh_db_adrd`: 3 trials, 2 with `conditionBrowseModule`, 6 direct
+  MeSH rows (5 distinct terms), 15 distinct ancestor nodes.
+- Step 2 `mesh_db_nsclc`: same MeSH numbers under the NSCLC taxonomy;
+  0 of 3 trials overlay-mapped, 3 of 3 fallback.
+- Step 3a: `records=2618 with_conditionBrowseModule=2523
+  text_fallback_studies_in_first_500=171`, the 171-study fallback pool, and
+  the three reviewed studies whose classifications are quoted above.
 
 ```sql
 -- 1. Coverage: derived-section presence and explicit has_derived_mesh flag

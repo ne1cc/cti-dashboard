@@ -10,6 +10,7 @@ similarity inputs exclude ancestor edges.
 """
 
 import os
+import shutil
 from datetime import timedelta
 from pathlib import Path
 
@@ -26,7 +27,13 @@ from src.transform.flatten_studies import (
 from src.transform.normalize_conditions import get_taxonomy
 from src.transform.normalize_locations import get_geography_rules
 from tests.conftest import FIXTURE_SNAPSHOT_DAY
-from tests.fixture_warehouse import FixtureRun, build_fixture_warehouse
+from tests.fixture_warehouse import (
+    FixtureRun,
+    _clear_caches,
+    build_dbt_fixture,
+    build_fixture_warehouse,
+    prepare_fixture_root,
+)
 
 TAXONOMY = get_taxonomy()
 GEOGRAPHY = get_geography_rules()
@@ -163,6 +170,21 @@ def mesh_run() -> FixtureRun:
     )
 
 
+def nsclc_mesh_run() -> FixtureRun:
+    """The same MeSH fixture page under the NSCLC taxonomy overlay.
+
+    Exists so docs/condition_mesh_coverage.md can reproduce the report's
+    NSCLC x mesh fixture row with the same helper the ADRD row uses.
+    """
+    return FixtureRun(
+        profile="oncology_nsclc",
+        run_id="20260901T130001Z_fixturemesh",
+        started_at=FIXTURE_SNAPSHOT_DAY + timedelta(hours=13, minutes=30),
+        condition="Non-Small Cell Lung Cancer",
+        fixture_dir="condition_mesh",
+    )
+
+
 @pytest.fixture(scope="module")
 def mesh_warehouse(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """One warehouse: a single ADRD run over the mesh fixture page."""
@@ -245,7 +267,10 @@ def test_overlay_group_nodes_keep_taxonomy_semantics(mesh_warehouse: Path):
         ("group:frontotemporal_dementia", "frontotemporal_dementia", "yaml_overlay", 1),
         ("group:non_dementia_other", "non_dementia_other", "text_fallback", 1),
     ]
-    # The trial without a derived section is flagged only by its fallback row.
+    # The trial without a derived section keeps only its overlay group row;
+    # its missing derived section is flagged explicitly as has_derived_mesh =
+    # false on dim_trial (test_dim_trial_has_derived_mesh_flag), independent
+    # of this yaml_overlay classification.
     rows = query(
         mesh_warehouse,
         """
@@ -474,3 +499,114 @@ def test_group_counts_unchanged_by_mesh_rows(mesh_warehouse: Path):
         ("NCT99000002", 1),
         ("NCT99000003", 1),
     ]
+
+
+def test_old_schema_silver_with_pruned_bronze_builds_end_to_end(
+    tmp_path_factory: pytest.TempPathFactory,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Round-2 finding 1: a retained old-only silver tree upgrades, not just skips.
+
+    Rewinds a prepared TEMP fixture to the pre-upgrade shape — mapping_source
+    dropped from every condition Parquet, every silver_trial_condition_mesh
+    file removed, bronze pruned — then runs the transform (plain and forced,
+    both profiles' manifests) and a full dbt build. Before the schema-safe
+    staging reads this failed twice: union_by_name cannot supply a column that
+    no input file defines (Binder Error on stg_trial_conditions), and
+    read_parquet raises on the file-less MeSH glob (IO Error). The silver in
+    the repository tree is never touched: everything happens under tmp_path.
+    """
+    root = prepare_fixture_root(tmp_path_factory.mktemp("legacy_upgrade"))
+
+    # Baseline: the current-schema mapping_source values, captured before the
+    # rewind. The post-build assertion compares the legacy inference against
+    # these rows, so "truthful" is measured, not assumed from literals.
+    con = duckdb.connect()
+    condition_files = sorted(
+        str(p) for p in (root / "data" / "silver" / "silver_trial_conditions").glob("*.parquet")
+    )
+    assert len(condition_files) == 2  # one file per fixture run
+    expected_conditions = sorted(
+        con.execute(
+            "select indication_profile_id, nct_id, condition_raw, condition_group, "
+            "mapping_source from read_parquet(?)",
+            [condition_files],
+        ).fetchall()
+    )
+    con.close()
+
+    # 1. Rewind every condition file to the pre-mapping_source schema.
+    conditions_dir = root / "data" / "silver" / "silver_trial_conditions"
+    for path in sorted(conditions_dir.glob("*.parquet")):
+        con = duckdb.connect()
+        staged = path.parent / (path.name + ".legacy")
+        con.execute(
+            f"copy (select * exclude (mapping_source) from read_parquet('{path}')) "
+            f"to '{staged}' (format parquet)"
+        )
+        con.close()
+        os.replace(staged, path)
+        # Precondition: the column really is gone from the rewritten file.
+        check = duckdb.connect()
+        names = [
+            row[0] for row in check.execute(f"select name from parquet_schema('{path}')").fetchall()
+        ]
+        check.close()
+        assert "mapping_source" not in names
+
+    # 2. Omit the MeSH entity entirely (no run ever produced it).
+    shutil.rmtree(root / "data" / "silver" / "silver_trial_condition_mesh")
+
+    # 3. Prune bronze in this TEMP fixture only (retention keeps 1 bronze run
+    #    against 3 snapshots, so this is the normal production shape).
+    for run_dir in root.glob("data/bronze/*/api_responses/run_id=*"):
+        shutil.rmtree(run_dir)
+
+    # 4. The transform must skip both retained runs — plain and forced —
+    #    instead of raising FileNotFoundError, keeping silver as written.
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(root))
+    _clear_caches()
+    try:
+        from src.profiles import load_profile, load_shared_paths
+        from src.transform.build_silver_entities import run_transform
+
+        shared = load_shared_paths(root / "config" / "shared_paths.yml")
+        nsclc = load_profile(root / "config/profiles/oncology_nsclc.yml", shared=shared)
+        assert run_transform() == []  # ADRD manifests via the global config
+        assert run_transform(config=nsclc.config) == []
+        assert run_transform(force=True) == []
+        assert run_transform(config=nsclc.config, force=True) == []
+    finally:
+        _clear_caches()
+
+    # 5. The warehouse builds: staging downgrades to the legacy reads.
+    build_dbt_fixture(root)
+
+    # The MeSH entity reads as typed empty, and no trial claims derived data.
+    assert query(root, "select count(*) from main_staging.stg_trial_condition_mesh") == [(0,)]
+    assert query(
+        root,
+        "select count(*), count(*) filter (where has_derived_mesh) from main_marts.dim_trial",
+    ) == [(20, 0)]
+
+    # Legacy mapping_source is inferred truthfully: row for row (profile,
+    # trial, condition text, group, source) identical to the captured
+    # new-schema silver — not flattened to one value.
+    assert (
+        query(
+            root,
+            """
+        select indication_profile_id, nct_id, condition_raw, condition_group, mapping_source
+        from main_staging.stg_trial_conditions
+        order by all
+        """,
+        )
+        == expected_conditions
+    )
+    # The group marts match the current-schema cardinalities (6 ADRD + 4 NSCLC
+    # group nodes, as pinned on the base fixture in test_dbt_fixture_build).
+    assert query(
+        root,
+        "select indication_profile_id, count(*) from main_marts.dim_condition "
+        "group by 1 order by 1",
+    ) == [("adrd", 6), ("oncology_nsclc", 4)]
