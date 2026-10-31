@@ -283,11 +283,17 @@ def _pruned_bronze_run(tmp_path: Path, *, keep_silver: bool) -> tuple[ProjectCon
     return cfg, run_id
 
 
-def test_run_transform_explicit_rebuild_of_a_pruned_run_still_raises(tmp_path: Path):
+@pytest.mark.parametrize(("explicit_run", "force"), [(True, False), (False, True), (True, True)])
+def test_run_transform_explicit_rebuild_of_a_pruned_run_still_raises(
+    tmp_path: Path, explicit_run: bool, force: bool
+):
+    """Either rebuild option must raise when retained silver has no bronze source."""
     cfg, run_id = _pruned_bronze_run(tmp_path, keep_silver=True)
 
     with pytest.raises(FileNotFoundError, match="Bronze pages missing"):
-        build_silver_entities.run_transform(run_id=run_id, force=True, config=cfg)
+        build_silver_entities.run_transform(
+            run_id=run_id if explicit_run else None, force=force, config=cfg
+        )
 
 
 def test_run_transform_raises_for_a_run_with_no_silver_and_no_bronze(tmp_path: Path):
