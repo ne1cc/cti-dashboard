@@ -356,6 +356,69 @@ def test_normalize_study_detail_conforms_to_schema(
     assert detail.sites[0].distance_miles is not None
 
 
+# --- Participant-relevant design data (arms, placebo, stop reason, timing) ---
+
+
+def test_normalize_study_detail_captures_arms_placebo_and_summary(
+    live_detail_fixture: dict[str, Any],
+) -> None:
+    detail = normalize_study_detail(live_detail_fixture)
+
+    assert detail.has_placebo_arm is True
+    assert [arm.arm_type for arm in detail.arms] == ["EXPERIMENTAL", "PLACEBO_COMPARATOR"]
+    assert detail.arms[0].label == "BIIB080"
+    assert detail.arms[0].intervention_names == ["Drug: BIIB080"]
+    assert detail.arms[1].label == "Placebo"
+    # Registry text passes through verbatim, labelled as registry-provided
+    assert detail.brief_summary.startswith(
+        "This phase 3 study evaluates the efficacy and safety of BIIB080"
+    )
+    assert detail.primary_outcome_time_frame == "78 weeks"
+    assert detail.study_design.masking == "QUADRUPLE"
+    assert detail.study_design.intervention_model == "PARALLEL"
+
+
+def test_normalize_study_detail_passes_why_stopped_verbatim(
+    live_detail_fixture: dict[str, Any],
+) -> None:
+    study = deepcopy(live_detail_fixture)
+    study["protocolSection"]["statusModule"]["overallStatus"] = "TERMINATED"
+    study["protocolSection"]["statusModule"]["whyStopped"] = (
+        "Sponsor decided to discontinue due to enrollment below projections."
+    )
+    detail = normalize_study_detail(study)
+    assert detail.overall_status == "TERMINATED"
+    assert (
+        detail.why_stopped == "Sponsor decided to discontinue due to enrollment below projections."
+    )
+
+
+def test_normalize_study_detail_absent_arm_data_defaults(live_detail_fixture) -> None:
+    study = deepcopy(live_detail_fixture)
+    del study["protocolSection"]["armsInterventionsModule"]["armGroups"]
+    del study["protocolSection"]["descriptionModule"]
+    del study["protocolSection"]["outcomesModule"]
+    detail = normalize_study_detail(study)
+    assert detail.arms == []
+    assert detail.has_placebo_arm is False
+    assert detail.brief_summary is None
+    assert detail.primary_outcome_time_frame is None
+
+
+def test_normalize_study_detail_tolerates_explicit_null_modules(live_detail_fixture) -> None:
+    """The registry can send `"key": null` as well as omitting the key; both
+    degrade to the same defaults instead of TypeError/AttributeError."""
+    study = deepcopy(live_detail_fixture)
+    study["protocolSection"]["armsInterventionsModule"]["armGroups"] = None
+    study["protocolSection"]["descriptionModule"] = None
+    study["protocolSection"]["outcomesModule"] = None
+    detail = normalize_study_detail(study)
+    assert detail.arms == []
+    assert detail.has_placebo_arm is False
+    assert detail.brief_summary is None
+    assert detail.primary_outcome_time_frame is None
+
+
 # --- Issue #62 Structured Eligibility & Unstated Ages ---
 
 

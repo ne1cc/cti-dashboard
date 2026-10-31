@@ -159,6 +159,12 @@ def _init_fixture_database(db_path: Path) -> None:
         enrollment_type VARCHAR,
         allocation VARCHAR,
         primary_purpose VARCHAR,
+        intervention_model VARCHAR,
+        masking VARCHAR,
+        has_placebo_arm BOOLEAN,
+        why_stopped VARCHAR,
+        brief_summary VARCHAR,
+        primary_outcome_time_frame VARCHAR,
         lead_sponsor_name VARCHAR,
         lead_sponsor_normalized VARCHAR,
         responsible_party_type VARCHAR,
@@ -236,6 +242,18 @@ def _init_fixture_database(db_path: Path) -> None:
         intervention_type VARCHAR,
         intervention_description VARCHAR,
         intervention_normalized VARCHAR,
+        source_json_hash VARCHAR
+    );
+
+    CREATE TABLE stg_trial_arms (
+        ingestion_run_id VARCHAR,
+        indication_profile_id VARCHAR,
+        nct_id VARCHAR,
+        arm_ordinal BIGINT,
+        arm_label VARCHAR,
+        arm_type VARCHAR,
+        arm_description VARCHAR,
+        intervention_names VARCHAR[],
         source_json_hash VARCHAR
     );
     """)
@@ -340,6 +358,9 @@ def _init_fixture_database(db_path: Path) -> None:
         'INTERVENTIONAL', 'RECRUITING', null, '2026-06', false,
         '2024-01-10', '2027-01-10', '2027-06-10', '2024-01-01', null, '2026-06-15',
         'Phase 3', 'PHASE3', 350, 'ESTIMATED', 'RANDOMIZED', 'TREATMENT',
+        'PARALLEL', 'DOUBLE', true, 'Study halted after the interim futility review.',
+        'Phase 3 trial of an investigational tau-targeted therapy.',
+        '78 weeks',
         'NeuroPharm Inc', 'neuropharm inc', 'SPONSOR', false,
         '55 Years', '55 Years', 55.0, '85 Years', '85 Years', 85.0, 'ALL',
         false, null, ['ADULT', 'OLDER_ADULT'],
@@ -354,6 +375,7 @@ def _init_fixture_database(db_path: Path) -> None:
         'INTERVENTIONAL', 'ACTIVE_NOT_RECRUITING', null, '2026-05', false,
         '2023-06-01', '2026-12-01', '2027-01-01', '2023-05-15', null, '2026-05-10',
         'Phase 2', 'PHASE2', 120, 'ACTUAL', 'RANDOMIZED', 'TREATMENT',
+        'PARALLEL', 'NONE', false, null, null, '12 months',
         'Cedar Cognitive Institute', 'cedar cognitive institute', 'PRINCIPAL_INVESTIGATOR', true,
         '60 Years', '60 Years', 60.0, null, null, null, 'FEMALE',
         false, null, ['OLDER_ADULT'], 'Inclusion criteria: Women age 60+, MCI diagnosis.',
@@ -367,6 +389,7 @@ def _init_fixture_database(db_path: Path) -> None:
         'INTERVENTIONAL', 'COMPLETED', null, '2026-04', false,
         '2022-03-15', '2025-03-15', '2025-06-15', '2022-03-01', '2025-07-01', '2026-04-01',
         'Phase 3', 'PHASE3', 500, 'ACTUAL', 'NON_RANDOMIZED', 'TREATMENT',
+        'PARALLEL', null, false, null, null, '6 months',
         'OncoTarget Corp', 'oncotarget corp', 'SPONSOR', false,
         null, null, null, null, null, null, 'ALL',
         false, null, ['ADULT', 'OLDER_ADULT'], 'Inclusion: Histologically confirmed NSCLC.',
@@ -380,6 +403,7 @@ def _init_fixture_database(db_path: Path) -> None:
         'INTERVENTIONAL', 'RECRUITING', null, '2026-07', false,
         '2025-01-01', '2026-08-01', '2026-10-01', '2024-12-15', null, '2026-07-01',
         'Phase 1', 'PHASE1', 40, 'ESTIMATED', 'NON_RANDOMIZED', 'DEVICE_FEASIBILITY',
+        'SINGLE_GROUP', null, false, null, null, null,
         'BioGenix Labs', 'biogenix labs', 'SPONSOR_INVESTIGATOR', true,
         '18 Years', '18 Years', 18.0, '50 Years', '50 Years', 50.0, 'MALE',
         false, null, ['ADULT'], 'Inclusion: Men aged 18 to 50.',
@@ -457,6 +481,17 @@ def _init_fixture_database(db_path: Path) -> None:
      'Oral tyrosine kinase inhibitor', 'kinase-x', 'hi3'),
     ('run_01', 'adrd', 'NCT00000004', 'NeuroStim DBS', 'DEVICE',
      'Deep brain stimulation micro-electrode array', 'neurostim dbs', 'hi4');
+    """)
+
+    # Arm groups (registry text verbatim; NCT00000001 carries a placebo comparator)
+    con.execute("""
+    INSERT INTO stg_trial_arms VALUES
+    ('run_01', 'adrd', 'NCT00000001', 0, 'Tau-001', 'EXPERIMENTAL',
+     'Investigational anti-tau small molecule', ['Drug: Tau-001'], 'ha1'),
+    ('run_01', 'adrd', 'NCT00000001', 1, 'Placebo', 'PLACEBO_COMPARATOR',
+     'Matching placebo administered intrathecally', ['Drug: Placebo'], 'ha2'),
+    ('run_01', 'adrd', 'NCT00000002', 0, 'CogniMab', 'EXPERIMENTAL',
+     null, ['Drug: CogniMab'], 'ha3');
     """)
 
     con.close()
@@ -887,6 +922,12 @@ def test_keyset_pagination_with_null_dates_across_all_date_sorts(tmp_path: Path)
         intervention_name VARCHAR,
         intervention_type VARCHAR
     );
+
+    CREATE TABLE stg_trial_arms (
+        nct_id VARCHAR,
+        ingestion_run_id VARCHAR,
+        arm_ordinal BIGINT
+    );
     """)
 
     # 5 trials: 2 with dates, 3 with NULL dates
@@ -999,6 +1040,8 @@ def test_warehouse_trial_detail_success(client_warehouse: TestClient) -> None:
     assert detail.overall_status == "RECRUITING"
     assert detail.study_design.phase_normalized == "PHASE3"
     assert detail.study_design.phases == ["Phase 3"]
+    assert detail.study_design.intervention_model == "PARALLEL"
+    assert detail.study_design.masking == "DOUBLE"
     assert detail.enrollment.count == 350
     assert detail.dates.start_date == "2024-01-10"
     assert detail.sponsors.lead_sponsor.name == "NeuroPharm Inc"
@@ -1007,6 +1050,16 @@ def test_warehouse_trial_detail_success(client_warehouse: TestClient) -> None:
     assert detail.eligibility.minimum_age_years == 55.0
     assert detail.eligibility.maximum_age_years == 85.0
     assert len(detail.sites) == 2
+
+    # Participant-relevant design data (registry text verbatim)
+    assert detail.has_placebo_arm is True
+    assert [arm.arm_type for arm in detail.arms] == ["EXPERIMENTAL", "PLACEBO_COMPARATOR"]
+    placebo_arm = detail.arms[1]
+    assert placebo_arm.label == "Placebo"
+    assert placebo_arm.intervention_names == ["Drug: Placebo"]
+    assert detail.why_stopped == "Study halted after the interim futility review."
+    assert detail.brief_summary == "Phase 3 trial of an investigational tau-targeted therapy."
+    assert detail.primary_outcome_time_frame == "78 weeks"
 
     # Verify site distance computation
     ucsf_site = next(s for s in detail.sites if "UCSF" in s.facility_name)
@@ -1021,6 +1074,39 @@ def test_warehouse_trial_detail_success(client_warehouse: TestClient) -> None:
     site_dict = ucsf_site.model_dump()
     for forbidden in ("investigator_name", "email", "phone", "contact_name", "contact_email"):
         assert forbidden not in site_dict
+
+
+def test_warehouse_trial_detail_absent_design_data(client_warehouse: TestClient) -> None:
+    """A trial with non-placebo arms and no stop reason reports false/null, not errors."""
+    resp = client_warehouse.get("/v1/trials/NCT00000002")
+    assert resp.status_code == 200
+    detail = TrialDetail(**resp.json())
+    assert detail.has_placebo_arm is False
+    assert [arm.arm_type for arm in detail.arms] == ["EXPERIMENTAL"]
+    assert detail.why_stopped is None
+    assert detail.brief_summary is None
+    assert detail.study_design.masking == "NONE"
+
+    # A trial with no arm rows at all still serializes an empty list.
+    resp = client_warehouse.get("/v1/trials/NCT00000004")
+    assert resp.status_code == 200
+    detail = TrialDetail(**resp.json())
+    assert detail.has_placebo_arm is False
+    assert detail.arms == []
+    assert detail.primary_outcome_time_frame is None
+
+
+def test_warehouse_trial_detail_null_placebo_stays_unknown(
+    warehouse_db: Path, client_warehouse: TestClient
+) -> None:
+    """A pre-feature row (NULL flag) must not surface as "no placebo"."""
+    con = duckdb.connect(str(warehouse_db))
+    con.execute("update stg_trials set has_placebo_arm = null where nct_id = 'NCT00000002'")
+    con.close()
+    resp = client_warehouse.get("/v1/trials/NCT00000002")
+    assert resp.status_code == 200
+    detail = TrialDetail(**resp.json())
+    assert detail.has_placebo_arm is None
 
 
 def test_warehouse_trial_detail_not_found(client_warehouse: TestClient) -> None:

@@ -20,6 +20,12 @@ sources:
         description: One row per NCT ID + raw condition + run, with taxonomy mapping.
       - name: silver_trial_interventions
         description: One row per NCT ID + intervention + run.
+      - name: silver_trial_arms
+        description: >
+          One row per NCT ID + arm group + run, with the original zero-based
+          arm_ordinal. Labels, types (including PLACEBO_COMPARATOR),
+          descriptions and intervention name lists are stored verbatim from the
+          registry.
       - name: silver_trial_sponsors
         description: One row per NCT ID + sponsor/collaborator + run.
       - name: silver_trial_locations

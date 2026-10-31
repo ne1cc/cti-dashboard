@@ -82,6 +82,12 @@
         "designModule": {
           "studyType": "INTERVENTIONAL",
           "phases": ["PHASE2"],
+          "designInfo": {
+            "allocation": "RANDOMIZED",
+            "interventionModel": "PARALLEL",
+            "primaryPurpose": "TREATMENT",
+            "maskingInfo": { "masking": "DOUBLE", "whoMasked": ["PARTICIPANT", "INVESTIGATOR"] }
+          },
           "enrollmentInfo": { "count": 120, "type": "Actual" }
         },
         "conditionsModule": {
@@ -90,7 +96,24 @@
         "armsInterventionsModule": {
           "interventions": [
             { "name": "CSF biomarker panel", "type": "Procedure" }
+          ],
+          "armGroups": [
+            {
+              "label": "CSF biomarker panel",
+              "type": "EXPERIMENTAL",
+              "description": "Participants receive the CSF biomarker panel procedure.",
+              "interventionNames": ["Procedure: CSF biomarker panel"]
+            },
+            {
+              "label": "Sham procedure",
+              "type": "PLACEBO_COMPARATOR",
+              "description": "Participants receive a sham lumbar puncture procedure.",
+              "interventionNames": ["Procedure: Sham lumbar puncture"]
+            }
           ]
+        },
+        "descriptionModule": {
+          "briefSummary": "This study collects CSF biomarkers in amnestic mild cognitive impairment and compares biomarker trajectories between active and sham procedures."
         },
         "outcomesModule": {
           "primaryOutcomes": [
@@ -142,6 +165,18 @@
         "armsInterventionsModule": {
           "interventions": [
             { "name": "Metformin extended release", "type": "Drug" }
+          ],
+          "armGroups": [
+            {
+              "label": "Metformin extended release",
+              "type": "EXPERIMENTAL",
+              "interventionNames": ["Drug: Metformin extended release"]
+            },
+            {
+              "label": "Sitagliptin",
+              "type": "ACTIVE_COMPARATOR",
+              "interventionNames": ["Drug: Sitagliptin"]
+            }
           ]
         },
         "outcomesModule": {
@@ -340,7 +375,8 @@
           "primaryCompletionDateStruct": { "date": "2025-12-01" },
           "completionDateStruct": { "date": "2025-12-01" },
           "studyFirstPostDateStruct": { "date": "2023-07-01" },
-          "lastUpdatePostDateStruct": { "date": "2026-03-10" }
+          "lastUpdatePostDateStruct": { "date": "2026-03-10" },
+          "whyStopped": "Trial terminated early due to slower-than-planned enrollment."
         },
         "sponsorCollaboratorsModule": {
           "leadSponsor": { "name": "National Institute on Aging", "class": "NIH" }

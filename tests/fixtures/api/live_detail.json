@@ -93,6 +93,31 @@
           "name": "Placebo",
           "description": "Matching placebo administered intrathecally"
         }
+      ],
+      "armGroups": [
+        {
+          "label": "BIIB080",
+          "type": "EXPERIMENTAL",
+          "description": "Antisense oligonucleotide targeting tau synthesis administered intrathecally",
+          "interventionNames": ["Drug: BIIB080"]
+        },
+        {
+          "label": "Placebo",
+          "type": "PLACEBO_COMPARATOR",
+          "description": "Matching placebo administered intrathecally",
+          "interventionNames": ["Drug: Placebo"]
+        }
+      ]
+    },
+    "descriptionModule": {
+      "briefSummary": "This phase 3 study evaluates the efficacy and safety of BIIB080 in participants with early Alzheimer disease."
+    },
+    "outcomesModule": {
+      "primaryOutcomes": [
+        {
+          "measure": "Change from Baseline in CDR-SB at Week 78",
+          "timeFrame": "78 weeks"
+        }
       ]
     },
     "eligibilityModule": {

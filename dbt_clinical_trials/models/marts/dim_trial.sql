@@ -33,6 +33,12 @@ select
     t.gender_based,
     t.gender_description,
     t.healthy_volunteers as accepts_healthy_volunteers,
+    t.intervention_model as current_intervention_model,
+    t.masking as current_masking,
+    t.has_placebo_arm as has_placebo_arm,
+    t.why_stopped,
+    t.brief_summary,
+    t.primary_outcome_time_frame,
     case
         when t.minimum_age_years is not null and t.maximum_age_years is not null and t.minimum_age_years > t.maximum_age_years then false
         when t.minimum_age_raw is not null and trim(t.minimum_age_raw) != '' and upper(trim(t.minimum_age_raw)) not in ('N/A', 'NA', 'NOT APPLICABLE') and t.minimum_age_years is null then false
