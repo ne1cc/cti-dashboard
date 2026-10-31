@@ -32,11 +32,12 @@ closure, study-level); the YAML taxonomies are optional overlays on top. The
   closure edge.
 - `bridge_trial_condition` grain: profile × trial × node, with the same node
   namespace. Existing group-based segments read only the `group:` rows; count
-  metrics and similarity exclude `is_ancestor` edges so closure adds browsing
-  reach without multiplying counts.
-- `same_condition` in `mart_trial_similarity` = two trials share ≥1 node with
-  `is_ancestor = false` (a taxonomy group or a directly applied MeSH term);
-  shared tree ancestors do not count. Weights are unchanged from the
+  marts read `int_trial_condition_mapping` (which contains only taxonomy condition
+  groups), and similarity excludes all MeSH rows (`mesh_id is null`) so closure
+  adds browsing reach without multiplying counts or shifting similarity.
+- `same_condition` in `mart_trial_similarity` = two trials share ≥1 taxonomy
+  condition group (`mesh_id is null`); MeSH rows are excluded so candidate pair
+  discovery, similarity scores, and factor weights are unchanged from the
   taxonomy-only definitions.
 - Coverage/disagreement review: `docs/condition_mesh_coverage.md`
   (fixture-limited).

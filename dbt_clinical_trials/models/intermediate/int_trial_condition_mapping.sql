@@ -16,4 +16,5 @@ select
     end as mapping_source,
     count(distinct condition_raw) as source_condition_count
 from {{ ref('stg_trial_conditions') }}
+where condition_normalized is not null
 group by 1, 2, 3, 4

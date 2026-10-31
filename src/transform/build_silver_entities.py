@@ -62,10 +62,18 @@ def build_silver_for_run(
     if not run_dir.exists():
         raise FileNotFoundError(f"Bronze pages missing for run {run_id}: {run_dir}")
 
-    # Taxonomy is an optional overlay (Issue #52): MeSH browse terms are the
-    # default condition identity. A profile without one still transforms —
-    # condition text rows fall back (mapping_source text_fallback) and the
-    # registry's conditionBrowseModule carries the browsable identity.
+    # Step 1: Guard against ingest_only profiles. They have no place in the
+    # shared silver tree (their bronze records are held without classification).
+    if profile is not None and profile.ingest_only:
+        raise ValueError(
+            f"Profile '{profile.profile_id}' is ingest_only (see its config/profiles/*.yml) "
+            "and cannot be transformed into the shared silver tree."
+        )
+
+    # Step 2: Taxonomy is an optional overlay (Issue #52): MeSH browse terms are the
+    # default condition identity. A non-ingest-only profile without a taxonomy
+    # still transforms — condition text rows fall back (mapping_source text_fallback)
+    # and the registry's conditionBrowseModule carries the browsable identity.
     taxonomy = profile.taxonomy if profile is not None else get_taxonomy()
     geography = get_geography_rules()
     profile_id = profile.profile_id if profile else "adrd"
@@ -180,6 +188,17 @@ def run_transform(
         if not force and _already_transformed(cfg, manifest.ingestion_run_id):
             log.info(
                 "Run {} already transformed; skipping (use --force to rebuild).",
+                manifest.ingestion_run_id,
+            )
+            continue
+        # A new entity in ENTITY_NAMES marks every pre-upgrade run as not yet
+        # transformed, but runs whose bronze was pruned can never be rebuilt:
+        # skip them and keep their retained silver exactly as written, instead
+        # of failing the whole upgrade on FileNotFoundError.
+        if not (cfg.paths.bronze_api_responses / f"run_id={manifest.ingestion_run_id}").exists():
+            log.warning(
+                "Run {}: bronze pages pruned; keeping existing silver as written "
+                "(the run cannot be rebuilt without its bronze).",
                 manifest.ingestion_run_id,
             )
             continue

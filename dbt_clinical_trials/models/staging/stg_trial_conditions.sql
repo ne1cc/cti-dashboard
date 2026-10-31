@@ -12,7 +12,13 @@ select
     condition_group,
     cast(dementia_relevance_flag as boolean) as dementia_relevance_flag,
     mapping_confidence,
-    mapping_source,
+    coalesce(
+        mapping_source,
+        case
+            when mapping_confidence != 'low' and condition_group != 'unmapped' then 'yaml_overlay'
+            else 'text_fallback'
+        end
+    ) as mapping_source,
     source_json_hash
 from {{ source('silver', 'silver_trial_conditions') }}
 where nct_id is not null

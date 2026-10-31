@@ -3,7 +3,7 @@
 Unit tests cover the flattener (direct/ancestor extraction, deduplication,
 missing/empty derived sections, branch semantics, taxonomy-less fallback).
 The end-to-end test builds one dbt warehouse from tests/fixtures/
-condition_mesh.json and proves the acceptance criteria: an unseen MeSH
+condition_mesh/page=00001.json and proves the acceptance criteria: an unseen MeSH
 condition is browsable in dim_condition with no config file, ancestor closure
 lands in the bridge, overlay group rows keep their pre-MeSH semantics, and
 similarity inputs exclude ancestor edges.
@@ -264,28 +264,199 @@ def test_trial_without_derived_section_has_no_mesh_rows(mesh_warehouse: Path):
     assert rows == [(0,)]
 
 
-def test_similarity_inputs_exclude_ancestor_edges(mesh_warehouse: Path):
-    # Direct terms are in the comparability identity (by label); ancestors
-    # are not: NCT99000001 carries "Alzheimer Disease" directly while
-    # "Cognition Disorders" is reachable only as an ancestor.
+def test_dim_trial_has_derived_mesh_flag(mesh_warehouse: Path):
+    # Finding 4: explicit flag on trial-grain mart independent of mapping_source.
+    # NCT99000001 (yaml_overlay) -> has_derived_mesh = True
+    # NCT99000002 (text_fallback) -> has_derived_mesh = True
+    # NCT99000003 (yaml_overlay) -> has_derived_mesh = False (no derivedSection)
+    rows = query(
+        mesh_warehouse,
+        """
+        select nct_id, has_derived_mesh
+        from main_marts.dim_trial
+        order by nct_id
+        """,
+    )
+    assert rows == [
+        ("NCT99000001", True),
+        ("NCT99000002", True),
+        ("NCT99000003", False),
+    ]
+
+
+def test_similarity_inputs_exclude_all_mesh_rows(mesh_warehouse: Path):
+    # Finding 3: comparability features condition_groups contains ONLY taxonomy groups
+    # (mesh_id is null); direct MeSH terms and ancestors are excluded.
     rows = query(
         mesh_warehouse,
         """
         select
+            list_contains(condition_groups, 'alzheimers_disease'),
             list_contains(condition_groups, 'Alzheimer Disease'),
             list_contains(condition_groups, 'Cognition Disorders')
         from main_intermediate.int_trial_comparability_features
         where nct_id = 'NCT99000001'
         """,
     )
-    assert rows == [(True, False)]
-    # The two mesh trials share D010300 directly but sit in different phases,
-    # so no (condition node, phase) token is shared: no candidate pairs.
+    assert rows == [(True, False, False)]
+
+    # Candidate discovery is strictly based on taxonomy condition_groups.
+    # Shared direct MeSH terms (such as D010300 on NCT99000001 and NCT99000002)
+    # never enter candidate tokens, so no similarity pairs form.
     rows = query(
         mesh_warehouse,
         "select count(*) from main_marts.mart_trial_similarity",
     )
     assert rows == [(0,)]
+
+
+def test_shared_direct_mesh_term_does_not_create_similarity_pair(mesh_warehouse: Path):
+    # Finding 3: Two trials sharing a direct MeSH term (D010300) must never form
+    # a candidate token or pair because tokens filter bridge.mesh_id is null.
+    rows = query(
+        mesh_warehouse,
+        """
+        select count(*) from main_intermediate.int_similarity_candidates
+        where (nct_id_a = 'NCT99000001' and nct_id_b = 'NCT99000002')
+           or (nct_id_a = 'NCT99000002' and nct_id_b = 'NCT99000001')
+        """,
+    )
+    assert rows == [(0,)]
+
+
+def test_mesh_dimension_dementia_relevance_flag_is_null(mesh_warehouse: Path):
+    # Finding 9: dim_condition and bridge_trial_condition are consistent (NULL on mesh rows)
+    dim_rows = query(
+        mesh_warehouse,
+        "select distinct dementia_relevance_flag from main_marts.dim_condition "
+        "where mapping_source = 'mesh'",
+    )
+    assert dim_rows == [(None,)]
+
+    bridge_rows = query(
+        mesh_warehouse,
+        "select distinct dementia_relevance_flag from main_marts.bridge_trial_condition "
+        "where mapping_source = 'mesh'",
+    )
+    assert bridge_rows == [(None,)]
+
+
+def test_trials_for_segment_with_mesh_rows(mesh_warehouse: Path, monkeypatch):
+    # Finding 7: located fixture proves non-empty segment outputs and verifies
+    # dashboard trials_for_segment works cleanly with mesh rows present.
+    from dashboard.components import data
+
+    db_path = mesh_warehouse / "data/warehouse/clinical_trials.duckdb"
+    con = duckdb.connect(str(db_path), read_only=True)
+    monkeypatch.setattr(data, "_connection", lambda: con)
+
+    try:
+        df = data.trials_for_segment(
+            profile_id="adrd",
+            condition_group="alzheimers_disease",
+            state_normalized="CA",
+            phase_normalized="PHASE3",
+        )
+        assert len(df) == 1
+        assert df.iloc[0]["nct_id"] == "NCT99000001"
+        assert df.iloc[0]["overall_status"] == "RECRUITING"
+    finally:
+        con.close()
+
+
+def test_segment_marts_nonempty_with_mesh_rows(mesh_warehouse: Path):
+    # Finding 7: Site and queue marts are populated and unaffected by MeSH rows
+    site_rows = query(
+        mesh_warehouse,
+        "select nct_id, facility_name, state_normalized "
+        "from main_marts.fct_trial_site order by state_normalized",
+    )
+    assert len(site_rows) == 2
+    assert site_rows[0][0] == "NCT99000001"
+    assert {r[2] for r in site_rows} == {"CA", "NC"}
+
+    queue_rows = query(
+        mesh_warehouse,
+        "select condition_group, state_normalized, phase_normalized "
+        "from main_marts.mart_feasibility_priority_queue "
+        "where condition_group = 'alzheimers_disease'",
+    )
+    assert len(queue_rows) >= 1
+
+
+def test_mesh_term_rename_produces_single_dim_row_with_latest_label(
+    tmp_path_factory: pytest.TempPathFactory,
+):
+    # Finding 2: MeSH dimension keyed solely by id with latest deterministic label, aggregate count.
+    renamed_module = {
+        "meshes": [
+            {"id": "D060825", "term": "Cognitive Dysfunction"},
+            {"id": "D000544", "term": "Alzheimer Disease"},
+            {"id": "D010300", "term": "Parkinson Disease, Renamed"},
+            {"id": "D009043", "term": "Motor Activity"},
+        ],
+        "ancestors": [
+            {"id": "D003072", "term": "Cognition Disorders"},
+            {"id": "D009422", "term": "Nervous System Diseases"},
+        ],
+    }
+    # Run 1 has trial 2 with D010300 'Parkinson Disease' (trial 1 omitted)
+    run1 = FixtureRun(
+        profile="adrd",
+        run_id="20260901T100000Z_r1",
+        started_at=FIXTURE_SNAPSHOT_DAY + timedelta(hours=10),
+        condition="Alzheimer Disease",
+        fixture_dir="condition_mesh",
+        study_overrides={"NCT99000001": None},
+    )
+    # Run 2 is later on same date, has trial 1 with D010300 'Parkinson Disease, Renamed'
+    run2 = FixtureRun(
+        profile="adrd",
+        run_id="20260901T140000Z_r2",
+        started_at=FIXTURE_SNAPSHOT_DAY + timedelta(hours=14),
+        condition="Alzheimer Disease",
+        fixture_dir="condition_mesh",
+        study_overrides={
+            "NCT99000002": None,
+            "NCT99000001": {"derivedSection": {"conditionBrowseModule": renamed_module}},
+        },
+    )
+    root = build_fixture_warehouse(tmp_path_factory.mktemp("rename_warehouse"), runs=[run1, run2])
+    rows = query(
+        root,
+        """
+        select node_id, condition_normalized, trial_count
+        from main_marts.dim_condition
+        where node_id = 'D010300'
+        """,
+    )
+    # Exactly one row for D010300 with the renamed label and aggregated count = 2
+    assert rows == [("D010300", "Parkinson Disease, Renamed", 2)]
+
+
+def test_blank_condition_consistency(tmp_path_factory: pytest.TempPathFactory):
+    # Finding 8: blank condition string does not create orphan bridge rows
+    run = FixtureRun(
+        profile="adrd",
+        run_id="20260901T150000Z_blank",
+        started_at=FIXTURE_SNAPSHOT_DAY + timedelta(hours=15),
+        condition="Alzheimer Disease",
+        fixture_dir="condition_mesh",
+        study_overrides={"NCT99000002": {"conditionsModule": {"conditions": ["   "]}}},
+    )
+    root = build_fixture_warehouse(tmp_path_factory.mktemp("blank_cond_warehouse"), runs=[run])
+    # Verify no bridge row has condition_key not in dim_condition
+    orphans = query(
+        root,
+        """
+        select count(*) from main_marts.bridge_trial_condition b
+        where not exists (
+            select 1 from main_marts.dim_condition d
+            where b.condition_key = d.condition_key
+        )
+        """,
+    )
+    assert orphans == [(0,)]
 
 
 def test_group_counts_unchanged_by_mesh_rows(mesh_warehouse: Path):

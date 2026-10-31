@@ -100,6 +100,7 @@ MARTS_WITH_PROFILE_SCOPED_WINDOWS = [
     # same guard so a repartitioned rank cannot slip in through the oracle.
     "mart_trial_similarity_reference",
     "fct_trial_site",
+    "dim_condition",
 ]
 
 _SQL_COMMENT_RE = re.compile(r"--[^\n]*|\{#.*?#\}", re.DOTALL)
