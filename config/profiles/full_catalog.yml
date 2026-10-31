@@ -1,25 +1,32 @@
 # ============================================================
-# Opt-in full-catalog ingestion profile.
+# Registry-wide profile: all conditions, worldwide.
 #
-# All conditions, worldwide — no condition/status/study-type filter.
-# Runs completely alongside the default ADRD/US profile with its own
-# bronze tree, so it cannot interfere with the default pipeline,
-# dbt marts, or dashboard.
+# The default ingestion target since issue #53 — `python -m src.cli
+# ingest` with no flags snapshots the whole registry, no indication
+# profile required. It is also transformable: `taxonomy: null` maps
+# every condition to "uncategorized" (src/transform/normalize_conditions.py
+# REGISTRY_TAXONOMY), so registry-wide silver builds with the same
+# flatten code the indication profiles use.
 #
-# Scope: ingestion (bronze) only — ingest_only: true.
-# Silver/gold/dbt/dashboard remain scoped to condition-specific profiles
-# until a later, separately planned chunked-loading phase extends
-# transform to this volume.
+# orchestrate: false keeps it out of the multi-profile loop and the
+# dashboard's scope selector: its weekly refresh runs on its own
+# command (below), and dashboard/gold scopes stay indication-level
+# until a later issue generalizes the marts (epic #43).
 #
-# Run with: make ingest-full-catalog
-#   or:     python -m src.cli ingest --profile full_catalog
+# Refresh cadence:
+#   full snapshot   python -m src.cli ingest            (reuse window below)
+#   weekly refresh  python -m src.cli ingest --incremental-refresh
+#                   (only studies with LastUpdatePostDate on/after the
+#                   previous successful run; transform upserts by NCT ID)
+#   transform       python -m src.cli transform
 # ============================================================
 
 profile:
   id: full_catalog
   display_name: "Full Registry (All Conditions, Worldwide)"
-  ingest_only: true    # transform, dbt, and dashboard are NOT run for this profile
-  taxonomy: null       # no condition grouping applicable
+  ingest_only: false   # transformable: silver covers the whole registry
+  orchestrate: false   # not in `orchestrate`/refreshable(): own cadence, see header
+  taxonomy: null       # REGISTRY_TAXONOMY: conditions stay uncategorized
 
 api:
   base_url: https://clinicaltrials.gov/api/v2
@@ -27,10 +34,30 @@ api:
   openapi_spec_url: https://clinicaltrials.gov/api/oas/v2
   docs_url: https://clinicaltrials.gov/data-api/api
   format: json
-  page_size: 1000           # API max — 602 pages, measured 2026-09-05 (9.7 GB bronze)
+  page_size: 1000           # API max, spec-verified 2026-10-30
   count_total: true
-  # Intentionally empty: no query.cond / filter.* — CTG default is "all studies"
+  # Slim field projection, identical to project_config.yml — silver's upsert
+  # assumes every profile's bronze carries the same modules, so this list must
+  # not drift between profiles (tests/test_profile_configs.py guards it).
+  fields:
+    - protocolSection.identificationModule
+    - protocolSection.statusModule
+    - protocolSection.designModule
+    - protocolSection.sponsorCollaboratorsModule
+    - protocolSection.conditionsModule
+    - protocolSection.armsInterventionsModule
+    - protocolSection.eligibilityModule
+    - protocolSection.contactsLocationsModule
+    - protocolSection.outcomesModule
+    - resultsSection.participantFlowModule
+    - resultsSection.baselineCharacteristicsModule
+    - hasResults
+  # Intentionally empty: no query.cond / filter.* — CTG default is "all studies".
+  # `ingest --incremental-refresh` ANDs AREA[LastUpdatePostDate]RANGE[...] in
+  # at request time (verified live 2026-10-30).
   query_params: {}
+  # No published numeric rate limit (checked 2026-10-30); 1.2s ≈ 50 req/min.
+  min_request_interval_seconds: 1.2
   http:
     timeout_seconds: 120    # larger pages take longer to transfer
     max_retries: 5
@@ -43,18 +70,17 @@ scope:
   geography: "Worldwide (no filter)"
   study_type: "ALL (no filter)"
   statuses: []              # empty = no overallStatus filter
-  refresh_cadence: monthly  # descriptive only, not enforced by code
+  refresh_cadence: weekly   # --incremental-refresh; full snapshots opt-in
   history_note: >-
-    Full-registry bronze snapshot. Ingestion (bronze) only as of this
-    phase; silver/gold/dbt/dashboard remain scoped to condition-specific
-    profiles until a later, separately planned chunked-loading phase
-    extends transform to this volume.
+    ClinicalTrials.gov returns only the current record per study. Longitudinal
+    status history is constructed by repeated snapshots; weekly incremental
+    refreshes keep the latest snapshot current, full snapshots reset it.
 
 paths:
   bronze_api_responses: data/bronze/full_catalog/api_responses
   bronze_manifests: data/bronze/full_catalog/manifests
-  # silver/gold/duckdb unused for this profile (ingest_only: true)
-  # but required by PathsConfig — resolved from shared_paths.yml at runtime
+  # silver/gold/duckdb are shared across refreshable profiles, resolved
+  # from shared_paths.yml at runtime
   silver: data/silver
   gold: data/gold
   duckdb: data/warehouse/clinical_trials.duckdb
@@ -62,30 +88,24 @@ paths:
 
 ingestion:
   mode_default: incremental
-  # Longer than the ADRD profile: a full-catalog run is far more
-  # expensive to redo, and this profile's cadence is monthly.
+  # Longer than the condition profiles: a full registry snapshot is far more
+  # expensive to redo. Incremental refreshes have a different query hash
+  # (date-bounded), so they never collide with this window.
   reuse_window_hours: 720
   page_file_pattern: "run_id={run_id}/page={page:05d}.json"
   manifest_file_pattern: "manifest_{run_id}.json"
 
 # Run retention for this profile (make prune-data, src/utils/retention.py).
-# Deliberately the same horizon as the condition profiles: this profile's
-# pages are the whole registry, so a single retained bronze run matters here
-# more than anywhere else on the volume — and a special case is a knob nobody
-# will remember to re-tune.
-# bronze_runs_to_keep is decisive for this profile and this profile only: it is
-# ingest_only, so it has no silver and no transform, and the bronze horizon is
-# the sole thing bounding its raw pages. The snapshot horizon is therefore
-# unused here; it moves with the others (3, from the 2026-09-07 1 GB volume
-# measurement in config/project_config.yml) rather than special-casing.
+# Same horizon as every other profile — one knob, no special cases. With the
+# fields projection a registry bronze run is ~4.7 GB (MEASURED 2026-10-30),
+# so the single retained run below is the dominant term on any laptop; raw
+# JSON is kept for the latest run only, by exactly this horizon.
 retention:
   bronze_runs_to_keep: 1
   snapshot_runs_to_keep: 3
 
 guardrails:
   disclaimer: >-
-    Public-registry-based full-catalog snapshot for analytical
-    portfolio demonstration only. Bronze (raw) data only in this
-    phase — not reflected in any dashboard, dbt mart, or quality
-    report until a later phase implements chunked/partitioned
-    transform for this volume.
+    Public-registry-based planning signals for analytical portfolio
+    demonstration only. Not a recruitment forecast, not clinical decision
+    support, and not an assessment of site, sponsor, or population quality.

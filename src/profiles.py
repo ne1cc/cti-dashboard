@@ -46,7 +46,11 @@ from src.config import (
     ProjectConfig,
     RetentionConfig,
 )
-from src.transform.normalize_conditions import ConditionTaxonomy, load_taxonomy
+from src.transform.normalize_conditions import (
+    REGISTRY_TAXONOMY,
+    ConditionTaxonomy,
+    load_taxonomy,
+)
 from src.utils.paths import project_root, resolve_path
 
 PROFILES_DIR = "config/profiles"
@@ -56,8 +60,11 @@ SHARED_PATHS_FILE = "config/shared_paths.yml"
 # historically typed `default`/`full-catalog`; config/profiles/*.yml are keyed by
 # profile.id. One function owns the mapping so ingest, transform and the
 # dashboard selector cannot each invent their own accepted-spellings list.
+# `default` is the registry-wide snapshot since issue #53: ingesting must not
+# require an indication profile, so a bare `python -m src.cli ingest` targets
+# the whole registry. Disease profiles are opt-in via their own ids.
 PROFILE_ALIASES: dict[str, str] = {
-    "default": "adrd",
+    "default": "full_catalog",
     "full-catalog": "full_catalog",
 }
 
@@ -110,7 +117,16 @@ class IndicationProfile:
                             API query parameters, with shared silver/gold/duckdb
                             paths injected from config/shared_paths.yml.
         taxonomy:           Loaded ConditionTaxonomy, or None for ingest_only profiles.
+                            A refreshable profile without a taxonomy file gets
+                            REGISTRY_TAXONOMY (whole-registry profiles classify
+                            nothing; conditions stay uncategorized).
         shared:             Shared medallion paths (silver, gold, duckdb).
+        orchestrate:        Membership in refreshable() — the multi-profile
+                            orchestrate loop and the dashboard's scope selector.
+                            The registry-wide profile sets False: its weekly
+                            refresh runs on its own command, and the dashboard
+                            scopes stay indication-level until a later issue
+                            generalizes the marts (epic #43).
     """
 
     profile_id: str
@@ -119,6 +135,7 @@ class IndicationProfile:
     config: ProjectConfig
     taxonomy: ConditionTaxonomy | None
     shared: SharedPaths
+    orchestrate: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -179,8 +196,11 @@ def load_profile(
 
     taxonomy: ConditionTaxonomy | None = None
     taxonomy_rel: str | None = pmeta.get("taxonomy")
-    if taxonomy_rel and not ingest_only:
-        taxonomy = load_taxonomy(project_root() / taxonomy_rel)
+    if not ingest_only:
+        if taxonomy_rel:
+            taxonomy = load_taxonomy(project_root() / taxonomy_rel)
+        else:
+            taxonomy = REGISTRY_TAXONOMY
 
     return IndicationProfile(
         profile_id=profile_id,
@@ -189,6 +209,7 @@ def load_profile(
         config=cfg,
         taxonomy=taxonomy,
         shared=resolved_shared,
+        orchestrate=bool(pmeta.get("orchestrate", True)),
     )
 
 
@@ -237,9 +258,11 @@ class ProfileRegistry:
     def refreshable(self) -> list[IndicationProfile]:
         """Profiles eligible for the full pipeline: ingest + transform + dbt.
 
-        `ingest_only` profiles (full_catalog) keep their bronze but never reach
-        silver or the warehouse, so they are excluded here — `orchestrate` and
-        the dashboard must not be able to pick one up.
+        Membership is `ingest_only: false` AND `orchestrate: true` (default).
+        `ingest_only` profiles keep their bronze but never reach silver; the
+        registry-wide profile transforms but opts out of the loop (`orchestrate:
+        false`) because its weekly refresh is its own command and the dashboard
+        scopes stay indication-level (epic #43).
 
         When `CTI_REFRESHABLE_PROFILES` is set (comma-separated profile ids),
         the returned set is narrowed to it. The Fly deployment sets this
@@ -249,7 +272,9 @@ class ProfileRegistry:
         is deployed. A name the registry does not know fails loudly here
         rather than silently shrinking the refresh.
         """
-        profiles = [profile for profile in self.all() if not profile.ingest_only]
+        profiles = [
+            profile for profile in self.all() if not profile.ingest_only and profile.orchestrate
+        ]
         scope = os.environ.get("CTI_REFRESHABLE_PROFILES")
         if scope is None:
             return profiles

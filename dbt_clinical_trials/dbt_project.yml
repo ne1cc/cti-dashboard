@@ -14,8 +14,10 @@ clean-targets:
 # ingest_only_profiles must stay in sync with config/profiles/*.yml
 # (tests/test_profiles.py::test_dbt_ingest_only_var_matches_registry) — dbt
 # cannot import src.profiles, so the list is duplicated and guarded.
+# Empty since issue #53: no shipped profile is bronze-only any more (the
+# registry-wide full_catalog profile transforms via REGISTRY_TAXONOMY).
 vars:
-  ingest_only_profiles: ['full_catalog']
+  ingest_only_profiles: []
   # Candidate-pair guard for int_similarity_candidates: a condition-group
   # token whose per-profile trial count reaches this is dropped from pair
   # discovery, bounding the candidate join when one group dominates a large

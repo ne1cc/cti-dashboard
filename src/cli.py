@@ -50,6 +50,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Force a new snapshot even if a recent completed run exists for this query.",
     )
     ingest.add_argument(
+        "--incremental-refresh",
+        action="store_true",
+        help=(
+            "Weekly refresh: fetch only studies with LastUpdatePostDate on or "
+            "after the previous successful run (Essie date-range filter), then "
+            "let transform upsert them by NCT ID. Requires a prior full snapshot."
+        ),
+    )
+    ingest.add_argument(
         "--max-pages",
         type=_positive_int,
         default=None,
@@ -59,9 +68,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--profile",
         default="default",
         help=(
-            "Indication profile ID from config/profiles/ (e.g. 'adrd', 'full_catalog'). "
-            "Legacy aliases 'default' → adrd and 'full-catalog' → full_catalog are accepted. "
-            "Use 'orchestrate' to run all discovered profiles in one command."
+            "Indication profile ID from config/profiles/ (e.g. 'adrd', "
+            "'oncology_nsclc'). 'default' resolves to the registry-wide "
+            "full_catalog profile: a bare ingest snapshots the whole registry "
+            "with no profile needed. Use 'orchestrate' to run every "
+            "orchestrated profile in one command."
         ),
     )
 
@@ -84,7 +95,8 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Indication profile ID from config/profiles/ (e.g. 'adrd', "
             "'oncology_nsclc'). Legacy aliases 'default' and 'full-catalog' are "
-            "accepted. ingest_only profiles are refused: they have no taxonomy."
+            "accepted; 'default' resolves to the registry-wide full_catalog "
+            "profile. ingest_only profiles are refused: they have no taxonomy."
         ),
     )
 
@@ -104,9 +116,10 @@ def build_parser() -> argparse.ArgumentParser:
     orchestrate = subparsers.add_parser(
         "orchestrate",
         help=(
-            "Discover the refreshable indication profiles in config/profiles/ "
-            "(everything that is not ingest_only) and run ingest + transform for each. "
-            "Use 'ingest --profile full_catalog' for the opt-in registry-wide pull."
+            "Discover the orchestrated indication profiles in config/profiles/ "
+            "(ingest_only: false, orchestrate: true — not the registry-wide "
+            "profile) and run ingest + transform for each. Refresh the registry "
+            "with 'ingest' or 'ingest --incremental-refresh'."
         ),
     )
     orchestrate.add_argument(
@@ -180,6 +193,7 @@ def main(argv: list[str] | None = None) -> int:
                 full_refresh=args.full_refresh,
                 max_pages=args.max_pages,
                 config=indication_profile,
+                incremental_refresh=args.incremental_refresh,
             )
         except Exception as exc:
             log.error("Ingestion failed: {}", exc)
@@ -260,13 +274,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.profile:
             # Same contract as `transform` above: 2 = usage, 1 = data failure.
             # An ingest_only profile is refused *here*, before the loop, because
-            # the branch that follows would otherwise pull 602 pages / 9.7 GB of
-            # bronze — measured 2026-09-05, run 20260905T071910Z_774560b2,
-            # docs/archive/development_log.md — and 9.7 GB is roughly ten times the 1 GB
-            # `cti_data` volume (docs/DEPLOY_FLY.md), so the pull would take the
-            # two healthy profiles down with it. It would then hand the profile to
-            # run_transform, which has no taxonomy to classify with.
-            # See src/transform/build_silver_entities.py.
+            # the branch that follows would hand it to run_transform, which has
+            # no taxonomy to classify with (see
+            # src/transform/build_silver_entities.py). The registry-wide profile
+            # is not in the default loop (orchestrate: false), but naming it
+            # explicitly is allowed — that is exactly ingest+transform for the
+            # whole registry.
             try:
                 profiles = [registry.get(normalize_profile_id(args.profile))]
             except KeyError as exc:
@@ -275,7 +288,7 @@ def main(argv: list[str] | None = None) -> int:
             if profiles[0].ingest_only:
                 log.error(
                     "Profile '{}' is ingest_only: it has no taxonomy, so it can never be "
-                    "transformed. Use 'orchestrate' without --profile for the refreshable "
+                    "transformed. Use 'orchestrate' without --profile for the orchestrated "
                     "profiles.",
                     profiles[0].profile_id,
                 )

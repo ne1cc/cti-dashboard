@@ -363,7 +363,10 @@ def test_an_ingest_only_profile_honors_its_bronze_horizon(tmp_path, monkeypatch)
 
     monkeypatch.setenv("CTI_PROJECT_ROOT", str(tmp_path))
     _temp_config_tree(tmp_path)
-    profile = load_profile(FULL_CATALOG_PROFILE_YAML)
+    ingest_only_yaml = tmp_path / "config/profiles/ingest_only_test.yml"
+    ingest_only_yaml.parent.mkdir(parents=True, exist_ok=True)
+    ingest_only_yaml.write_text(MINIMAL_RETENTION_YAML)
+    profile = load_profile(ingest_only_yaml)
     assert profile.ingest_only
     cfg = profile.config
     assert not cfg.paths.silver.exists()
@@ -577,14 +580,19 @@ class _FakeRegistry:
 
 
 def test_prune_all_reaches_every_profile_including_ingest_only(tmp_path, monkeypatch):
-    """full_catalog's pages are the largest single consumer on the volume, so
-    prune_all must not restrict itself to the refreshable profiles."""
+    """prune_all must reach every profile in registry.all(), including ingest_only
+    profiles that opt out of the refreshable loop."""
     from src.profiles import load_profile
 
     monkeypatch.setenv("CTI_PROJECT_ROOT", str(tmp_path))
     _temp_config_tree(tmp_path)
     adrd = load_profile(ADRD_PROFILE_YAML)
-    catalog = load_profile(FULL_CATALOG_PROFILE_YAML)
+    ingest_only_yaml = tmp_path / "config/profiles/test_ingest_only.yml"
+    replacement = "bronze_runs_to_keep: 1\n  snapshot_runs_to_keep: 3"
+    ingest_only_yaml.write_text(
+        MINIMAL_RETENTION_YAML.replace("bronze_runs_to_keep: 3", replacement)
+    )
+    catalog = load_profile(ingest_only_yaml)
     assert catalog.ingest_only
     for i in range(2):
         _mk_run(adrd.config, f"2026090{i + 1}T000000Z_run{i:08d}")
@@ -594,11 +602,11 @@ def test_prune_all_reaches_every_profile_including_ingest_only(tmp_path, monkeyp
         _mk_run(catalog.config, f"2026091{i}T000000Z_run{i:08d}", with_silver=False)
 
     removed = prune_all(_FakeRegistry([adrd, catalog]))
-    assert {r.profile_id for r in removed} == {"adrd", "full_catalog"}
+    assert {r.profile_id for r in removed} == {"adrd", "test_ind"}
     pages = sorted(p.name for p in catalog.config.paths.bronze_api_responses.iterdir())
     assert pages == ["run_id=20260917T000000Z_run00000007"], "bronze_runs_to_keep must bite"
     # The snapshot horizon is untouched by that: a full horizon of runs still
-    # has an index. Read from the shipped config rather than hardcoded, because
+    # has an index. Read from the config rather than hardcoded, because
     # the horizon is a volume measurement and moves with it (3 since
     # 2026-09-07 — docs/DEPLOY_FLY.md); what may not move is that it runs
     # deeper than bronze, which is the independence this test exists for.

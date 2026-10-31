@@ -33,6 +33,17 @@ class ApiConfig(BaseModel):
     format: str = "json"
     page_size: int = 100
     count_total: bool = True
+    # Field projection (GET /studies `fields`): branch names under the study
+    # record whose descendants are all included, e.g.
+    # "protocolSection.identificationModule". Empty means "return everything",
+    # which is what a slim registry build must never do (issue #53).
+    fields: list[str] = []
+    # Minimum wall-clock spacing between HTTP requests. The API publishes no
+    # numeric rate limit (no rate-limit response headers, OpenAPI spec and NLM
+    # bulletins silent as of 2026-10-30); ~50 requests/minute is the community
+    # consensus, so the shipped configs set 1.2s. 429s retry with backoff
+    # regardless (retry_policy.py).
+    min_request_interval_seconds: float = 0.0
     query_params: dict[str, Any] = {}
     http: HttpConfig = HttpConfig()
 

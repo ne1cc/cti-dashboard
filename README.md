@@ -136,11 +136,14 @@ erDiagram
 - **Phases:** EARLY_PHASE1 – PHASE4 where available.
 - **Cadence:** Weekly snapshots; history accrues from this project's own runs.
 
-### Optional: Full-Catalog Ingestion
+### Registry-Wide Ingestion & Transform
 
-An opt-in, additive ingestion profile snapshots the **entire** ClinicalTrials.gov registry — all conditions, worldwide, no status/type filter (~600k+ studies as of this writing). Run it with `make ingest-full-catalog` (equivalently `python -m src.cli ingest --profile full_catalog`). It writes to a completely separate bronze tree (`data/bronze/full_catalog/`, declared in `config/profiles/full_catalog.yml`) and cannot interfere with the default ADRD/US pipeline above. Combining `--condition` with this profile is rejected: the profile's scope is all conditions by definition.
+The platform supports snapshotting the **entire** ClinicalTrials.gov registry — all conditions, worldwide, no status/type filter (~600k+ studies) — using a minimal API `fields` projection (ADR 0083) that cuts per-study bronze payload size from ~17.3 KB to ~7.7 KB (~4.7 GB full registry).
 
-**Bronze only.** That profile is marked `ingest_only`, so `python -m src.cli transform --profile full_catalog` refuses with exit code 2: there is no condition taxonomy to group trials by, and a taxonomy-less silver tree would be misleading rather than useful. Its former `make transform-full-catalog` target and the private silver tree it wrote are retired; `python -m src.cli transform --profile <id>` flattens one named profile from its own manifests under `data/bronze/<profile_id>/manifests/` (a bare `make transform` is the legacy `default` alias, i.e. `adrd`), and `make orchestrate` runs every refreshable profile end to end (the migration record is in [`docs/archive/development_log.md`](docs/archive/development_log.md)). The chunked streaming writer that target used (`src/transform/export_parquet.py`: bounded-memory Parquet row groups, no full-run materialization) is the same one every transformable profile writes through. Gold, dbt marts, and the dashboard read the single shared silver root, so full-catalog bronze reaches the warehouse only when a taxonomy exists for it; see [`docs/architecture.md`](docs/architecture.md) for the remaining scaling work (extending the condition/geography rules beyond ADRD/US).
+- **No profile required:** Bare `python -m src.cli ingest` (or `make ingest-registry`) snapshots the entire registry.
+- **Transformable silver:** `python -m src.cli transform` builds full-registry silver Parquet using `REGISTRY_TAXONOMY` (mapping conditions to `uncategorized`).
+- **Weekly incremental refresh:** `python -m src.cli ingest --incremental-refresh` (or `make ingest-registry-incremental`) fetches only studies modified on or after the previous successful run (`AREA[LastUpdatePostDate]RANGE`), which silver upserts by NCT ID onto the prior full snapshot.
+- **Indication profiles:** Specific indications (`adrd`, `oncology_nsclc`, etc.) continue to run with explicit `--profile <id>` (or `make orchestrate`). Combining `--condition` with `full_catalog` is rejected as the profile encompasses all conditions.
 
 ---
 
