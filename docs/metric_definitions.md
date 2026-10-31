@@ -14,6 +14,34 @@ Global rules:
 - Every metric is a *registry-listing signal*. None measures patients,
   enrollment performance, or site capacity.
 
+## Condition identity (Issue #52)
+A trial's condition identity comes from the registry's MeSH browse module
+(`silver_trial_condition_mesh`: direct terms plus the supplied ancestor
+closure, study-level); the YAML taxonomies are optional overlays on top. The
+`mapping_source` column says how a condition row's group was assigned:
+
+| mapping_source | meaning |
+|---|---|
+| `mesh` | registry MeSH browse identity (bridge/dim mesh nodes) |
+| `yaml_overlay` | a profile taxonomy rule matched the condition text |
+| `text_fallback` | no taxonomy match (or no taxonomy); the profile's catch-all group, or `unmapped` when the profile has no taxonomy |
+
+- `dim_condition` grain: profile × condition node — `group:<slug>` (taxonomy)
+  or a MeSH id. MeSH nodes include ancestor-closure edges, so any tree node is
+  selectable; `is_ancestor` is true only where every membership edge is a
+  closure edge.
+- `bridge_trial_condition` grain: profile × trial × node, with the same node
+  namespace. Existing group-based segments read only the `group:` rows; count
+  marts read `int_trial_condition_mapping` (which contains only taxonomy condition
+  groups), and similarity excludes all MeSH rows (`mesh_id is null`) so closure
+  adds browsing reach without multiplying counts or shifting similarity.
+- `same_condition` in `mart_trial_similarity` = two trials share ≥1 taxonomy
+  condition group (`mesh_id is null`); MeSH rows are excluded so candidate pair
+  discovery, similarity scores, and factor weights are unchanged from the
+  taxonomy-only definitions.
+- Coverage/disagreement review: `docs/condition_mesh_coverage.md`
+  (fixture-limited).
+
 ## Activity metrics (`mart_trial_activity`)
 | Metric | Definition |
 |---|---|

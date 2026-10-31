@@ -242,11 +242,25 @@ def prepare_fixture_root(
                 doc = json.loads(page_src.read_text(encoding="utf-8"))
 
             if run.study_overrides:
+                doc["studies"] = [
+                    s
+                    for s in doc["studies"]
+                    if run.study_overrides.get(
+                        s["protocolSection"]["identificationModule"]["nctId"], ""
+                    )
+                    is not None
+                ]
                 for study in doc["studies"]:
                     section = study["protocolSection"]
                     nct_id = section["identificationModule"]["nctId"]
-                    for module, fields in run.study_overrides.get(nct_id, {}).items():
-                        section[module].update(fields)
+                    override_dict = run.study_overrides.get(nct_id)
+                    if not override_dict:
+                        continue
+                    for module, fields in override_dict.items():
+                        if module == "derivedSection":
+                            study["derivedSection"] = fields
+                        else:
+                            section[module].update(fields)
                 page_dst.write_text(json.dumps(doc), encoding="utf-8")
 
             if run.retrieved_at:

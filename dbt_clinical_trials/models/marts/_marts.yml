@@ -104,13 +104,20 @@ models:
       - name: sex_eligibility_unknown_flag
         data_type: BOOLEAN
         description: True when sex eligibility is unstated, empty, or unknown.
+      - name: has_derived_mesh
+        data_type: BOOLEAN
+        description: True when the registry record supplied a derivedSection.conditionBrowseModule (Issue #52).
+        tests: [not_null]
 
   - name: dim_condition
     description: >
-      Normalized condition per indication profile. Grain: profile x
-      condition_normalized. Counts cover one profile's listings; the key hashes
-      both columns because a per-profile row cannot be addressed by the entity
-      alone.
+      Condition node per indication profile (Issue #52). A node is a taxonomy
+      condition_group (node_id "group:<slug>", the overlay/fallback text
+      mapping) or a registry MeSH browse identity (node_id = mesh id), from
+      each trial's current record in that profile. MeSH nodes include the
+      registry-supplied ancestor closure, so any tree node is selectable with
+      no per-disease configuration. Grain: profile x node_id; counts cover one
+      profile's listings and the key hashes both columns.
     contract:
       enforced: true
     columns:
@@ -121,12 +128,42 @@ models:
         data_type: VARCHAR
         description: Indication profile whose query scope produced this row. Part of the model's grain.
         tests: [not_null]
+      - name: node_id
+        data_type: VARCHAR
+        description: >
+          Namespaced node identity: "group:<slug>" for taxonomy groups, the
+          bare mesh id for MeSH nodes; the two cannot collide.
+        tests: [not_null]
       - name: condition_normalized
         data_type: VARCHAR
+        description: Node label (taxonomy group slug or MeSH term).
       - name: condition_display_name
         data_type: VARCHAR
+        description: >
+          Display exemplar: the profile's lexicographically smallest raw
+          condition text behind the node, or the MeSH term when the node has
+          no text rows.
       - name: condition_group
         data_type: VARCHAR
+        description: Legacy alias of condition_normalized kept for existing consumers.
+      - name: mesh_id
+        data_type: VARCHAR
+        description: MeSH browse id for mesh nodes, null for taxonomy group nodes.
+      - name: is_ancestor
+        data_type: BOOLEAN
+        description: >
+          True when every membership edge of this MeSH node is an
+          ancestor-closure edge (never directly applied in this profile).
+          False for taxonomy group nodes and nodes applied directly at least
+          once.
+      - name: mapping_source
+        data_type: VARCHAR
+        description: >
+          mesh for registry MeSH nodes; yaml_overlay when any condition text
+          behind a group node matched a taxonomy rule; text_fallback otherwise.
+        tests:
+          - accepted_values:
+              values: [mesh, yaml_overlay, text_fallback]
       - name: dementia_relevance_flag
         data_type: BOOLEAN
       - name: mapping_confidence
@@ -337,7 +374,14 @@ models:
         data_type: VARCHAR
 
   - name: bridge_trial_condition
-    description: One row per profile per trial per condition group.
+    description: >
+      One row per profile per trial per condition node (Issue #52 grain): a
+      taxonomy condition_group (node_id "group:<slug>", how every existing
+      group-based view consumes the bridge) or a registry MeSH browse identity
+      (node_id = mesh id). MeSH rows carry the registry's ancestor closure
+      (is_ancestor), so any tree node is selectable; count marts read
+      int_trial_condition_mapping (group-only), and similarity excludes all
+      MeSH rows (mesh_id is null).
     contract:
       enforced: true
     columns:
@@ -351,15 +395,46 @@ models:
           - relationships:
               to: ref('dim_trial')
               field: trial_key
-      - name: condition_group
+      - name: condition_key
         data_type: VARCHAR
-        tests: [not_null]
+        description: Same two inputs as dim_condition.condition_key (node_id x indication_profile_id).
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_condition')
+              field: condition_key
       - name: nct_id
         data_type: VARCHAR
       - name: indication_profile_id
         data_type: VARCHAR
         description: Indication profile whose query scope produced this row. Part of the model's grain.
         tests: [not_null]
+      - name: node_id
+        data_type: VARCHAR
+        description: Namespaced node identity ("group:<slug>" or mesh id); part of the model's grain.
+        tests: [not_null]
+      - name: condition_group
+        data_type: VARCHAR
+        description: >
+          Node label (taxonomy group slug or MeSH term); legacy column name
+          kept for existing consumers, which filter on group slugs that MeSH
+          term labels never collide with.
+        tests: [not_null]
+      - name: mesh_id
+        data_type: VARCHAR
+        description: MeSH browse id for mesh rows, null for taxonomy group rows.
+      - name: is_ancestor
+        data_type: BOOLEAN
+        description: >
+          True for registry ancestor-closure edges (browsing only); false for
+          taxonomy group rows and directly applied MeSH terms.
+        tests: [not_null]
+      - name: mapping_source
+        data_type: VARCHAR
+        description: mesh | yaml_overlay | text_fallback (Issue #52).
+        tests:
+          - accepted_values:
+              values: [mesh, yaml_overlay, text_fallback]
       - name: dementia_relevance_flag
         data_type: BOOLEAN
       - name: mapping_confidence

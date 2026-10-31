@@ -6,9 +6,12 @@ incomplete snapshot. Duplicate NCT IDs within a run are deduplicated (first
 occurrence kept) and reported, never silently ignored.
 
 When called via the profile system, build_silver_for_run receives an
-IndicationProfile that supplies the per-profile taxonomy and profile_id
-(used to stamp every silver row with indication_profile_id and to correctly
-de-duplicate: the same NCT ID in two profiles is valid, not a duplicate).
+IndicationProfile that supplies the profile_id (used to stamp every silver row
+with indication_profile_id and to correctly de-duplicate: the same NCT ID in
+two profiles is valid, not a duplicate) and, optionally, the profile's
+condition taxonomy overlay. Since Issue #52 a profile without a taxonomy still
+transforms: MeSH browse terms are the default condition identity and condition
+text rows fall back (mapping_source text_fallback).
 """
 
 from __future__ import annotations
@@ -34,6 +37,7 @@ PROGRESS_EVERY = 100_000
 ENTITY_NAMES = (
     "silver_trials",
     "silver_trial_conditions",
+    "silver_trial_condition_mesh",
     "silver_trial_interventions",
     "silver_trial_sponsors",
     "silver_trial_locations",
@@ -58,21 +62,19 @@ def build_silver_for_run(
     if not run_dir.exists():
         raise FileNotFoundError(f"Bronze pages missing for run {run_id}: {run_dir}")
 
-    # A named profile with no taxonomy is a caller bug, not a licence to borrow
-    # another profile's: the rows would carry this profile's
-    # `indication_profile_id` while classifying conditions by someone else's
-    # aliases. Only a caller that predates the registry (profile is None) gets the
-    # global ADRD singleton.
-    if profile is not None and profile.taxonomy is None:
+    # Step 1: Guard against ingest_only profiles. They have no place in the
+    # shared silver tree (their bronze records are held without classification).
+    if profile is not None and profile.ingest_only:
         raise ValueError(
-            f"Profile '{profile.profile_id}' has no condition_taxonomy and cannot be "
-            "transformed; it is ingest_only (see its config/profiles/*.yml)."
+            f"Profile '{profile.profile_id}' is ingest_only (see its config/profiles/*.yml) "
+            "and cannot be transformed into the shared silver tree."
         )
-    if profile is not None:
-        assert profile.taxonomy is not None
-        taxonomy = profile.taxonomy
-    else:
-        taxonomy = get_taxonomy()
+
+    # Step 2: Taxonomy is an optional overlay (Issue #52): MeSH browse terms are the
+    # default condition identity. A non-ingest-only profile without a taxonomy
+    # still transforms — condition text rows fall back (mapping_source text_fallback)
+    # and the registry's conditionBrowseModule carries the browsable identity.
+    taxonomy = profile.taxonomy if profile is not None else get_taxonomy()
     geography = get_geography_rules()
     profile_id = profile.profile_id if profile else "adrd"
     snapshot_ts = manifest.started_at_utc.isoformat()
@@ -186,6 +188,17 @@ def run_transform(
         if not force and _already_transformed(cfg, manifest.ingestion_run_id):
             log.info(
                 "Run {} already transformed; skipping (use --force to rebuild).",
+                manifest.ingestion_run_id,
+            )
+            continue
+        # A new entity in ENTITY_NAMES marks every pre-upgrade run as not yet
+        # transformed, but runs whose bronze was pruned can never be rebuilt:
+        # skip them and keep their retained silver exactly as written, instead
+        # of failing the whole upgrade on FileNotFoundError.
+        if not (cfg.paths.bronze_api_responses / f"run_id={manifest.ingestion_run_id}").exists():
+            log.warning(
+                "Run {}: bronze pages pruned; keeping existing silver as written "
+                "(the run cannot be rebuilt without its bronze).",
                 manifest.ingestion_run_id,
             )
             continue
