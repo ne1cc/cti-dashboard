@@ -59,6 +59,15 @@ nulls it instead (pinned by
 mean is the opposite case: a one-point mean is honest, so
 `recruiting_trial_count_3m_avg` keeps its value even at a single month.
 
+| Metric | Definition |
+|---|---|
+| recruiting_trials_per_100k | `100000.0 * recruiting_trial_count / population` (rounded to 4 decimals); null when population is missing or nonpositive |
+| population | Resident population from U.S. Census Bureau (Vintage 2024, July 1, 2024 estimates, `POPESTIMATE2024` from `NST-EST2024-ALLDATA.csv`); null for unmatched territories |
+| population_source | `U.S. Census Bureau` when population is present, else null |
+| population_vintage | `Vintage 2024` when population is present, else null |
+
+Population normalization controls for state size so that large states (CA, TX, FL, NY) do not dominate maps solely due to resident count. **Interpretation guardrail:** neither raw listing counts nor population-adjusted rates measure clinical need, disease prevalence, or patient access. Unmatched jurisdictions (e.g. Guam, Virgin Islands) retain raw counts but carry null per-100k rates.
+
 ## Reliability metrics (`mart_data_reliability`)
 | Metric | Definition |
 |---|---|

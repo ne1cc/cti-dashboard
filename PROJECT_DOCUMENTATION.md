@@ -13,8 +13,8 @@
 |---|---|---|
 | **System Architecture** | [`docs/architecture.md`](docs/architecture.md) | Medallion architecture (Bronze/Silver/Gold), layer contracts, grain definitions, technology choices, and [configuration reference](docs/architecture.md#configuration-reference) |
 | **Data Dictionary** | [`docs/data_dictionary.md`](docs/data_dictionary.md) | Entity specifications for Silver Parquet files and Gold dbt models (dimensions, facts, marts), plus the [glossary](docs/data_dictionary.md#glossary) |
-| **Metric Definitions** | [`docs/metric_definitions.md`](docs/metric_definitions.md) | Grains and formulas for the raw registry segment metrics, and the ADR 0077 rationale for removing the composite score and priority bands |
-| **Source & Ingestion** | [`docs/source_documentation.md`](docs/source_documentation.md) | ClinicalTrials.gov API v2 protocol, pagination, [incremental reuse](docs/source_documentation.md#incremental-reuse), and quarantine handling |
+| **Metric Definitions** | [`docs/metric_definitions.md`](docs/metric_definitions.md) | Grains and formulas for registry segment metrics and per-100k state listings (Census Vintage 2024), and the ADR 0077 rationale for removing the composite score and priority bands |
+| **Source & Ingestion** | [`docs/source_documentation.md`](docs/source_documentation.md) | ClinicalTrials.gov API v2 protocol, pagination, [incremental reuse](docs/source_documentation.md#incremental-reuse), quarantine handling, and the static Census Vintage 2024 population seed |
 | **Data Quality Framework** | [`docs/data_quality_framework.md`](docs/data_quality_framework.md) | Ingestion validation, Silver transformations, dbt schema/data tests, reconciliation gates, and CI checks |
 | **Dashboard Specification** | [`docs/dashboard_spec.md`](docs/dashboard_spec.md) | Streamlit dashboard layout, page structure, UI components, caching strategy, and filters |
 | **Competition Audit** | [`docs/competition_audit.md`](docs/competition_audit.md) | Competition audit panel details, drill-through definitions, audit JSON schema, and limitations |

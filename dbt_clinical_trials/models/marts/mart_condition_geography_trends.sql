@@ -15,6 +15,10 @@ with activity as (
     select * from {{ ref('int_condition_geography_activity') }}
 ),
 
+state_pop as (
+    select * from {{ ref('state_population') }}
+),
+
 monthly as (
     select
         indication_profile_id,
@@ -52,21 +56,31 @@ windowed as (
 )
 
 select
-    indication_profile_id,
-    activity_month,
-    condition_group,
-    state_normalized,
-    trial_count,
-    recruiting_trial_count,
-    newly_posted_in_month_proxy,
-    sponsor_count,
-    recruiting_trial_count_3m_avg,
-    recruiting_count_3m_baseline,
+    w.indication_profile_id,
+    w.activity_month,
+    w.condition_group,
+    w.state_normalized,
+    w.trial_count,
+    w.recruiting_trial_count,
+    w.newly_posted_in_month_proxy,
+    w.sponsor_count,
+    w.recruiting_trial_count_3m_avg,
+    w.recruiting_count_3m_baseline,
     case
-        when months_in_window >= 2 then {{ safe_divide(
-            'recruiting_trial_count - recruiting_count_3m_baseline',
-            'recruiting_count_3m_baseline',
+        when w.months_in_window >= 2 then {{ safe_divide(
+            'w.recruiting_trial_count - w.recruiting_count_3m_baseline',
+            'w.recruiting_count_3m_baseline',
         ) }}
         else null
-    end as recruiting_growth_3m
-from windowed
+    end as recruiting_growth_3m,
+    sp.population,
+    case when sp.population is not null then 'U.S. Census Bureau' else null end as population_source,
+    case when sp.population is not null then sp.vintage else null end as population_vintage,
+    case
+        when sp.population is not null and sp.population > 0 then
+            round(100000.0 * cast(w.recruiting_trial_count as double) / cast(sp.population as double), 4)
+        else null
+    end as recruiting_trials_per_100k
+from windowed w
+left join state_pop sp
+    on w.state_normalized = sp.state_code

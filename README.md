@@ -247,7 +247,13 @@ processes can share the file, while writes require exclusive access.
 
 ### Metric Definitions
 
-Fully documented in [`docs/metric_definitions.md`](docs/metric_definitions.md). Core rules: trial counts are always `COUNT(DISTINCT nct_id)`; site counts use the documented facility grain and are never presented as investigator capacity; only complete (`success`) snapshots feed metrics.
+Fully documented in [`docs/metric_definitions.md`](docs/metric_definitions.md). Core
+rules: trial counts are always `COUNT(DISTINCT nct_id)`; site counts use the documented
+facility grain and are never presented as investigator capacity; only complete
+(`success`) snapshots feed metrics. The state choropleth defaults to population-adjusted
+listings (per 100k residents from U.S. Census Bureau Vintage 2024 estimates) with a toggle
+for raw counts; population normalization controls for state size without measuring disease
+prevalence or patient access.
 
 ### Registry Segment Metrics Methodology
 

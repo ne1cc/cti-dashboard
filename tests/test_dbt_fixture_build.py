@@ -588,6 +588,54 @@ def test_trends_growth_guard_emits_non_null_only_on_a_two_month_segment(
     )
 
 
+def test_mart_condition_geography_trends_population_columns(
+    fixture_project_root: Path,
+) -> None:
+    """Verify mart_condition_geography_trends populates Census population, source, vintage,
+    and correct recruiting_trials_per_100k rates."""
+    import yaml
+
+    rows = _rows(
+        fixture_project_root,
+        """
+        select
+            state_normalized,
+            recruiting_trial_count,
+            population,
+            population_source,
+            population_vintage,
+            recruiting_trials_per_100k
+        from main_marts.mart_condition_geography_trends
+        where state_normalized in ('CA', 'NC')
+        order by state_normalized, indication_profile_id
+        """,
+    )
+    assert len(rows) > 0, "No CA or NC rows in mart_condition_geography_trends"
+    for state, recruiting, pop, src, vintage, rate in rows:
+        assert src == "U.S. Census Bureau"
+        assert vintage == "Vintage 2024"
+        assert pop is not None and pop > 0
+        if state == "CA":
+            assert pop == 39431263
+        elif state == "NC":
+            assert pop == 11046024
+        expected_rate = round(100000.0 * recruiting / pop, 4)
+        assert rate == expected_rate
+
+    # Contract declaration check for the 4 population columns
+    from src.utils.paths import project_root
+
+    doc = yaml.safe_load(
+        (project_root() / "dbt_clinical_trials/models/marts/_marts.yml").read_text(encoding="utf-8")
+    )
+    model_block = next(m for m in doc["models"] if m["name"] == "mart_condition_geography_trends")
+    columns = {c["name"]: c["data_type"] for c in model_block["columns"]}
+    assert columns["population"] == "BIGINT"
+    assert columns["population_source"] == "VARCHAR"
+    assert columns["population_vintage"] == "VARCHAR"
+    assert columns["recruiting_trials_per_100k"] == "DOUBLE"
+
+
 def test_mart_feasibility_priority_queue_shape(fixture_project_root: Path) -> None:
     """Assert segment row counts per profile, key uniqueness, raw metrics, and no score columns.
 
