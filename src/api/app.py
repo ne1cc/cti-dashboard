@@ -602,28 +602,8 @@ def create_app(
                     str(request.url),
                     code="INVALID_CURSOR",
                 )
-            except TimeoutError as timeout_err:
-                logger.warning("Warehouse connection pool timed out", exc_info=timeout_err)
-                res = create_problem_response(
-                    503,
-                    "Service Unavailable",
-                    "The warehouse is temporarily saturated. Please retry after a brief pause.",
-                    str(request.url),
-                    code="WAREHOUSE_BUSY",
-                )
-                res.headers["Retry-After"] = "5"
-                return res
-            except WarehouseNotReadyError as not_ready_err:
-                logger.warning("Warehouse not ready during search", exc_info=not_ready_err)
-                res = create_problem_response(
-                    503,
-                    "Service Unavailable",
-                    f"Warehouse is not ready: {not_ready_err}",
-                    str(request.url),
-                    code="WAREHOUSE_NOT_READY",
-                )
-                res.headers["Retry-After"] = "5"
-                return res
+            except (TimeoutError, WarehouseNotReadyError):
+                raise  # global handlers map these to 503 + Retry-After
             except Exception as err:
                 logger.error("Warehouse search failed", exc_info=err)
                 return create_problem_response(
@@ -761,28 +741,8 @@ def create_app(
             try:
                 detail = deps.warehouse.get_trial_detail(canonical_nct, lat=lat, lon=lon)
                 snap_id, snap_ts = deps.warehouse.get_snapshot_metadata()
-            except TimeoutError as timeout_err:
-                logger.warning("Warehouse connection pool timed out", exc_info=timeout_err)
-                res = create_problem_response(
-                    503,
-                    "Service Unavailable",
-                    "The warehouse is temporarily saturated. Please retry after a brief pause.",
-                    str(request.url),
-                    code="WAREHOUSE_BUSY",
-                )
-                res.headers["Retry-After"] = "5"
-                return res
-            except WarehouseNotReadyError as not_ready_err:
-                logger.warning("Warehouse not ready during detail query", exc_info=not_ready_err)
-                res = create_problem_response(
-                    503,
-                    "Service Unavailable",
-                    f"Warehouse is not ready: {not_ready_err}",
-                    str(request.url),
-                    code="WAREHOUSE_NOT_READY",
-                )
-                res.headers["Retry-After"] = "5"
-                return res
+            except (TimeoutError, WarehouseNotReadyError):
+                raise  # global handlers map these to 503 + Retry-After
             except Exception as err:
                 logger.error("Warehouse detail query failed", exc_info=err)
                 return create_problem_response(
