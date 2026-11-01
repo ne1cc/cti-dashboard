@@ -681,9 +681,10 @@ def test_growth_history_gating_across_snapshot_depths_and_gaps(
     but its timing inside any 90-day window ending there is unobserved, so
     every windowed figure on 12-15 stays null even though entered_recruiting_flag
     is set. On 12-22 the latest gap is 7 days and observed history is 112
-    days, so the windows are covered and both recorded entries appear --
-    with legitimately 0 values on covered segments that recorded no
-    transition, distinct from the nulls that mean "not enough history".
+    days, but the predecessor 09-01 predates the 90-day window start (09-23) by
+    22 days (> 14-day tolerance) and the earliest in-window snapshot (12-15) sits
+    83 days past the window start, so the window is not covered and 90-day
+    figures stay null ("not enough history").
     Measured on a `dbt build` of this root.
     """
     assert _rows(
@@ -699,7 +700,7 @@ def test_growth_history_gating_across_snapshot_depths_and_gaps(
         ("adrd", "2026-10-01", 30, 30, 8, 8, 0, 0),
         ("oncology_nsclc", "2026-09-01", 0, 0, 4, 0, 0, 0),
         ("oncology_nsclc", "2026-12-15", 105, 105, 5, 0, 0, 0),
-        ("oncology_nsclc", "2026-12-22", 112, 112, 8, 8, 8, 8),
+        ("oncology_nsclc", "2026-12-22", 112, 112, 8, 0, 0, 0),
     ]
     # The one ADRD entrant (a status flip observed on 09-08) is what the
     # covered 30-day window at 10-01 sums; the added recruits of the second
@@ -718,27 +719,16 @@ def test_growth_history_gating_across_snapshot_depths_and_gaps(
         " where indication_profile_id = 'oncology_nsclc'"
         " and snapshot_date = '2026-12-15' and entered_recruiting_flag",
     ) == [(1,)]
-    # The covered 12-22 arm: the two recorded entries surface per segment
-    # (NCT00000003 lists three facilities, so its segment appears in three
-    # states), and covered segments without transitions report a real 0.
-    covered = _rows(
+    # The 12-22 gap arm: despite a recent 7-day snapshot pair, the boundary
+    # predecessor (09-01) sits 22 days before the 90-day window opens (09-23),
+    # which exceeds the 14-day tolerance, keeping windowed figures null.
+    uncovered_90d = _rows(
         growth_history_fixture_root,
-        "select condition_group, state_normalized, new_recruiting_90d, recruiting_growth_90d"
+        "select count(new_recruiting_90d), count(recruiting_growth_90d)"
         " from main_marts.mart_recruiting_competition"
-        " where indication_profile_id = 'oncology_nsclc' and snapshot_date = '2026-12-22'"
-        " order by new_recruiting_90d desc, condition_group, state_normalized",
+        " where indication_profile_id = 'oncology_nsclc' and snapshot_date = '2026-12-22'",
     )
-    assert [row[2] for row in covered] == [1, 1, 1, 1, 0, 0, 0, 0]
-    assert [row[0] for row in covered if row[2] == 1] == [
-        "nsclc_squamous",
-        "nsclc_squamous",
-        "nsclc_squamous",
-        "nsclc_unspecified",
-    ]
-    assert all(row[3] == 0.0 for row in covered), (
-        "growth on a covered window with an unchanged count is a real 0, "
-        "distinct from the nulls that mean not enough history"
-    )
+    assert uncovered_90d == [(0, 0)]
     # The monthly mart on the same root: NSCLC's December rows reach back to
     # a September baseline exactly three months away, so growth is emitted
     # there despite the intervening empty months; ADRD never spans three

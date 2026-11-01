@@ -181,13 +181,17 @@ if selected_rows:
         f"{segment['state_normalized']} · {format_phase(segment['phase_normalized'])}"
     )
     segment_history = int(segment["observed_history_days"])
-    growth_label = "Recent recruiting growth (90d)"
     if pd.notna(segment["new_recruiting_90d"]):
+        growth_label = "Recent recruiting growth (90d)"
         growth_val = (
             f"{int(segment['new_recruiting_90d'])} newly recruiting "
             f"({segment_history} days of history observed)"
         )
+    elif segment_history >= 90:
+        growth_label = "Recent recruiting growth"
+        growth_val = "not enough history (gap between snapshots exceeds window) — unknown, not zero"
     else:
+        growth_label = "Recent recruiting growth"
         growth_val = (
             f"not enough history ({segment_history} of 90 days observed) — unknown, not zero"
         )

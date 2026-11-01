@@ -41,13 +41,16 @@ def format_snapshot_date(value: str | pd.Timestamp | datetime | date | None) -> 
 
 def format_priority_explanation(row: pd.Series) -> str:
     """Summarize segment metrics without presenting first-post counts as recruiting events."""
+    observed = row.get("observed_history_days", 0)
     if pd.notna(row["new_recruiting_90d"]):
-        growth = f"Newly recruiting (90d): {row['new_recruiting_90d']:.0f}"
-    else:
         growth = (
-            "Newly recruiting (90d): not enough history "
-            f"({row['observed_history_days']:.0f} of 90 days observed)"
+            f"Newly recruiting (90d): {row['new_recruiting_90d']:.0f} "
+            f"({observed:.0f} days of history observed)"
         )
+    elif observed >= 90:
+        growth = "Newly recruiting: not enough history (gap between snapshots exceeds window)"
+    else:
+        growth = f"Newly recruiting: not enough history ({observed:.0f} of 90 days observed)"
     return (
         f"Recruiting trials: {row['recruiting_trial_count']:.0f} · "
         f"{growth} · "

@@ -29,10 +29,10 @@ Global rules:
 |---|---|
 | recruiting_trial_count | distinct RECRUITING listings in the segment — a raw count, without population adjustment |
 | observed_history_days | days of snapshot history observed as of the snapshot (earliest retained snapshot through the row's own date); 0 on a first snapshot |
-| new_recruiting_30d / 90d | sum of entered_recruiting transitions observed at snapshot dates inside a 30/90-day window (`RANGE BETWEEN INTERVAL n DAYS PRECEDING`); **null unless observed history covers the window** (observed_history_days ≥ n) and the latest gap between snapshots is at most n days — a transition observed across a longer gap has unobserved timing inside the window, so it cannot be counted as if observed within it. Null means not enough history, never zero transitions |
+| new_recruiting_30d / 90d | sum of entered_recruiting transitions observed at snapshot dates inside a 30/90-day window (`RANGE BETWEEN INTERVAL n DAYS PRECEDING`); **null unless observed history covers the window** (observed_history_days ≥ n, earliest in-window snapshot and its predecessor sit within 14-day tolerance of the window boundary, and the latest gap between snapshots is at most n days) — a transition observed across an unobserved gap has unknown timing, so it cannot be counted as if observed within the window. Null means not enough history, never zero transitions |
 | newly_registered_90d | recruiting trials with `study_first_post_date` ≥ snapshot date minus 90 days (inclusive lower bound, no upper bound) — a **registration count** from registry dates, not a recruiting transition; computable from a single snapshot |
 | recruiting_count_90d_baseline | first recruiting-count value inside the 90-day window |
-| recruiting_growth_90d | (recruiting count − baseline) / baseline; null unless the 90-day window is covered (same guards as new_recruiting_90d, which guarantees the baseline is an earlier snapshot) or the baseline is 0 |
+| recruiting_growth_90d | (recruiting count − baseline) / baseline; null unless the 90-day window is covered, the segment was observed at the window's earliest snapshot (guaranteeing baseline precedes the row), and baseline count is > 0 (safe_divide). Never manufactured 0.0 for newly appearing segments or unknown history |
 | top_sponsor_share | max lead-sponsor share of segment recruiting trials |
 | sponsor_hhi | Σ (lead-sponsor share)², 0..1; 1.0 = single sponsor |
 | density_percentile | `percent_rank()` ordered by recruiting count within profile × snapshot date |
@@ -236,7 +236,7 @@ snapshot date minus 90 days, with an inclusive lower bound and no upper bound; r
 and parsed first-post dates survive.
 Eligible coverage and count-input contributors remain separate from event contributors.
 
-The panel audits count inputs and identifies growth/proxy contributing events, without
+The panel audits count inputs and identifies qualifying recruiting transition and newly registered contributing events, without
 recomputing unrelated HHI or percentiles. Derived formulas, displayed values, source-rule
 hashes and relevant windows are exported. These derived values cannot be inferred merely
 from the union contributor count.

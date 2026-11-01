@@ -1,5 +1,6 @@
 """Competition Landscape — recruiting trial counts and sponsor concentration."""
 
+import pandas as pd
 import plotly.express as px
 import streamlit as st
 from components import data
@@ -77,6 +78,7 @@ table_df = filtered.sort_values(
         "phase_normalized",
         "recruiting_trial_count",
         "listed_site_count",
+        "observed_history_days",
         "new_recruiting_90d",
         "newly_registered_90d",
         "sponsor_count",
@@ -88,17 +90,28 @@ table_df = filtered.sort_values(
 table_df["condition_group"] = table_df["condition_group"].apply(format_condition_group)
 table_df["phase_normalized"] = table_df["phase_normalized"].map(format_phase)
 table_df["competition_signal_band"] = table_df["competition_signal_band"].str.capitalize()
-# The "(90d)" label is only honest once 90 days were actually observed; below
-# that the column carries "not enough history" text instead of a count or 0.
+# The "(90d)" label is only honest once 90 days were actually observed and covered;
+# below that or across unobserved gaps the column carries "not enough history".
+has_covered_rows = (
+    bool(filtered["new_recruiting_90d"].notna().any()) if not filtered.empty else False
+)
+growth_window_covered = observed_history_days >= 90 and has_covered_rows
+
+
+def _format_competition_new_recruiting(value: float | None) -> str:
+    if pd.notna(value):
+        return f"{value:.0f}"
+    if observed_history_days >= 90:
+        return "not enough history (gap between snapshots exceeds window)"
+    return f"not enough history ({observed_history_days} of 90 days observed)"
+
+
+table_df["new_recruiting_90d"] = table_df["new_recruiting_90d"].apply(
+    _format_competition_new_recruiting
+)
 if growth_window_covered:
-    table_df["new_recruiting_90d"] = table_df["new_recruiting_90d"].map(
-        lambda value: f"{value:.0f}"
-    )
     growth_column_label = "New Recruiting (90d)"
 else:
-    table_df["new_recruiting_90d"] = (
-        f"not enough history ({observed_history_days} of 90 days observed)"
-    )
     growth_column_label = "New Recruiting (observed history too short)"
 
 st.dataframe(
@@ -111,6 +124,11 @@ st.dataframe(
         "phase_normalized": st.column_config.TextColumn("Phase"),
         "recruiting_trial_count": st.column_config.NumberColumn("Recruiting Listings", format="%d"),
         "listed_site_count": st.column_config.NumberColumn("Listed Sites", format="%d"),
+        "observed_history_days": st.column_config.NumberColumn(
+            "Observed History (days)",
+            format="%d",
+            help="Snapshot history accrued for this profile in days.",
+        ),
         "new_recruiting_90d": st.column_config.TextColumn(
             growth_column_label,
             help="Trials observed transitioning into recruiting within 90 days; "

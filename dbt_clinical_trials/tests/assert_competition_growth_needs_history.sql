@@ -13,33 +13,71 @@
 -- snapshots at 09-01/09-08/10-01 a profile holds 30 retained days but had
 -- observed only 7 when that snapshot was captured, and the guard must gate
 -- on what was observed.
-with profile_history as (
+with snapshot_calendar as (
+    select distinct indication_profile_id, snapshot_date
+    from {{ ref('fct_trial_snapshot') }}
+),
+
+profile_history as (
     select
         indication_profile_id,
         snapshot_date,
         datediff('day', min(snapshot_date) over running_window, snapshot_date)
-            as observed_history_days
-    from (
-        select distinct indication_profile_id, snapshot_date
-        from {{ ref('fct_trial_snapshot') }}
-    )
+            as observed_history_days,
+        lag(snapshot_date) over running_window as previous_snapshot_date
+    from snapshot_calendar
     window running_window as (
         partition by indication_profile_id order by snapshot_date
     )
 ),
 
-previous_snapshot as (
+profile_window_coverage as (
     select
         indication_profile_id,
         snapshot_date,
-        lag(snapshot_date) over previous_window as previous_snapshot_date
-    from (
-        select distinct indication_profile_id, snapshot_date
-        from {{ ref('fct_trial_snapshot') }}
-    )
-    window previous_window as (
-        partition by indication_profile_id order by snapshot_date
-    )
+        observed_history_days,
+        previous_snapshot_date,
+        first_value(snapshot_date) over profile_30d as window_30d_earliest_date,
+        first_value(previous_snapshot_date) over profile_30d as window_30d_earliest_pred_date,
+        first_value(snapshot_date) over profile_90d as window_90d_earliest_date,
+        first_value(previous_snapshot_date) over profile_90d as window_90d_earliest_pred_date
+    from profile_history
+    window
+        profile_30d as (
+            partition by indication_profile_id order by snapshot_date
+            range between interval 30 day preceding and current row
+        ),
+        profile_90d as (
+            partition by indication_profile_id order by snapshot_date
+            range between interval 90 day preceding and current row
+        )
+),
+
+coverage_flags as (
+    select
+        indication_profile_id,
+        snapshot_date,
+        observed_history_days,
+        previous_snapshot_date,
+        (
+            observed_history_days >= 30
+            and window_30d_earliest_date <= snapshot_date - interval 30 day + interval 14 day
+            and (
+                window_30d_earliest_pred_date is null
+                or window_30d_earliest_pred_date >= snapshot_date - interval 30 day - interval 14 day
+            )
+            and coalesce(previous_snapshot_date >= snapshot_date - interval 30 day, false)
+        ) as is_30d_covered,
+        (
+            observed_history_days >= 90
+            and window_90d_earliest_date <= snapshot_date - interval 90 day + interval 14 day
+            and (
+                window_90d_earliest_pred_date is null
+                or window_90d_earliest_pred_date >= snapshot_date - interval 90 day - interval 14 day
+            )
+            and coalesce(previous_snapshot_date >= snapshot_date - interval 90 day, false)
+        ) as is_90d_covered
+    from profile_window_coverage
 )
 
 select
@@ -49,35 +87,17 @@ select
     c.state_normalized,
     c.phase_normalized,
     h.observed_history_days,
-    p.previous_snapshot_date,
+    h.previous_snapshot_date,
     c.new_recruiting_30d,
     c.new_recruiting_90d,
     c.recruiting_growth_90d
 from {{ ref('mart_recruiting_competition') }} c
-inner join profile_history h
+inner join coverage_flags h
     on h.indication_profile_id = c.indication_profile_id
     and h.snapshot_date = c.snapshot_date
-inner join previous_snapshot p
-    on p.indication_profile_id = c.indication_profile_id
-    and p.snapshot_date = c.snapshot_date
-where (
-        h.observed_history_days >= 30
-        and coalesce(
-            p.previous_snapshot_date >= c.snapshot_date - interval 30 day, false
-        )
-      ) is distinct from (c.new_recruiting_30d is not null)
-   or (
-        h.observed_history_days >= 90
-        and coalesce(
-            p.previous_snapshot_date >= c.snapshot_date - interval 90 day, false
-        )
-      ) is distinct from (c.new_recruiting_90d is not null)
+where h.is_30d_covered is distinct from (c.new_recruiting_30d is not null)
+   or h.is_90d_covered is distinct from (c.new_recruiting_90d is not null)
    or (
         c.recruiting_growth_90d is not null
-        and not (
-            h.observed_history_days >= 90
-            and coalesce(
-                p.previous_snapshot_date >= c.snapshot_date - interval 90 day, false
-            )
-        )
+        and not h.is_90d_covered
       )

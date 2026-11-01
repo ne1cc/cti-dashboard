@@ -12,6 +12,7 @@ with windowed as (
         state_normalized,
         activity_month,
         recruiting_growth_3m,
+        observed_history_days,
         min(activity_month) over trailing_3m as window_first_month
     from {{ ref('mart_condition_geography_trends') }}
     window trailing_3m as (
@@ -26,7 +27,11 @@ select
     state_normalized,
     activity_month,
     window_first_month,
+    observed_history_days,
     recruiting_growth_3m
 from windowed
 where recruiting_growth_3m is not null
-    and datediff('month', window_first_month, activity_month) < 3
+    and (
+        datediff('month', window_first_month, activity_month) < 3
+        or observed_history_days < 90
+    )

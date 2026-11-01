@@ -98,6 +98,7 @@ select
     h.observed_history_days,
     case
         when datediff('month', w.window_first_month, w.activity_month) >= 3
+            and h.observed_history_days >= 90
             then {{ safe_divide(
                 'w.recruiting_trial_count - w.recruiting_count_3m_baseline',
                 'w.recruiting_count_3m_baseline',

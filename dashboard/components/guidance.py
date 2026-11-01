@@ -302,7 +302,7 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
                 "an incoming wave of active protocols that will compete for clinical coordinators."
             ),
             (
-                '**Audit Registry Date Fallback:** The "Newly registered (first '
+                '**Evaluate Newly Registered Studies:** The "Newly registered (first '
                 'posted)" column counts registry first-post dates — registrations, '
                 'not recruiting transitions; growth stays "not enough history" '
                 "until 90 days of snapshots accumulate."

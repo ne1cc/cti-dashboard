@@ -532,10 +532,11 @@ def growth_history_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Pat
     NSCLC is the gap arm. The 105-day jump from 09-01 to 12-15 is longer than
     the 90-day window itself, so transitions first observed on 12-15 have
     unobserved timing inside every window that matters: the 90-day figures
-    there must stay null even though entered_recruiting_flag is set. A week
-    later (12-22) the latest gap is 7 days and history exceeds 90 days, so the
-    window is covered and the two recorded transitions legitimately appear --
-    observed-timing attribution, not manufactured zero growth.
+    there stay null even though entered_recruiting_flag is set. A week
+    later (12-22) the latest gap is 7 days and history is 112 days, but the
+    predecessor 09-01 predates the 90-day window opening (09-23) by 22 days
+    (> 14-day tolerance), so the window is not covered and 90-day transition
+    figures stay null — timing across the 105-day jump remains unobserved.
     """
     return _build_fixture_root(
         tmp_path_factory,

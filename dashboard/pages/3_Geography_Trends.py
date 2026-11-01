@@ -54,31 +54,33 @@ st.caption(
 st.subheader("Top states")
 # Growth renders as text so an uncovered window can say "not enough history"
 # instead of a blank that reads as zero; covered windows keep a signed percent.
-latest_table = latest.sort_values("recruiting_trial_count", ascending=False)[
+top_rows = latest.sort_values("recruiting_trial_count", ascending=False).head(20).copy()
+
+
+def _format_growth_3m(row: pd.Series) -> str:
+    val = row["recruiting_growth_3m"]
+    if pd.notna(val):
+        return f"{val * 100:+.1f}%"
+    history = row.get("observed_history_days", 0)
+    baseline = row.get("recruiting_count_3m_baseline")
+    if pd.notna(baseline) and baseline == 0 and history >= 90:
+        return "zero baseline"
+    return "not enough history (window spans under 3 months)"
+
+
+top_rows["recruiting_growth_3m"] = top_rows.apply(_format_growth_3m, axis=1)
+
+latest_table = top_rows[
     [
         "state_normalized",
         "recruiting_trial_count",
         "trial_count",
         "sponsor_count",
         "newly_registered_in_month",
+        "observed_history_days",
         "recruiting_growth_3m",
     ]
-].head(20)
-latest_table = pd.concat(
-    [
-        latest_table.drop(columns=["recruiting_growth_3m"]),
-        latest_table["recruiting_growth_3m"]
-        .map(
-            lambda value: (
-                f"{value * 100:+.1f}%"
-                if pd.notna(value)
-                else "not enough history (window spans under 3 months)"
-            )
-        )
-        .rename("recruiting_growth_3m"),
-    ],
-    axis=1,
-)
+]
 st.dataframe(
     latest_table,
     hide_index=True,
@@ -93,6 +95,11 @@ st.dataframe(
             format="%d",
             help="Trials whose registry first-post month equals the snapshot "
             "month — registrations, not recruiting transitions.",
+        ),
+        "observed_history_days": st.column_config.NumberColumn(
+            "Observed History (days)",
+            format="%d",
+            help="Snapshot history accrued for this profile up to this month.",
         ),
         "recruiting_growth_3m": st.column_config.TextColumn(
             "3-Month Growth",
