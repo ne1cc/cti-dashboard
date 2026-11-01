@@ -28,7 +28,7 @@ flowchart TB
 
     subgraph SILVER["Silver — normalized (src/transform)"]
         FLAT["flatten_studies.py<br/>nested JSON → tabular"]
-        ENTITIES["Parquet entities:<br/>silver_trials · silver_trial_conditions<br/>silver_trial_interventions · silver_trial_sponsors<br/>silver_trial_locations · silver_trial_outcomes"]
+        ENTITIES["Parquet entities:<br/>silver_trials · silver_trial_conditions<br/>silver_trial_interventions · silver_trial_sponsors<br/>silver_trial_locations · silver_trial_outcomes<br/>silver_trial_baseline_demographics"]
         TAX["condition_taxonomy.yml<br/>config-driven ADRD mapping"]
         GEO["geography_rules.yml<br/>US state normalization"]
     end

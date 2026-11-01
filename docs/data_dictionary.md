@@ -83,6 +83,16 @@ exist anywhere in this project (formalized in ADR 0065).
 `outcome_type` (primary/secondary), `measure`, `time_frame`. Descriptive
 text only — never interpreted clinically.
 
+### `silver_trial_baseline_demographics` — grain: NCT × measure × class × category × group × run
+One row per `resultsSection.baselineCharacteristicsModule` measurement: who
+actually enrolled, with labels kept exactly as sponsors reported them (combined
+race/ethnicity tables often carry the label in the class title, so
+`class_title` + `category_title` are both preserved and disambiguation is left
+to the dbt layer). `participant_count` parses only when the measure is a
+participant count. `group_denominator` is the most specific denominator the
+registry reports for the group — class, then measure, then module scope —
+taken from the participant-denominated `denoms` entry when one exists.
+
 ---
 
 ## Gold: staging (`main_staging`, views)

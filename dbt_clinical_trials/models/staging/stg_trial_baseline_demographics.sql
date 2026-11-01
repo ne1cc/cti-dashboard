@@ -10,6 +10,9 @@
 -- itself. Anything unresolvable — including dimension-neutral buckets like
 -- "Unknown or Not Reported" inside a combined table — keeps its reported label,
 -- stays unmapped, and carries is_ambiguous_combined_flag rather than a guess.
+-- Dimension words match on RE2 word boundaries (review round 1, finding 4):
+-- "Gender" is sex, "Mean Age" is age, and "GRACE score" is not race. \bethnic
+-- keeps its prefix boundary only so "ethnicity" still matches.
 with raw as (
     select
         ingestion_run_id,
@@ -37,21 +40,27 @@ with raw as (
     where nct_id is not null
 ),
 
+lowered as (
+    select *, lower(coalesce(measure_title, '')) as lower_title
+    from raw
+),
+
 classified as (
+    -- lower_title flows through the CTEs and is dropped by the final select.
     select
         *,
         case
-            when lower(measure_title) like '%race%'
-                and lower(measure_title) like '%ethnic%'
-                and lower(measure_title) like '%not collected%'
+            when regexp_matches(lower_title, '\brace\b')
+                and regexp_matches(lower_title, '\bethnic')
+                and regexp_matches(lower_title, 'not collected')
                 then 'race_ethnicity_not_collected'
-            when lower(measure_title) like '%race%'
-                and lower(measure_title) like '%ethnic%'
+            when regexp_matches(lower_title, '\brace\b')
+                and regexp_matches(lower_title, '\bethnic')
                 then 'race_ethnicity_combined'
-            when lower(measure_title) like '%ethnic%' then 'ethnicity'
-            when lower(measure_title) like '%race%' then 'race'
-            when lower(measure_title) like 'sex%' then 'sex'
-            when lower(measure_title) like 'age%' then 'age'
+            when regexp_matches(lower_title, '\bethnic') then 'ethnicity'
+            when regexp_matches(lower_title, '\brace\b') then 'race'
+            when regexp_matches(lower_title, '\b(sex|gender)\b') then 'sex'
+            when regexp_matches(lower_title, '\bage\b') then 'age'
             else 'other'
         end as dimension,
         -- Lookup label: reported label with an explicit dimension prefix removed
@@ -71,7 +80,7 @@ classified as (
                 then 'ethnicity'
             else null
         end as prefix_dimension
-    from raw
+    from lowered
 ),
 
 labeled as (

@@ -168,6 +168,110 @@ class TestPrefixedCustomLabels:
         assert {row["param_type"] for row in rows} == {"MEAN"}
 
 
+class TestDenominatorScopes:
+    """Review round 1, finding 2: denoms exist at module, measure, and class
+    scope (verified against live NCT03046121), and the most specific one must
+    provide the percent base."""
+
+    @staticmethod
+    def _study(
+        measure: dict,
+        module_denoms: list[dict] | None = None,
+        class_denoms: list[dict] | None = None,
+        measure_denoms: list[dict] | None = None,
+    ) -> dict:
+        cls: dict = {
+            "title": None,
+            "categories": [
+                {"title": "Female", "measurements": [{"groupId": "BG000", "value": "25"}]}
+            ],
+        }
+        if class_denoms is not None:
+            cls["denoms"] = class_denoms
+        if measure_denoms is not None:
+            measure["denoms"] = measure_denoms
+        measure["classes"] = [cls]
+        module: dict = {
+            "groups": [{"id": "BG000", "title": "Arm A"}],
+            "measures": [measure],
+        }
+        if module_denoms is not None:
+            module["denoms"] = module_denoms
+        return {
+            "protocolSection": {"identificationModule": {"nctId": "NCT90000001"}},
+            "resultsSection": {"baselineCharacteristicsModule": module},
+            "hasResults": True,
+        }
+
+    def _denominators(self, study: dict) -> list[int | None]:
+        rows = _rows(study, "Sex: Female, Male")
+        assert len(rows) == 1
+        return [rows[0]["group_denominator"]]
+
+    def test_class_denominator_beats_measure_and_module(self) -> None:
+        study = self._study(
+            {
+                "title": "Sex: Female, Male",
+                "paramType": "COUNT_OF_PARTICIPANTS",
+                "unitOfMeasure": "Participants",
+            },
+            module_denoms=[
+                {"units": "Participants", "counts": [{"groupId": "BG000", "value": "200"}]}
+            ],
+            measure_denoms=[
+                {"units": "Participants", "counts": [{"groupId": "BG000", "value": "100"}]}
+            ],
+            class_denoms=[
+                {"units": "Participants", "counts": [{"groupId": "BG000", "value": "40"}]}
+            ],
+        )
+        assert self._denominators(study) == [40]
+
+    def test_measure_denominator_beats_module(self) -> None:
+        study = self._study(
+            {
+                "title": "Sex: Female, Male",
+                "paramType": "COUNT_OF_PARTICIPANTS",
+                "unitOfMeasure": "Participants",
+            },
+            module_denoms=[
+                {"units": "Participants", "counts": [{"groupId": "BG000", "value": "458"}]}
+            ],
+            measure_denoms=[
+                {"units": "Participants", "counts": [{"groupId": "BG000", "value": "229"}]}
+            ],
+        )
+        assert self._denominators(study) == [229]
+
+    def test_non_participant_units_entry_is_skipped(self) -> None:
+        study = self._study(
+            {
+                "title": "Sex: Female, Male",
+                "paramType": "COUNT_OF_PARTICIPANTS",
+                "unitOfMeasure": "Participants",
+            },
+            # "hospital units" listed first, as live NCT03046121 does.
+            module_denoms=[
+                {"units": "hospital units", "counts": [{"groupId": "BG000", "value": "3"}]},
+                {"units": "Participants", "counts": [{"groupId": "BG000", "value": "458"}]},
+            ],
+        )
+        assert self._denominators(study) == [458]
+
+    def test_non_numeric_counts_stay_none(self) -> None:
+        study = self._study(
+            {
+                "title": "Sex: Female, Male",
+                "paramType": "COUNT_OF_PARTICIPANTS",
+                "unitOfMeasure": "Participants",
+            },
+            module_denoms=[
+                {"units": "Participants", "counts": [{"groupId": "BG000", "value": "n=458"}]}
+            ],
+        )
+        assert self._denominators(study) == [None]
+
+
 class TestStudyWithoutResults:
     def test_no_results_section_yields_no_rows(self) -> None:
         page = json.loads(
@@ -202,7 +306,10 @@ class TestParticipantCountParsing:
 class TestFixturePageSanity:
     def test_all_studies_have_results(self) -> None:
         studies = list(iter_bronze_studies(FIXTURE_PAGE.parent))
-        assert len(studies) == 5
+        # page=00001: the five real label shapes. page=00002: NCT10000003's
+        # amended sex-only snapshot plus NCT10000006 (denominator scopes and
+        # word-boundary titles, see tests/test_demographics_coverage.py).
+        assert len(studies) == 7
         for study in studies:
             assert study["hasResults"] is True
             module = study.get("resultsSection", {}).get("baselineCharacteristicsModule")

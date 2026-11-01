@@ -19,6 +19,7 @@ trial_scope as (
     select
         t.nct_id,
         t.indication_profile_id,
+        t.ingestion_run_id,
         t.completion_date,
         m.condition_group
     from {{ ref('stg_trials') }} t
@@ -38,15 +39,20 @@ denominator as (
     select
         indication_profile_id,
         condition_group,
+        ingestion_run_id,
         year(completion_date) as completion_year,
         nct_id
     from trial_scope
 ),
 
 demographics as (
+    -- Pinned to the trial's current run (review round 1, finding 3): joining on
+    -- nct_id + profile alone let demographics from any retained older snapshot
+    -- count for a trial whose current snapshot no longer reports it.
     select distinct
         nct_id,
         indication_profile_id,
+        ingestion_run_id,
         dimension,
         resolved_dimension,
         is_ambiguous_combined_flag
@@ -68,6 +74,7 @@ per_trial as (
     left join demographics d
         on d.nct_id = b.nct_id
         and d.indication_profile_id = b.indication_profile_id
+        and d.ingestion_run_id = b.ingestion_run_id
     group by 1, 2, 3, 4
 )
 

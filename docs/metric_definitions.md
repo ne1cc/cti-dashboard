@@ -264,9 +264,15 @@ Source: `resultsSection.baselineCharacteristicsModule` (posted results), extract
 measurement, with labels kept exactly as sponsors reported them. The participant
 head-count is parsed only when the measure is a participant count (`COUNT_OF_PARTICIPANTS`
 or `NUMBER` with unit Participants); mean/median ages stay raw strings.
+`group_denominator` resolves from the most specific scope the registry reports for
+the group — class, then measure, then module — preferring the participant-denominated
+`denoms` entry when a scope lists several units; `percent_of_group_denominator` derives
+from that base in staging.
 
-**Dimension classification** (staging, from the measure title): `sex`, `age`, `race`,
-`ethnicity`, `race_ethnicity_combined`, `race_ethnicity_not_collected`, `other`.
+**Dimension classification** (staging, from the measure title, on word boundaries so
+"Gender" is sex, "Mean Age" is age, and "GRACE score" is not race): `sex` (sex/gender),
+`age`, `race`, `ethnicity`, `race_ethnicity_combined`, `race_ethnicity_not_collected`,
+`other`.
 
 **OMB mapping** (`dbt_clinical_trials/seeds/omb_race_ethnicity_mapping.csv`, versioned and PR-reviewed):
 maps a normalized sponsor label to an OMB race/ethnicity category with
@@ -281,13 +287,16 @@ combined table keep their reported label, stay unmapped, and set
 
 | Metric | Definition |
 |---|---|
-| trials_with_results_count | distinct COMPLETED trials with posted results (denominator) |
+| trials_with_results_count | distinct COMPLETED trials with posted results, read from their profile's latest snapshot (denominator) |
 | reports_sex_count / share | baseline characteristics include a sex measure |
 | reports_age_count / share | include an age measure |
 | reports_race_count / share | ≥1 race row whose dimension resolved from explicit evidence |
 | reports_ethnicity_count / share | ≥1 ethnicity row whose dimension resolved from explicit evidence |
 | ambiguous_combined_trials_count / share | denominator trials carrying ≥1 ambiguous combined row |
 
-`completion_year` is null when the registry completion date is missing or unparseable;
-those trials stay on a null-year row rather than being dropped. Coverage numbers are
-queryable wherever demographics are consumed; a dashboard surface is out of scope for #74.
+Demographics count only from the same latest snapshot as the trial row: a race
+table that a sponsor later amended out of the results section stops counting
+once the newer snapshot lands. `completion_year` is null when the registry
+completion date is missing or unparseable; those trials stay on a null-year row
+rather than being dropped. Coverage numbers are queryable wherever demographics
+are consumed; a dashboard surface is out of scope for #74.

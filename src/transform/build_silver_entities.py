@@ -41,10 +41,33 @@ ENTITY_NAMES = (
     "silver_trial_baseline_demographics",
 )
 
+# The entity set before silver_trial_baseline_demographics was added (#74): a run
+# transformed by that older code is complete under the legacy set but misses the
+# new entity, so the ENTITY_NAMES check above flags it for a rebuild it cannot
+# survive once retention has pruned its bronze pages.
+LEGACY_ENTITY_NAMES = tuple(
+    entity for entity in ENTITY_NAMES if entity != "silver_trial_baseline_demographics"
+)
+
 
 def _already_transformed(cfg: ProjectConfig, run_id: str) -> bool:
     return all(
         (cfg.paths.silver / entity / f"run_id={run_id}.parquet").exists() for entity in ENTITY_NAMES
+    )
+
+
+def _legacy_run_without_bronze(cfg: ProjectConfig, run_id: str) -> bool:
+    """True when a pre-#74 run holds complete legacy silver but no bronze pages.
+
+    Rebuilding needs the bronze pages, so the only safe action is to keep the
+    existing silver and skip; a new-entity backfill for such a run requires
+    re-ingestion.
+    """
+    if (cfg.paths.bronze_api_responses / f"run_id={run_id}").exists():
+        return False
+    return all(
+        (cfg.paths.silver / entity / f"run_id={run_id}.parquet").exists()
+        for entity in LEGACY_ENTITY_NAMES
     )
 
 
@@ -184,14 +207,20 @@ def run_transform(
 
     processed: list[str] = []
     for manifest in selected:
-        if not force and _already_transformed(cfg, manifest.ingestion_run_id):
-            log.info(
-                "Run {} already transformed; skipping (use --force to rebuild).",
-                manifest.ingestion_run_id,
+        run_id = manifest.ingestion_run_id
+        if not force and _already_transformed(cfg, run_id):
+            log.info("Run {} already transformed; skipping (use --force to rebuild).", run_id)
+            continue
+        if _legacy_run_without_bronze(cfg, run_id):
+            log.warning(
+                "Run {}: silver predates silver_trial_baseline_demographics (#74) but its "
+                "bronze pages are pruned; keeping the existing silver without the new entity "
+                "instead of failing the refresh. Re-ingest the run to backfill.",
+                run_id,
             )
             continue
         build_silver_for_run(manifest, cfg, profile=profile)
-        processed.append(manifest.ingestion_run_id)
+        processed.append(run_id)
 
     if not processed:
         log.info("No runs to transform ({} manifests inspected).", len(manifests))
