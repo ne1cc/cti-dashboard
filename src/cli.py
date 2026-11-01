@@ -263,7 +263,7 @@ def main(argv: list[str] | None = None) -> int:
             # the branch that follows would otherwise pull 602 pages / 9.7 GB of
             # bronze — measured 2026-09-05, run 20260905T071910Z_774560b2,
             # docs/archive/development_log.md — and 9.7 GB is roughly ten times the 1 GB
-            # `cti_data` volume (docs/DEPLOY_FLY.md), so the pull would take the
+            # `cti_data` volume (docs/OPERATIONS.md), so the pull would take the
             # two healthy profiles down with it. It would then hand the profile to
             # run_transform, which has no taxonomy to classify with.
             # See src/transform/build_silver_entities.py.

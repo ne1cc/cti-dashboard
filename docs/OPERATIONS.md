@@ -1,135 +1,70 @@
-# Deploy the Streamlit dashboard (Fly.io)
+# Operating the dashboard container (refresh, retention, history)
 
-**Live:** this project's own deployment runs at
-[cti-dashboard.fly.dev](https://cti-dashboard.fly.dev/).
+> **Hosting note (2026-10-31):** the Fly.io deployment (`cti-dashboard.fly.dev`)
+> is retired; `fly.toml`, the CI deploy job and the Fly runbook were removed.
+> The live demo is at [cti-trials.duckdns.org](https://cti-trials.duckdns.org).
+> This document keeps what does not depend on the host: how the container
+> refreshes the warehouse, retention sizing, and what production taught us.
+> Figures that mention a "1 GB volume" or Fly's `kill_timeout` are dated
+> measurements from the Fly era, kept as history.
 
 The dashboard reads a local DuckDB warehouse built by the pipeline. Unlike
-Streamlit Community Cloud (see `docs/DEPLOY_STREAMLIT.md`), this Fly.io
-setup keeps the pipeline running: the container bootstraps the warehouse on
-first boot and then refreshes it every 7 days on its own, matching this
-project's weekly-snapshot design (`config/project_config.yml`'s
-`scope.refresh_cadence: weekly`). A refresh briefly stops the dashboard,
-because DuckDB will not let a writer run while a reader holds the file — see
-"What the first week in production caught" for the failure that forced this
-shape.
+Streamlit Community Cloud (see `docs/DEPLOY_STREAMLIT.md`), the container keeps
+the pipeline running: it bootstraps the warehouse on first boot and then
+refreshes it every 7 days on its own, matching this project's weekly-snapshot
+design (`config/project_config.yml`'s `scope.refresh_cadence: weekly`). A
+refresh briefly stops the dashboard, because DuckDB will not let a writer run
+while a reader holds the file — see "What the first week in production caught"
+for the failure that forced this shape.
 
-## What's already in the repo
+## What's in the repo
 
 - `Dockerfile` — builds the app image (Python 3.12, `uv`, dbt deps).
 - `entrypoint.sh` — a supervisor, not just a launcher: it runs `make pipeline`
   once if no warehouse exists yet, then owns the Streamlit child process and,
   on schedule, stops that process, reruns the pipeline, and starts it again.
-- `fly.toml` — Fly app config: one always-on machine, one persistent
-  volume (`cti_data`) mounted at `/app/data`, health-checked against
-  Streamlit's `/_stcore/health` endpoint, and `kill_timeout = '270s'` so a
-  deploy that lands during a refresh lets the pipeline finish rather than
-  killing it mid-write. 270s is 2x the longest measured two-profile run
-  (130s, in this image on 2026-09-07 at commit `78c2050`), rounded up to 30s,
-  and `tests/test_fly_config.py` pins that relation. The earlier 90s was set
-  from a 59s *one-profile* cold run and would have force-killed a
-  two-profile refresh mid-write.
-- `.github/workflows/ci.yml` — unified CI/CD workflow: gates production
-  deployment on the `lint-and-test` job passing on pushes to `main`.
-- `.github/scripts/deploy_fly.sh` — automated deployment script with pre-rollout
-  release image capture, post-deployment smoke check against `/_stcore/health`,
-  and automated rollback on rollout or smoke failure.
+- `.github/workflows/ci.yml` — `lint-and-test` only; CI does not deploy.
 
-## Automated deployment (GitHub Actions)
+## Measured footprint of `/app/data` (Fly era, 1 GB volume)
 
-Production deployments are automated and gated by CI in `.github/workflows/ci.yml`.
-The uncoordinated standalone Fly deployment workflow has been removed
-so broken code can never deploy to production if tests fail.
+The volume then reported 1 GB (`cti_data`, region iad, 2026-09-06). The
+measurements are of the data, so they hold on any host.
 
-### Unified Pipeline & CI Gating
-The `deploy` job runs strictly downstream of `lint-and-test` (`needs: lint-and-test`).
-If code fails linting, code formatting, type checking, or unit test coverage gates,
-the deployment job does not execute.
+```text
 
-- **Trigger:** Gated strictly to pushes on `main` (`github.event_name == 'push' && github.ref == 'refs/heads/main'`).
-  Pull requests and manual `workflow_dispatch` invocations run the full verification
-  suite without triggering a deploy.
-- **GitHub Environment:** The deploy job runs in the GitHub environment `production`,
-  restricting `FLY_API_TOKEN` secret exposure to the deploy step. This allows
-  repository administrators to configure protection rules (such as required reviewers)
-  without impacting CI test execution.
-- **Concurrency:** Uses concurrency group `deploy-production` with `cancel-in-progress: false`.
-  This serializes production rollouts so overlapping runs cannot clobber each other
-  or deploy out of order, while ensuring an active in-flight rollout is never terminated
-  mid-run.
+Measured footprint of /app/data in this image on 2026-09-07 (commit 78c2050,
+linux/arm64, fresh named volume, both refreshable profiles — 78.8 MB of ADRD
+bronze and 253.1 MB of NSCLC bronze per ingestion run, so one retained bronze
+run per profile is 331.9 MB (the whole bronze directory walks 332.0 MB; the
+0.1 MB is per-directory rounding), 34.9 MB of silver per retained weekly
+snapshot, DuckDB 44.6 MB at one snapshot and 63.2 MB at three):
 
-### Deployment Script & Health Verification
-Rollouts are executed by `.github/scripts/deploy_fly.sh`:
-1. **Pre-rollout image capture:** Inspects current releases using
-   `flyctl releases --image --json -a cti-dashboard` to capture the Docker image
-   reference of the active release before deploying new code.
-2. **Rollout execution:** Runs `flyctl deploy --remote-only --app cti-dashboard`.
-3. **Smoke check:** Polls `/_stcore/health` with bounded retries (12 attempts,
-   10-second intervals, 5-second request timeout; matching the ~2-minute initial boot budget).
-   HTTP 200 signals a healthy deployment.
+  steady state, 3 retained snapshots  499.7 MB  -> 2.0x headroom
+    (walked 332.0 bronze + 104.6 silver + 63.2 DuckDB; per-directory 1-dp MB
+     sum to 499.8, so the byte total 499,714,216 is authoritative — reproduced
+     to 14 bytes across two independent rounds)
+  worst instant of a refresh, same horizon  866.5 MB  -> 1.15x headroom
+    (walked 663.9 bronze + 139.4 silver + 63.2 DuckDB, taken after the new
+     fetch and before `prune-data` trims it; the same fetch-time construction
+     walked at one and two retained snapshots measured 778.1 MB (411,344,692
+     steady / 778,098,816 peak) and 824.2 MB)
+  `make prune-data` at the shipped horizon then took the volume from 866.5 MB
+  back to 499.7 MB (4 runs removed across both profiles, 2026-09-07).
 
-### Automated Rollback
-If either the deployment command or the post-deployment smoke check fails:
-- The script automatically initiates a rollback by redeploying the previously captured
-  image reference: `flyctl deploy --image "$PREV_IMAGE" --app cti-dashboard`.
-- It performs a follow-up health check against `/_stcore/health` to confirm recovery.
-- Regardless of whether rollback restores service, the script **always exits with a non-zero exit code**,
-  ensuring GitHub Actions marks the workflow failed and surfaces the failure immediately.
-- If no previous image exists (e.g. first deployment), rollback is skipped and failure is
-  reported directly.
-
-## One-time setup (you run these — they provision billed Fly resources)
-
-```bash
-# Install the Fly CLI if you haven't: https://fly.io/docs/flyctl/install/
-fly auth login
-
-# Create the app from fly.toml (app = "cti-dashboard"; rename that line
-# first if the name is already taken on Fly).
-fly launch --no-deploy
-
-# Create the persistent volume fly.toml expects. 1 GB is the size the deployed
-# volume reports (`fly volumes list --app cti-dashboard --json`, 2026-09-06:
-# vol_vwnxk31ln0w618mv, cti_data, size_gb 1, region iad, snapshot_retention 5,
-# auto_backup_enabled true).
-#
-# Measured footprint of /app/data in this image on 2026-09-07 (commit 78c2050,
-# linux/arm64, fresh named volume, both refreshable profiles — 78.8 MB of ADRD
-# bronze and 253.1 MB of NSCLC bronze per ingestion run, so one retained bronze
-# run per profile is 331.9 MB (the whole bronze directory walks 332.0 MB; the
-# 0.1 MB is per-directory rounding), 34.9 MB of silver per retained weekly
-# snapshot, DuckDB 44.6 MB at one snapshot and 63.2 MB at three):
-#
-#   steady state, 3 retained snapshots  499.7 MB  -> 2.0x headroom
-#     (walked 332.0 bronze + 104.6 silver + 63.2 DuckDB; per-directory 1-dp MB
-#      sum to 499.8, so the byte total 499,714,216 is authoritative — reproduced
-#      to 14 bytes across two independent rounds)
-#   worst instant of a refresh, same horizon  866.5 MB  -> 1.15x headroom
-#     (walked 663.9 bronze + 139.4 silver + 63.2 DuckDB, taken after the new
-#      fetch and before `prune-data` trims it; the same fetch-time construction
-#      walked at one and two retained snapshots measured 778.1 MB (411,344,692
-#      steady / 778,098,816 peak) and 824.2 MB)
-#   `make prune-data` at the shipped horizon then took the volume from 866.5 MB
-#   back to 499.7 MB (4 runs removed across both profiles, 2026-09-07).
-#
-# Why the horizon is 3 and not the 6 it shipped with. The plan's rule of record
-# is "headroom >= 2.5 keeps 6", but at 1 GB that is unsatisfiable for any horizon
-# (2.5x needs a steady state <= 400 MB, and a single retained snapshot already
-# walks 411.3 MB). The criterion actually applied is the deepest horizon whose
-# worst refresh instant leaves more than a chosen 100 MB free of the 1,000 MB
-# ceiling — 3, at 866.5 MB walked (133.5 free). Beyond the walked points the peak
-# is a prediction of one two-point fit through the walked peaks peak(1)=778.1 and
-# peak(3)=866.5 (44.2 MB per extra snapshot): peak(6) ~= 999 MB (ESTIMATE), at or
-# over the ceiling. The hazard there is the fetch/transform writes, not the DuckDB
-# build — `make pipeline` runs `prune-data` before `dbt-run`, so the transient
-# second bronze run is reclaimed before the warehouse is written. `fly volumes
-# extend cti_data --size 2` restores the rule's premise; at 2 GB the same fit puts
-# steady(6) ~= 632 MB, ~= 3.2x headroom (ESTIMATE — no 2 GB volume has been
-# walked, re-measure after extending). Horizon 3 also gives up the guaranteed
-# monthly trend series; see "What to expect" for that mechanism and number.
-fly volumes create cti_data --region iad --size 1
-
-# Deploy manually if needed.
-fly deploy
+Why the horizon is 3 and not the 6 it shipped with. The plan's rule of record
+is "headroom >= 2.5 keeps 6", but at 1 GB that is unsatisfiable for any horizon
+(2.5x needs a steady state <= 400 MB, and a single retained snapshot already
+walks 411.3 MB). The criterion actually applied is the deepest horizon whose
+worst refresh instant leaves more than a chosen 100 MB free of the 1,000 MB
+ceiling — 3, at 866.5 MB walked (133.5 free). Beyond the walked points the peak
+is a prediction of one two-point fit through the walked peaks peak(1)=778.1 and
+peak(3)=866.5 (44.2 MB per extra snapshot): peak(6) ~= 999 MB (ESTIMATE), at or
+over the ceiling. The hazard there is the fetch/transform writes, not the DuckDB
+build — `make pipeline` runs `prune-data` before `dbt-run`, so the transient
+second bronze run is reclaimed before the warehouse is written. extending the volume to 2 GB restores the rule's premise; at 2 GB the same fit puts
+steady(6) ~= 632 MB, ~= 3.2x headroom (ESTIMATE — no 2 GB volume has been
+walked, re-measure after extending). Horizon 3 also gives up the guaranteed
+monthly trend series; see "What to expect" for that mechanism and number.
 ```
 
 ## Adding indication profiles
@@ -149,7 +84,7 @@ models other than trial similarity occupied 272 MB. Building
 `mart_trial_similarity` over all twelve profiles used 28 GB of temporary DuckDB
 storage after about 14 minutes without completing; the run was stopped and its
 temporary files were removed. This run does not establish a final warehouse
-size or refresh time. The 1 GB Fly volume cannot hold even the ten new raw
+size or refresh time. The 1 GB Fly-era volume cannot hold even the ten new raw
 snapshots, before retaining the existing profiles, silver data, or the
 warehouse. Do not deploy the expanded profile set until storage has been sized
 from a completed full build and the similarity mart's runtime and peak storage
@@ -165,8 +100,11 @@ container within seconds of boot, before anything could be logged. With
 `auto_start_machines` off, the stopped machine stayed dark until 2026-10-15.
 Remediation in PR `fix/production-volume-and-profile-scope`:
 
-- `fly.toml` sets `CTI_REFRESHABLE_PROFILES = 'adrd,oncology_nsclc'`; the
-  deployed refresh is the measured-passing two-profile configuration again.
+- The Fly config set `CTI_REFRESHABLE_PROFILES = 'adrd,oncology_nsclc'`; the
+  deployed refresh was the measured-passing two-profile configuration again.
+  The image does not default this variable, so any host must set it to keep
+  the refresh at two profiles; unset, `make pipeline` refreshes every
+  non-ingest-only profile (twelve, with the sizing below).
   `src/profiles.py` `refreshable()` enforces the variable and fails loudly on
   unknown names. Remove the variable only after the paragraph above is
   satisfied: the similarity mart bounded, and storage sized from a completed
@@ -201,9 +139,9 @@ Remediation in PR `fix/production-volume-and-profile-scope`:
     catch-all groups still exceed the cap within one phase).
   Sizing for twelve profiles on any host: >= 2 GB RAM (or 1 GB with the DuckDB
   settings above), >= 15 GB disk, and a ~10-minute weekly refresh outage,
-  which exceeds Fly's 300 s `kill_timeout` ceiling. `CTI_REFRESHABLE_PROFILES`
-  stays set here; hosting is moving off Fly.
-- The volume was extended 2 GB → 5 GB (`fly volumes extend cti_data --size 5`).
+  which exceeded Fly's 300 s `kill_timeout` ceiling. Fly has since been retired;
+  size the new host from these figures.
+- On Fly the volume was extended 2 GB → 5 GB.
   The stale ten-profile bronze (~1.4 GB) is retained by `prune_all`, which
   intentionally prunes `registry.all()` at `bronze_runs_to_keep: 1`.
 - `entrypoint.sh` logging is non-fatal; `auto_start_machines` is on so a
@@ -211,16 +149,16 @@ Remediation in PR `fix/production-volume-and-profile-scope`:
 
 ## Secrets and CI environment
 
-- ClinicalTrials.gov's API v2 is public and unauthenticated — there is nothing
-  to pass via `fly secrets set` on the running Fly machine.
-- GitHub Actions automated deployment requires a `FLY_API_TOKEN` configured in
-  repository secrets or within the `production` GitHub Environment settings.
+- ClinicalTrials.gov's API v2 is public and unauthenticated — the container
+  needs no secrets to refresh the warehouse.
+- CI holds no deploy credentials; `.github/workflows/ci.yml` only runs
+  `lint-and-test`.
 
 ## What to expect
 
 - **First boot** takes longer than a normal deploy: the container runs the
   full pipeline (orchestrate → prune-data → dbt-run → dbt-test → quality-report)
-  before Streamlit starts serving. Watch progress with `fly logs`.
+  before Streamlit starts serving. Watch progress in the container's stdout.
   Measured on the live app: 59 seconds from `starting make pipeline` to
   `pipeline succeeded` (2026-09-05T02:35:56Z → 02:36:55Z), which includes a
   real 27-page download from ClinicalTrials.gov. That was a *one-profile*
@@ -254,9 +192,9 @@ Remediation in PR `fix/production-volume-and-profile-scope`:
   comes to serve meanwhile.
   It has to pause: DuckDB takes one writer *or* readers, and the dashboard
   caches its read-only connection for the life of the process. While paused,
-  Fly's proxy stops routing to the machine, but nothing restarts: the machine's
-  `restart` policy is `on-failure`, which keys off the entrypoint process's
-  exit code, and the supervisor stays PID 1 through the whole refresh.
+  the host's proxy sees an unresponsive upstream, but nothing restarts: an
+  `on-failure` restart policy keys off the entrypoint process's exit code, and
+  the supervisor stays PID 1 through the whole refresh.
   Output goes to stdout/stderr and is also appended best-effort to
   `/app/data/logs/pipeline.log` on the volume. A failed file append cannot
   suppress stdout or change the pipeline exit status. Every
@@ -264,11 +202,10 @@ Remediation in PR `fix/production-volume-and-profile-scope`:
   interval=…s`), so a skipped refresh is visible in stdout rather than merely
   absent. Both intervals are tunable via `CTI_REFRESH_INTERVAL_SECONDS` and
   `CTI_REFRESH_CHECK_SECONDS`.
-- **This machine cannot auto-suspend to zero.** `auto_stop_machines` is set
-  to `"off"` because the background refresh loop must keep running
-  continuously — unlike a typical Fly demo app that scales to zero when
-  idle. Expect a small recurring cost (roughly $2-5/month on Fly's
-  smallest shared-CPU tier as of this writing), not a free deployment.
+- **The host cannot scale to zero.** The background refresh loop must keep
+  running continuously, so a host that suspends idle containers would skip
+  refreshes. On Fly this cost roughly $2-5/month on the smallest shared-CPU
+  tier (as of 2026-09).
 - **The volume is the constraint, and the horizon is set from it.** `pipeline`
   prunes before it builds, so between refreshes `/app/data` holds exactly one
   raw bronze run per profile plus `retention.snapshot_runs_to_keep` weekly
@@ -305,7 +242,7 @@ Remediation in PR `fix/production-volume-and-profile-scope`:
   instant leaves more than a **chosen** 100 MB free of the 1,000 MB ceiling: that
   floor and the 2.0× acceptability are judgment on measured terms, not
   measurements. 3 (peak 866.5, walked, 133.5 free) is where they land. (d)
-  `fly volumes extend cti_data --size 2` is the user's action that restores (a)'s
+  Extending the volume to 2 GB was the action that would restore (a)'s
   premise; until then the shipped horizon is 3 (`config/project_config.yml` and
   all three `config/profiles/*.yml`).
 
@@ -530,7 +467,7 @@ commit `78c2050`), and the flat tree holds the pre-cutover equivalent of one, so
 treat that as the order of magnitude and confirm it rather than trusting it:
 
 ```bash
-fly ssh console -a cti-dashboard
+# on the host, inside the container:
 du -sh /app/data/bronze/manifests /app/data/bronze/api_responses   # if either exists
 du -sh /app/data                                                   # the current total
 ls /app/data/bronze/    # the live tree is per-profile: adrd/, oncology_nsclc/
@@ -551,12 +488,12 @@ rm -rf /app/data/bronze/manifests /app/data/bronze/api_responses
 du -sh /app/data   # the drop from the figure recorded above is what you recovered
 ```
 
-## Egress from Fly is verified
+## Egress from Fly was verified (2026-09)
 
 ClinicalTrials.gov's bot protection blocks `httpx`'s TLS/HTTP handshake
 specifically — `curl`, stdlib `urllib`, and `requests` all succeed with
 identical requests while `httpx` gets a 403 — which is why this project's
-ingestion client uses `requests`. That fix now holds from a real Fly egress
+ingestion client uses `requests`. That fix held from a real Fly egress
 IP: the container's run `20260905T191901Z_77632421` reported
 `status=success pages=27 records=2618 quarantined=0` with no 403.
 

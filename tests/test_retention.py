@@ -271,7 +271,7 @@ def test_a_zero_horizon_is_refused_by_either_name(profile_with_runs):
     """A horizon of 0 is not "keep nothing", it is "delete everything":
     `runs_to_prune` only refuses a *negative* keep, so 0 hands back every success
     run the profile has — including the newest one the warehouse is reading. Both
-    sentences in `config/project_config.yml` and `docs/DEPLOY_FLY.md` advertise
+    sentences in `config/project_config.yml` and `docs/OPERATIONS.md` advertise
     this refusal, so it must exist for each horizon independently.
     """
     # Each arm matches the zero guard's own wording. On (1, 0) the coherence
@@ -600,7 +600,7 @@ def test_prune_all_reaches_every_profile_including_ingest_only(tmp_path, monkeyp
     # The snapshot horizon is untouched by that: a full horizon of runs still
     # has an index. Read from the shipped config rather than hardcoded, because
     # the horizon is a volume measurement and moves with it (3 since
-    # 2026-09-07 — docs/DEPLOY_FLY.md); what may not move is that it runs
+    # 2026-09-07 — docs/OPERATIONS.md); what may not move is that it runs
     # deeper than bronze, which is the independence this test exists for.
     horizon = catalog.config.retention.snapshot_runs_to_keep
     assert horizon > catalog.config.retention.bronze_runs_to_keep
@@ -689,7 +689,7 @@ def test_retention_config_defaults_when_absent(project_root_tmp: Path) -> None:
     assert cfg.retention.bronze_runs_to_keep == 1
     assert cfg.retention.snapshot_runs_to_keep == 3
     # A config with no `retention:` block falls back to the same horizon. It has
-    # to: 3 is the value the 1 GB volume measurement allowed (docs/DEPLOY_FLY.md,
+    # to: 3 is the value the 1 GB volume measurement allowed (docs/OPERATIONS.md,
     # 2026-09-07, commit 78c2050), so a looser fallback would restore a horizon
     # whose refresh peak fills the volume.
     assert RetentionConfig().snapshot_runs_to_keep == 3
@@ -723,7 +723,7 @@ def test_shipped_horizon_discloses_its_trend_consequence() -> None:
     ``CTI_REFRESH_INTERVAL_SECONDS:-604800`` default), so ``N`` weekly snapshots
     retain a span of ``(N - 1) * 7`` days. When that span can fall inside a single
     calendar month (<= 31 days — the longest month) the 3-month growth KPI goes
-    null on part of the year, and docs/DEPLOY_FLY.md must carry the dated
+    null on part of the year, and docs/OPERATIONS.md must carry the dated
     measurement for it. Raise the horizon to 6 (a 35-day span, always two months)
     and the sentence stops being required.
 
@@ -743,10 +743,10 @@ def test_shipped_horizon_discloses_its_trend_consequence() -> None:
     span_days = (horizon - 1) * cadence_days
     if span_days > 31:
         return  # a span longer than any calendar month always shows two months
-    doc = (REPO_ROOT / "docs/DEPLOY_FLY.md").read_text(encoding="utf-8")
+    doc = (REPO_ROOT / "docs/OPERATIONS.md").read_text(encoding="utf-8")
     required_wording = f"{span_days}-day span"
     assert required_wording in doc, (
-        f"docs/DEPLOY_FLY.md must disclose that the {span_days}-day span "
+        f"docs/OPERATIONS.md must disclose that the {span_days}-day span "
         f"(shipped horizon {horizon} x {cadence_days}-day cadence) can sit inside one "
         "calendar month, which nulls recruiting_growth_3m on the Geography Trends page; "
         f"the required wording is the computed {required_wording!r}, so a cadence change "
