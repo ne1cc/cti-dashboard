@@ -331,9 +331,14 @@ Remediation in PR `fix/production-volume-and-profile-scope`:
   refreshes weekly, so 3 snapshots span 14 days, and a 14-day span sits inside a
   single calendar month on **197 of 365 weekly start dates** (measured 2026-09-07)
   — on those weeks the Geography Trends page's `recruiting_growth_3m` is null,
-  because the model reports no 3-month delta without a second month (see
-  `docs/metric_definitions.md`); that null is the honest reading of "not enough
-  history" the 0.0 used to disguise. At 2 GB, restoring horizon 6 makes the series
+  because the model reports no 3-month delta until the window's earliest observed
+  month sits at least three months back (see `docs/metric_definitions.md`); that
+  null is the honest reading of "not enough history" the 0.0 used to disguise.
+  The same honesty gates the 90-day recruiting-growth figures on the Competition
+  and Registry Segments pages: a 14-day observed history is far under 90 days, so
+  `new_recruiting_90d` shows "not enough history" there, with the separately
+  labelled `newly_registered_90d` (registry first-post dates) available from the
+  first snapshot. At 2 GB, restoring horizon 6 makes the monthly series
   always present; the 6-snapshot steady state there is ≈632 MB (ESTIMATE, the same
   fit: `499.7 + 44.2·3`), ≈3.2x headroom — re-measure after extending, no 2 GB
   volume has been walked.

@@ -61,9 +61,11 @@ therefore constructed from this project's own repeated snapshots:
 - every run stores verbatim pages under a unique `ingestion_run_id`;
 - `int_trial_status_history` derives transitions between *complete*
   snapshots only;
-- transition-based metrics (e.g. `new_recruiting_90d`) honestly report 0
-  until multiple snapshots have accrued, and registry-date proxies
-  (`study_first_post_date`) are always labeled as proxies.
+- transition-based metrics (e.g. `new_recruiting_90d`) are null ("not enough
+  history") until observed snapshot history covers their window — never a
+  misleading 0 — and registry-date counts (`study_first_post_date`) are
+  always labeled as registrations ("newly registered (first posted)"),
+  never as recruiting transitions.
 
 ## Record validation and quarantine
 Records failing validation are quarantined with reason codes — never

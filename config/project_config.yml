@@ -96,7 +96,10 @@ ingestion:
 # Depth 3 also drops the guaranteed monthly trend series: at the 7-day cadence
 # three snapshots span 14 days, which sits inside one calendar month on 197 of
 # 365 weekly start dates (measured 2026-09-07), so recruiting_growth_3m goes null
-# rather than 0.0 on those weeks. (d) fly volumes extend cti_data --size 2 is the
+# rather than 0.0 on those weeks — and a 14-day observed history is likewise under
+# the 90-day gate, so the 90d recruiting-growth figures show "not enough history"
+# while newly_registered_90d (registry first-post dates) stays computable.
+# (d) fly volumes extend cti_data --size 2 is the
 # user's action that restores (a)'s premise; raise this back to 6 only after
 # extending. docs/DEPLOY_FLY.md ("What to expect") carries the full arithmetic.
 retention:

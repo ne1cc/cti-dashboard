@@ -241,5 +241,6 @@ lineage is in [source-field-map.md](api/source-field-map.md).
 | **Run ID** | UTC timestamp plus UUID suffix minted for a new ingestion run; partitions bronze and silver |
 | **Manifest** | Per-run JSON recording endpoint, query parameters/hash, page/record counts, timestamps, profile, and completion status |
 | **HHI** | Herfindahl–Hirschman Index: sum of squared lead-sponsor listing shares within a segment; see [metric definitions](metric_definitions.md) for denominator rules |
-| **Proxy growth** | Registry-first-post-date proxy used when snapshot history is insufficient, identified by `growth_uses_registry_proxy_flag`; not an observed recruiting transition |
+| **Observed history** | Days of snapshot history observed as of a snapshot (`observed_history_days`); windowed recruiting-growth figures are null ("not enough history") until it covers their window, never 0 |
+| **Newly registered (first posted)** | Recruiting studies whose registry first-post date falls in the window (`newly_registered_90d` / `newly_registered_in_month`); a registration count, not an observed recruiting transition |
 | **Quarantine** | Records rejected by ingestion screening, retained with reason codes; transformation skips records without an NCT ID |

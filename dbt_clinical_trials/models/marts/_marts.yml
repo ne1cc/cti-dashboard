@@ -483,16 +483,43 @@ models:
         data_type: HUGEINT
       - name: entered_recruiting_count
         data_type: BIGINT
-      - name: newly_posted_90d_proxy
+      - name: observed_history_days
         data_type: BIGINT
+        description: >
+          Days of snapshot history observed as of this snapshot: the span from
+          the profile's earliest retained snapshot up to this row's own date.
+          Carried beside every windowed figure so "not enough history" is
+          quantifiable; 0 on a first snapshot.
+      - name: newly_registered_90d
+        data_type: BIGINT
+        description: >
+          Recruiting listings whose registry study_first_post_date falls
+          within 90 days of the snapshot (inclusive lower bound, no upper
+          bound). A registration count computed from registry dates, not a
+          recruiting transition; it needs no snapshot history.
       - name: new_recruiting_30d
         data_type: HUGEINT
+        description: >
+          Sum of entered_recruiting transitions observed at snapshots inside
+          the trailing 30-day window; null unless observed_history_days >= 30
+          and the latest gap between snapshots is at most 30 days. Null means
+          not enough history, not zero transitions.
       - name: new_recruiting_90d
         data_type: HUGEINT
+        description: >
+          Sum of entered_recruiting transitions observed at snapshots inside
+          the trailing 90-day window; null unless observed_history_days >= 90
+          and the latest gap between snapshots is at most 90 days. Null means
+          not enough history, not zero transitions.
       - name: recruiting_count_90d_baseline
         data_type: BIGINT
+        description: Earliest recruiting count among snapshots inside the trailing 90-day window.
       - name: recruiting_growth_90d
         data_type: DOUBLE
+        description: >
+          (recruiting count − 90d baseline) / baseline; null unless the 90-day
+          window is covered (same guards as new_recruiting_90d, which
+          guarantees the baseline is an earlier snapshot) or the baseline is 0.
       - name: sponsor_count
         data_type: BIGINT
       - name: top_sponsor_share
@@ -565,16 +592,32 @@ models:
         data_type: BIGINT
       - name: recruiting_trial_count
         data_type: BIGINT
-      - name: newly_posted_in_month_proxy
+      - name: newly_registered_in_month
         data_type: BIGINT
+        description: >
+          Trials whose registry study_first_post_date falls in the snapshot
+          month. A registration count, not a recruiting transition.
       - name: sponsor_count
         data_type: BIGINT
       - name: recruiting_trial_count_3m_avg
         data_type: DOUBLE
       - name: recruiting_count_3m_baseline
         data_type: BIGINT
+      - name: observed_history_days
+        data_type: BIGINT
+        description: >
+          Days of snapshot history observed as of this month row (earliest
+          snapshot through the latest snapshot in or before the month);
+          travels with recruiting_growth_3m so "not enough history" is
+          quantifiable.
       - name: recruiting_growth_3m
         data_type: DOUBLE
+        description: >
+          (current monthly recruiting count − earliest count in the trailing
+          3-calendar-month window) / baseline; null unless the window's
+          earliest observed month is at least 3 months back, so the figure
+          never labels a shorter history as 3-month growth. Null means not
+          enough history, not zero change.
 
   - name: mart_data_reliability
     description: >
@@ -711,19 +754,27 @@ models:
         description: Count of attributable clinical trial facility listings in this state for this segment.
       - name: new_recruiting_90d
         data_type: HUGEINT
-        description: Count of trials newly transitioning into recruiting status within the last 90 days.
-      - name: newly_posted_90d_proxy
+        description: >
+          Count of trials observed transitioning into recruiting status within
+          the last 90 days; null unless the profile's retained snapshots cover
+          the 90-day window (see mart_recruiting_competition). Null means not
+          enough history, not zero transitions.
+      - name: newly_registered_90d
         data_type: BIGINT
-        description: Count of trials first posted on the registry within the last 90 days (fallback proxy).
+        description: >
+          Count of trials first posted on the registry within the last 90
+          days. A registration count, not a recruiting transition; computed
+          from registry dates, so it needs no snapshot history.
       - name: has_multi_snapshot_history
         data_type: BOOLEAN
         description: Flag indicating whether multi-snapshot history has accrued for this profile.
-      - name: recent_growth_input
-        data_type: HUGEINT
-        description: 90-day count of newly recruiting trials, or first-posted count when growth_uses_registry_proxy_flag.
-      - name: growth_uses_registry_proxy_flag
-        data_type: BOOLEAN
-        description: Flag indicating whether recent growth uses the first-posted registry date proxy.
+      - name: observed_history_days
+        data_type: BIGINT
+        description: >
+          Days of snapshot history observed as of this queue snapshot
+          (earliest retained snapshot through the latest). Recruiting-growth
+          figures are unknown below 90; this column quantifies "not enough
+          history" instead of a bare null.
       - name: sponsor_count
         data_type: BIGINT
         description: Count of distinct lead sponsors in the segment.

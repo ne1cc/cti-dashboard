@@ -302,8 +302,10 @@ PAGE_PLAYBOOKS: dict[str, dict[str, Any]] = {
                 "an incoming wave of active protocols that will compete for clinical coordinators."
             ),
             (
-                "**Audit Registry Date Fallback:** If the trend chart displays a proxy banner, "
-                "recognize that historical baseline is still accumulating from weekly snapshots."
+                '**Audit Registry Date Fallback:** The "Newly registered (first '
+                'posted)" column counts registry first-post dates — registrations, '
+                'not recruiting transitions; growth stays "not enough history" '
+                "until 90 days of snapshots accumulate."
             ),
         ],
         "adrd_context": (

@@ -1,5 +1,6 @@
 """Geography Trends — state-level listing activity (choropleth + monthly)."""
 
+import pandas as pd
 import plotly.express as px
 import streamlit as st
 from components import data
@@ -51,19 +52,35 @@ st.caption(
 )
 
 st.subheader("Top states")
-st.dataframe(
-    latest.sort_values("recruiting_trial_count", ascending=False)[
-        [
-            "state_normalized",
-            "recruiting_trial_count",
-            "trial_count",
-            "sponsor_count",
-            "newly_posted_in_month_proxy",
-            "recruiting_growth_3m",
-        ]
+# Growth renders as text so an uncovered window can say "not enough history"
+# instead of a blank that reads as zero; covered windows keep a signed percent.
+latest_table = latest.sort_values("recruiting_trial_count", ascending=False)[
+    [
+        "state_normalized",
+        "recruiting_trial_count",
+        "trial_count",
+        "sponsor_count",
+        "newly_registered_in_month",
+        "recruiting_growth_3m",
     ]
-    .head(20)
-    .assign(recruiting_growth_3m=lambda frame: frame.recruiting_growth_3m * 100),
+].head(20)
+latest_table = pd.concat(
+    [
+        latest_table.drop(columns=["recruiting_growth_3m"]),
+        latest_table["recruiting_growth_3m"]
+        .map(
+            lambda value: (
+                f"{value * 100:+.1f}%"
+                if pd.notna(value)
+                else "not enough history (window spans under 3 months)"
+            )
+        )
+        .rename("recruiting_growth_3m"),
+    ],
+    axis=1,
+)
+st.dataframe(
+    latest_table,
     hide_index=True,
     width="content",
     column_config={
@@ -71,13 +88,17 @@ st.dataframe(
         "trial_count": st.column_config.NumberColumn("Total Trials", format="%d"),
         "recruiting_trial_count": st.column_config.NumberColumn("Recruiting Trials", format="%d"),
         "sponsor_count": st.column_config.NumberColumn("Sponsors", format="%d"),
-        "newly_posted_in_month_proxy": st.column_config.NumberColumn(
-            "Newly Posted (Month Proxy)", format="%d"
+        "newly_registered_in_month": st.column_config.NumberColumn(
+            "Newly registered (first posted)",
+            format="%d",
+            help="Trials whose registry first-post month equals the snapshot "
+            "month — registrations, not recruiting transitions.",
         ),
-        "recruiting_growth_3m": st.column_config.NumberColumn(
+        "recruiting_growth_3m": st.column_config.TextColumn(
             "3-Month Growth",
-            format="%+.1f%%",
-            help="Relative change from the earliest recruiting count in the three-month window",
+            help="Relative change from the earliest recruiting count in the "
+            "three-month window; 'not enough history' until that window "
+            "actually spans three months.",
         ),
     },
 )
@@ -110,11 +131,14 @@ render_metric_audit(
             "Monthly counts are distinct NCT IDs across daily observations per "
             "profile/condition/state/month; recruiting requires RECRUITING on an "
             "observation. Sponsor count is distinct normalized lead sponsors. "
-            "Posting proxy requires first-post month equal to snapshot month. "
+            "Newly registered (first posted) requires first-post month equal to "
+            "snapshot month: registrations, not transitions. "
             "Growth = (current monthly recruiting count - earliest recruiting count "
             "in the inclusive preceding three-calendar-month range)/earliest count; "
-            "null with fewer than two months or zero baseline. State sums may repeat "
-            "studies. This panel audits window counts; deltas remain warehouse calculations."
+            "null with zero baseline or until the window's earliest observed month "
+            "sits at least three months back — 'not enough history', never zero. "
+            "State sums may repeat studies. This panel audits window counts; deltas "
+            "remain warehouse calculations."
         )
     },
     key="geography",

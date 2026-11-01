@@ -35,13 +35,14 @@ def test_snapshot_date_drops_the_midnight_time():
     assert format_snapshot_date(pd.NaT) == "not yet captured"
 
 
-@pytest.mark.parametrize("proxy", [False, True])
-def test_priority_summary_labels_proxy_and_observed_growth_distinctly(proxy):
+@pytest.mark.parametrize("covered", [False, True])
+def test_priority_summary_labels_growth_and_registrations_distinctly(covered):
     row = pd.Series(
         {
             "recruiting_trial_count": 15,
-            "growth_uses_registry_proxy_flag": proxy,
-            "recent_growth_input": 2,
+            "new_recruiting_90d": 2 if covered else pd.NA,
+            "newly_registered_90d": 4,
+            "observed_history_days": 90 if covered else 14,
             "sponsor_count": 6,
             "sponsor_hhi": 0.26,
             "site_overlap_share": 0.93,
@@ -50,13 +51,14 @@ def test_priority_summary_labels_proxy_and_observed_growth_distinctly(proxy):
     )
     before = row.copy()
     text = format_priority_explanation(row)
-    assert len(text) < 190
+    assert len(text) < 220
     assert "Recruiting trials: 15" in text
+    assert "Newly registered (first posted): 4" in text
     assert "93%" in text and "74%" in text
-    if proxy:
-        assert "First posted (90d proxy): 2" in text
-        assert "Newly recruiting" not in text
-    else:
+    if covered:
         assert "Newly recruiting (90d): 2" in text
+        assert "not enough history" not in text
+    else:
+        assert "Newly recruiting (90d): not enough history (14 of 90 days observed)" in text
         assert "proxy" not in text
     pd.testing.assert_series_equal(row, before)
