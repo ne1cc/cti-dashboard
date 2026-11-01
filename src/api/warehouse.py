@@ -60,6 +60,11 @@ REQUIRED_TABLES = (
 )
 
 
+def _escape_like(text: str) -> str:
+    """Make LIKE wildcards literal; the SQL declares ESCAPE '\'."""
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 class WarehouseNotReadyError(Exception):
     """Raised when warehouse database is missing, corrupted, or inaccessible."""
 
@@ -369,7 +374,7 @@ class DuckDBWarehouseManager:
             cursor_id = cursor_id_val
 
         params: dict[str, Any] = {
-            "cond": cond.strip() if cond else None,
+            "cond": _escape_like(cond.strip()) if cond else None,
             "status": status.strip() if status else None,
             "phase": phase.strip() if phase else None,
             "min_age": float(min_age) if min_age is not None else None,
