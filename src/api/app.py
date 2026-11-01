@@ -21,7 +21,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
-from src.api.ratelimit import SlidingWindowLimiter
 from src.api.cache import (
     CacheEntry,
     CacheState,
@@ -48,6 +47,7 @@ from src.api.models import (
     TrialsListResponse,
     TrialSummary,
 )
+from src.api.ratelimit import SlidingWindowLimiter
 from src.api.warehouse import (
     DuckDBWarehouseManager,
     WarehouseNotReadyError,
