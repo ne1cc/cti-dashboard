@@ -1027,3 +1027,65 @@ models:
         data_type: BOOLEAN
       - name: missing_facility_flag
         data_type: BOOLEAN
+
+  - name: mart_trial_change_events
+    description: >
+      Change Radar. One row per indication profile x NCT ID x observation pair
+      (previous trusted run, current trusted run) x event_type x field. Events
+      describe changes in the public registry record between two observations by
+      this pipeline; they are not clinical conclusions, efficacy signals or
+      recommendations. Run-trust gate (int_trusted_change_runs): only runs whose
+      manifest status is 'success' AND that were newly fetched (latest page
+      retrieved_at_utc not earlier than the run's started_at_utc; a re-used
+      earlier snapshot fails this; runs with no retrieval stamp pass) may be
+      either side of a pair; the previous run is the prior trusted run of the same
+      profile. Status events compare overall_status across that pair (equivalent to
+      int_trial_status_history.previous_status when no untrusted run intervenes).
+      Incremental with full_refresh disabled and unique_key event_id: rows persist
+      in the warehouse after bronze/silver pruning (src/utils/retention.py)
+      removes the source runs. Dropping the table is the only way to rebuild it.
+    contract:
+      enforced: true
+    columns:
+      - name: event_id
+        data_type: VARCHAR
+        description: md5 of profile, NCT ID, both run ids, event_type and field_name.
+        tests: [unique, not_null]
+      - name: indication_profile_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: nct_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: event_type
+        data_type: VARCHAR
+        tests:
+          - not_null
+          - accepted_values:
+              values: [status_change, enrollment_change, completion_date_change, outcome_set_change]
+      - name: field_name
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: before_value
+        data_type: VARCHAR
+      - name: after_value
+        data_type: VARCHAR
+      - name: before_value_type
+        data_type: VARCHAR
+        description: enrollment_type (count events) or registry date type (date events).
+      - name: after_value_type
+        data_type: VARCHAR
+      - name: before_ingestion_run_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: after_ingestion_run_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: before_observed_at_utc
+        data_type: TIMESTAMP
+        tests: [not_null]
+      - name: after_observed_at_utc
+        data_type: TIMESTAMP
+        tests: [not_null]
+      - name: registry_url
+        data_type: VARCHAR
