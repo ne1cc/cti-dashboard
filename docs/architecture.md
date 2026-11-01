@@ -201,7 +201,7 @@ own profile and working directory; `CTI_PROJECT_ROOT` does not redirect dbt.
 The sample `CTI_DATA_DIR`, `CTI_BRONZE_DIR`, `CTI_SILVER_DIR`, `CTI_GOLD_DIR`, and
 `CTI_DUCKDB_PATH` entries are not read by the current Python loaders; change YAML
 paths (and dbt connection settings) instead. Container refresh-loop settings are
-documented in the [Fly deployment runbook](DEPLOY_FLY.md).
+documented in the [operations guide](OPERATIONS.md).
 
 ## 6. Scaling path (implemented extensions, and the roadmap beyond them)
 

@@ -27,6 +27,5 @@ Same checks CI runs (`.github/workflows/ci.yml`); copy them into an issue's "Ver
 ## Do not touch
 - `data/bronze|silver|gold/**` and `data/warehouse/*.duckdb`: generated, never committed.
 - `.env` and anything holding secrets; add new variables to `.env.example`.
-- Deploy path: the `deploy` job in `ci.yml`, `fly.toml`, `.github/scripts/deploy_fly.sh`, unless the issue says so.
 - `make prune-data` deletes run artifacts (`make prune-data-dry` previews); never run it unless the issue says so.
 - `uv.lock`: change it only through `uv`, never by hand.

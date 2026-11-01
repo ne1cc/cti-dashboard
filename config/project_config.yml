@@ -101,7 +101,7 @@ ingestion:
 # while newly_registered_90d (registry first-post dates) stays computable.
 # (d) fly volumes extend cti_data --size 2 is the
 # user's action that restores (a)'s premise; raise this back to 6 only after
-# extending. docs/DEPLOY_FLY.md ("What to expect") carries the full arithmetic.
+# extending. docs/OPERATIONS.md ("What to expect") carries the full arithmetic.
 retention:
   bronze_runs_to_keep: 1
   snapshot_runs_to_keep: 3

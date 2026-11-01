@@ -242,9 +242,9 @@ class ProfileRegistry:
         the dashboard must not be able to pick one up.
 
         When `CTI_REFRESHABLE_PROFILES` is set (comma-separated profile ids),
-        the returned set is narrowed to it. The Fly deployment sets this
-        because the deployed volume and VM cannot run every refreshable
-        profile — docs/DEPLOY_FLY.md, "Adding indication profiles", requires
+        the returned set is narrowed to it. A host sets this when its
+        volume and memory cannot run every refreshable
+        profile — docs/OPERATIONS.md, "Adding indication profiles", requires
         storage to be sized from a completed full build before a profile set
         is deployed. A name the registry does not know fails loudly here
         rather than silently shrinking the refresh.

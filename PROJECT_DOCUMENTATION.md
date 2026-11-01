@@ -22,7 +22,7 @@
 | **Assumptions & Limitations** | [`docs/assumptions_and_limitations.md`](docs/assumptions_and_limitations.md) | Source data biases, coverage boundaries, and analytical assumptions |
 | **Business Case (archived)** | [`docs/archive/business_case.md`](docs/archive/business_case.md) | Archived exploratory analyst persona and business case hypothesis (ADR 0082) |
 | **Competitive Positioning** | [`docs/competitive_positioning.md`](docs/competitive_positioning.md) | Strategic positioning as an open, auditable feasibility workbench vs. commercial intelligence platforms |
-| **Production Deployment** | [`docs/DEPLOY_FLY.md`](docs/DEPLOY_FLY.md) | Fly.io container deployment, memory envelopes, volume persistence, and operation runbooks |
+| **Container Operations** | [`docs/OPERATIONS.md`](docs/OPERATIONS.md) | Refresh loop, retention sizing, memory envelopes, and operations history (Fly.io retired) |
 | **Study Guide** | [`docs/study_guide.md`](docs/study_guide.md) | Architectural interview talking points, system design walkthroughs, and topic guides |
 | **Executive Memo Template** | [`docs/executive_memo_template.md`](docs/executive_memo_template.md) | Template for briefing clinical operations leadership on trial feasibility findings |
 
