@@ -722,3 +722,67 @@ def audit_event_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
         ],
         session_timezone="America/Los_Angeles",
     )
+
+
+# --- Change Radar fixture ------------------------------------------------------
+# ADRD only. r1 baseline; r2 (trusted) changes status, enrollment, a completion
+# date and an outcome; r3 is a "stale" run (retrieved before it started) changing
+# NCT00000005; r4 is a failed run changing NCT00000006. r3/r4 must yield no events.
+CHANGE_RADAR_RUN_IDS = {
+    "r1": "20260901T100000Z_radar001",
+    "r2": "20260908T100000Z_radar002",
+    "r3": "20260915T100000Z_radar003",
+    "r4": "20260922T100000Z_radar004",
+}
+
+
+def change_radar_runs() -> list[FixtureRun]:
+    base = replace(_base_adrd_run(), retrieved_at="2026-09-01T10:01:00+00:00")
+    r2 = replace(
+        base,
+        run_id=CHANGE_RADAR_RUN_IDS["r2"],
+        started_at=datetime(2026, 9, 8, 10, tzinfo=UTC),
+        retrieved_at="2026-09-08T10:01:00+00:00",
+        status_overrides={"NCT00000002": "UNKNOWN"},
+        study_overrides={
+            "NCT00000001": {"designModule": {"enrollmentInfo": {"count": 650, "type": "ACTUAL"}}},
+            "NCT00000003": {
+                "statusModule": {
+                    "primaryCompletionDateStruct": {"date": "2026-02-15", "type": "ACTUAL"}
+                }
+            },
+            "NCT00000004": {
+                "outcomesModule": {
+                    "primaryOutcomes": [
+                        {"measure": "Overall response rate", "timeFrame": "6 months"}
+                    ]
+                }
+            },
+        },
+    )
+    return [
+        replace(
+            base, run_id=CHANGE_RADAR_RUN_IDS["r1"], started_at=datetime(2026, 9, 1, 10, tzinfo=UTC)
+        ),
+        r2,
+        replace(
+            base,
+            run_id=CHANGE_RADAR_RUN_IDS["r3"],
+            started_at=datetime(2026, 9, 15, 10, tzinfo=UTC),
+            retrieved_at="2026-09-01T10:01:00+00:00",
+            status_overrides={"NCT00000005": "WITHDRAWN"},
+        ),
+        replace(
+            base,
+            run_id=CHANGE_RADAR_RUN_IDS["r4"],
+            started_at=datetime(2026, 9, 22, 10, tzinfo=UTC),
+            retrieved_at="2026-09-22T10:01:00+00:00",
+            status_overrides={"NCT00000006": "WITHDRAWN"},
+            final_status="failed",
+        ),
+    ]
+
+
+@pytest.fixture
+def change_radar_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return _build_fixture_root(tmp_path_factory, "fixture_change_radar", change_radar_runs())

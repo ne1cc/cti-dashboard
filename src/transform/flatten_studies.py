@@ -32,6 +32,11 @@ def _struct_date(status_module: dict[str, Any], key: str) -> str | None:
     return str(val) if isinstance(val, str) else None
 
 
+def _struct_date_type(status_module: dict[str, Any], key: str) -> str | None:
+    val = dig(status_module, key, "type")
+    return str(val) if isinstance(val, str) else None
+
+
 def normalize_phases(phases: list[str] | None) -> tuple[str | None, str]:
     """Returns (phase_raw, phase_normalized). Multi-phase studies join with '/'.
     Missing → UNKNOWN; NA → NOT_APPLICABLE."""
@@ -118,7 +123,9 @@ def flatten_study(
         "expanded_access_info": dig(status, "expandedAccessInfo", "hasExpandedAccess"),
         "start_date": _struct_date(status, "startDateStruct"),
         "primary_completion_date": _struct_date(status, "primaryCompletionDateStruct"),
+        "primary_completion_date_type": _struct_date_type(status, "primaryCompletionDateStruct"),
         "completion_date": _struct_date(status, "completionDateStruct"),
+        "completion_date_type": _struct_date_type(status, "completionDateStruct"),
         "study_first_post_date": _struct_date(status, "studyFirstPostDateStruct"),
         "results_first_post_date": _struct_date(status, "resultsFirstPostDateStruct"),
         "last_update_post_date": _struct_date(status, "lastUpdatePostDateStruct"),
