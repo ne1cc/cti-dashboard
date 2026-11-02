@@ -14,6 +14,10 @@ snapshot with one psql command:
                   primary_completion_date, completion_date
            from ctgov.studies) to 'studies_YYYYMMDD.csv' csv header
 
+Each past snapshot date requires that date's dump restored first: the \\copy
+runs against a connected database, so a historical extract cannot be produced
+from the current database alone.
+
 It builds the slim ``fct_trial_status_history`` frame (nct_id, snapshot_date,
 overall_status, key dates, record hash) with the same transition flags as dbt
 ``int_trial_status_history``, and compares AACT rows against this project's
@@ -80,6 +84,9 @@ def read_aact_extract(path: Path) -> pd.DataFrame:
     missing = [field for field in _AACT_FIELDS if field not in frame.columns]
     if missing:
         raise ValueError(f"{path.name} missing AACT columns: {missing}")
+    # AACT spans registry API eras with differing capitalization; normalize
+    # before hashing and before any comparison against RECRUITING.
+    frame["overall_status"] = frame["overall_status"].str.strip().str.upper()
     frame["snapshot_date"] = snapshot_date
     frame["record_hash"] = frame.apply(_record_hash, axis=1)
     frame["source"] = "aact"
@@ -110,8 +117,13 @@ def build_status_history(csv_paths: Sequence[Path]) -> pd.DataFrame:
         & history["previous_status"].notna()
         & (history["previous_status"] != "RECRUITING")
     )
-    history["left_recruiting_flag"] = (history["overall_status"] != "RECRUITING") & (
-        history["previous_status"] == "RECRUITING"
+    # Null status after RECRUITING must not set the flag: the dbt model's
+    # `overall_status != 'RECRUITING'` is NULL for a null status, and the
+    # flag stays unset there.
+    history["left_recruiting_flag"] = (
+        history["overall_status"].notna()
+        & (history["overall_status"] != "RECRUITING")
+        & (history["previous_status"] == "RECRUITING")
     )
     return history[SLIM_HISTORY_COLUMNS].reset_index(drop=True)
 
@@ -135,7 +147,12 @@ def compare_with_own(
     Trials present only in AACT produce no row here; they are outside the
     project's own collection scope and never a discrepancy of it.
     """
-    left = own.assign(_ts=pd.to_datetime(own["snapshot_date"])).sort_values("_ts")
+    left = own.assign(
+        _ts=pd.to_datetime(own["snapshot_date"]),
+        # Normalize for the comparison, mirroring the loader's read-time
+        # normalization; AACT history frames are already normalized.
+        overall_status=own["overall_status"].str.strip().str.upper(),
+    ).sort_values("_ts")
     right = aact.assign(_ts=pd.to_datetime(aact["snapshot_date"]))
     right = right[["nct_id", "_ts", "snapshot_date", "overall_status"]].sort_values("_ts")
     merged = pd.merge_asof(
@@ -147,7 +164,9 @@ def compare_with_own(
         tolerance=timedelta(days=tolerance_days),
         suffixes=("_own", "_aact"),
     )
-    matched = merged["overall_status_aact"].notna()
+    # A match is keyed on the AACT snapshot date, never on the status: a
+    # matched row with a null AACT status is a real observation, not own_only.
+    matched = merged["snapshot_date_aact"].notna()
     merged["outcome"] = "own_only"
     merged.loc[matched, "outcome"] = "match"
     mismatch = matched & (merged["overall_status_own"] != merged["overall_status_aact"])

@@ -103,6 +103,62 @@ def test_rejects_bad_extract_name_and_missing_columns(tmp_path: Path) -> None:
         build_status_history([bad])
 
 
+def _single_extract(tmp_path: Path, statuses: list[str], dates: list[str]) -> list[Path]:
+    paths: list[Path] = []
+    for status, date in zip(statuses, dates, strict=True):
+        path = tmp_path / f"studies_{date.replace('-', '')}.csv"
+        pd.DataFrame(
+            [
+                {
+                    "nct_id": "NCT00000001",
+                    "overall_status": status,
+                    "start_date": "2024-06-01",
+                    "primary_completion_date": "2026-06-01",
+                    "completion_date": "2026-12-01",
+                }
+            ]
+        ).to_csv(path, index=False)
+        paths.append(path)
+    return paths
+
+
+def test_status_normalization_is_not_a_transition(tmp_path: Path) -> None:
+    # AACT spans registry API eras with differing capitalization; case or
+    # padding alone must never read as a status change.
+    paths = _single_extract(
+        tmp_path, ["Recruiting", "  RECRUITING  "], ["2025-01-01", "2025-02-01"]
+    )
+    history = build_status_history(paths)
+    assert (history["overall_status"] == "RECRUITING").all()
+    assert not history["status_changed_flag"].any()
+    assert not history["entered_recruiting_flag"].any()
+    assert not history["left_recruiting_flag"].any()
+
+
+def test_null_status_matches_dbt_model(tmp_path: Path) -> None:
+    # int_trial_status_history: `overall_status != 'RECRUITING'` is NULL for a
+    # null status, so left_recruiting stays unset; `is distinct from` still
+    # counts the null as a change.
+    paths = _single_extract(tmp_path, ["RECRUITING", None], ["2025-01-01", "2025-02-01"])
+    history = build_status_history(paths)
+    second = history.iloc[1]
+    assert pd.isna(second["overall_status"])
+    assert not bool(second["left_recruiting_flag"])
+    assert bool(second["status_changed_flag"])
+
+
+def test_compare_matched_null_status_is_not_own_only(tmp_path: Path) -> None:
+    paths = _single_extract(tmp_path, [None], ["2025-02-01"])
+    aact = build_status_history(paths)
+    own = pd.DataFrame(
+        [{"nct_id": "NCT00000001", "snapshot_date": "2025-02-01", "overall_status": "RECRUITING"}]
+    )
+    report = compare_with_own(aact, own)
+    row = report.iloc[0]
+    assert row["snapshot_date_aact"] == "2025-02-01"
+    assert row["outcome"] == "status_mismatch"
+
+
 def test_compare_reports_discrepancies(extract_paths: list[Path]) -> None:
     aact = build_status_history(extract_paths)
     own = pd.DataFrame(
