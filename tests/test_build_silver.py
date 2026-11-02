@@ -13,7 +13,11 @@ from src.ingest.snapshot_manifest import IngestionManifest, write_manifest
 from src.profiles import get_registry
 from src.quality.profiling import profile_run
 from src.transform import build_silver_entities
-from src.transform.build_silver_entities import _already_transformed, build_silver_for_run
+from src.transform.build_silver_entities import (
+    BronzeRebuildMismatch,
+    _already_transformed,
+    build_silver_for_run,
+)
 from src.transform.export_parquet import ENTITY_COLUMNS
 from src.transform.silver_stats import stats_path
 from src.utils.dates import utc_now
@@ -288,6 +292,162 @@ def test_run_transform_fails_on_mixed_runs_when_one_lacks_silver(tmp_path: Path)
 
     # run_transform must raise for r2 rather than silently skipping both
     with pytest.raises(FileNotFoundError, match=f"Bronze pages missing for run {r2}"):
+        build_silver_entities.run_transform(config=cfg)
+
+
+def _rewind_to_pre_upgrade_shape(cfg: ProjectConfig, run_id: str) -> None:
+    """Drop the mesh entity file so the run looks pre-upgrade (implicit upgrade path)."""
+    (cfg.paths.silver / "silver_trial_condition_mesh" / f"run_id={run_id}.parquet").unlink()
+
+
+def _retained_silver_bytes(cfg: ProjectConfig, run_id: str) -> dict[Path, bytes]:
+    return {
+        path: path.read_bytes()
+        for path in sorted(cfg.paths.silver.glob(f"*/run_id={run_id}.parquet"))
+    }
+
+
+@pytest.mark.parametrize("force", [False, True])
+def test_implicit_upgrade_refuses_a_missing_bronze_page(tmp_path: Path, force: bool):
+    """Round-4 finding 1: incomplete bronze must never overwrite retained silver.
+
+    A legacy run whose bronze lost a page rebuilds fewer studies than the
+    manifest recorded; replacing the retained silver with that partial rebuild
+    would destroy the only surviving copy of the run. The transform must abort
+    before close() swaps any file in, both plain and with --force.
+    """
+    cfg = make_config(tmp_path)
+    run_id = "r_upgrade_missing_page"
+    run_dir = cfg.paths.bronze_api_responses / f"run_id={run_id}"
+    write_bronze_page(
+        run_dir,
+        1,
+        [make_study("NCT00000001"), make_study("NCT00000002"), make_study("NCT00000003")],
+    )
+    write_bronze_page(run_dir, 2, [make_study("NCT00000004")])
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+    write_manifest(cfg.paths.bronze_manifests, make_manifest(run_id, record_count=4))
+    build_silver_for_run(make_manifest(run_id, record_count=4), cfg)
+    _rewind_to_pre_upgrade_shape(cfg, run_id)
+
+    (run_dir / "page=00002.json").unlink()  # directory remains, one page gone
+
+    before = _retained_silver_bytes(cfg, run_id)
+    assert len(before) == 6
+    with pytest.raises(
+        BronzeRebuildMismatch, match="produced 3 studies but the manifest expects 4"
+    ):
+        build_silver_entities.run_transform(config=cfg, force=force)
+    assert _retained_silver_bytes(cfg, run_id) == before
+    assert list(cfg.paths.silver.glob("*/run_id=*.parquet.tmp")) == []
+
+
+@pytest.mark.parametrize("force", [False, True])
+def test_implicit_upgrade_refuses_a_truncated_bronze_page(tmp_path: Path, force: bool):
+    """Round-4 finding 1: a truncated page is the same data-loss path as a lost one."""
+    cfg = make_config(tmp_path)
+    run_id = "r_upgrade_truncated"
+    run_dir = cfg.paths.bronze_api_responses / f"run_id={run_id}"
+    write_bronze_page(
+        run_dir,
+        1,
+        [make_study("NCT00000001"), make_study("NCT00000002"), make_study("NCT00000003")],
+    )
+    write_bronze_page(run_dir, 2, [make_study("NCT00000004")])
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+    write_manifest(cfg.paths.bronze_manifests, make_manifest(run_id, record_count=4))
+    build_silver_for_run(make_manifest(run_id, record_count=4), cfg)
+    _rewind_to_pre_upgrade_shape(cfg, run_id)
+
+    (run_dir / "page=00001.json").write_text(json.dumps({"studies": [make_study("NCT00000001")]}))
+
+    before = _retained_silver_bytes(cfg, run_id)
+    with pytest.raises(
+        BronzeRebuildMismatch, match="produced 2 studies but the manifest expects 4"
+    ):
+        build_silver_entities.run_transform(config=cfg, force=force)
+    assert _retained_silver_bytes(cfg, run_id) == before
+    assert list(cfg.paths.silver.glob("*/run_id=*.parquet.tmp")) == []
+
+
+def test_implicit_upgrade_completes_when_bronze_reproduces_the_manifest(tmp_path: Path):
+    """Positive arm of the count guard: a complete bronze upgrades retained silver.
+
+    Duplicates and missing-NCT records are legitimate exclusions the guard
+    subtracts on both sides, so a complete rebuild (4 manifest records − 1
+    duplicate − 1 no-NCT = 2 studies) proceeds and gains the mesh entity.
+    """
+    cfg = make_config(tmp_path)
+    run_id = "r_upgrade_ok"
+    run_dir = cfg.paths.bronze_api_responses / f"run_id={run_id}"
+    write_bronze_page(
+        run_dir,
+        1,
+        [
+            make_study("NCT00000001"),
+            make_study("NCT00000002"),
+            {"protocolSection": {}},
+        ],
+    )
+    write_bronze_page(run_dir, 2, [make_study("NCT00000001")])  # duplicate NCT ID
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+    write_manifest(cfg.paths.bronze_manifests, make_manifest(run_id, record_count=4))
+    build_silver_for_run(make_manifest(run_id, record_count=4), cfg)
+    assert pd.read_parquet(cfg.paths.silver / "silver_trials" / f"run_id={run_id}.parquet")[
+        "nct_id"
+    ].tolist() == ["NCT00000001", "NCT00000002"]
+    _rewind_to_pre_upgrade_shape(cfg, run_id)
+
+    assert build_silver_entities.run_transform(config=cfg) == [run_id]
+
+    mesh_path = cfg.paths.silver / "silver_trial_condition_mesh" / f"run_id={run_id}.parquet"
+    assert mesh_path.exists()
+    assert _already_transformed(cfg, run_id)
+    assert list(cfg.paths.silver.glob("*/run_id=*.parquet.tmp")) == []
+
+
+def test_incomplete_bronze_without_retained_silver_still_transforms(tmp_path: Path):
+    """The count guard protects retained silver only.
+
+    A fresh (never-transformed) run transforms whatever bronze holds; the
+    pre-existing post-close warning covers its shortfall, and explicitly
+    requested partial-run transforms keep working.
+    """
+    cfg = make_config(tmp_path)
+    run_id = "r_fresh_truncated"
+    run_dir = cfg.paths.bronze_api_responses / f"run_id={run_id}"
+    write_bronze_page(run_dir, 1, [make_study("NCT00000001")])
+
+    row_counts = build_silver_for_run(make_manifest(run_id, record_count=4), cfg)
+
+    assert row_counts["silver_trials"] == 1
+    assert (cfg.paths.silver / "silver_trials" / f"run_id={run_id}.parquet").exists()
+
+
+def test_run_transform_fails_on_mixed_runs_when_one_bronze_is_truncated(tmp_path: Path):
+    """Mixed runs: a pruned-bronze legacy run skips; a truncated-bronze run aborts."""
+    cfg = make_config(tmp_path)
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+
+    # Run 1: legacy intact, bronze pruned — the safe skip from round 3.
+    r1 = "r_pruned_intact"
+    d1 = cfg.paths.bronze_api_responses / f"run_id={r1}"
+    write_bronze_page(d1, 1, [make_study("NCT00000001")])
+    write_manifest(cfg.paths.bronze_manifests, make_manifest(r1, record_count=1))
+    build_silver_for_run(make_manifest(r1, record_count=1), cfg)
+    _rewind_to_pre_upgrade_shape(cfg, r1)
+    shutil.rmtree(d1)
+
+    # Run 2: legacy shape kept, but its bronze lost a page.
+    r2 = "r_truncated"
+    d2 = cfg.paths.bronze_api_responses / f"run_id={r2}"
+    write_bronze_page(d2, 1, [make_study("NCT00000002"), make_study("NCT00000003")])
+    write_manifest(cfg.paths.bronze_manifests, make_manifest(r2, record_count=2))
+    build_silver_for_run(make_manifest(r2, record_count=2), cfg)
+    _rewind_to_pre_upgrade_shape(cfg, r2)
+    (d2 / "page=00001.json").write_text(json.dumps({"studies": [make_study("NCT00000002")]}))
+
+    with pytest.raises(BronzeRebuildMismatch, match=f"Run {r2}"):
         build_silver_entities.run_transform(config=cfg)
 
 

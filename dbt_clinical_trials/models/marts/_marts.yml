@@ -107,9 +107,11 @@ models:
       - name: has_derived_mesh
         data_type: BOOLEAN
         description: >
-          True when the registry record supplied a derivedSection.conditionBrowseModule,
-          false when extracted but absent, or null (unknown) when MeSH was never
-          extracted (retained historical runs predating Issue #52).
+          True when the run's MeSH extraction produced at least one usable
+          silver_trial_condition_mesh row for the trial (direct term or
+          ancestor), false when it was extracted but produced none, or null
+          (unknown) when MeSH was never extracted (retained historical runs
+          predating Issue #52).
 
   - name: dim_condition
     description: >

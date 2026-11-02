@@ -108,9 +108,15 @@ ClinicalTrials.gov API v2 query (`query.cond=Non-small+cell+lung+cancer&pageSize
   - Fallback-only studies (zero YAML overlay matches): **8 of 50 (16.0%)**.
   - **Scope limitation**: Full registry-wide NSCLC coverage across all 8,600+ records remains
     **unmeasured** without a complete NSCLC bronze ingestion snapshot (unlike ADRD which has
-    the committed dev bronze run `20260905T012941Z_fe9f104f` with 2,618 records).
+    the local dev bronze snapshot `20260905T012941Z_fe9f104f` with 2,618 records — also
+    not committed; see "Real-data sources" above).
 
-Key patterns of disagreement from the reviewed clinical scenarios:
+Key patterns of disagreement from the reviewed clinical scenarios. The three
+studies below were **hand-picked** (not drawn from the 50-study sample and not
+selected by an automated rule) to illustrate three distinct disagreement
+patterns — symptom/complication indexing, basket-trial multi-indication
+coverage, and broad-text ancestor closure — so they are illustrative examples,
+not a ranked or representative selection:
 
 1. **Complication & symptom studies (`NCT03803787`):**
    - Condition text: `['Radiation Pneumonitis']`.
@@ -319,6 +325,13 @@ Expected outputs:
 
 ```sql
 -- 0. Coverage table reproduction (measures every column of the table above)
+-- Multi-run limitation: dim_trial holds current records only, while
+-- stg_trial_conditions / stg_trial_condition_mesh read every retained run.
+-- On a warehouse with multiple runs per profile, the overlay/fallback and
+-- mesh-count columns below would aggregate superseded runs alongside the
+-- current one (total_trials stays current-record). Every published row above
+-- comes from a single-run fixture warehouse, so the table is unaffected;
+-- on a multi-run tree, filter the staging models to the latest run first.
 with trial_mapping as (
     select
         indication_profile_id,

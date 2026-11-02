@@ -54,8 +54,22 @@ PRE_UPGRADE_ENTITY_NAMES = (
 )
 
 
+class BronzeRebuildMismatch(ValueError):
+    """A bronze rebuild did not reproduce the manifest's expected study count."""
+
+
 def _already_transformed(cfg: ProjectConfig, run_id: str) -> bool:
     return all(
+        (cfg.paths.silver / entity / f"run_id={run_id}.parquet").exists() for entity in ENTITY_NAMES
+    )
+
+
+def _has_existing_silver(cfg: ProjectConfig, run_id: str) -> bool:
+    """True when any final silver entity file for run_id exists on disk.
+
+    Used to detect an overwrite: close() would replace these retained files.
+    """
+    return any(
         (cfg.paths.silver / entity / f"run_id={run_id}.parquet").exists() for entity in ENTITY_NAMES
     )
 
@@ -133,6 +147,23 @@ def build_silver_for_run(
             study_count += 1
             if study_count % PROGRESS_EVERY == 0:
                 log.info("Run {}: {} studies streamed.", run_id, study_count)
+
+        # Incomplete bronze (a lost page or truncated records) yields fewer studies
+        # than the manifest recorded. Overwriting retained silver with that partial
+        # rebuild is irreversible — the original silver could never be rebuilt. Fail
+        # BEFORE close() swaps any tmp file in; the except below then discards every
+        # tmp file and the old silver stays byte-identical. Legitimate dedup and
+        # missing-NCT exclusions are subtracted on both sides, so a complete bronze
+        # with duplicates still passes.
+        expected = manifest.record_count - duplicate_count - skipped_no_nct
+        if study_count != expected and _has_existing_silver(cfg, run_id):
+            raise BronzeRebuildMismatch(
+                f"Run {run_id}: bronze rebuild produced {study_count} studies but the manifest "
+                f"expects {expected} ({manifest.record_count} records minus {duplicate_count} "
+                f"duplicate and {skipped_no_nct} missing-NCT exclusions). Bronze is incomplete; "
+                "refusing to overwrite the retained silver files. Restore the bronze pages, or "
+                "delete the retained silver for this run explicitly to rebuild."
+            )
         counts = writer.close()
     except BaseException:
         writer.discard()
@@ -162,7 +193,6 @@ def build_silver_for_run(
         skipped_no_nct_id=skipped_no_nct,
     )
 
-    expected = manifest.record_count - duplicate_count - skipped_no_nct
     if row_counts["silver_trials"] != expected:
         log.warning(
             "Run {}: silver_trials rows ({}) != manifest records minus exclusions ({}).",
