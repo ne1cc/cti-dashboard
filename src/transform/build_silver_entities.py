@@ -21,7 +21,7 @@ from src.transform.export_parquet import DEFAULT_FLUSH_ROWS, SilverRunWriter
 from src.transform.flatten_studies import flatten_study, iter_bronze_study_records
 from src.transform.normalize_conditions import get_taxonomy
 from src.transform.normalize_locations import get_geography_rules
-from src.transform.silver_stats import write_transform_stats
+from src.transform.silver_stats import load_transform_stats, write_transform_stats
 from src.utils.logging import setup_logging
 
 if TYPE_CHECKING:
@@ -57,13 +57,20 @@ def _already_transformed(cfg: ProjectConfig, run_id: str) -> bool:
 
 
 def _legacy_run_without_bronze(cfg: ProjectConfig, run_id: str) -> bool:
-    """True when a pre-#74 run holds complete legacy silver but no bronze pages.
+    """Identify a likely pre-#74 run with complete old silver and no bronze.
 
     Rebuilding needs the bronze pages, so the only safe action is to keep the
     existing silver and skip; a new-entity backfill for such a run requires
-    re-ingestion.
+    re-ingestion. If transform stats are missing, the run's vintage is unknown.
     """
     if (cfg.paths.bronze_api_responses / f"run_id={run_id}").exists():
+        return False
+    if (
+        cfg.paths.silver / "silver_trial_baseline_demographics" / f"run_id={run_id}.parquet"
+    ).exists():
+        return False
+    stats = load_transform_stats(cfg, run_id) or {}
+    if "silver_trial_baseline_demographics" in (stats.get("row_counts") or {}):
         return False
     return all(
         (cfg.paths.silver / entity / f"run_id={run_id}.parquet").exists()
@@ -211,9 +218,9 @@ def run_transform(
         if not force and _already_transformed(cfg, run_id):
             log.info("Run {} already transformed; skipping (use --force to rebuild).", run_id)
             continue
-        if _legacy_run_without_bronze(cfg, run_id):
+        if not force and _legacy_run_without_bronze(cfg, run_id):
             log.warning(
-                "Run {}: silver predates silver_trial_baseline_demographics (#74) but its "
+                "Run {}: silver may predate silver_trial_baseline_demographics (#74) and its "
                 "bronze pages are pruned; keeping the existing silver without the new entity "
                 "instead of failing the refresh. Re-ingest the run to backfill.",
                 run_id,

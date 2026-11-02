@@ -341,3 +341,34 @@ def test_run_transform_still_raises_when_silver_is_incomplete_and_bronze_pruned(
 
     with pytest.raises(FileNotFoundError, match="Bronze pages missing"):
         run_transform(config=cfg)
+
+
+@pytest.mark.parametrize("explicit_run", [False, True])
+def test_force_rebuild_does_not_skip_pruned_bronze(tmp_path: Path, explicit_run: bool):
+    cfg = make_config(tmp_path)
+    run_id = "r_force_pruned"
+    _write_legacy_silver(cfg, run_id)
+    new_entity = (
+        cfg.paths.silver / "silver_trial_baseline_demographics" / f"run_id={run_id}.parquet"
+    )
+    new_entity.parent.mkdir(parents=True, exist_ok=True)
+    new_entity.write_bytes(b"existing")
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+    write_manifest(cfg.paths.bronze_manifests, make_manifest(run_id, record_count=1))
+
+    with pytest.raises(FileNotFoundError, match="Bronze pages missing"):
+        run_transform(run_id=run_id if explicit_run else None, force=True, config=cfg)
+
+
+def test_pruned_bronze_with_recorded_demographics_is_not_legacy(tmp_path: Path):
+    cfg = make_config(tmp_path)
+    run_id = "r_missing_demographics"
+    _write_legacy_silver(cfg, run_id)
+    stats = cfg.paths.silver / "_transform_stats" / f"run_id={run_id}.json"
+    stats.parent.mkdir(parents=True, exist_ok=True)
+    stats.write_text('{"row_counts": {"silver_trial_baseline_demographics": 1}}')
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+    write_manifest(cfg.paths.bronze_manifests, make_manifest(run_id, record_count=1))
+
+    with pytest.raises(FileNotFoundError, match="Bronze pages missing"):
+        run_transform(config=cfg)

@@ -6,7 +6,8 @@
 -- Label policy (issue #74): labels are mapped only where the evidence is
 -- explicit. A measure titled with a single dimension ("Race (NIH/OMB)") fixes
 -- that dimension; a combined "Race/Ethnicity, Customized" table is mapped per
--- label, using a "Race:"/"Ethnicity:" category prefix or the reviewed seed row
+-- label, using a "Race:"/"Ethnicity:" category prefix, an exact class title,
+-- or the reviewed seed row
 -- itself. Anything unresolvable — including dimension-neutral buckets like
 -- "Unknown or Not Reported" inside a combined table — keeps its reported label,
 -- stays unmapped, and carries is_ambiguous_combined_flag rather than a guess.
@@ -91,7 +92,13 @@ labeled as (
                 when dimension in ('race', 'ethnicity') then dimension
                 else null
             end,
-            prefix_dimension
+            prefix_dimension,
+            case
+                when dimension = 'race_ethnicity_combined'
+                    and upper(trim(class_title)) in ('RACE', 'ETHNICITY')
+                    then lower(trim(class_title))
+                else null
+            end
         ) as mapping_dimension
     from classified
 ),

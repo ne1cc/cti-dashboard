@@ -140,7 +140,58 @@ class TestOMBMapping:
             demographics_fixture_root,
             "select count(*) from main_seeds.omb_race_ethnicity_mapping",
         )
-        assert count == 15
+        assert count == 20
+
+    def test_reviewed_labels_and_class_dimension(self, demographics_fixture_root: Path) -> None:
+        con = duckdb.connect(
+            str(demographics_fixture_root / "data/warehouse/clinical_trials.duckdb"),
+            read_only=True,
+        )
+        start = Path.cwd()
+        try:
+            os.chdir(demographics_fixture_root)
+            source = "data/silver/silver_trial_baseline_demographics/*.parquet"
+            con.execute(
+                "create temp table mapping_input as "
+                "select * from read_parquet(?, union_by_name=true) limit 0",
+                [source],
+            )
+            examples = [
+                ("Race", "Black", "race", "Black or African American"),
+                ("Race", "Caucasian", "race", "White"),
+                ("Ethnicity", "Hispanic", "ethnicity", "Hispanic or Latino"),
+                ("Ethnicity", "Hispanic/Latino", "ethnicity", "Hispanic or Latino"),
+                ("Ethnicity", "Non-Hispanic", "ethnicity", "Not Hispanic or Latino"),
+                ("Race", "Other", "race", None),
+            ]
+            for cls, label, _, _ in examples:
+                con.execute(
+                    """insert into mapping_input
+                       select * replace ('Race and Ethnicity' as measure_title,
+                           ? as class_title, ? as category_title)
+                       from read_parquet(?, union_by_name=true) limit 1""",
+                    [cls, label, source],
+                )
+            view_sql = con.execute(
+                "select sql from duckdb_views() "
+                "where schema_name='main_staging' "
+                "and view_name='stg_trial_baseline_demographics'"
+            ).fetchone()[0]
+            query = view_sql.split(" AS ", 1)[1]
+            begin = query.index("read_parquet(")
+            end = query.index(" WHERE (nct_id IS NOT NULL)", begin)
+            query = query[:begin] + "mapping_input" + query[end:]
+            rows = con.execute(
+                "select class_title, category_title, resolved_dimension, omb_category, "
+                "is_ambiguous_combined_flag from (" + query.rstrip(";") + ")"
+            ).fetchall()
+            assert sorted(rows) == sorted(
+                (cls, label, dimension, category, False)
+                for cls, label, dimension, category in examples
+            )
+        finally:
+            os.chdir(start)
+            con.close()
 
     def _label_rows(self, root: Path, label: str) -> list[tuple]:
         return _rows(
@@ -275,17 +326,11 @@ class TestCoverageMart:
                from main_marts.mart_baseline_demographics_coverage
                order by 1, 2""",
         )
-        # Only the demographics runs carry baseline sections, but the base
-        # fixtures already hold two COMPLETED trials with posted results and no
-        # demographics (ADRD "Type 2 Diabetes" -> non_dementia_other, NSCLC
-        # squamous) — both stay in the denominator with zero reporting.
+        # The second ADRD run replaces the first even on the same day. NSCLC
+        # has its own latest run and retains its denominator-only trial.
         assert rows == [
             ("alzheimers_disease", 2022, 1),
-            ("alzheimers_disease", 2024, 2),
-            ("frontotemporal_dementia", 2023, 1),
-            ("lewy_body_dementia", 2025, 1),
             ("mild_cognitive_impairment", 2025, 1),
-            ("non_dementia_other", 2025, 1),
             ("nsclc_squamous", 2025, 1),
         ]
 
@@ -301,25 +346,16 @@ class TestCoverageMart:
                from main_marts.mart_baseline_demographics_coverage
                order by 1, 2""",
         )
-        # alzheimers 2024 = canonical study + combined-category study: age only
-        # on the canonical one; ethnicity only on the canonical one; ambiguity
-        # from the combined table's unresolvable custom buckets.
         # alzheimers 2022 = NCT10000006: Gender + Mean Age + NIH/OMB measures
         # all report, nothing ambiguous.
         assert rows == [
             ("alzheimers_disease", 2022, 1, 1, 1, 1, 0, 1.0, 1.0, 0.0),
-            ("alzheimers_disease", 2024, 2, 1, 2, 1, 1, 0.5, 0.5, 0.5),
-            # FTD study: prefixed labels resolve, no sex measure at all.
-            ("frontotemporal_dementia", 2023, 0, 1, 1, 1, 0, 1.0, 1.0, 0.0),
-            # DLB study: sex reported, race/ethnicity explicitly not collected.
-            ("lewy_body_dementia", 2025, 1, 0, 0, 0, 0, 0.0, 0.0, 0.0),
             # MCI study: the current (09-02) snapshot reports sex only. Its
             # race/ethnicity rows live in the superseded 09-01 snapshot and
             # must not count (review round 1, finding 3): a nct_id-only join
             # reported this row as (1, 0, 1, 1, 1, 0.0, 1.0, 1.0).
             ("mild_cognitive_impairment", 2025, 1, 0, 0, 0, 0, 0.0, 0.0, 0.0),
             # Base-fixture trials with posted results but no demographics data.
-            ("non_dementia_other", 2025, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0),
             ("nsclc_squamous", 2025, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0),
         ]
 
@@ -328,8 +364,9 @@ class TestCoverageMart:
     ) -> None:
         rows = _rows(
             demographics_fixture_root,
-            """select reports_race_count, reports_ethnicity_count, ambiguous_combined_trials_count
-               from main_marts.mart_baseline_demographics_coverage
-               where condition_group = 'lewy_body_dementia'""",
+            """select count(*) filter (resolved_dimension in ('race', 'ethnicity')),
+                      count(*) filter (is_ambiguous_combined_flag)
+               from main_staging.stg_trial_baseline_demographics
+               where dimension = 'race_ethnicity_not_collected'""",
         )
-        assert rows == [(0, 0, 0)]
+        assert rows == [(0, 0)]

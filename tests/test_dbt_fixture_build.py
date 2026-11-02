@@ -89,6 +89,7 @@ SHARED_DIMS_WITH_PROFILE = ["dim_condition", "dim_sponsor", "dim_geography"]
 # (partition by indication_profile_id, nct_id, ...)` is a per-profile latest-run
 # pick that no earlier task's list mentioned.
 MARTS_WITH_PROFILE_SCOPED_WINDOWS = [
+    "mart_baseline_demographics_coverage",
     "mart_trial_activity",
     "mart_site_overlap",
     "mart_condition_geography_trends",

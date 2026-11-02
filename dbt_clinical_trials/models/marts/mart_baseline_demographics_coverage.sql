@@ -5,14 +5,18 @@
 -- how much of that reporting the OMB mapping could not classify: trials with
 -- ambiguous combined race/ethnicity tables (flagged, never guessed — issue #74).
 --
--- Denominator: trials in their profile's latest snapshot (int_current_trial_status),
+-- Denominator: trials in their profile's latest successful ingestion run,
 -- COMPLETED, with posted results, joined to their condition groups. Trials with
 -- no condition group have no place in a per-condition coverage mart and drop out.
 -- Completion year may be null when the registry date is missing or unparseable;
 -- those trials stay in the mart on a null-year row instead of being hidden.
-with current_trials as (
-    select nct_id, indication_profile_id, ingestion_run_id
-    from {{ ref('int_current_trial_status') }}
+with latest_runs as (
+    select ingestion_run_id, indication_profile_id
+    from {{ ref('stg_trial_snapshots') }}
+    where status = 'success'
+    qualify row_number() over (
+        partition by indication_profile_id order by started_at_utc desc, ingestion_run_id desc
+    ) = 1
 ),
 
 trial_scope as (
@@ -27,10 +31,9 @@ trial_scope as (
         on t.ingestion_run_id = m.ingestion_run_id
         and t.indication_profile_id = m.indication_profile_id
         and t.nct_id = m.nct_id
-    inner join current_trials c
+    inner join latest_runs c
         on t.ingestion_run_id = c.ingestion_run_id
         and t.indication_profile_id = c.indication_profile_id
-        and t.nct_id = c.nct_id
     where t.overall_status = 'COMPLETED'
       and t.has_results_flag
 ),

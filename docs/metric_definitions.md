@@ -278,23 +278,23 @@ from that base in staging.
 maps a normalized sponsor label to an OMB race/ethnicity category with
 `mapping_confidence` (`high`/`medium`/`low`) and `manually_reviewed`. Unmapped labels stay
 unmapped. Combined race/ethnicity tables are mapped per label only where the dimension is
-explicit — a `Race:`/`Ethnicity:` label prefix, or a seed row scoped to one dimension.
-Dimension-neutral buckets ("Unknown or Not Reported", "Not Stated", "Other") inside a
-combined table keep their reported label, stay unmapped, and set
-`is_ambiguous_combined_flag`; they are never guessed into a race or ethnicity category.
+explicit — a `Race:`/`Ethnicity:` label prefix, an exact `Race`/`Ethnicity` class title,
+or a seed row scoped to one dimension. Dimension-neutral buckets ("Unknown or Not
+Reported", "Not Stated", "Other") inside a combined table without such context keep
+their reported label, stay unmapped, and set `is_ambiguous_combined_flag`.
 
 **Coverage metrics** (per indication profile × condition group × completion year):
 
 | Metric | Definition |
 |---|---|
-| trials_with_results_count | distinct COMPLETED trials with posted results, read from their profile's latest snapshot (denominator) |
+| trials_with_results_count | distinct COMPLETED trials with posted results in their profile's latest successful ingestion run (denominator) |
 | reports_sex_count / share | baseline characteristics include a sex measure |
 | reports_age_count / share | include an age measure |
 | reports_race_count / share | ≥1 race row whose dimension resolved from explicit evidence |
 | reports_ethnicity_count / share | ≥1 ethnicity row whose dimension resolved from explicit evidence |
 | ambiguous_combined_trials_count / share | denominator trials carrying ≥1 ambiguous combined row |
 
-Demographics count only from the same latest snapshot as the trial row: a race
+Demographics count only from the same latest successful run as the trial row: a race
 table that a sponsor later amended out of the results section stops counting
 once the newer snapshot lands. `completion_year` is null when the registry
 completion date is missing or unparseable; those trials stay on a null-year row
