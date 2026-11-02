@@ -48,7 +48,7 @@ def format_priority_explanation(row: pd.Series) -> str:
             f"({observed:.0f} days of history observed)"
         )
     elif observed >= 90:
-        growth = "Newly recruiting: not enough history (gap between snapshots exceeds window)"
+        growth = "Newly recruiting: not enough history (snapshots do not cover the window)"
     else:
         growth = f"Newly recruiting: not enough history ({observed:.0f} of 90 days observed)"
     return (

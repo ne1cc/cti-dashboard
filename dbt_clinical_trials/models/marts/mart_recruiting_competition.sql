@@ -6,11 +6,15 @@
 -- Windowed recruiting-transition figures (new_recruiting_30d/90d,
 -- recruiting_growth_90d) are unknown until the profile's retained snapshots
 -- actually cover the window: they are null unless observed_history_days
--- reaches the window length AND the latest gap between snapshots does not
--- itself span the window -- a transition observed across a gap longer than
--- the window has unobserved timing inside it, so summing it into the window
--- would claim a precision the captures do not have. Null means "not enough
--- history"; zero is reserved for a covered window with no transitions.
+-- reaches the window length, the earliest in-window snapshot and its predecessor
+-- fall within a 7-day cadence tolerance of the window boundary, and the latest
+-- gap between snapshots does not exceed the window. A transition observed across
+-- an unobserved gap has unknown timing, so summing it into the window would
+-- claim a precision the captures do not have. Null means "not enough history";
+-- zero is reserved for a covered window with no transitions.
+-- recruiting_growth_90d additionally requires that the segment was observed
+-- at the start of the window, that the baseline predates counted transitions,
+-- and that baseline recruiting count is non-zero (safe_divide).
 -- newly_registered_90d counts registry study_first_post_date values, which
 -- are fully observed from a single snapshot; it measures registrations,
 -- never recruiting transitions.
@@ -95,7 +99,9 @@ windowed as (
         first_value(recruiting_trial_count) over segment_90d
             as recruiting_count_90d_baseline,
         first_value(s.snapshot_date) over segment_90d
-            as segment_90d_first_snapshot_date
+            as segment_90d_first_snapshot_date,
+        first_value(s.entered_recruiting_count) over segment_90d
+            as segment_90d_first_entered_recruiting_count
     from segments s
     inner join profile_window_coverage h
         on h.indication_profile_id = s.indication_profile_id
@@ -120,48 +126,53 @@ windowed as (
 -- Coverage guards (applied here so the raw window sums and helper dates
 -- never reach the mart's contract): the sums are emitted only when the window
 -- is covered (profile history reaches the window, earliest in-window snapshot
--- and its predecessor sit within a 14-day tolerance of the window boundary, and
--- the latest snapshot gap does not exceed the window).
+-- and its predecessor sit within a 7-day cadence tolerance of the window boundary,
+-- and the latest snapshot gap does not exceed the window).
 -- Growth additionally requires its baseline to be an earlier snapshot at the
--- start of the window with non-zero recruiting trial count; segments that first
--- appear in the window or have zero baseline emit null, never manufactured 0.0.
+-- start of the window that predates counted transitions, with non-zero recruiting
+-- trial count; segments that first appear in the window, have transitions at the
+-- baseline snapshot, or have zero baseline emit null, never manufactured 0.0.
 with_concentration as (
     select
         w.* exclude (
             new_recruiting_30d_raw, new_recruiting_90d_raw, previous_snapshot_date,
             window_30d_earliest_date, window_30d_earliest_pred_date,
             window_90d_earliest_date, window_90d_earliest_pred_date,
-            segment_90d_first_snapshot_date
+            segment_90d_first_snapshot_date, segment_90d_first_entered_recruiting_count
         ),
         case
             when w.observed_history_days >= 30
-                and w.window_30d_earliest_date <= w.snapshot_date - interval 30 day + interval 14 day
+                and w.window_30d_earliest_date <= w.snapshot_date - interval 30 day + interval 7 day
                 and (
                     w.window_30d_earliest_pred_date is null
-                    or w.window_30d_earliest_pred_date >= w.snapshot_date - interval 30 day - interval 14 day
+                    or w.window_30d_earliest_pred_date >= w.snapshot_date - interval 30 day - interval 7 day
                 )
                 and w.previous_snapshot_date >= w.snapshot_date - interval 30 day
             then w.new_recruiting_30d_raw
         end as new_recruiting_30d,
         case
             when w.observed_history_days >= 90
-                and w.window_90d_earliest_date <= w.snapshot_date - interval 90 day + interval 14 day
+                and w.window_90d_earliest_date <= w.snapshot_date - interval 90 day + interval 7 day
                 and (
                     w.window_90d_earliest_pred_date is null
-                    or w.window_90d_earliest_pred_date >= w.snapshot_date - interval 90 day - interval 14 day
+                    or w.window_90d_earliest_pred_date >= w.snapshot_date - interval 90 day - interval 7 day
                 )
                 and w.previous_snapshot_date >= w.snapshot_date - interval 90 day
             then w.new_recruiting_90d_raw
         end as new_recruiting_90d,
         case
             when w.observed_history_days >= 90
-                and w.window_90d_earliest_date <= w.snapshot_date - interval 90 day + interval 14 day
+                and w.window_90d_earliest_date <= w.snapshot_date - interval 90 day + interval 7 day
                 and (
                     w.window_90d_earliest_pred_date is null
-                    or w.window_90d_earliest_pred_date >= w.snapshot_date - interval 90 day - interval 14 day
+                    or w.window_90d_earliest_pred_date >= w.snapshot_date - interval 90 day - interval 7 day
                 )
                 and w.previous_snapshot_date >= w.snapshot_date - interval 90 day
                 and w.segment_90d_first_snapshot_date = w.window_90d_earliest_date
+                and (
+                    w.new_recruiting_90d_raw = 0
+                    or w.segment_90d_first_entered_recruiting_count = 0
+                )
                 and w.recruiting_count_90d_baseline > 0
             then {{ safe_divide(
                 'w.recruiting_trial_count - w.recruiting_count_90d_baseline',

@@ -61,19 +61,19 @@ coverage_flags as (
         previous_snapshot_date,
         (
             observed_history_days >= 30
-            and window_30d_earliest_date <= snapshot_date - interval 30 day + interval 14 day
+            and window_30d_earliest_date <= snapshot_date - interval 30 day + interval 7 day
             and (
                 window_30d_earliest_pred_date is null
-                or window_30d_earliest_pred_date >= snapshot_date - interval 30 day - interval 14 day
+                or window_30d_earliest_pred_date >= snapshot_date - interval 30 day - interval 7 day
             )
             and coalesce(previous_snapshot_date >= snapshot_date - interval 30 day, false)
         ) as is_30d_covered,
         (
             observed_history_days >= 90
-            and window_90d_earliest_date <= snapshot_date - interval 90 day + interval 14 day
+            and window_90d_earliest_date <= snapshot_date - interval 90 day + interval 7 day
             and (
                 window_90d_earliest_pred_date is null
-                or window_90d_earliest_pred_date >= snapshot_date - interval 90 day - interval 14 day
+                or window_90d_earliest_pred_date >= snapshot_date - interval 90 day - interval 7 day
             )
             and coalesce(previous_snapshot_date >= snapshot_date - interval 90 day, false)
         ) as is_90d_covered

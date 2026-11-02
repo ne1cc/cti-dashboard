@@ -2,8 +2,10 @@
 
 ## Source-inherited limitations
 1. **Current-records-only API.** History exists only from this project's
-   own snapshot cadence; transition metrics are zero until snapshots
-   accrue. Registry-date proxies are labeled wherever used.
+   own snapshot cadence; transition metrics are null until snapshot
+   history covers the window (never zero to mean unknown). Newly registered
+   counts (registry first-post dates) are labeled separately from recruiting
+   transitions.
 2. **Registry lag and inconsistency.** Sponsors update listings on their
    own schedule; statuses, enrollment counts, and dates may be stale.
 3. **Partial dates.** Registry dates may be YYYY or YYYY-MM; parsed

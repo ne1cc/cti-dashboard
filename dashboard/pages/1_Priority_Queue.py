@@ -191,7 +191,7 @@ if selected_rows:
         )
     elif segment_history >= 90:
         growth_label = "Recent recruiting growth"
-        growth_val = "not enough history (gap between snapshots exceeds window) — unknown, not zero"
+        growth_val = "not enough history (snapshots do not cover the window) — unknown, not zero"
     else:
         growth_label = "Recent recruiting growth"
         growth_val = (
