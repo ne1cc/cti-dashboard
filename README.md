@@ -271,10 +271,6 @@ For complete drill-through specifications, provenance requirements, and analytic
 - Raw recruiting counts are not population-adjusted.
 - Portfolio demonstration only; real decisions require qualified clinical-operations review. See [`docs/assumptions_and_limitations.md`](docs/assumptions_and_limitations.md).
 
-### Scenario-Value Methodology
-
-No fake ROI. A configurable scenario calculator (`config/roi_assumptions.yml`) lets an organization test whether a feasibility-review process could justify its cost using *its own* site-startup and study-burn assumptions, under low/base/high scenarios.
-
 ---
 
 ## Documentation Index

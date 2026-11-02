@@ -28,7 +28,7 @@ st.caption(
     "concentration HHI, or site overlap) according to your operational screening "
     "criteria. Scientific validity is not measured."
 )
-filtered = segment_filters(queue)
+filtered = segment_filters(queue, profile_id=profile_id)
 
 observed_history_days = int(queue["observed_history_days"].max()) if not queue.empty else 0
 if observed_history_days < 90:
@@ -42,7 +42,7 @@ if observed_history_days < 90:
 
 filtered = filtered.copy()
 filtered["registry_search_url"] = [
-    clinicaltrials_gov_search_url(cg, st_val)
+    clinicaltrials_gov_search_url(cg, st_val, profile_id)
     for cg, st_val in zip(filtered["condition_group"], filtered["state_normalized"], strict=False)
 ]
 
@@ -67,7 +67,9 @@ queue_columns = [
     "priority_explanation",
 ]
 display_df = filtered[queue_columns].copy()
-display_df["condition_group"] = display_df["condition_group"].apply(format_condition_group)
+display_df["condition_group"] = display_df["condition_group"].apply(
+    lambda g: format_condition_group(g, profile_id)
+)
 display_df["phase_normalized"] = display_df["phase_normalized"].map(format_phase)
 display_df["priority_explanation"] = [
     format_priority_explanation(row) for _, row in filtered.iterrows()
@@ -177,7 +179,7 @@ selected_rows = (
 if selected_rows:
     segment = filtered.iloc[selected_rows[0]]
     st.subheader(
-        f"Segment details — {format_condition_group(segment['condition_group'])} · "
+        f"Segment details — {format_condition_group(segment['condition_group'], profile_id)} · "
         f"{segment['state_normalized']} · {format_phase(segment['phase_normalized'])}"
     )
     segment_history = int(segment["observed_history_days"])
@@ -223,7 +225,8 @@ if selected_rows:
     st.caption(segment["priority_explanation"])
 
     st.subheader(
-        f"Constituent Clinical Trials — {format_condition_group(segment['condition_group'])} · "
+        "Constituent Clinical Trials — "
+        f"{format_condition_group(segment['condition_group'], profile_id)} · "
         f"{segment['state_normalized']} · {segment['phase_normalized']}"
     )
     st.caption(

@@ -1,9 +1,11 @@
 version: 1
 default:
   condition_group: other_melanoma_conditions
+  display_name: Other Melanoma Conditions
   dementia_relevance: false
 groups:
 - condition_group: melanoma_advanced
+  display_name: Advanced Melanoma
   dementia_relevance: false
   exact:
   - metastatic melanoma
@@ -11,6 +13,7 @@ groups:
   - metastatic melanoma
   - advanced melanoma
 - condition_group: melanoma
+  display_name: Melanoma
   dementia_relevance: false
   exact:
   - melanoma
