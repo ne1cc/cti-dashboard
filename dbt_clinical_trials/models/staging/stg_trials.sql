@@ -21,6 +21,8 @@ select
     {{ parse_partial_date('start_date') }} as start_date,
     primary_completion_date as primary_completion_date_raw,
     {{ parse_partial_date('primary_completion_date') }} as primary_completion_date,
+    primary_completion_date_type,
+    completion_date_type,
     completion_date as completion_date_raw,
     {{ parse_partial_date('completion_date') }} as completion_date,
     study_first_post_date as study_first_post_date_raw,

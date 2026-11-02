@@ -633,7 +633,7 @@ def metric_audit_observations(profile_id: str, metric: str = "competition") -> p
             "nct_id order by snapshot_date)",
             [profile_id],
         )
-    if metric in {"competition", "first_post_proxy"}:
+    if metric in {"competition", "first_post_registered"}:
         return query(
             "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, snapshot_date "
             "from main_intermediate.int_trial_status_history where indication_profile_id = ? "

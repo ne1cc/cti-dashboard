@@ -25,8 +25,8 @@ sections, and three separately named metric audits (see [Competition Audit](comp
 
 ### 1 · Registry Segments
 Segment-level activity metrics, condition/state/phase multiselects with
-dynamic row-count reconciliation caption, proxy warning when growth uses
-the registry-date fallback, interactive selectable raw metrics table sorted
+dynamic row-count reconciliation caption, history warning when snapshot
+history is too short for recruiting growth, interactive selectable raw metrics table sorted
 by active recruiting trials (click a row to inspect segment details), CSV
 export button with full decision-brief columns and embedded guardrail
 notes, horizontal bar chart of active recruiting trials across top 15
