@@ -16,7 +16,7 @@
 | **Metric Definitions** | [`docs/metric_definitions.md`](docs/metric_definitions.md) | Grains and formulas for registry segment metrics and per-100k state listings (Census Vintage 2024), and the ADR 0077 rationale for removing the composite score and priority bands |
 | **Source & Ingestion** | [`docs/source_documentation.md`](docs/source_documentation.md) | ClinicalTrials.gov API v2 protocol, pagination, [incremental reuse](docs/source_documentation.md#incremental-reuse), quarantine handling, and the static Census Vintage 2024 population seed |
 | **Data Quality Framework** | [`docs/data_quality_framework.md`](docs/data_quality_framework.md) | Ingestion validation, Silver transformations, dbt schema/data tests, reconciliation gates, and CI checks |
-| **Dashboard Specification** | [`docs/dashboard_spec.md`](docs/dashboard_spec.md) | Streamlit dashboard layout, page structure, UI components, caching strategy, and filters |
+| **Dashboard Specification** | [`docs/dashboard_spec.md`](docs/dashboard_spec.md) | Streamlit dashboard layout, profile-driven labels, neutral page guidance, caching strategy, and filters |
 | **Competition Audit** | [`docs/competition_audit.md`](docs/competition_audit.md) | Competition audit panel details, drill-through definitions, audit JSON schema, and limitations |
 | **Clinical Guardrails** | [`docs/clinical_interpretation_guardrails.md`](docs/clinical_interpretation_guardrails.md) | Rules for interpreting public registry signals without overstating operational or clinical claims |
 | **Assumptions & Limitations** | [`docs/assumptions_and_limitations.md`](docs/assumptions_and_limitations.md) | Source data biases, coverage boundaries, and analytical assumptions |

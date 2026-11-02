@@ -202,13 +202,18 @@ def _build_fixture_root(
 ) -> Path:
     """Bronze->silver->gold for `runs`, then one `dbt build`; returns the scratch root."""
     root = tmp_path_factory.mktemp(name)
-    build_fixture_warehouse(
-        root,
-        runs=runs,
-        session_timezone=session_timezone,
-        dbt_vars=dbt_vars,
-    )
-    return root
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(root))
+    try:
+        build_fixture_warehouse(
+            root,
+            runs=runs,
+            session_timezone=session_timezone,
+            dbt_vars=dbt_vars,
+        )
+        return root
+    finally:
+        monkeypatch.undo()
 
 
 def _base_adrd_run() -> FixtureRun:
@@ -316,6 +321,55 @@ DIVERGENT_ADRD_RUN2 = FixtureRun(
 # through here automatically: this root's job is to give that same content a
 # second calendar month, not to fork a second copy of it that can drift.
 TWO_MONTH_ADRD_RUN2 = replace(DIVERGENT_ADRD_RUN2, started_at=TWO_MONTH_ADRD_RUN2_AT)
+
+# A third ADRD run re-dated into December (same seed content again, new run id
+# so the two re-dated runs never share a manifest identity). ADRD then spans
+# 2026-09 -> 2026-12, which is what lets the strict growth guard's positive arm
+# fire: recruiting_growth_3m is emitted only when the trailing window's earliest
+# observed month sits >= 3 months back, so September must be inside a December
+# row's window. October-only segments reach back only to September's neighbours
+# one month away, so their December rows stay null and the per-segment guard
+# stays observable on the same root.
+TWO_MONTH_ADRD_RUN3_ID = "20261201T100000Z_fixture07"
+TWO_MONTH_ADRD_RUN3_AT = datetime(2026, 12, 1, 10, tzinfo=UTC)
+TWO_MONTH_ADRD_RUN3 = replace(
+    DIVERGENT_ADRD_RUN2, run_id=TWO_MONTH_ADRD_RUN3_ID, started_at=TWO_MONTH_ADRD_RUN3_AT
+)
+
+# Growth-gating fixture (see `growth_history_fixture_root`): a third ADRD run a
+# month after its second, and two December NSCLC runs whose status overrides
+# turn existing non-recruiting studies RECRUITING. Overrides must flip existing
+# studies -- a listing that first appears already RECRUITING has a null previous
+# status and is never an entrant, so it could not exercise windowed transitions.
+GROWTH_HISTORY_ADRD_RUN3_ID = "20261001T100000Z_fixture08"
+GROWTH_HISTORY_ADRD_RUN3_AT = datetime(2026, 10, 1, 10, tzinfo=UTC)
+GROWTH_HISTORY_ADRD_RUN3 = replace(
+    DIVERGENT_ADRD_RUN2, run_id=GROWTH_HISTORY_ADRD_RUN3_ID, started_at=GROWTH_HISTORY_ADRD_RUN3_AT
+)
+
+GROWTH_HISTORY_NSCLC_RUN2_ID = "20261215T110000Z_fixture09"
+GROWTH_HISTORY_NSCLC_RUN3_ID = "20261222T110000Z_fixture10"
+
+
+def _growth_history_nsclc_run2() -> FixtureRun:
+    return FixtureRun(
+        profile="oncology_nsclc",
+        run_id=GROWTH_HISTORY_NSCLC_RUN2_ID,
+        started_at=datetime(2026, 12, 15, 11, tzinfo=UTC),
+        condition=NSCLC_CONDITION,
+        fixture_dir="bronze_snapshot_nsclc",
+        status_overrides={"NCT00000002": "RECRUITING"},
+    )
+
+
+def _growth_history_nsclc_run3() -> FixtureRun:
+    return replace(
+        _growth_history_nsclc_run2(),
+        run_id=GROWTH_HISTORY_NSCLC_RUN3_ID,
+        started_at=datetime(2026, 12, 22, 11, tzinfo=UTC),
+        status_overrides={"NCT00000002": "RECRUITING", "NCT00000003": "RECRUITING"},
+    )
+
 
 # Same bronze, manifest left at the pre-stamping default. Silver still says
 # oncology_nsclc, because src/transform stamps from the resolved profile.
@@ -445,25 +499,61 @@ def divergent_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.fixture(scope="session")
-def two_month_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """The divergent seed set with ADRD's second run moved into October, so ADRD
-    spans two `activity_month`s (2026-09, 2026-10) and NSCLC still one.
+def multi_month_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """The divergent seed set with ADRD runs re-dated into October and December,
+    so ADRD spans three `activity_month`s (2026-09, 2026-10, 2026-12) while
+    NSCLC still spans one.
 
     Built lazily and session-scoped like the other roots: only the positive-arm
     assertion in tests/test_dbt_fixture_build.py requests it, so the rest of the
     suite does not pay the extra `dbt build`. Nothing here changes an existing
-    seeded date -- it is a fourth, separate warehouse derived from
-    `DIVERGENT_ADRD_RUN2` by moving one run's `started_at` forward a month. That
-    single month of separation is the whole point: `assert_trends_growth_needs_two_months.sql`
-    proves the negative arm (no non-null growth on a one-month window) but no
-    other committed fixture ever reaches `months_in_window >= 2`, so nulling
-    `recruiting_growth_3m` on *every* row would pass CI forever. This root is the
-    first data the guard's positive arm can be checked against.
+    seeded date -- it is a separate warehouse derived from `DIVERGENT_ADRD_RUN2`
+    by moving two runs' `started_at` forward. Months of separation are the whole
+    point: `assert_trends_growth_needs_full_window.sql` proves the negative arm
+    (no non-null growth inside a three-month span) but `recruiting_growth_3m`
+    only fires when a December row's window reaches back to September, which no
+    other committed fixture can satisfy.
     """
     return _build_fixture_root(
         tmp_path_factory,
-        "fixture_two_month",
-        [_base_adrd_run(), TWO_MONTH_ADRD_RUN2, _base_nsclc_run(), UNSTAMPED_NSCLC_RUN],
+        "fixture_multi_month",
+        [
+            _base_adrd_run(),
+            TWO_MONTH_ADRD_RUN2,
+            TWO_MONTH_ADRD_RUN3,
+            _base_nsclc_run(),
+            UNSTAMPED_NSCLC_RUN,
+        ],
+    )
+
+
+@pytest.fixture(scope="session")
+def growth_history_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Snapshot histories built to exercise growth gating at 1/2/3 snapshots
+    and across gaps: ADRD holds three runs (09-01, 09-08, 10-01 => 30 observed
+    days, enough for the 30-day window, never the 90-day one); NSCLC holds
+    09-01 then 12-15 and 12-22.
+
+    NSCLC is the gap arm. The 105-day jump from 09-01 to 12-15 is longer than
+    the 90-day window itself, so transitions first observed on 12-15 have
+    unobserved timing inside every window that matters: the 90-day figures
+    there stay null even though entered_recruiting_flag is set. A week
+    later (12-22) the latest gap is 7 days and history is 112 days, but the
+    predecessor 09-01 predates the 90-day window opening (09-23) by 22 days
+    (> 14-day tolerance), so the window is not covered and 90-day transition
+    figures stay null — timing across the 105-day jump remains unobserved.
+    """
+    return _build_fixture_root(
+        tmp_path_factory,
+        "fixture_growth_history",
+        [
+            _base_adrd_run(),
+            DIVERGENT_ADRD_RUN2,
+            GROWTH_HISTORY_ADRD_RUN3,
+            _base_nsclc_run(),
+            _growth_history_nsclc_run2(),
+            _growth_history_nsclc_run3(),
+        ],
     )
 
 
@@ -637,3 +727,67 @@ def audit_event_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
         ],
         session_timezone="America/Los_Angeles",
     )
+
+
+# --- Change Radar fixture ------------------------------------------------------
+# ADRD only. r1 baseline; r2 (trusted) changes status, enrollment, a completion
+# date and an outcome; r3 is a "stale" run (retrieved before it started) changing
+# NCT00000005; r4 is a failed run changing NCT00000006. r3/r4 must yield no events.
+CHANGE_RADAR_RUN_IDS = {
+    "r1": "20260901T100000Z_radar001",
+    "r2": "20260908T100000Z_radar002",
+    "r3": "20260915T100000Z_radar003",
+    "r4": "20260922T100000Z_radar004",
+}
+
+
+def change_radar_runs() -> list[FixtureRun]:
+    base = replace(_base_adrd_run(), retrieved_at="2026-09-01T10:01:00+00:00")
+    r2 = replace(
+        base,
+        run_id=CHANGE_RADAR_RUN_IDS["r2"],
+        started_at=datetime(2026, 9, 8, 10, tzinfo=UTC),
+        retrieved_at="2026-09-08T10:01:00+00:00",
+        status_overrides={"NCT00000002": "UNKNOWN"},
+        study_overrides={
+            "NCT00000001": {"designModule": {"enrollmentInfo": {"count": 650, "type": "ACTUAL"}}},
+            "NCT00000003": {
+                "statusModule": {
+                    "primaryCompletionDateStruct": {"date": "2026-02-15", "type": "ACTUAL"}
+                }
+            },
+            "NCT00000004": {
+                "outcomesModule": {
+                    "primaryOutcomes": [
+                        {"measure": "Overall response rate", "timeFrame": "6 months"}
+                    ]
+                }
+            },
+        },
+    )
+    return [
+        replace(
+            base, run_id=CHANGE_RADAR_RUN_IDS["r1"], started_at=datetime(2026, 9, 1, 10, tzinfo=UTC)
+        ),
+        r2,
+        replace(
+            base,
+            run_id=CHANGE_RADAR_RUN_IDS["r3"],
+            started_at=datetime(2026, 9, 15, 10, tzinfo=UTC),
+            retrieved_at="2026-09-01T10:01:00+00:00",
+            status_overrides={"NCT00000005": "WITHDRAWN"},
+        ),
+        replace(
+            base,
+            run_id=CHANGE_RADAR_RUN_IDS["r4"],
+            started_at=datetime(2026, 9, 22, 10, tzinfo=UTC),
+            retrieved_at="2026-09-22T10:01:00+00:00",
+            status_overrides={"NCT00000006": "WITHDRAWN"},
+            final_status="failed",
+        ),
+    ]
+
+
+@pytest.fixture
+def change_radar_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return _build_fixture_root(tmp_path_factory, "fixture_change_radar", change_radar_runs())

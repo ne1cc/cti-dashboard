@@ -154,8 +154,10 @@ def test_overview_queue_discloses_priority_rules_in_ui_and_export(warehouse, cap
         "recruiting_trial_count",
         "distinct_sponsors",
         "sponsor_hhi",
-        "Growth sums daily recruiting entrants over 90 days",
-        "first-post >=",
+        "new_recruiting_90d sums daily recruiting entrants over the inclusive 90-day window",
+        "null means not enough history, never zero",
+        "newly_registered_90d",
+        "registration count, not a recruiting transition",
         "site_overlap_rate",
         "share of recruiting trials",
         "divided by distinct recruiting segment trials",
@@ -163,7 +165,7 @@ def test_overview_queue_discloses_priority_rules_in_ui_and_export(warehouse, cap
         "0.5 segment record-quality-ok share + 0.5 latest successful-run",
     ]:
         assert phrase in rules
-    for forbidden in ["min-max", "weighted sum", "0.70", "0.45", "priority_review"]:
+    for forbidden in ["min-max", "weighted sum", "0.70", "0.45", "priority_review", "proxy"]:
         assert forbidden not in rules.lower()
     export = next(
         item
@@ -295,7 +297,7 @@ def test_threshold_control_warns_retains_and_exports(warehouse, captured_exports
     "mode, expected, state",
     [
         ("90-day growth observations", ["NCT00000002"], "NC"),
-        ("First-post (90-day proxy)", ["NCT00000001"], "MA"),
+        ("Newly registered (first posted)", ["NCT00000001"], "MA"),
     ],
 )
 def test_event_panel_filter_export_evidence(
