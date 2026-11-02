@@ -28,6 +28,7 @@ from src.transform.normalize_conditions import get_taxonomy
 from src.transform.normalize_locations import get_geography_rules
 from tests.conftest import FIXTURE_SNAPSHOT_DAY
 from tests.fixture_warehouse import (
+    FIXTURE_RUN_ID,
     FixtureRun,
     _clear_caches,
     build_dbt_fixture,
@@ -588,6 +589,11 @@ def test_old_schema_silver_with_pruned_bronze_builds_end_to_end(
         root,
         "select count(*), count(*) filter (where has_derived_mesh) from main_marts.dim_trial",
     ) == [(20, 0)]
+    # Legacy runs where MeSH was never extracted preserve UNKNOWN (null) (Finding 2)
+    assert query(
+        root,
+        "select count(*) filter (where has_derived_mesh is null) from main_marts.dim_trial",
+    ) == [(20,)]
 
     # Legacy mapping_source is inferred truthfully: row for row (profile,
     # trial, condition text, group, source) identical to the captured
@@ -610,3 +616,52 @@ def test_old_schema_silver_with_pruned_bronze_builds_end_to_end(
         "select indication_profile_id, count(*) from main_marts.dim_condition "
         "group by 1 order by 1",
     ) == [("adrd", 6), ("oncology_nsclc", 4)]
+
+
+def test_dbt_build_fails_when_all_mesh_files_missing_on_new_schema(
+    tmp_path_factory: pytest.TempPathFactory,
+):
+    """Finding 2: genuinely missing mesh data fails the build loudly instead of inferring false."""
+    root = prepare_fixture_root(tmp_path_factory.mktemp("missing_mesh_all"))
+    mesh_dir = root / "data" / "silver" / "silver_trial_condition_mesh"
+    for p in mesh_dir.glob("*.parquet"):
+        p.unlink()
+
+    match_msg = "Missing silver_trial_condition_mesh file for new-schema run"
+    with pytest.raises(RuntimeError, match=match_msg):
+        build_dbt_fixture(root)
+
+
+def test_dbt_build_fails_when_mixed_runs_one_lacks_mesh_file(
+    tmp_path_factory: pytest.TempPathFactory,
+):
+    """Finding 2: deleting one run's mesh file fails the build with that run named."""
+    root = prepare_fixture_root(tmp_path_factory.mktemp("missing_mesh_one"))
+    mesh_dir = root / "data" / "silver" / "silver_trial_condition_mesh"
+    target = mesh_dir / f"run_id={FIXTURE_RUN_ID}.parquet"
+    assert target.exists()
+    target.unlink()
+
+    match_msg = f"Missing silver_trial_condition_mesh file for new-schema run.*{FIXTURE_RUN_ID}"
+    with pytest.raises(RuntimeError, match=match_msg):
+        build_dbt_fixture(root)
+
+
+def test_new_empty_mesh_file_distinguishes_false_from_unknown(
+    tmp_path_factory: pytest.TempPathFactory,
+):
+    """Finding 2: a new run that wrote a 0-row mesh file produces false (not null / unknown)."""
+    root = build_fixture_warehouse(tmp_path_factory.mktemp("empty_mesh_warehouse"))
+    # Base fixture runs write 0-row mesh files (new-schema runs without conditionBrowseModule)
+    res = query(
+        root,
+        """
+        select
+            count(*),
+            count(*) filter (where has_derived_mesh is true),
+            count(*) filter (where has_derived_mesh is false),
+            count(*) filter (where has_derived_mesh is null)
+        from main_marts.dim_trial
+        """,
+    )
+    assert res == [(20, 0, 20, 0)]

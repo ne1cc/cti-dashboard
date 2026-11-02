@@ -211,10 +211,84 @@ def test_run_transform_skips_a_retained_run_whose_bronze_was_pruned(tmp_path: Pa
 
     # run_transform must safely skip the pruned run rather than raising FileNotFoundError
     assert build_silver_entities.run_transform(config=cfg) == []
+    # --force also skips when bronze is pruned and legacy silver is intact
+    assert build_silver_entities.run_transform(config=cfg, force=True) == []
 
     after = pd.read_parquet(trials_path)
     assert list(after.columns) == list(before.columns)
     assert after["nct_id"].tolist() == before["nct_id"].tolist()
+
+
+def test_run_transform_fails_on_partial_silver_loss_when_bronze_pruned(tmp_path: Path):
+    """When bronze is pruned and silver is partially missing, run_transform fails (Finding 1)."""
+    cfg = make_config(tmp_path)
+    run_id = "r_partial_loss"
+    run_dir = cfg.paths.bronze_api_responses / f"run_id={run_id}"
+    write_bronze_page(run_dir, 1, [make_study("NCT00000001")])
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+    write_manifest(cfg.paths.bronze_manifests, make_manifest(run_id, record_count=1))
+    build_silver_for_run(make_manifest(run_id, record_count=1), cfg)
+
+    # Prune bronze and delete one silver entity (silver_trial_conditions)
+    shutil.rmtree(run_dir)
+    (cfg.paths.silver / "silver_trial_conditions" / f"run_id={run_id}.parquet").unlink()
+
+    # Plain and forced must both raise FileNotFoundError rather than silently skipping
+    with pytest.raises(FileNotFoundError, match=f"Bronze pages missing for run {run_id}"):
+        build_silver_entities.run_transform(config=cfg)
+    with pytest.raises(FileNotFoundError, match=f"Bronze pages missing for run {run_id}"):
+        build_silver_entities.run_transform(config=cfg, force=True)
+
+
+def test_run_transform_fails_on_total_silver_loss_when_bronze_pruned(tmp_path: Path):
+    """When bronze is pruned and silver is totally missing, run_transform fails (Finding 1)."""
+    cfg = make_config(tmp_path)
+    run_id = "r_total_loss"
+    run_dir = cfg.paths.bronze_api_responses / f"run_id={run_id}"
+    write_bronze_page(run_dir, 1, [make_study("NCT00000001")])
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+    write_manifest(cfg.paths.bronze_manifests, make_manifest(run_id, record_count=1))
+    build_silver_for_run(make_manifest(run_id, record_count=1), cfg)
+
+    # Prune bronze and delete all silver entity files
+    shutil.rmtree(run_dir)
+    for entity in build_silver_entities.ENTITY_NAMES:
+        path = cfg.paths.silver / entity / f"run_id={run_id}.parquet"
+        if path.exists():
+            path.unlink()
+
+    with pytest.raises(FileNotFoundError, match=f"Bronze pages missing for run {run_id}"):
+        build_silver_entities.run_transform(config=cfg)
+    with pytest.raises(FileNotFoundError, match=f"Bronze pages missing for run {run_id}"):
+        build_silver_entities.run_transform(config=cfg, force=True)
+
+
+def test_run_transform_fails_on_mixed_runs_when_one_lacks_silver(tmp_path: Path):
+    """Mixed runs: an intact legacy run skips; a second run with missing silver fails."""
+    cfg = make_config(tmp_path)
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+
+    # Run 1: legacy intact (bronze pruned, mesh file deleted, 6 pre-upgrade entities intact)
+    r1 = "r_intact"
+    d1 = cfg.paths.bronze_api_responses / f"run_id={r1}"
+    write_bronze_page(d1, 1, [make_study("NCT00000001")])
+    write_manifest(cfg.paths.bronze_manifests, make_manifest(r1, record_count=1))
+    build_silver_for_run(make_manifest(r1, record_count=1), cfg)
+    (cfg.paths.silver / "silver_trial_condition_mesh" / f"run_id={r1}.parquet").unlink()
+    shutil.rmtree(d1)
+
+    # Run 2: partial loss (bronze pruned, silver_trial_conditions deleted)
+    r2 = "r_corrupt"
+    d2 = cfg.paths.bronze_api_responses / f"run_id={r2}"
+    write_bronze_page(d2, 1, [make_study("NCT00000002")])
+    write_manifest(cfg.paths.bronze_manifests, make_manifest(r2, record_count=1))
+    build_silver_for_run(make_manifest(r2, record_count=1), cfg)
+    (cfg.paths.silver / "silver_trial_conditions" / f"run_id={r2}.parquet").unlink()
+    shutil.rmtree(d2)
+
+    # run_transform must raise for r2 rather than silently skipping both
+    with pytest.raises(FileNotFoundError, match=f"Bronze pages missing for run {r2}"):
+        build_silver_entities.run_transform(config=cfg)
 
 
 def test_build_silver_still_transforms_a_named_profile_with_a_taxonomy(tmp_path: Path):

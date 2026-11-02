@@ -7,6 +7,7 @@
     an absent entity reads as a typed empty relation — same columns and types
     as a real empty run file — instead of failing the whole upgrade. A present
     entity is always read in full; only the file-less case downgrades. -#}
+{{ validate_mesh_extraction_integrity() }}
 {%- if not silver_entity_has_parquet_files('silver_trial_condition_mesh') %}
 select
     cast(null as varchar) as ingestion_run_id,

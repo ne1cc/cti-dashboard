@@ -106,8 +106,10 @@ models:
         description: True when sex eligibility is unstated, empty, or unknown.
       - name: has_derived_mesh
         data_type: BOOLEAN
-        description: True when the registry record supplied a derivedSection.conditionBrowseModule (Issue #52).
-        tests: [not_null]
+        description: >
+          True when the registry record supplied a derivedSection.conditionBrowseModule,
+          false when extracted but absent, or null (unknown) when MeSH was never
+          extracted (retained historical runs predating Issue #52).
 
   - name: dim_condition
     description: >

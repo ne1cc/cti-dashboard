@@ -44,10 +44,31 @@ ENTITY_NAMES = (
     "silver_trial_outcomes",
 )
 
+PRE_UPGRADE_ENTITY_NAMES = (
+    "silver_trials",
+    "silver_trial_conditions",
+    "silver_trial_interventions",
+    "silver_trial_sponsors",
+    "silver_trial_locations",
+    "silver_trial_outcomes",
+)
+
 
 def _already_transformed(cfg: ProjectConfig, run_id: str) -> bool:
     return all(
         (cfg.paths.silver / entity / f"run_id={run_id}.parquet").exists() for entity in ENTITY_NAMES
+    )
+
+
+def _has_pre_upgrade_silver(cfg: ProjectConfig, run_id: str) -> bool:
+    """Check whether all pre-upgrade required silver entity files exist for run_id.
+
+    Returns True if every entity in PRE_UPGRADE_ENTITY_NAMES is present on disk.
+    Missing silver_trial_condition_mesh is tolerated (pre-upgrade historical run).
+    """
+    return all(
+        (cfg.paths.silver / entity / f"run_id={run_id}.parquet").exists()
+        for entity in PRE_UPGRADE_ENTITY_NAMES
     )
 
 
@@ -193,15 +214,18 @@ def run_transform(
             continue
         # A new entity in ENTITY_NAMES marks every pre-upgrade run as not yet
         # transformed, but runs whose bronze was pruned can never be rebuilt:
-        # skip them and keep their retained silver exactly as written, instead
-        # of failing the whole upgrade on FileNotFoundError.
+        # skip them ONLY when all pre-upgrade required silver entity files exist,
+        # keeping their retained silver exactly as written. Any other missing
+        # silver (partial or complete loss) must fail loudly via build_silver_for_run
+        # raising FileNotFoundError.
         if not (cfg.paths.bronze_api_responses / f"run_id={manifest.ingestion_run_id}").exists():
-            log.warning(
-                "Run {}: bronze pages pruned; keeping existing silver as written "
-                "(the run cannot be rebuilt without its bronze).",
-                manifest.ingestion_run_id,
-            )
-            continue
+            if _has_pre_upgrade_silver(cfg, manifest.ingestion_run_id):
+                log.warning(
+                    "Run {}: bronze pages pruned; keeping existing silver as written "
+                    "(the run cannot be rebuilt without its bronze).",
+                    manifest.ingestion_run_id,
+                )
+                continue
         build_silver_for_run(manifest, cfg, profile=profile)
         processed.append(manifest.ingestion_run_id)
 

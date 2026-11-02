@@ -41,3 +41,41 @@
         {{ return(true) }}
     {%- endif -%}
 {% endmacro %}
+
+
+{% macro validate_mesh_extraction_integrity() %}
+    {%- if execute -%}
+        {#- Identify extraction state per run (Issue #52 round 3, finding 2).
+            Every new run writes a silver_trial_condition_mesh Parquet file, even
+            with zero rows. If any run whose condition file carries mapping_source
+            lacks a corresponding mesh Parquet file, fail loudly instead of
+            silently inferring MeSH absence. Retained historical runs (old-only)
+            carry no mapping_source and legitimately produce no mesh file. -#}
+        {%- set check_sql -%}
+        with new_schema_runs as (
+            select distinct regexp_extract(file_name, 'run_id=([^.]+)\.parquet', 1) as run_id
+            from parquet_schema('data/silver/silver_trial_conditions/*.parquet')
+            where name = 'mapping_source'
+        ),
+        mesh_runs as (
+            select distinct regexp_extract(file, 'run_id=([^.]+)\.parquet', 1) as run_id
+            from glob('data/silver/silver_trial_condition_mesh/*.parquet')
+        )
+        select n.run_id
+        from new_schema_runs n
+        left join mesh_runs m on n.run_id = m.run_id
+        where m.run_id is null
+        {%- endset -%}
+        {%- set missing = run_query(check_sql) -%}
+        {%- if missing and missing.rows | length > 0 -%}
+            {%- set bad_runs = [] -%}
+            {%- for row in missing.rows -%}
+                {%- do bad_runs.append(row[0]) -%}
+            {%- endfor -%}
+            {{ exceptions.raise_compiler_error(
+                "Missing silver_trial_condition_mesh file for new-schema run(s) carrying mapping_source: "
+                ~ bad_runs | join(', ')
+            ) }}
+        {%- endif -%}
+    {%- endif -%}
+{% endmacro %}

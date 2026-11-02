@@ -16,8 +16,12 @@ v2 API (NSCLC) were reviewed and are documented below.
     committed to this repository; the reproduce block below accepts the path to
     wherever a copy of that snapshot lives
   - NSCLC: live ClinicalTrials.gov API v2 query `query.cond=Non-small+cell+lung+cancer`
+    (sample of 50 consecutively retrieved studies: 8,646 registry total matches,
+    43 of 50 with `conditionBrowseModule`, 42 of 50 overlay mapped, 21 of 50 with
+    any fallback row, 8 of 50 fallback-only; full registry-wide NSCLC coverage
+    is explicitly unmeasured without a complete NSCLC bronze snapshot)
   - Committed fixture provenance: `GET /api/v2/studies/NCT02253732`, 2026-10-30
-- Report date: 2026-10-31 (updated review rounds 1–2)
+- Report date: 2026-11-02 (updated review round 3)
 
 ## Verified wire shape
 
@@ -39,19 +43,22 @@ Verified against the spec and live API responses:
 2. `browseBranches` carries no term linkage, so the `branch` column is NULL
    everywhere; no branch attribution is inferred.
 3. Studies without a derived section (new or unprocessed records) contribute zero
-   MeSH rows and are flagged explicitly with `has_derived_mesh = false` on `dim_trial`.
+   MeSH rows and are flagged explicitly with `has_derived_mesh = false` on `dim_trial`
+   (distinguished from `null` / unknown for retained historical legacy runs where MeSH
+   extraction was never performed).
 
 ## Coverage (fixture denominators)
 
-| warehouse | trials | with `conditionBrowseModule` | direct MeSH rows (distinct terms) | distinct ancestor nodes | overlay (yaml) mapped trials | fallback trials |
-|---|---|---|---|---|---|---|
-| ADRD × mesh fixture (`tests/fixtures/condition_mesh/`) | 3 | 2 (67%) | 6 (5) | 15 | 2 of 3 (NCT99000001, NCT99000003) | 1 of 3 (NCT99000002) |
-| NSCLC × mesh fixture (same page, NSCLC taxonomy) | 3 | 2 (67%) | 6 (5) | 15 | 0 of 3 | 3 of 3 (all catch-all) |
-| ADRD base fixture (`bronze_snapshot`) | 10 | 0 (0%) | — | — | 7 of 10 | 3 of 10 |
-| NSCLC base fixture (`bronze_snapshot_nsclc`) | 10 | 0 (0%) | — | — | 7 of 10 | 3 of 10 |
+| warehouse | trials | with `conditionBrowseModule` | direct MeSH rows (distinct terms) | distinct ancestor nodes | overlay (yaml) mapped trials | trials with any fallback row | fallback-only trials |
+|---|---|---|---|---|---|---|---|
+| ADRD × mesh fixture (`tests/fixtures/condition_mesh/`) | 3 | 2 (67%) | 6 (5) | 15 | 2 of 3 (NCT99000001, NCT99000003) | 1 of 3 (NCT99000002) | 1 of 3 (NCT99000002) |
+| NSCLC × mesh fixture (same page, NSCLC taxonomy) | 3 | 2 (67%) | 6 (5) | 15 | 0 of 3 | 3 of 3 (all catch-all) | 3 of 3 |
+| ADRD base fixture (`bronze_snapshot`) | 10 | 0 (0%) | — | — | 7 of 10 | 4 of 10 | 3 of 10 |
+| NSCLC base fixture (`bronze_snapshot_nsclc`) | 10 | 0 (0%) | — | — | 7 of 10 | 6 of 10 | 3 of 10 |
 
 **Missing-derived path:**
-Studies lacking a derived section contribute no MeSH rows (`has_derived_mesh = false`).
+Studies lacking a derived section in a new-schema run contribute no MeSH rows (`has_derived_mesh = false`).
+Retained historical runs predating Issue #52 where MeSH was never extracted preserve `has_derived_mesh = null` (unknown).
 Their condition grouping is completely independent of derived section presence:
 - When a taxonomy rule matches, they carry `mapping_source = 'yaml_overlay'`.
   `NCT99000003` is the in-fixture example: condition "Frontotemporal Dementia"
@@ -88,6 +95,22 @@ Key patterns of disagreement:
    - Review: MeSH accurately indexes both the cognitive and traumatic brain injury facets without bespoke taxonomy rules.
 
 ### Real NSCLC records (live ClinicalTrials.gov API v2)
+
+Evaluated against a reproducible sample of 50 consecutive studies from the live
+ClinicalTrials.gov API v2 query (`query.cond=Non-small+cell+lung+cancer&pageSize=50&countTotal=true`).
+
+- **Sample denominator and measurement**:
+  - Total studies matching query in registry: **8,646** (as of 2026-11-02).
+  - Sample size: **50** consecutively retrieved studies.
+  - Studies with `conditionBrowseModule`: **43 of 50 (86.0%)**.
+  - Overlay mapped studies (≥1 condition matched YAML overlay): **42 of 50 (84.0%)**.
+  - Studies with any fallback row (`text_fallback`): **21 of 50 (42.0%)**.
+  - Fallback-only studies (zero YAML overlay matches): **8 of 50 (16.0%)**.
+  - **Scope limitation**: Full registry-wide NSCLC coverage across all 8,600+ records remains
+    **unmeasured** without a complete NSCLC bronze ingestion snapshot (unlike ADRD which has
+    the committed dev bronze run `20260905T012941Z_fe9f104f` with 2,618 records).
+
+Key patterns of disagreement from the reviewed clinical scenarios:
 
 1. **Complication & symptom studies (`NCT03803787`):**
    - Condition text: `['Radiation Pneumonitis']`.
@@ -213,8 +236,9 @@ print(
 PY
 
 # 3b. Real NSCLC records (live ClinicalTrials.gov API v2, needs network).
-#     Prints the three reviewed studies with their overlay mapping and
-#     direct MeSH terms.
+#     Retrieves a 50-study sample from query.cond=Non-small+cell+lung+cancer,
+#     measures the sample denominator and coverage metrics, and prints the three
+#     reviewed studies with their overlay mapping and direct MeSH terms.
 uv run python - <<'PY'
 import json
 import urllib.request
@@ -222,6 +246,41 @@ import urllib.request
 from src.transform.normalize_conditions import load_taxonomy
 
 nsclc = load_taxonomy("config/condition_taxonomy_nsclc.yml")
+url = "https://clinicaltrials.gov/api/v2/studies?query.cond=Non-small+cell+lung+cancer&pageSize=50&countTotal=true"
+with urllib.request.urlopen(url, timeout=15) as r:
+    data = json.load(r)
+
+studies = data.get("studies", [])
+total_count = data.get("totalCount")
+with_module = 0
+overlay_studies = 0
+any_fallback_studies = 0
+fallback_only_studies = 0
+
+for study in studies:
+    has_mod = "conditionBrowseModule" in study.get("derivedSection", {})
+    if has_mod:
+        with_module += 1
+    conditions = study.get("protocolSection", {}).get("conditionsModule", {}).get("conditions", [])
+    rows = [
+        (c, nsclc.map_condition(c).condition_group, "yaml_overlay" if nsclc.map_condition(c).mapping_confidence != "low" else "text_fallback")
+        for c in conditions
+    ]
+    has_ov = any(s == "yaml_overlay" for _, _, s in rows)
+    has_fb = any(s == "text_fallback" for _, _, s in rows)
+    if has_ov:
+        overlay_studies += 1
+    if has_fb:
+        any_fallback_studies += 1
+    if has_fb and not has_ov:
+        fallback_only_studies += 1
+
+print(
+    f"nsclc_total_in_registry={total_count} sample_size={len(studies)} "
+    f"with_conditionBrowseModule={with_module} overlay_mapped={overlay_studies} "
+    f"any_fallback={any_fallback_studies} fallback_only={fallback_only_studies}"
+)
+
 for nct in ("NCT03803787", "NCT03836352", "NCT00080509"):
     with urllib.request.urlopen(f"https://clinicaltrials.gov/api/v2/studies/{nct}") as r:
         study = json.load(r)
@@ -242,19 +301,61 @@ cd "${TMP_DIR}/mesh_db_nsclc" && uv run duckdb data/warehouse/clinical_trials.du
 Expected outputs:
 
 - Step 1 `base_db`: the two base-fixture table rows — 10 trials per profile,
-  0 with `conditionBrowseModule`, 7 overlay-mapped trials per profile and
-  4 (ADRD) / 6 (NSCLC) trials with a fallback row — one ADRD trial and three
-  NSCLC trials carry both an overlay row and a fallback row, which is why the
-  per-row buckets exceed 10.
+  0 with `conditionBrowseModule`, 7 overlay-mapped trials per profile,
+  4 (ADRD) / 6 (NSCLC) trials with any fallback row, and 3 (ADRD) / 3 (NSCLC)
+  fallback-only trials. One ADRD trial and three NSCLC trials carry both an
+  overlay row and a fallback row, which is why overlay + fallback-only equals
+  total trials (7 + 3 = 10) while any fallback (4 and 6) reflects multi-condition trials.
 - Step 2 `mesh_db_adrd`: 3 trials, 2 with `conditionBrowseModule`, 6 direct
-  MeSH rows (5 distinct terms), 15 distinct ancestor nodes.
+  MeSH rows (5 distinct terms), 15 distinct ancestor nodes, 2 overlay-mapped,
+  1 with any fallback, and 1 fallback-only.
 - Step 2 `mesh_db_nsclc`: same MeSH numbers under the NSCLC taxonomy;
-  0 of 3 trials overlay-mapped, 3 of 3 fallback.
+  0 of 3 trials overlay-mapped, 3 of 3 with any fallback, and 3 of 3 fallback-only.
 - Step 3a: `records=2618 with_conditionBrowseModule=2523
   text_fallback_studies_in_first_500=171`, the 171-study fallback pool, and
   the three reviewed studies whose classifications are quoted above.
+- Step 3b: `nsclc_total_in_registry=8646 sample_size=50 with_conditionBrowseModule=43 overlay_mapped=42 any_fallback=21 fallback_only=8`
+  and the three reviewed studies whose classifications and MeSH terms are quoted above.
 
 ```sql
+-- 0. Coverage table reproduction (measures every column of the table above)
+with trial_mapping as (
+    select
+        indication_profile_id,
+        nct_id,
+        bool_or(mapping_source = 'yaml_overlay') as has_overlay,
+        bool_or(mapping_source = 'text_fallback') as has_fallback
+    from main_staging.stg_trial_conditions
+    group by indication_profile_id, nct_id
+),
+mesh_counts as (
+    select
+        indication_profile_id,
+        count(*) filter (where not is_ancestor) as direct_mesh_rows,
+        count(distinct mesh_id) filter (where not is_ancestor) as distinct_direct_terms,
+        count(distinct mesh_id) filter (where is_ancestor) as distinct_ancestor_nodes
+    from main_staging.stg_trial_condition_mesh
+    group by indication_profile_id
+)
+select
+    t.indication_profile_id,
+    count(distinct t.nct_id) as total_trials,
+    count(distinct t.nct_id) filter (where t.has_derived_mesh is true) as with_condition_browse_module,
+    coalesce(max(m.direct_mesh_rows), 0) as direct_mesh_rows,
+    coalesce(max(m.distinct_direct_terms), 0) as distinct_direct_terms,
+    coalesce(max(m.distinct_ancestor_nodes), 0) as distinct_ancestor_nodes,
+    count(distinct t.nct_id) filter (where tm.has_overlay) as overlay_mapped_trials,
+    count(distinct t.nct_id) filter (where tm.has_fallback) as trials_with_any_fallback,
+    count(distinct t.nct_id) filter (where tm.has_fallback and not coalesce(tm.has_overlay, false)) as fallback_only_trials
+from main_marts.dim_trial t
+left join trial_mapping tm
+    on t.indication_profile_id = tm.indication_profile_id
+    and t.nct_id = tm.nct_id
+left join mesh_counts m
+    on t.indication_profile_id = m.indication_profile_id
+group by t.indication_profile_id
+order by t.indication_profile_id;
+
 -- 1. Coverage: derived-section presence and explicit has_derived_mesh flag
 select nct_id, has_derived_mesh, current_overall_status
 from main_marts.dim_trial
