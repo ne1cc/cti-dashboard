@@ -451,6 +451,117 @@ def test_run_transform_fails_on_mixed_runs_when_one_bronze_is_truncated(tmp_path
         build_silver_entities.run_transform(config=cfg)
 
 
+def _ten_trial_run(cfg: ProjectConfig, run_id: str) -> Path:
+    """A legacy-shaped run with two 5-study pages, silver built once, mesh removed."""
+    run_dir = cfg.paths.bronze_api_responses / f"run_id={run_id}"
+    write_bronze_page(run_dir, 1, [make_study(f"NCT{i:08d}") for i in range(1, 6)])
+    write_bronze_page(run_dir, 2, [make_study(f"NCT{i:08d}") for i in range(6, 11)])
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+    write_manifest(cfg.paths.bronze_manifests, make_manifest(run_id, record_count=10))
+    row_counts = build_silver_for_run(make_manifest(run_id, record_count=10), cfg)
+    assert row_counts["silver_trials"] == 10
+    _rewind_to_pre_upgrade_shape(cfg, run_id)
+    return run_dir
+
+
+def _retained_trials_rows(cfg: ProjectConfig, run_id: str) -> int:
+    path = cfg.paths.silver / "silver_trials" / f"run_id={run_id}.parquet"
+    return pq.ParquetFile(path).metadata.num_rows
+
+
+@pytest.mark.parametrize("force", [False, True])
+def test_implicit_upgrade_refuses_a_page_replaced_by_a_copy_of_another(tmp_path: Path, force: bool):
+    """Round-5 finding 1: equal raw record counts hide lost studies.
+
+    Page 2 overwritten with a copy of page 1 keeps the manifest's record count
+    (10 raw records read) and burns the difference on dedup, so the manifest
+    check alone passes (5 == 10 − 5 duplicates). The rebuild must also be
+    compared against what is retained: 5 rebuilt studies may not replace 10
+    retained trials.
+    """
+    cfg = make_config(tmp_path)
+    run_id = "r_upgrade_copied_page"
+    run_dir = _ten_trial_run(cfg, run_id)
+
+    shutil.copy(run_dir / "page=00001.json", run_dir / "page=00002.json")
+
+    before = _retained_silver_bytes(cfg, run_id)
+    with pytest.raises(
+        BronzeRebuildMismatch, match="the retained silver_trials file holds 10 trials"
+    ) as excinfo:
+        build_silver_entities.run_transform(config=cfg, force=force)
+    assert "the retained transform stats expect 10 trials" in str(excinfo.value)
+    assert "Bronze is incomplete" not in str(excinfo.value)
+    assert stats_path(cfg, run_id).exists()  # retained stats survive a guard abort
+    assert _retained_silver_bytes(cfg, run_id) == before
+    assert _retained_trials_rows(cfg, run_id) == 10
+    assert list(cfg.paths.silver.glob("*/run_id=*.parquet.tmp")) == []
+
+
+@pytest.mark.parametrize("force", [False, True])
+def test_implicit_upgrade_refuses_a_page_whose_studies_lose_their_nct_id(
+    tmp_path: Path, force: bool
+):
+    """Round-5 finding 1: studies replaced by NCT-less records hide behind exclusions too.
+
+    Page 2's five studies lose their NCT IDs: all 10 raw records are read and
+    the five losses count as legitimate missing-NCT exclusions, so 5 == the
+    manifest's expected 10 − 0 − 5. With the run's stats removed, the retained
+    silver_trials row count alone must abort the upgrade.
+    """
+    cfg = make_config(tmp_path)
+    run_id = "r_upgrade_nctless_page"
+    run_dir = _ten_trial_run(cfg, run_id)
+
+    write_bronze_page(run_dir, 2, [{"protocolSection": {}} for _ in range(5)])
+    stats_path(cfg, run_id).unlink()
+
+    before = _retained_silver_bytes(cfg, run_id)
+    with pytest.raises(
+        BronzeRebuildMismatch, match="the retained silver_trials file holds 10 trials"
+    ):
+        build_silver_entities.run_transform(config=cfg, force=force)
+    assert _retained_silver_bytes(cfg, run_id) == before
+    assert _retained_trials_rows(cfg, run_id) == 10
+    assert list(cfg.paths.silver.glob("*/run_id=*.parquet.tmp")) == []
+
+
+def test_interrupted_close_marks_the_run_for_a_full_rebuild(tmp_path: Path, monkeypatch):
+    """Round-5 finding 4: a swap failure mid-close() must not strand a mixed run.
+
+    close() replaces final files one entity at a time; an I/O failure there can
+    leave some entities rebuilt and others legacy. The run's stats are removed
+    on that path, so _already_transformed is false and the next plain transform
+    rebuilds the run whole from the (already count-verified) bronze.
+    """
+    import src.transform.export_parquet as export_parquet_module
+
+    cfg = make_config(tmp_path)
+    run_id = "r_upgrade_swap_failure"
+    _ten_trial_run(cfg, run_id)
+
+    real_replace = export_parquet_module.os.replace
+
+    def fail_on_interventions(src, dst):
+        if "silver_trial_interventions" in str(dst):
+            raise OSError("disk died mid-swap")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(export_parquet_module.os, "replace", fail_on_interventions)
+    with pytest.raises(OSError, match="disk died mid-swap"):
+        build_silver_entities.run_transform(config=cfg)
+    assert not _already_transformed(cfg, run_id)
+    assert not stats_path(cfg, run_id).exists()
+
+    monkeypatch.undo()
+    assert build_silver_entities.run_transform(config=cfg) == [run_id]
+    assert _already_transformed(cfg, run_id)
+    assert stats_path(cfg, run_id).exists()
+    assert (cfg.paths.silver / "silver_trial_condition_mesh" / f"run_id={run_id}.parquet").exists()
+    assert _retained_trials_rows(cfg, run_id) == 10
+    assert list(cfg.paths.silver.glob("*/run_id=*.parquet.tmp")) == []
+
+
 def test_build_silver_still_transforms_a_named_profile_with_a_taxonomy(tmp_path: Path):
     """Positive arm of the guard: a refreshable profile is unaffected."""
     cfg = make_config(tmp_path)

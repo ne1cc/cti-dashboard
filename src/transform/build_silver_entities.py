@@ -16,7 +16,10 @@ text rows fall back (mapping_source text_fallback).
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
+
+import pyarrow.parquet as pq
 
 from src.config import ProjectConfig, get_config
 from src.ingest.snapshot_manifest import IngestionManifest, load_manifests
@@ -24,7 +27,12 @@ from src.transform.export_parquet import DEFAULT_FLUSH_ROWS, SilverRunWriter
 from src.transform.flatten_studies import flatten_study, iter_bronze_study_records
 from src.transform.normalize_conditions import get_taxonomy
 from src.transform.normalize_locations import get_geography_rules
-from src.transform.silver_stats import write_transform_stats
+from src.transform.silver_stats import (
+    expected_trial_rows,
+    load_transform_stats,
+    stats_path,
+    write_transform_stats,
+)
 from src.utils.logging import setup_logging
 
 if TYPE_CHECKING:
@@ -58,7 +66,24 @@ class BronzeRebuildMismatch(ValueError):
     """A bronze rebuild did not reproduce the manifest's expected study count."""
 
 
+def _parquet_row_count(path: Path) -> int | None:
+    """Row count from Parquet metadata; None when the file is missing or unreadable."""
+    try:
+        return int(pq.ParquetFile(path).metadata.num_rows)
+    except Exception:
+        return None
+
+
 def _already_transformed(cfg: ProjectConfig, run_id: str) -> bool:
+    """Every entity file exists AND the run's transform stats exist.
+
+    Stats are written after close() swaps the final files in, so they double as
+    the completion marker: a run whose swap was interrupted mid-way keeps its
+    entity files but loses its stats and is rebuilt whole on the next plain
+    transform instead of staying permanently mixed.
+    """
+    if not stats_path(cfg, run_id).exists():
+        return False
     return all(
         (cfg.paths.silver / entity / f"run_id={run_id}.parquet").exists() for entity in ENTITY_NAMES
     )
@@ -148,25 +173,56 @@ def build_silver_for_run(
             if study_count % PROGRESS_EVERY == 0:
                 log.info("Run {}: {} studies streamed.", run_id, study_count)
 
-        # Incomplete bronze (a lost page or truncated records) yields fewer studies
-        # than the manifest recorded. Overwriting retained silver with that partial
-        # rebuild is irreversible — the original silver could never be rebuilt. Fail
-        # BEFORE close() swaps any tmp file in; the except below then discards every
-        # tmp file and the old silver stays byte-identical. Legitimate dedup and
-        # missing-NCT exclusions are subtracted on both sides, so a complete bronze
-        # with duplicates still passes.
+        # An incomplete bronze rebuild (a lost page, truncated records, or lost
+        # studies hidden behind repeated/NCT-less records) must never replace the
+        # retained silver: it could be the only surviving copy. Fail BEFORE close()
+        # swaps any tmp file in; the except below then discards every tmp file and
+        # the old silver stays byte-identical. Three count checks compare the
+        # rebuild against what is known, so lost studies cannot hide behind the
+        # rebuild's own duplicate/missing-NCT exclusions.
         expected = manifest.record_count - duplicate_count - skipped_no_nct
-        if study_count != expected and _has_existing_silver(cfg, run_id):
-            raise BronzeRebuildMismatch(
-                f"Run {run_id}: bronze rebuild produced {study_count} studies but the manifest "
-                f"expects {expected} ({manifest.record_count} records minus {duplicate_count} "
-                f"duplicate and {skipped_no_nct} missing-NCT exclusions). Bronze is incomplete; "
-                "refusing to overwrite the retained silver files. Restore the bronze pages, or "
-                "delete the retained silver for this run explicitly to rebuild."
+        if _has_existing_silver(cfg, run_id):
+            reasons: list[str] = []
+            if study_count != expected:
+                reasons.append(
+                    f"produced {study_count} studies but the manifest expects {expected} "
+                    f"({manifest.record_count} records minus {duplicate_count} duplicate and "
+                    f"{skipped_no_nct} missing-NCT exclusions)"
+                )
+            retained_trials = _parquet_row_count(
+                cfg.paths.silver / "silver_trials" / f"run_id={run_id}.parquet"
             )
+            if retained_trials is not None and study_count < retained_trials:
+                reasons.append(f"the retained silver_trials file holds {retained_trials} trials")
+            stats_expected = expected_trial_rows(
+                load_transform_stats(cfg, run_id), manifest.record_count
+            )
+            if stats_expected is not None and study_count < stats_expected:
+                reasons.append(f"the retained transform stats expect {stats_expected} trials")
+            if reasons:
+                raise BronzeRebuildMismatch(
+                    f"Run {run_id}: the bronze rebuild "
+                    + "; ".join(reasons)
+                    + ". Replacing the retained silver with this rebuild would be irreversible, "
+                    "so nothing was written. Restore the missing bronze pages, or remove this "
+                    "run's bronze directory to keep its retained silver as written, then re-run "
+                    "the transform."
+                )
+    except BaseException:
+        writer.discard()
+        raise
+    try:
         counts = writer.close()
     except BaseException:
         writer.discard()
+        # close() swaps final files one entity at a time; an I/O failure mid-swap
+        # leaves some entities rebuilt and others legacy. Drop the run's stats so
+        # _already_transformed is false and the next plain transform rebuilds the
+        # run whole.
+        try:
+            stats_path(cfg, run_id).unlink(missing_ok=True)
+        except OSError:
+            pass
         raise
 
     if duplicate_count:
