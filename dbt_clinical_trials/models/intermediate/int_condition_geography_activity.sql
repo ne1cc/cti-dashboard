@@ -32,6 +32,7 @@ select
     s.state_normalized,
     h.phase_normalized,
     h.overall_status,
+    h.previous_snapshot_date as previous_trial_snapshot_date,
     h.previous_status,
     h.status_changed_from_previous_snapshot_flag,
     h.entered_recruiting_flag,

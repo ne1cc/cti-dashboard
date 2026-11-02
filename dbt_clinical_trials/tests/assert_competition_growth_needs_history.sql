@@ -64,7 +64,7 @@ coverage_flags as (
             and window_30d_earliest_date <= snapshot_date - interval 30 day + interval 7 day
             and (
                 window_30d_earliest_pred_date is null
-                or window_30d_earliest_pred_date >= snapshot_date - interval 30 day - interval 7 day
+                or window_30d_earliest_pred_date >= snapshot_date - interval 30 day - interval 1 day
             )
             and coalesce(previous_snapshot_date >= snapshot_date - interval 30 day, false)
         ) as is_30d_covered,
@@ -73,11 +73,66 @@ coverage_flags as (
             and window_90d_earliest_date <= snapshot_date - interval 90 day + interval 7 day
             and (
                 window_90d_earliest_pred_date is null
-                or window_90d_earliest_pred_date >= snapshot_date - interval 90 day - interval 7 day
+                or window_90d_earliest_pred_date >= snapshot_date - interval 90 day - interval 1 day
             )
             and coalesce(previous_snapshot_date >= snapshot_date - interval 90 day, false)
         ) as is_90d_covered
     from profile_window_coverage
+),
+
+segment_entrants as (
+    select
+        indication_profile_id,
+        condition_group,
+        state_normalized,
+        phase_normalized,
+        snapshot_date,
+        min(previous_trial_snapshot_date) filter (entered_recruiting_flag)
+            as segment_earliest_entrant_pred_date
+    from {{ ref('int_condition_geography_activity') }}
+    group by 1, 2, 3, 4, 5
+),
+
+segment_windowed as (
+    select
+        indication_profile_id,
+        condition_group,
+        state_normalized,
+        phase_normalized,
+        snapshot_date,
+        min(segment_earliest_entrant_pred_date) over segment_30d
+            as window_30d_earliest_entrant_pred_date,
+        min(segment_earliest_entrant_pred_date) over segment_90d
+            as window_90d_earliest_entrant_pred_date
+    from segment_entrants
+    window
+        segment_30d as (
+            partition by indication_profile_id, condition_group, state_normalized, phase_normalized
+            order by snapshot_date
+            range between interval 30 day preceding and current row
+        ),
+        segment_90d as (
+            partition by indication_profile_id, condition_group, state_normalized, phase_normalized
+            order by snapshot_date
+            range between interval 90 day preceding and current row
+        )
+),
+
+segment_baseline as (
+    select
+        indication_profile_id,
+        condition_group,
+        state_normalized,
+        phase_normalized,
+        snapshot_date,
+        first_value(entered_recruiting_count) over segment_90d
+            as segment_90d_first_entered_recruiting_count
+    from {{ ref('mart_recruiting_competition') }}
+    window segment_90d as (
+        partition by indication_profile_id, condition_group, state_normalized, phase_normalized
+        order by snapshot_date
+        range between interval 90 day preceding and current row
+    )
 )
 
 select
@@ -95,9 +150,52 @@ from {{ ref('mart_recruiting_competition') }} c
 inner join coverage_flags h
     on h.indication_profile_id = c.indication_profile_id
     and h.snapshot_date = c.snapshot_date
-where h.is_30d_covered is distinct from (c.new_recruiting_30d is not null)
-   or h.is_90d_covered is distinct from (c.new_recruiting_90d is not null)
-   or (
+left join segment_windowed se
+    on se.indication_profile_id = c.indication_profile_id
+    and se.condition_group = c.condition_group
+    and coalesce(se.state_normalized, '') = coalesce(c.state_normalized, '')
+    and coalesce(se.phase_normalized, '') = coalesce(c.phase_normalized, '')
+    and se.snapshot_date = c.snapshot_date
+left join segment_baseline sb
+    on sb.indication_profile_id = c.indication_profile_id
+    and sb.condition_group = c.condition_group
+    and coalesce(sb.state_normalized, '') = coalesce(c.state_normalized, '')
+    and coalesce(sb.phase_normalized, '') = coalesce(c.phase_normalized, '')
+    and sb.snapshot_date = c.snapshot_date
+where (
+        -- 30d window must match segment-level coverage
+        (
+            h.is_30d_covered
+            and (
+                se.window_30d_earliest_entrant_pred_date is null
+                or se.window_30d_earliest_entrant_pred_date >= c.snapshot_date - interval 30 day - interval 1 day
+            )
+        ) is distinct from (c.new_recruiting_30d is not null)
+    ) or (
+        -- 90d window must match segment-level coverage
+        (
+            h.is_90d_covered
+            and (
+                se.window_90d_earliest_entrant_pred_date is null
+                or se.window_90d_earliest_entrant_pred_date >= c.snapshot_date - interval 90 day - interval 1 day
+            )
+        ) is distinct from (c.new_recruiting_90d is not null)
+    ) or (
+        -- growth must be null if 90d window is not covered
         c.recruiting_growth_90d is not null
-        and not h.is_90d_covered
-      )
+        and (
+            not h.is_90d_covered
+            or (
+                se.window_90d_earliest_entrant_pred_date is not null
+                and se.window_90d_earliest_entrant_pred_date < c.snapshot_date - interval 90 day - interval 1 day
+            )
+        )
+    ) or (
+        -- growth must be null when entrants occur at the baseline snapshot
+        c.recruiting_growth_90d is not null
+        and sb.segment_90d_first_entered_recruiting_count > 0
+    ) or (
+        -- growth must be null when new_recruiting_90d is null
+        c.recruiting_growth_90d is not null
+        and c.new_recruiting_90d is null
+    )

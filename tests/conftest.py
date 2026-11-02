@@ -384,8 +384,8 @@ DENSE_ME_STUDY = AddedStudy(
 DENSE_ADRD_RUNS = [
     replace(
         _base_adrd_run(),
-        run_id="20260902T100000Z_fixture20",
-        started_at=datetime(2026, 9, 2, 10, tzinfo=UTC),
+        run_id="20260908T100000Z_fixture20",
+        started_at=datetime(2026, 9, 8, 10, tzinfo=UTC),
     ),
     replace(
         _base_adrd_run(),
