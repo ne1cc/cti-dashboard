@@ -47,6 +47,7 @@ from src.api.models import (
     TrialsListResponse,
     TrialSummary,
 )
+from src.api.patient import register_patient_routes
 from src.api.warehouse import (
     DuckDBWarehouseManager,
     WarehouseNotReadyError,
@@ -835,4 +836,5 @@ def create_app(
         set_live_response_headers(response, entry)
         return detail
 
+    register_patient_routes(app)
     return app
