@@ -1,0 +1,25 @@
+:root { color-scheme: light; font-family: system-ui, sans-serif; color: #182a38; background: #f6f9fa; line-height: 1.5; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+.wrap { width: min(100% - 2rem, 64rem); margin-inline: auto; }
+header { background: #143b53; padding-block: 1rem; }
+.brand { color: white; font-weight: 700; font-size: 1.2rem; }
+nav { padding-block: 1rem; }
+main { min-height: 55vh; padding-bottom: 3rem; }
+h1, h2 { line-height: 1.2; overflow-wrap: anywhere; }
+h1 { font-size: clamp(1.8rem, 5vw, 2.5rem); }
+h2 { font-size: 1.15rem; }
+a { color: #075b88; }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #b04c00; outline-offset: 3px; }
+.skip { position: absolute; left: -9999px; }
+.skip:focus { left: 1rem; top: 1rem; z-index: 1; background: white; padding: .5rem; }
+.search-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: 1rem; background: white; border: 1px solid #b9cbd2; border-radius: .5rem; padding: 1rem; }
+label { display: block; font-weight: 600; margin-bottom: .25rem; }
+input, select, button { width: 100%; min-height: 2.75rem; padding: .5rem; font: inherit; border: 1px solid #56717f; border-radius: .25rem; }
+button { background: #075b88; color: white; border: 0; cursor: pointer; font-weight: 700; align-self: end; }
+.notice { grid-column: 1 / -1; margin: 0; font-size: .9rem; }
+.results { list-style: none; margin: 1rem 0; padding: 0; }
+.results li { background: white; border: 1px solid #b9cbd2; border-radius: .5rem; padding: 1rem; margin-bottom: .75rem; }
+.results h2, .results p { margin: .25rem 0; }
+.error { border-left: 4px solid #a02121; background: #fff0ef; padding: 1rem; }
+footer { background: #e7eff1; padding-block: 1rem; }
