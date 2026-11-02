@@ -1,5 +1,6 @@
 """Competition Landscape — recruiting trial counts and sponsor concentration."""
 
+import pandas as pd
 import plotly.express as px
 import streamlit as st
 from components import data
@@ -40,6 +41,11 @@ col3.metric(
 )
 proxy_caption()
 
+observed_history_days = (
+    int(competition["observed_history_days"].max()) if not competition.empty else 0
+)
+growth_window_covered = observed_history_days >= 90
+
 st.subheader("Recruiting trial count vs sponsor concentration")
 fig = px.scatter(
     filtered,
@@ -72,8 +78,9 @@ table_df = filtered.sort_values(
         "phase_normalized",
         "recruiting_trial_count",
         "listed_site_count",
+        "observed_history_days",
         "new_recruiting_90d",
-        "newly_posted_90d_proxy",
+        "newly_registered_90d",
         "sponsor_count",
         "top_sponsor_share",
         "sponsor_hhi",
@@ -83,6 +90,29 @@ table_df = filtered.sort_values(
 table_df["condition_group"] = table_df["condition_group"].apply(format_condition_group)
 table_df["phase_normalized"] = table_df["phase_normalized"].map(format_phase)
 table_df["competition_signal_band"] = table_df["competition_signal_band"].str.capitalize()
+# The "(90d)" label is only honest once 90 days were actually observed and covered;
+# below that or across unobserved gaps the column carries "not enough history".
+has_covered_rows = (
+    bool(filtered["new_recruiting_90d"].notna().any()) if not filtered.empty else False
+)
+growth_window_covered = observed_history_days >= 90 and has_covered_rows
+
+
+def _format_competition_new_recruiting(value: float | None) -> str:
+    if pd.notna(value):
+        return f"{value:.0f}"
+    if observed_history_days >= 90:
+        return "not enough history (gap between snapshots exceeds window)"
+    return f"not enough history ({observed_history_days} of 90 days observed)"
+
+
+table_df["new_recruiting_90d"] = table_df["new_recruiting_90d"].apply(
+    _format_competition_new_recruiting
+)
+if growth_window_covered:
+    growth_column_label = "New Recruiting (90d)"
+else:
+    growth_column_label = "New Recruiting (observed history too short)"
 
 st.dataframe(
     table_df,
@@ -94,9 +124,21 @@ st.dataframe(
         "phase_normalized": st.column_config.TextColumn("Phase"),
         "recruiting_trial_count": st.column_config.NumberColumn("Recruiting Listings", format="%d"),
         "listed_site_count": st.column_config.NumberColumn("Listed Sites", format="%d"),
-        "new_recruiting_90d": st.column_config.NumberColumn("New Recruiting (90d)", format="%d"),
-        "newly_posted_90d_proxy": st.column_config.NumberColumn(
-            "Newly Posted (90d Proxy)", format="%d"
+        "observed_history_days": st.column_config.NumberColumn(
+            "Observed History (days)",
+            format="%d",
+            help="Snapshot history accrued for this profile in days.",
+        ),
+        "new_recruiting_90d": st.column_config.TextColumn(
+            growth_column_label,
+            help="Trials observed transitioning into recruiting within 90 days; "
+            "null until 90 days of snapshot history are observed.",
+        ),
+        "newly_registered_90d": st.column_config.NumberColumn(
+            "Newly registered (first posted)",
+            format="%d",
+            help="Recruiting studies whose registry first-post date falls within "
+            "90 days — a registration count, not a recruiting transition.",
         ),
         "sponsor_count": st.column_config.NumberColumn("Sponsors", format="%d"),
         "top_sponsor_share": st.column_config.NumberColumn("Top Sponsor Share", format="percent"),
@@ -125,8 +167,14 @@ render_metric_audit(
             "within profile and snapshot: low <0.5, moderate <0.8, elevated otherwise. "
             "New recruiting (90d) sums daily distinct entrants over the inclusive "
             "90-day range; entrant requires previous captured status non-null and "
-            "not RECRUITING. First-post proxy counts recruiting studies with first "
-            "post date >= snapshot date minus 90 days. Counts may repeat across segments. "
+            "not RECRUITING; it is null until observed history covers 90 days and "
+            "the latest snapshot gap does not itself span the window (a transition "
+            "across a longer gap has unobserved timing inside it), so null means "
+            f"not enough history, never zero. Observed history here: "
+            f"{observed_history_days} days. Newly registered (first posted) counts "
+            "recruiting studies whose registry first-post date is within 90 days of "
+            "the snapshot — registrations, not transitions. Counts may repeat across "
+            "segments. "
             "This panel audits count inputs; derived values remain warehouse calculations."
         )
     },

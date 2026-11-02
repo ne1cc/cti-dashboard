@@ -69,7 +69,7 @@
     facility. Recorded-location ordinals distinguish rows only. Study segment counts
     overlap and must not be summed into a unique-study total. Derived metrics, sponsor
     concentration, percentiles and growth remain warehouse calculations; the panel
-    enumerates count inputs and qualifying growth/proxy events with predecessor/source
+    enumerates count inputs and qualifying recruiting transition and newly registered first-post events with predecessor/source
     evidence, and discloses formulas, windows and displayed values.
 20. Raw pages are immutable while retained. Configured pruning can remove them;
     exported references do not guarantee future resolution or indefinite bronze
