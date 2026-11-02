@@ -1006,6 +1006,15 @@ def test_warehouse_trial_detail_success(client_warehouse: TestClient) -> None:
     assert len(detail.interventions) >= 1
     assert detail.eligibility.minimum_age_years == 55.0
     assert detail.eligibility.maximum_age_years == 85.0
+
+    # Issue #67: lossless structural split of the criteria text
+    sections = detail.eligibility.eligibility_sections
+    assert sections is not None
+    assert sections.parsed is True
+    assert sections.inclusion == ["Age 55-85, confirmed early Alzheimer."]
+    assert sections.exclusion == []
+    assert sections.unclassified == []
+
     assert len(detail.sites) == 2
 
     # Verify site distance computation
@@ -1021,6 +1030,198 @@ def test_warehouse_trial_detail_success(client_warehouse: TestClient) -> None:
     site_dict = ucsf_site.model_dump()
     for forbidden in ("investigator_name", "email", "phone", "contact_name", "contact_email"):
         assert forbidden not in site_dict
+
+
+def test_warehouse_detail_sections_multi_item(
+    warehouse_db: Path,
+) -> None:
+    """Issue #67: bulleted multi-item criteria split into inclusion/exclusion."""
+    con = duckdb.connect(str(warehouse_db))
+    con.execute(
+        "UPDATE stg_trials SET eligibility_criteria_text = ? WHERE nct_id = 'NCT00000004'",
+        [
+            "Key Inclusion Criteria:\n\n"
+            "* Men aged 18 to 50\n"
+            "* Idiopathic Parkinson disease\n\n"
+            "Exclusion Criteria (applies to all patients):\n"
+            "* Prior ablative therapy\n"
+        ],
+    )
+    con.close()
+
+    mgr = DuckDBWarehouseManager(warehouse_db, max_connections=2, timeout=2.0)
+    container = APIContainer(warehouse=mgr)
+    app = create_app(container=container)
+    with TestClient(app) as client:
+        resp = client.get("/v1/trials/NCT00000004")
+    mgr.close()
+
+    assert resp.status_code == 200
+    detail = TrialDetail(**resp.json())
+    sections = detail.eligibility.eligibility_sections
+    assert sections is not None
+    assert sections.parsed is True
+    assert sections.inclusion == ["Men aged 18 to 50", "Idiopathic Parkinson disease"]
+    assert sections.exclusion == ["Prior ablative therapy"]
+    assert sections.unclassified == []
+
+
+def test_warehouse_detail_sections_api_payload_lossless_with_repeated_headings(
+    warehouse_db: Path,
+) -> None:
+    """Issue #67: the API sections list is lossless and keeps repeated same-kind
+    heading boundaries that the flat convenience lists merge away."""
+    from src.transform.eligibility_sections import strip_bullet_markers
+
+    criteria = (
+        "Note: review all criteria with the study team.\n"
+        "Baseline: Inclusion Criteria:\n"
+        "* Age 18+\n"
+        "\n"
+        "Extension Phase: Inclusion Criteria:\n"
+        "* Completed baseline\n"
+        "Exclusion Criteria for Patients:\n"
+        "* Prior therapy\n"
+        "Inclusion Criteria for Cognitively Healthy Participants:\n"
+        "* MoCA 26+\n"
+    )
+    con = duckdb.connect(str(warehouse_db))
+    con.execute(
+        "UPDATE stg_trials SET eligibility_criteria_text = ? WHERE nct_id = 'NCT00000004'",
+        [criteria],
+    )
+    con.close()
+
+    mgr = DuckDBWarehouseManager(warehouse_db, max_connections=2, timeout=2.0)
+    container = APIContainer(warehouse=mgr)
+    app = create_app(container=container)
+    with TestClient(app) as client:
+        resp = client.get("/v1/trials/NCT00000004")
+    mgr.close()
+
+    assert resp.status_code == 200
+    detail = TrialDetail(**resp.json())
+    sections = detail.eligibility.eligibility_sections
+    assert sections is not None
+    assert sections.parsed is True
+
+    # Ordered groups with verbatim headings: repeated same-kind boundaries kept.
+    assert [(s.kind, s.heading) for s in sections.sections] == [
+        ("unclassified", None),
+        ("inclusion", "Baseline: Inclusion Criteria:"),
+        ("inclusion", "Extension Phase: Inclusion Criteria:"),
+        ("exclusion", "Exclusion Criteria for Patients:"),
+        ("inclusion", "Inclusion Criteria for Cognitively Healthy Participants:"),
+    ]
+
+    # Lossless at the API layer: heading + items per section rebuild the blob.
+    rebuilt = "\n".join(
+        line for s in sections.sections for line in ([s.heading] if s.heading else []) + s.items
+    )
+    assert rebuilt.split() == strip_bullet_markers(criteria).split()
+
+    # Convenience lists merge across same-kind sections (no group semantics).
+    assert sections.inclusion == ["Age 18+", "Completed baseline", "MoCA 26+"]
+    assert sections.exclusion == ["Prior therapy"]
+    assert sections.unclassified == ["Note: review all criteria with the study team."]
+
+
+def test_warehouse_detail_sections_no_misclassification_or_group_loss(
+    warehouse_db: Path,
+) -> None:
+    """Issue #67 review findings: mid-line exclusion heading, parenthetical
+    heading, bulleted keyword non-heading, blank lines, nested bullets."""
+    criteria = (
+        "Inclusion Criteria:\n"
+        "\n"
+        "* 18 years old or over\n"
+        "\n"
+        "Paragraph one.\n"
+        "\n"
+        "Paragraph two.\n"
+        "* can provide written informed consent. Exclusion Criteria: The patients who have\n"
+        "* advanced cancer\n"
+        "\n"
+        "Exclusion Criteria (PCP): none\n"
+        "* Prior exclusion from study:\n"
+        "* Has one of:\n"
+        "  * A\n"
+        "  * B\n"
+    )
+    con = duckdb.connect(str(warehouse_db))
+    con.execute(
+        "UPDATE stg_trials SET eligibility_criteria_text = ? WHERE nct_id = 'NCT00000004'",
+        [criteria],
+    )
+    con.close()
+
+    mgr = DuckDBWarehouseManager(warehouse_db, max_connections=2, timeout=2.0)
+    container = APIContainer(warehouse=mgr)
+    app = create_app(container=container)
+    with TestClient(app) as client:
+        resp = client.get("/v1/trials/NCT00000004")
+    mgr.close()
+
+    assert resp.status_code == 200
+    detail = TrialDetail(**resp.json())
+    sections = detail.eligibility.eligibility_sections
+    assert sections is not None
+    assert sections.parsed is True
+    assert [(s.kind, s.heading) for s in sections.sections] == [
+        ("inclusion", "Inclusion Criteria:"),
+        ("exclusion", "Exclusion Criteria:"),
+        ("exclusion", "Exclusion Criteria (PCP):"),
+    ]
+
+    inclusion = sections.inclusion
+    exclusion = sections.exclusion
+    # Mid-line exclusion heading: its pre-text stays an inclusion item, the
+    # following text is exclusion.
+    assert "can provide written informed consent." in inclusion
+    assert "The patients who have" in exclusion
+    assert "advanced cancer" in exclusion
+    assert "The patients who have" not in inclusion
+    assert "advanced cancer" not in inclusion
+    # Blank lines are ignored: consecutive non-bullet lines join into one item
+    # (here, the continuation of the preceding item).
+    assert "18 years old or over\nParagraph one.\nParagraph two." in inclusion
+    # Parenthetical heading kept verbatim as a section heading.
+    assert sections.sections[2].heading == "Exclusion Criteria (PCP):"
+    # Bulleted criterion that merely ends in a colon is an item, not a heading.
+    assert "Prior exclusion from study:" in exclusion
+    assert "Prior exclusion from study:" not in {s.heading for s in sections.sections}
+    # Nested sub-bullets flatten to sibling items (documented limitation).
+    assert sections.sections[2].items == [
+        "none",
+        "Prior exclusion from study:",
+        "Has one of:",
+        "A",
+        "B",
+    ]
+    assert exclusion[-5:] == sections.sections[2].items
+
+
+def test_warehouse_trial_detail_null_criteria_yields_null_sections(
+    warehouse_db: Path,
+) -> None:
+    """Issue #67: absent criteria text yields null sections, not empty lists."""
+    con = duckdb.connect(str(warehouse_db))
+    con.execute(
+        "UPDATE stg_trials SET eligibility_criteria_text = NULL WHERE nct_id = 'NCT00000001'"
+    )
+    con.close()
+
+    mgr = DuckDBWarehouseManager(warehouse_db, max_connections=2, timeout=2.0)
+    container = APIContainer(warehouse=mgr)
+    app = create_app(container=container)
+    with TestClient(app) as client:
+        resp = client.get("/v1/trials/NCT00000001")
+    mgr.close()
+
+    assert resp.status_code == 200
+    detail = TrialDetail(**resp.json())
+    assert detail.eligibility.criteria_text is None
+    assert detail.eligibility.eligibility_sections is None
 
 
 def test_warehouse_trial_detail_not_found(client_warehouse: TestClient) -> None:

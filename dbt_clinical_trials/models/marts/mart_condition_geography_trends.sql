@@ -12,9 +12,15 @@
 -- newly_registered_in_month counts registry first-post months: a
 -- registration count, not a recruiting transition. The rolling baseline is
 -- partitioned by profile: unscoped, one profile's seasonality would blend
--- into another's.
+-- into another's. recruiting_trials_per_100k normalizes recruiting listings
+-- by U.S. Census Bureau resident population (Vintage 2024); states without
+-- an estimate stay null rather than inventing a rate.
 with activity as (
     select * from {{ ref('int_condition_geography_activity') }}
+),
+
+state_pop as (
+    select * from {{ ref('state_population') }}
 ),
 
 -- observed_history_days uses as-of semantics per month row: the span from
@@ -107,8 +113,18 @@ select
                 'w.recruiting_count_3m_baseline',
             ) }}
         else null
-    end as recruiting_growth_3m
+    end as recruiting_growth_3m,
+    sp.population,
+    case when sp.population is not null then 'U.S. Census Bureau' else null end as population_source,
+    case when sp.population is not null then sp.vintage else null end as population_vintage,
+    case
+        when sp.population is not null and sp.population > 0 then
+            round(100000.0 * cast(w.recruiting_trial_count as double) / cast(sp.population as double), 4)
+        else null
+    end as recruiting_trials_per_100k
 from windowed w
 inner join month_history h
     on h.indication_profile_id = w.indication_profile_id
     and h.activity_month = w.activity_month
+left join state_pop sp
+    on w.state_normalized = sp.state_code
