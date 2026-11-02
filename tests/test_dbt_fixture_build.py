@@ -1574,7 +1574,7 @@ def test_marts_contracts_enforced(fixture_project_root: Path) -> None:
         if node["resource_type"] == "model"
         and node["original_file_path"].startswith("models/marts/")
     }
-    assert len(marts) == 19
+    assert len(marts) == 20
     for name, node in marts.items():
         assert node["contract"]["enforced"] is True, name
         assert {c["name"] for c in node["columns"].values()}, name
@@ -1614,7 +1614,7 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
     # Membership, not just cardinality: a pin on len() alone stays green if a
     # mart is renamed or dim_date's exclusion clause goes stale, because the set
     # keeps its size while iterating something else. Names taken from
-    # _marts.yml's 19 model blocks minus dim_date, 2026-10-31.
+    # _marts.yml's 20 model blocks minus dim_date.
     assert trial_grain == {
         "bridge_trial_condition",
         "bridge_trial_sponsor",
