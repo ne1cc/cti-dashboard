@@ -45,10 +45,22 @@ if TYPE_CHECKING:
 INCREMENTAL_OVERLAP_DAYS = 1
 
 
-def latest_snapshot_date(manifests_dir: Path) -> str | None:
+def latest_snapshot_date(manifests_dir: Path, silver_dir: Path | None = None) -> str | None:
     """YYYY-MM-DD lower bound for a refresh: the newest successful run's start
-    minus the overlap, from any manifest in this profile's tree."""
-    successes = [m for m in load_manifests(manifests_dir) if m.status == "success"]
+    minus the overlap, from any manifest in this profile's tree. When silver_dir
+    is provided, only runs whose silver_trials exists are considered valid bases.
+    """
+
+    def _has_silver(run_id: str) -> bool:
+        if silver_dir is None:
+            return True
+        return (silver_dir / "silver_trials" / f"run_id={run_id}.parquet").exists()
+
+    successes = [
+        m
+        for m in load_manifests(manifests_dir)
+        if m.status == "success" and _has_silver(m.ingestion_run_id)
+    ]
     if not successes:
         return None
     newest = max(m.started_at_utc for m in successes)
@@ -126,7 +138,7 @@ def run_ingestion(
         params = client.build_params(condition=condition)
         updated_since: str | None = None
         if incremental_refresh:
-            updated_since = latest_snapshot_date(manifests_dir)
+            updated_since = latest_snapshot_date(manifests_dir, cfg.paths.silver)
             if updated_since is None:
                 raise ValueError(
                     "Incremental refresh needs a previous successful snapshot to "
@@ -204,16 +216,17 @@ def run_ingestion(
                 and manifest.total_count_reported is not None
                 and manifest.record_count != manifest.total_count_reported
             ):
-                # Not fatal — dbt's reconciliation mart compares the same two
-                # numbers and the quality gate fails on it — but say it here so
-                # the operator sees the drift at fetch time.
-                log.warning(
-                    "Run {}: record_count {} != countTotal {}; the API result "
-                    "changed under pagination.",
-                    run_id,
-                    manifest.record_count,
-                    manifest.total_count_reported,
+                msg = (
+                    f"Run {run_id}: record_count {manifest.record_count} != "
+                    f"countTotal {manifest.total_count_reported}; the API result "
+                    "changed under pagination or fetch was incomplete."
                 )
+                if incremental_refresh:
+                    manifest.status = "failed"
+                    manifest.error = msg
+                    log.error(msg)
+                    raise RuntimeError(msg)
+                log.warning(msg)
         except Exception as exc:
             manifest.status = "failed"
             manifest.error = f"{type(exc).__name__}: {exc}"

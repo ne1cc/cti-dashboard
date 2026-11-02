@@ -131,16 +131,17 @@ ingestion:
 # user's action that restores (a)'s premise; raise this back to 6 only after
 # extending. docs/DEPLOY_FLY.md ("What to expect") carries the full arithmetic.
 #
-# Registry storage budget (issue #53; measured/estimated 2026-10-30, see
-# docs/decisions/0083-ingest-source.md for the source decision):
+# Registry storage budget (issue #53; measured live 2026-11-02 outside data/,
+# see docs/decisions/0083-ingest-source.md for measured numbers and benchmarks):
 #   - registry bronze JSON per full run, with the fields projection:
-#     MEASURED ~5.26 GB (609,551 studies x ~8.6 KB) — kept for the latest run
+#     MEASURED ~5.18 GB (~610k studies x ~8.49 KB) — kept for the latest run
 #     only (bronze_runs_to_keep: 1); a mid-run instant briefly holds the
 #     previous and the new run (~2x) until prune-data reclaims it.
-#   - weekly incremental run: ESTIMATED ~70-75 MB (~9k changed studies/week,
-#     measured 9,017 via AREA[LastUpdatePostDate]RANGE over 7 days).
-#   - registry silver per snapshot: ~1.74 GB per snapshot; snapshot_runs_to_keep: 3
-#     retains 3 snapshots (~5.22 GB total silver). Total combined bronze + 3 silver snapshots ~10.5 GB.
+#   - weekly incremental run: MEASURED ~76.5 MB (~9k changed studies/week,
+#     ~22s fetch time).
+#   - registry silver per snapshot: MEASURED ~1.67 GB per complete snapshot
+#     (2,739 bytes/study); snapshot_runs_to_keep: 3 retains 3 complete snapshots
+#     (~5.01 GB total silver). Total combined steady-state storage: ~10.19 GB.
 retention:
   bronze_runs_to_keep: 1
   snapshot_runs_to_keep: 3

@@ -177,6 +177,9 @@ def test_incremental_refresh_builds_since_query_and_marks_manifest(tmp_path, mon
         started_at_utc=datetime(2026, 10, 25, 12, 0, tzinfo=UTC),
     )
     write_manifest(cfg.paths.bronze_manifests, m_prior)
+    silver_trials = cfg.paths.silver / "silver_trials"
+    silver_trials.mkdir(parents=True, exist_ok=True)
+    (silver_trials / "run_id=run_prev.parquet").touch()
 
     captured_params = {}
 
@@ -203,3 +206,90 @@ def test_incremental_refresh_builds_since_query_and_marks_manifest(tmp_path, mon
     assert manifest.status == "success"
     assert manifest.updated_since_utc == "2026-10-24"
     assert "AREA[LastUpdatePostDate]RANGE[2026-10-24,MAX]" in captured_params["filter.advanced"]
+
+
+def test_latest_snapshot_date_checks_silver_when_provided(tmp_path):
+    from datetime import UTC, datetime
+
+    from src.ingest.extract_studies import latest_snapshot_date
+    from src.ingest.snapshot_manifest import IngestionManifest, write_manifest
+
+    manifests_dir = tmp_path / "manifests"
+    manifests_dir.mkdir(parents=True, exist_ok=True)
+    silver_dir = tmp_path / "silver"
+
+    m = IngestionManifest(
+        ingestion_run_id="run_test",
+        query_hash="h_test",
+        endpoint="ep",
+        params={},
+        status="success",
+        started_at_utc=datetime(2026, 10, 25, 12, 0, tzinfo=UTC),
+    )
+    write_manifest(manifests_dir, m)
+
+    # Without silver_dir check, it returns the date
+    assert latest_snapshot_date(manifests_dir) == "2026-10-24"
+    # With silver_dir check, it requires silver_trials to exist
+    assert latest_snapshot_date(manifests_dir, silver_dir) is None
+
+    # Now create the silver file
+    (silver_dir / "silver_trials").mkdir(parents=True, exist_ok=True)
+    (silver_dir / "silver_trials" / "run_id=run_test.parquet").touch()
+    assert latest_snapshot_date(manifests_dir, silver_dir) == "2026-10-24"
+
+
+def test_incremental_refresh_fails_closed_on_count_total_mismatch(tmp_path, monkeypatch):
+    """When record_count != totalCount reported by API, incremental refresh fails closed
+    and does not advance the watermark."""
+    from datetime import UTC, datetime
+
+    from src.ingest.extract_studies import latest_snapshot_date
+    from src.ingest.snapshot_manifest import IngestionManifest, load_manifests, write_manifest
+    from tests.test_build_silver import make_config
+
+    cfg = make_config(tmp_path)
+    m_base = IngestionManifest(
+        ingestion_run_id="run_base",
+        query_hash="h_base",
+        endpoint=cfg.api.studies_url,
+        params={},
+        status="success",
+        started_at_utc=datetime(2026, 10, 10, 12, 0, tzinfo=UTC),
+    )
+    write_manifest(cfg.paths.bronze_manifests, m_base)
+    silver_trials = cfg.paths.silver / "silver_trials"
+    silver_trials.mkdir(parents=True, exist_ok=True)
+    (silver_trials / "run_id=run_base.parquet").touch()
+
+    class MockMismatchClient:
+        def __init__(self, api):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def build_params(self, condition=None):
+            return {"filter.advanced": "AREA[StudyType]INTERVENTIONAL"}
+
+        def fetch_page(self, params, page_token=None):
+            # API reports 9000 total studies, but returns only 1 study with no nextPageToken
+            study = {"protocolSection": {"identificationModule": {"nctId": "NCT00000001"}}}
+            return {"studies": [study], "totalCount": 9000}, '{"studies": [{}]}'
+
+    monkeypatch.setattr("src.ingest.extract_studies.CTGClient", MockMismatchClient)
+
+    with pytest.raises(RuntimeError, match="record_count 1 != countTotal 9000"):
+        run_ingestion(config=cfg, incremental_refresh=True)
+
+    # Manifest written to disk must be marked "failed"
+    manifests = load_manifests(cfg.paths.bronze_manifests)
+    failed_runs = [m for m in manifests if m.status == "failed"]
+    assert len(failed_runs) == 1
+    assert "countTotal 9000" in (failed_runs[0].error or "")
+
+    # Watermark must not have advanced; latest_snapshot_date must still return the base run's date
+    assert latest_snapshot_date(cfg.paths.bronze_manifests, cfg.paths.silver) == "2026-10-09"

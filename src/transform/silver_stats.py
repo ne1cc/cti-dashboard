@@ -29,6 +29,7 @@ def write_transform_stats(
     row_counts: dict[str, int],
     duplicate_nct_ids: int,
     skipped_no_nct_id: int,
+    carried_rows: int = 0,
 ) -> Path:
     path = stats_path(cfg, run_id)
     ensure_dir(path.parent)
@@ -37,6 +38,7 @@ def write_transform_stats(
         "manifest_record_count": record_count,
         "duplicate_nct_ids_dropped": duplicate_nct_ids,
         "records_without_nct_id": skipped_no_nct_id,
+        "carried_rows": carried_rows,
         "row_counts": row_counts,
     }
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -71,6 +73,7 @@ def expected_trial_rows(stats: dict[str, Any] | None, record_count: int) -> int 
     try:
         duplicates = int(stats.get("duplicate_nct_ids_dropped", 0))
         skipped = int(stats.get("records_without_nct_id", 0))
+        carried = int(stats.get("carried_rows", 0))
     except (TypeError, ValueError):
         return None
-    return record_count - duplicates - skipped
+    return record_count - duplicates - skipped + carried

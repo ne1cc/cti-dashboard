@@ -27,9 +27,10 @@ api:
   format: json
   page_size: 1000           # API maximum (OpenAPI-verified 2026-10-30)
   count_total: true
-  # Slim field projection — must not drift from project_config.yml /
-  # full_catalog.yml: silver's incremental upsert assumes every profile's
-  # bronze carries the same modules (tests/test_profile_configs.py guards it).
+  # Slim field projection — must not drift between adrd.yml, full_catalog.yml,
+  # and project_config.yml (tests/test_profile_configs.py guards this). Note:
+  # other indication profiles keep default unprojected pages; slim projection
+  # currently applies to full_catalog and adrd.
   fields:
     - protocolSection.identificationModule
     - protocolSection.statusModule

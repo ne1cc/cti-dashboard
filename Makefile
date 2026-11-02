@@ -55,7 +55,7 @@ ingest-nsclc: ## Snapshot Non-Small Cell Lung Cancer studies into bronze
 transform-nsclc: ## Flatten bronze NSCLC runs into silver Parquet entities
 	$(PYTHON) -m src.cli transform --profile oncology_nsclc
 
-ingest-full-catalog: ## Opt-in: snapshot the full ClinicalTrials.gov registry, all conditions worldwide (bronze only)
+ingest-full-catalog: ## Opt-in: snapshot the full ClinicalTrials.gov registry, all conditions worldwide
 	$(PYTHON) -m src.cli ingest --profile full_catalog
 
 full-catalog-full-refresh: ## Opt-in: force a full re-pull of the full-catalog profile
@@ -82,8 +82,8 @@ gazetteer: ## Download Census Gazetteer ZCTA/place centroids into data/reference
 	curl -fsSL $(GAZETTEER_BASE)/$(GAZETTEER_YEAR)_Gaz_place_national.zip | funzip > data/reference/gazetteer_place.csv
 	@echo "Gazetteer centroids written to data/reference/ ($(GAZETTEER_YEAR))."
 
-transform: ## Flatten bronze JSON into silver Parquet entities (Phase 3)
-	$(PYTHON) -m src.cli transform
+transform: ## Flatten ADRD bronze JSON into silver Parquet entities (Phase 3)
+	$(PYTHON) -m src.cli transform --profile adrd
 
 dbt-deps: ## Install dbt packages (Phase 4)
 	$(DBT) deps $(DBT_FLAGS)

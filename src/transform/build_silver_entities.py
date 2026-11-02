@@ -50,21 +50,22 @@ def _already_transformed(cfg: ProjectConfig, run_id: str) -> bool:
     )
 
 
-def previous_full_snapshot_id(
+def previous_snapshot_id(
     cfg: ProjectConfig, current_run_id: str, manifests: list[IngestionManifest] | None = None
 ) -> str | None:
-    """Run id of the newest completed full snapshot that silver already holds.
+    """Run id of the newest completed snapshot that silver already holds.
 
     An incremental run carries unchanged studies forward from this snapshot so
     its silver stays a complete registry state (dbt unions every run parquet).
     """
     manifests = manifests if manifests is not None else load_manifests(cfg.paths.bronze_manifests)
+    current_manifest = next((m for m in manifests if m.ingestion_run_id == current_run_id), None)
     candidates = [
         m
         for m in manifests
         if m.status == "success"
-        and m.updated_since_utc is None
         and m.ingestion_run_id != current_run_id
+        and (current_manifest is None or m.started_at_utc < current_manifest.started_at_utc)
         and _already_transformed(cfg, m.ingestion_run_id)
     ]
     if not candidates:
@@ -72,30 +73,54 @@ def previous_full_snapshot_id(
     return max(candidates, key=lambda m: m.started_at_utc).ingestion_run_id
 
 
+previous_full_snapshot_id = previous_snapshot_id
+
+
 def _carry_forward_rows(
     writer: SilverRunWriter,
     cfg: ProjectConfig,
     prev_run_id: str,
     seen_nct_ids: set[str],
+    current_run_id: str,
+    snapshot_ts: str,
 ) -> dict[str, int]:
-    """Append rows of the previous full snapshot whose NCT IDs this incremental
-    run did not touch. Returns per-entity carried row counts."""
+    """Append rows of the previous snapshot whose NCT IDs this incremental run
+    did not touch, rewritten with the current run metadata. Returns per-entity
+    carried row counts."""
     log = setup_logging()
     import pyarrow as pa
 
     carried: dict[str, int] = {}
-    value_set = pa.array(sorted(seen_nct_ids))
+    value_set = pa.array(sorted(seen_nct_ids), type=pa.string())
     for entity in ENTITY_NAMES:
         prev_path = cfg.paths.silver / entity / f"run_id={prev_run_id}.parquet"
-        table = pq.read_table(prev_path)
-        mask = pc.invert(pc.is_in(table.column("nct_id"), value_set=value_set))
-        kept = table.filter(mask)
-        writer.add_table(entity, kept)
-        carried[entity] = kept.num_rows
+        parquet_file = pq.ParquetFile(prev_path)
+        total_carried = 0
+        for batch in parquet_file.iter_batches(batch_size=FLUSH_ROWS):
+            mask = pc.invert(pc.is_in(batch.column("nct_id"), value_set=value_set))
+            kept_batch = batch.filter(mask)
+            if kept_batch.num_rows == 0:
+                continue
+            kept_table = pa.Table.from_batches([kept_batch])
+            schema = kept_table.schema
+            for col_name, new_val in [
+                ("ingestion_run_id", current_run_id),
+                ("snapshot_id", current_run_id),
+                ("snapshot_timestamp_utc", snapshot_ts),
+            ]:
+                idx = schema.get_field_index(col_name)
+                if idx != -1:
+                    field = schema.field(idx)
+                    new_col = pa.repeat(pa.scalar(new_val, type=field.type), kept_table.num_rows)
+                    kept_table = kept_table.set_column(idx, field, new_col)
+            writer.add_table(entity, kept_table)
+            total_carried += kept_table.num_rows
+
+        carried[entity] = total_carried
         log.info(
             "Run {}: carried {} unchanged {} row(s) from snapshot {}.",
-            prev_path.parent.name.removeprefix("run_id="),
-            kept.num_rows,
+            current_run_id,
+            total_carried,
             entity,
             prev_run_id,
         )
@@ -142,16 +167,16 @@ def build_silver_for_run(
 
     # An incremental-refresh run holds changed studies only; silver must still
     # describe the complete registry state, so unchanged rows are carried
-    # forward from the previous full snapshot. Resolve it before opening the
+    # forward from the previous snapshot. Resolve it before opening the
     # writer so a missing base fails loudly without leaving artifacts.
     updated_since = manifest.updated_since_utc
     carry_from: str | None = None
     if updated_since:
-        carry_from = previous_full_snapshot_id(cfg, run_id)
+        carry_from = previous_snapshot_id(cfg, run_id)
         if carry_from is None:
             raise ValueError(
                 f"Run {run_id} is an incremental refresh (updated_since_utc="
-                f"{updated_since}) but no previous full snapshot with silver "
+                f"{updated_since}) but no previous snapshot with silver "
                 "exists; run a full ingestion and transform first."
             )
 
@@ -183,7 +208,12 @@ def build_silver_for_run(
         carried_counts: dict[str, int] = {}
         if carry_from is not None:
             carried_counts = _carry_forward_rows(
-                writer, cfg, carry_from, {key[0] for key in seen_dedup_keys}
+                writer,
+                cfg,
+                carry_from,
+                {key[0] for key in seen_dedup_keys},
+                current_run_id=run_id,
+                snapshot_ts=snapshot_ts,
             )
         counts = writer.close()
     except BaseException:
@@ -212,6 +242,7 @@ def build_silver_for_run(
         row_counts=row_counts,
         duplicate_nct_ids=duplicate_count,
         skipped_no_nct_id=skipped_no_nct,
+        carried_rows=carried_counts.get("silver_trials", 0),
     )
 
     expected = manifest.record_count - duplicate_count - skipped_no_nct
