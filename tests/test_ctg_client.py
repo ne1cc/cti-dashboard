@@ -90,3 +90,35 @@ def test_retries_exhausted_raises_retryable_error(requests_mock):
         with pytest.raises(RetryableHTTPStatusError):
             client.fetch_page(client.build_params())
     assert requests_mock.call_count == 3
+
+
+def test_build_params_includes_fields_projection():
+    fields = [
+        "protocolSection.identificationModule",
+        "protocolSection.statusModule",
+        "hasResults",
+    ]
+    params = CTGClient(make_api(fields=fields)).build_params()
+    assert params["fields"] == (
+        "protocolSection.identificationModule|protocolSection.statusModule|hasResults"
+    )
+
+
+def test_throttle_spaces_requests(monkeypatch, requests_mock):
+    import time
+
+    slept: list[float] = []
+    monkeypatch.setattr(time, "sleep", lambda s: slept.append(s))
+
+    requests_mock.get(STUDIES, json={"studies": []})
+    api = make_api(min_request_interval_seconds=1.2)
+    client = CTGClient(api)
+
+    # First fetch: no prior request, no sleep
+    client.fetch_page({})
+    assert len(slept) == 0
+
+    # Second fetch immediately: should sleep
+    client.fetch_page({})
+    assert len(slept) == 1
+    assert slept[0] <= 1.2
