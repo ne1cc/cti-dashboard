@@ -181,7 +181,15 @@ FULL_STUDY = {
         },
         "conditionsModule": {"conditions": ["Alzheimer Disease"]},
         "armsInterventionsModule": {
-            "interventions": [{"name": "Drug X", "type": "DRUG", "description": "d"}]
+            "interventions": [{"name": "Drug X", "type": "DRUG", "description": "d"}],
+            "armGroups": [
+                {
+                    "label": "Drug X",
+                    "type": "EXPERIMENTAL",
+                    "description": "d",
+                    "interventionNames": ["Drug: Drug X"],
+                }
+            ],
         },
         "contactsLocationsModule": {
             "locations": [
@@ -208,6 +216,36 @@ FULL_STUDY = {
         "conditionBrowseModule": {
             "meshes": [{"id": "D000544", "term": "Alzheimer Disease"}],
             "ancestors": [{"id": "D003072", "term": "Cognition Disorders"}],
+        }
+    },
+    "resultsSection": {
+        "baselineCharacteristicsModule": {
+            "groups": [{"id": "BG000", "title": "Arm A", "description": None}],
+            "denoms": [{"units": "Participants", "counts": [{"groupId": "BG000", "value": "12"}]}],
+            "measures": [
+                {
+                    "title": "Sex: Female, Male",
+                    "paramType": "COUNT_OF_PARTICIPANTS",
+                    "unitOfMeasure": "Participants",
+                    "classes": [
+                        {
+                            "title": None,
+                            "categories": [
+                                {
+                                    "title": "Female",
+                                    "measurements": [
+                                        {"groupId": "BG000", "value": "7", "spread": None}
+                                    ],
+                                },
+                                {
+                                    "title": "Male",
+                                    "measurements": [{"groupId": "BG000", "value": "5"}],
+                                },
+                            ],
+                        }
+                    ],
+                }
+            ],
         }
     },
 }

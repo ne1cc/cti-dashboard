@@ -112,6 +112,27 @@ models:
           ancestor), false when it was extracted but produced none, or null
           (unknown) when MeSH was never extracted (retained historical runs
           predating Issue #52).
+      - name: current_intervention_model
+        data_type: VARCHAR
+        description: Registry designInfo.interventionModel (PARALLEL, SINGLE_GROUP, ...); null when unstated.
+      - name: current_masking
+        data_type: VARCHAR
+        description: Registry masking level (NONE, SINGLE, DOUBLE, TRIPLE, QUADRUPLE); null when unstated.
+      - name: has_placebo_arm
+        data_type: BOOLEAN
+        description: >
+          True when any registry arm group declares type PLACEBO_COMPARATOR;
+          null when the trial's current snapshot predates the field (unknown,
+          not asserted false).
+      - name: why_stopped
+        data_type: VARCHAR
+        description: Registry statusModule.whyStopped, verbatim; populated for terminated/withdrawn/suspended trials.
+      - name: brief_summary
+        data_type: VARCHAR
+        description: Registry descriptionModule.briefSummary, stored verbatim (registry-provided text, never generated).
+      - name: primary_outcome_time_frame
+        data_type: VARCHAR
+        description: timeFrame of the first registry primary outcome, verbatim (e.g. "78 weeks"); null when absent.
 
   - name: dim_condition
     description: >
@@ -1231,3 +1252,56 @@ models:
         tests: [not_null]
       - name: registry_url
         data_type: VARCHAR
+
+  - name: mart_baseline_demographics_coverage
+    description: >
+      Per indication profile, condition group, and completion year: the share of
+      COMPLETED trials with posted results whose baseline characteristics report
+      sex, age, race, or ethnicity (issue #74). Race/ethnicity coverage counts
+      only rows whose dimension resolved from explicit evidence (measure title,
+      label prefix, or reviewed seed row); trials with ambiguous combined
+      race/ethnicity tables are counted in the denominator and surfaced through
+      ambiguous_combined_trials_count instead of being guessed into a category.
+    contract:
+      enforced: true
+    columns:
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this row. Part of the model's grain.
+        tests: [not_null]
+      - name: condition_group
+        data_type: VARCHAR
+        description: Normalized condition group (taxonomy). Part of the model's grain.
+        tests: [not_null]
+      - name: completion_year
+        data_type: BIGINT
+        description: Year the trial completed; null when the registry date is missing or unparseable.
+      - name: trials_with_results_count
+        data_type: BIGINT
+        description: Denominator — distinct completed trials with posted results in the grain.
+        tests: [not_null]
+      - name: reports_sex_count
+        data_type: BIGINT
+        description: Trials whose baseline characteristics include a sex measure.
+      - name: reports_age_count
+        data_type: BIGINT
+        description: Trials whose baseline characteristics include an age measure.
+      - name: reports_race_count
+        data_type: BIGINT
+        description: Trials with at least one race row whose dimension resolved from explicit evidence.
+      - name: reports_ethnicity_count
+        data_type: BIGINT
+        description: Trials with at least one ethnicity row whose dimension resolved from explicit evidence.
+      - name: ambiguous_combined_trials_count
+        data_type: BIGINT
+        description: Trials carrying an ambiguous combined race/ethnicity row (kept unmapped by design).
+      - name: reports_sex_share
+        data_type: DOUBLE
+      - name: reports_age_share
+        data_type: DOUBLE
+      - name: reports_race_share
+        data_type: DOUBLE
+      - name: reports_ethnicity_share
+        data_type: DOUBLE
+      - name: ambiguous_combined_share
+        data_type: DOUBLE

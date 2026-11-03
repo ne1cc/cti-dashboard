@@ -42,6 +42,7 @@ STAGING_WITH_PROFILE = [
     "stg_trials",
     "stg_trial_conditions",
     "stg_trial_interventions",
+    "stg_trial_arms",
     "stg_trial_locations",
     "stg_trial_outcomes",
     "stg_trial_sponsors",
@@ -89,6 +90,7 @@ SHARED_DIMS_WITH_PROFILE = ["dim_condition", "dim_sponsor", "dim_geography"]
 # (partition by indication_profile_id, nct_id, ...)` is a per-profile latest-run
 # pick that no earlier task's list mentioned.
 MARTS_WITH_PROFILE_SCOPED_WINDOWS = [
+    "mart_baseline_demographics_coverage",
     "mart_trial_activity",
     "mart_site_overlap",
     "mart_condition_geography_trends",
@@ -1577,7 +1579,7 @@ def test_marts_contracts_enforced(fixture_project_root: Path) -> None:
         if node["resource_type"] == "model"
         and node["original_file_path"].startswith("models/marts/")
     }
-    assert len(marts) == 19
+    assert len(marts) == 20
     for name, node in marts.items():
         assert node["contract"]["enforced"] is True, name
         assert {c["name"] for c in node["columns"].values()}, name
@@ -1590,7 +1592,7 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
 
     ``test_marts_contracts_enforced`` proves every mart has an enforced contract
     and never proves *which* columns are in it, so it stays green whether or not
-    ``indication_profile_id`` is declared. This closes that gap over the 15
+    ``indication_profile_id`` is declared. This closes that gap over the
     trial-grain marts; ``dim_date`` is excluded because the calendar spine is
     global on purpose (Task 11). Read from ``_marts.yml`` rather than the built
     manifest so the not_null test is checked where it is authored.
@@ -1617,7 +1619,7 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
     # Membership, not just cardinality: a pin on len() alone stays green if a
     # mart is renamed or dim_date's exclusion clause goes stale, because the set
     # keeps its size while iterating something else. Names taken from
-    # _marts.yml's 16 model blocks minus dim_date, 2026-09-06.
+    # _marts.yml's 20 model blocks minus dim_date.
     assert trial_grain == {
         "bridge_trial_condition",
         "bridge_trial_sponsor",
@@ -1627,6 +1629,7 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
         "dim_trial",
         "fct_trial_site",
         "fct_trial_snapshot",
+        "mart_baseline_demographics_coverage",
         "mart_condition_geography_trends",
         "mart_data_reliability",
         "mart_feasibility_priority_queue",
@@ -1687,3 +1690,128 @@ def test_similarity_top_25_cap_trims_a_busy_profile(similarity_equivalence_root:
     max_candidates = {p: hi for p, hi, _ in rows}
     assert max_candidates["adrd"] > 25, "the cap never binds on the dense profile"
     assert max_candidates["oncology_nsclc"] < 25, "NSCLC must stay under the cap"
+
+
+def test_participant_design_fields_reach_gold_and_staging(
+    fixture_project_root: Path,
+) -> None:
+    """Registry arms, masking, stop reason and outcome timing survive to gold.
+
+    The base bronze page carries the design data on ADRD NCT00000002
+    (EXPERIMENTAL + PLACEBO_COMPARATOR arms, DOUBLE masking, PARALLEL model,
+    brief summary, first primary outcome timeFrame), NCT00000003
+    (EXPERIMENTAL + ACTIVE_COMPARATOR, no placebo), NCT00000007 (TERMINATED
+    with a verbatim whyStopped and no arms) and NCT00000008 (no armGroups at
+    all). NSCLC NCT00000003 carries one EXPERIMENTAL arm so the arms entity
+    covers both profiles.
+    """
+    (masking, model, placebo, summary, time_frame) = _rows(
+        fixture_project_root,
+        """
+        select current_masking, current_intervention_model, has_placebo_arm,
+               brief_summary, primary_outcome_time_frame
+        from main_marts.dim_trial
+        where nct_id = 'NCT00000002' and indication_profile_id = 'adrd'
+        """,
+    )[0]
+    assert masking == "DOUBLE"
+    assert model == "PARALLEL"
+    assert placebo is True
+    assert summary.startswith(
+        "This study collects CSF biomarkers in amnestic mild cognitive impairment"
+    )
+    assert time_frame == "12 months"
+
+    # Registry stop reason passes through verbatim for a TERMINATED trial.
+    (why_stopped,) = _rows(
+        fixture_project_root,
+        """
+        select why_stopped from main_marts.dim_trial
+        where nct_id = 'NCT00000007' and indication_profile_id = 'adrd'
+        """,
+    )[0]
+    assert why_stopped == "Trial terminated early due to slower-than-planned enrollment."
+
+    # Non-placebo arms never raise the flag; arm rows keep registry order.
+    placebo_non, arm_types = _rows(
+        fixture_project_root,
+        """
+        select
+            (select has_placebo_arm from main_marts.dim_trial
+              where nct_id = 'NCT00000003' and indication_profile_id = 'adrd'),
+            list(arm_type order by arm_ordinal)
+        from main_staging.stg_trial_arms
+        where nct_id = 'NCT00000003' and indication_profile_id = 'adrd'
+        """,
+    )[0]
+    assert placebo_non is False
+    assert arm_types == ["EXPERIMENTAL", "ACTIVE_COMPARATOR"]
+
+    # A trial with no armGroups yields no arm rows and a false flag, and the
+    # arms entity stays profile-stamped across both profiles.
+    arms_rows = _rows(
+        fixture_project_root,
+        """
+        select indication_profile_id, count(*)
+        from main_staging.stg_trial_arms
+        group by 1 order by 1
+        """,
+    )
+    assert dict(arms_rows) == {"adrd": 4, "oncology_nsclc": 1}
+    (no_arms_flag,) = _rows(
+        fixture_project_root,
+        """
+        select has_placebo_arm from main_marts.dim_trial
+        where nct_id = 'NCT00000008' and indication_profile_id = 'adrd'
+        """,
+    )[0]
+    assert no_arms_flag is False
+
+
+def test_legacy_silver_without_bronze_builds_and_keeps_placebo_unknown(
+    legacy_silver_fixture_root: Path,
+) -> None:
+    """The round-1 blocking regression: upgrading a real volume.
+
+    Production retains silver for every run while pruning all but the latest
+    bronze, so ADRD run fixture01 survives as pre-feature silver (no arms
+    entity, no new trial columns) with no source pages to rebuild from. The
+    transform must skip it (asserted when `legacy_silver_fixture_root` is
+    built) and an isolated `dbt build` must still succeed, with the legacy
+    rows keeping unknown as NULL instead of being coerced to "no placebo".
+    The current NSCLC run keeps real values, so the assertions discriminate.
+    """
+    # The legacy run contributes no arm rows; only the current run does.
+    assert _rows(
+        legacy_silver_fixture_root,
+        "select distinct ingestion_run_id from main_staging.stg_trial_arms",
+    ) == [(NSCLC_FIXTURE_RUN_ID,)]
+
+    # Legacy trial rows stay nullable through staging: 10 rows, none of them
+    # carrying a placebo flag; the current run's rows all carry one.
+    staging = _rows(
+        legacy_silver_fixture_root,
+        """
+        select indication_profile_id, count(*), count(has_placebo_arm)
+        from main_staging.stg_trials
+        group by 1 order by 1
+        """,
+    )
+    assert staging == [("adrd", 10, 0), ("oncology_nsclc", 10, 10)]
+
+    # ...and gold: unknown stays unknown on the legacy profile, and the fresh
+    # profile keeps its concrete false (one EXPERIMENTAL arm, no placebo).
+    assert _rows(
+        legacy_silver_fixture_root,
+        """
+        select distinct has_placebo_arm from main_marts.dim_trial
+        where indication_profile_id = 'adrd'
+        """,
+    ) == [(None,)]
+    assert _rows(
+        legacy_silver_fixture_root,
+        """
+        select distinct has_placebo_arm from main_marts.dim_trial
+        where indication_profile_id = 'oncology_nsclc'
+        """,
+    ) == [(False,)]

@@ -285,3 +285,46 @@ configuration identity was not recorded. Raw page references can stop resolving
 after configured bronze pruning. Export does not promise an indefinite archive.
 
 Registry-derived signals support preliminary feasibility review. They do not measure site-level recruitment performance or establish scientific validity. Counts reflect captured public records and the displayed inclusion rules.
+## Baseline demographics and coverage (`mart_baseline_demographics_coverage`, Issue #74)
+
+Source: `resultsSection.baselineCharacteristicsModule` (posted results), extracted as
+`silver_trial_baseline_demographics` — one row per (measure, class, category, group)
+measurement, with labels kept exactly as sponsors reported them. The participant
+head-count is parsed only when the measure is a participant count (`COUNT_OF_PARTICIPANTS`
+or `NUMBER` with unit Participants); mean/median ages stay raw strings.
+`group_denominator` resolves from the most specific scope the registry reports for
+the group — class, then measure, then module — preferring the participant-denominated
+`denoms` entry when a scope lists several units; `percent_of_group_denominator` derives
+from that base in staging.
+
+**Dimension classification** (staging, from the measure title, on word boundaries so
+"Gender" is sex, "Mean Age" is age, and "GRACE score" is not race): `sex` (sex/gender),
+`age`, `race`, `ethnicity`, `race_ethnicity_combined`, `race_ethnicity_not_collected`,
+`other`.
+
+**OMB mapping** (`dbt_clinical_trials/seeds/omb_race_ethnicity_mapping.csv`, versioned and PR-reviewed):
+maps a normalized sponsor label to an OMB race/ethnicity category with
+`mapping_confidence` (`high`/`medium`/`low`) and `manually_reviewed`. Unmapped labels stay
+unmapped. Combined race/ethnicity tables are mapped per label only where the dimension is
+explicit — a `Race:`/`Ethnicity:` label prefix, an exact `Race`/`Ethnicity` class title,
+or a seed row scoped to one dimension. Dimension-neutral buckets ("Unknown or Not
+Reported", "Not Stated", "Other") inside a combined table without such context keep
+their reported label, stay unmapped, and set `is_ambiguous_combined_flag`.
+
+**Coverage metrics** (per indication profile × condition group × completion year):
+
+| Metric | Definition |
+|---|---|
+| trials_with_results_count | distinct COMPLETED trials with posted results in their profile's latest successful ingestion run (denominator) |
+| reports_sex_count / share | baseline characteristics include a sex measure |
+| reports_age_count / share | include an age measure |
+| reports_race_count / share | ≥1 race row whose dimension resolved from explicit evidence |
+| reports_ethnicity_count / share | ≥1 ethnicity row whose dimension resolved from explicit evidence |
+| ambiguous_combined_trials_count / share | denominator trials carrying ≥1 ambiguous combined row |
+
+Demographics count only from the same latest successful run as the trial row: a race
+table that a sponsor later amended out of the results section stops counting
+once the newer snapshot lands. `completion_year` is null when the registry
+completion date is missing or unparseable; those trials stay on a null-year row
+rather than being dropped. Coverage numbers are queryable wherever demographics
+are consumed; a dashboard surface is out of scope for #74.
