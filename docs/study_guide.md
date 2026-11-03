@@ -123,8 +123,11 @@ Doing these will teach more than any reading. Each is safe and reversible.
    `make ingest CONDITION="Parkinson Disease"` and follow the run through
    transform. What breaks in the condition taxonomy, and why is that expected?
 5. **Second snapshot.** Run `make full-refresh` a day later, rebuild, and watch
-   `growth_uses_registry_proxy_flag` and `has_multi_snapshot_history` change.
-   This is the single best demonstration of the snapshot-history design.
+   `observed_history_days` and `has_multi_snapshot_history` change.
+   This is the single best demonstration of the snapshot-history design:
+   recruiting-growth figures stay "not enough history" until 90 days are
+   observed, while `newly_registered_90d` (registry first-post dates) is
+   computable from the first snapshot.
 6. **Dashboard change.** Add a phase filter to the Sponsor Landscape page using
    `dashboard/components/filters.py` as a pattern. Run `make test` — the smoke test will
    exercise your page.

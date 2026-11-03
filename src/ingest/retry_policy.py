@@ -8,6 +8,7 @@ from loguru import logger
 from tenacity import Retrying, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from src.config import HttpConfig
+from src.utils.privacy import patient_request
 
 
 class RetryableHTTPStatusError(Exception):
@@ -30,7 +31,9 @@ def build_retryer(http_config: HttpConfig) -> Retrying:
             "Retryable error on attempt {}/{}: {}",
             retry_state.attempt_number,
             http_config.max_retries,
-            retry_state.outcome.exception(),
+            type(retry_state.outcome.exception()).__name__
+            if patient_request.get()
+            else retry_state.outcome.exception(),
         )
 
     return Retrying(

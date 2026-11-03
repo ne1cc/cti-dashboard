@@ -34,6 +34,11 @@ class IngestionManifest(BaseModel):
     total_count_reported: int | None = None
     quarantined_record_count: int = 0
     error: str | None = None
+    # Set on incremental-refresh runs: the Essie RANGE lower bound (inclusive,
+    # YYYY-MM-DD) applied to AREA[LastUpdatePostDate]. Presence marks the run's
+    # bronze as *changed studies only*, which silver upserts onto the previous
+    # full snapshot (build_silver_entities.py). None on full snapshots.
+    updated_since_utc: str | None = None
 
 
 def new_run_id() -> str:

@@ -312,3 +312,185 @@ def test_pages_smoke_contain_no_priority_score_or_bands(fixture_warehouse):
         assert "Priority Review" not in page_text
         assert "Watch" not in page_text
         assert "priority score" not in page_text.lower()
+
+
+def test_geography_trends_view_mode_toggle(fixture_warehouse):
+    """Both listing modes render counts, rate provenance, and interpretation limits."""
+    from streamlit.testing.v1 import AppTest
+
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    at = AppTest.from_file(
+        str(ROOT / "dashboard/pages/3_Geography_Trends.py"), default_timeout=60
+    ).run()
+    assert not at.exception, at.exception
+
+    # Radio toggle exists with "Per 100k residents" and "Raw count"
+    radio = next(w for w in at.radio if w.label == "Listing metric")
+    assert radio.options == ["Per 100k residents", "Raw count"]
+    assert radio.value == "Per 100k residents"
+
+    # Default view shows per 100k subheader
+    assert any("per 100k" in s.value.lower() for s in at.subheader)
+
+    # Top states dataframe has both columns
+    df = at.dataframe[0].value
+    assert "recruiting_trials_per_100k" in df.columns
+    assert "recruiting_trial_count" in df.columns
+    assert df["recruiting_trials_per_100k"].dropna().is_monotonic_decreasing
+
+    # Vintage is visible in caption
+    assert any("Vintage 2024" in c.value for c in at.caption)
+    assert any("measure patient access or clinical need" in c.value for c in at.caption)
+    assert any(
+        "population_normalization" in str(item.value)
+        and "U.S. Census" in str(item.value)
+        and "Vintage 2024" in str(item.value)
+        for item in at.json
+    )
+
+    # Toggle to "Raw count" works
+    radio.set_value("Raw count").run()
+    assert not at.exception, at.exception
+    assert radio.value == "Raw count"
+    assert any("recruiting listings by state" in s.value.lower() for s in at.subheader)
+    raw = at.dataframe[0].value
+    assert "recruiting_trials_per_100k" in raw.columns
+    assert raw["recruiting_trial_count"].is_monotonic_decreasing
+    assert any("measure patient access or clinical need" in c.value for c in at.caption)
+
+
+@pytest.mark.parametrize("rerun_raw", [False, True])
+def test_geography_legacy_warehouse_keeps_raw_counts(
+    fixture_warehouse, monkeypatch: pytest.MonkeyPatch, rerun_raw: bool
+):
+    """A retained pre-population mart stays usable until its next dbt rebuild."""
+    from streamlit.testing.v1 import AppTest
+
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    from components import data
+
+    original = data.condition_geography_trends
+
+    def legacy_trends(profile_id: str):
+        """Return the legacy mart's columns without changing the shared warehouse."""
+        return original(profile_id).drop(
+            columns=[
+                "population",
+                "population_source",
+                "population_vintage",
+                "recruiting_trials_per_100k",
+            ]
+        )
+
+    monkeypatch.setattr(data, "condition_geography_trends", legacy_trends)
+    at = AppTest.from_file(
+        str(ROOT / "dashboard/pages/3_Geography_Trends.py"), default_timeout=60
+    ).run()
+    assert not at.exception, at.exception
+    radio = next(widget for widget in at.radio if widget.label == "Listing metric")
+    assert radio.options == ["Raw count"]
+    assert radio.value == "Raw count"
+    if rerun_raw:
+        radio.set_value("Raw count").run()
+        assert not at.exception, at.exception
+    table = at.dataframe[0].value
+    assert table["recruiting_trials_per_100k"].isna().all()
+    assert table["recruiting_trial_count"].is_monotonic_decreasing
+    assert table["recruiting_trial_count"].sum() > 0
+    assert any("rebuild" in warning.value.lower() for warning in at.warning)
+
+
+def test_geography_missing_rates_caption_describes_top_twenty(
+    fixture_warehouse, monkeypatch: pytest.MonkeyPatch
+):
+    """A null-rate territory outside the top twenty must not be promised visibility."""
+    import pandas as pd
+    from streamlit.testing.v1 import AppTest
+
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    from components import data
+
+    template = data.condition_geography_trends("adrd").iloc[[0]].copy()
+    states = "AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA GU".split()
+    rows = []
+    for index, state in enumerate(states):
+        row = template.copy()
+        row["state_normalized"] = state
+        row["recruiting_trial_count"] = len(states) - index
+        row["recruiting_trials_per_100k"] = float("nan") if state == "GU" else 22 - index
+        rows.append(row)
+    trends = pd.concat(rows, ignore_index=True)
+    monkeypatch.setattr(data, "condition_geography_trends", lambda _: trends.copy())
+    at = AppTest.from_file(
+        str(ROOT / "dashboard/pages/3_Geography_Trends.py"), default_timeout=60
+    ).run()
+    assert not at.exception, at.exception
+    assert len(at.dataframe[0].value) == 20
+    assert "GU" not in at.dataframe[0].value["state_normalized"].tolist()
+    assert any("table shows only the top 20" in caption.value.lower() for caption in at.caption)
+    assert not any("remain listed" in caption.value.lower() for caption in at.caption)
+
+
+def test_data_reliability_page_no_calculator(fixture_warehouse):
+    from streamlit.testing.v1 import AppTest
+
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    for profile_id in ("adrd", "oncology_nsclc"):
+        at = AppTest.from_file(
+            str(ROOT / "dashboard/pages/6_Data_Reliability.py"), default_timeout=60
+        ).run()
+        selector = next(w for w in at.sidebar.selectbox if w.key == "indication_profile_selector")
+        selector.set_value(profile_id)
+        at.run()
+        assert not at.exception, at.exception
+        # Confirm scenario explorer and currency inputs are gone
+        assert not any("scenario explorer" in str(h.value).lower() for h in at.subheader)
+        assert not any("feasibility review" in str(n.label).lower() for n in at.number_input)
+        assert not any("site activation" in str(n.label).lower() for n in at.number_input)
+        assert not any("reviews per cycle" in str(n.label).lower() for n in at.number_input)
+        # Confirm ingestion diagnostics and reconciliation remain
+        assert any("Ingestion runs" in str(h.value) for h in at.subheader)
+
+
+def test_segment_drilldown_uses_selected_profile_label(
+    fixture_warehouse, monkeypatch: pytest.MonkeyPatch
+):
+    """Both selected-segment headings use the active profile's display label."""
+    import streamlit as st
+    from streamlit.testing.v1 import AppTest
+
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    from components import guidance
+
+    original_formatter = guidance.format_condition_group
+    original_dataframe = st.dataframe
+
+    def profile_label(group, profile_id=None):
+        """Model a configured label that differs from the group-key fallback."""
+        if profile_id == "oncology_nsclc":
+            return "NSCLC Fixture Label"
+        return original_formatter(group, profile_id)
+
+    def select_first_row(*args, **kwargs):
+        """Render normally and model selecting the first row of the selectable table."""
+        rendered = original_dataframe(*args, **kwargs)
+        if kwargs.get("on_select") == "rerun":
+            return {"selection": {"rows": [0]}}
+        return rendered
+
+    monkeypatch.setattr(guidance, "format_condition_group", profile_label)
+    monkeypatch.setattr(st, "dataframe", select_first_row)
+    at = AppTest.from_file(
+        str(ROOT / "dashboard/pages/1_Priority_Queue.py"), default_timeout=60
+    ).run()
+    selector = next(w for w in at.sidebar.selectbox if w.key == "indication_profile_selector")
+    selector.set_value("oncology_nsclc").run()
+    assert not at.exception, at.exception
+    headings = [heading.value for heading in at.subheader]
+    assert any("Segment details — NSCLC Fixture Label" in text for text in headings)
+    assert any("Constituent Clinical Trials — NSCLC Fixture Label" in text for text in headings)

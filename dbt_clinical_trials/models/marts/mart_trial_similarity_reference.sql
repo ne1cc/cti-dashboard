@@ -4,7 +4,7 @@
 -- self-join, kept verbatim as the equivalence oracle for
 -- tests/test_similarity_candidates.py (see that module for the exact
 -- property). Disabled by default: at registry scale this join is the
--- measured 28 GB-of-temp run (docs/DEPLOY_FLY.md, "Adding indication
+-- measured 28 GB-of-temp run (docs/OPERATIONS.md, "Adding indication
 -- profiles"). Fixture warehouses enable it with
 -- var('build_similarity_reference'); nothing in the deployed graph may.
 -- Deterministic trial-pair comparability. Grain: one row per

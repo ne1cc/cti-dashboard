@@ -1,0 +1,39 @@
+version: 2
+
+seeds:
+  - name: state_population
+    description: >
+      U.S. Census Bureau resident population estimates (Vintage 2024, July 1, 2024)
+      for 50 U.S. states, District of Columbia, and Puerto Rico (52 rows). Used to
+      compute population-normalized trial listings per 100k residents.
+    columns:
+      - name: state_code
+        description: Two-letter state postal abbreviation (e.g. CA, NY, DC, PR).
+        tests:
+          - not_null
+          - unique
+      - name: fips_code
+        description: Two-digit FIPS state numeric code as string (e.g. '01', '06').
+        tests:
+          - not_null
+          - unique
+      - name: state_name
+        description: Full name of the state, federal district, or territory.
+        tests:
+          - not_null
+      - name: population
+        description: Resident population estimate as of July 1, 2024 (POPESTIMATE2024).
+        tests:
+          - not_null
+      - name: estimate_date
+        description: Reference date for the population estimate (2024-07-01).
+        tests:
+          - not_null
+      - name: vintage
+        description: Census estimates vintage (Vintage 2024).
+        tests:
+          - not_null
+      - name: source_url
+        description: Official U.S. Census Bureau dataset download URL.
+        tests:
+          - not_null

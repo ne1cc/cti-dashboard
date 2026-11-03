@@ -90,12 +90,14 @@ preview_df = queue.head(10)[
     ]
 ].copy()
 preview_df["registry_search_url"] = [
-    clinicaltrials_gov_search_url(cg, state)
+    clinicaltrials_gov_search_url(cg, state, profile_id)
     for cg, state in zip(
         preview_df["condition_group"], preview_df["state_normalized"], strict=False
     )
 ]
-preview_df["condition_group"] = preview_df["condition_group"].apply(format_condition_group)
+preview_df["condition_group"] = preview_df["condition_group"].apply(
+    lambda g: format_condition_group(g, profile_id)
+)
 preview_df["phase_normalized"] = preview_df["phase_normalized"].map(format_phase)
 preview_df["priority_explanation"] = [
     format_priority_explanation(row) for _, row in queue.head(10).iterrows()
