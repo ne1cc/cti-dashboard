@@ -6,13 +6,17 @@ incomplete snapshot. Duplicate NCT IDs within a run are deduplicated (first
 occurrence kept) and reported, never silently ignored.
 
 When called via the profile system, build_silver_for_run receives an
-IndicationProfile that supplies the per-profile taxonomy and profile_id
-(used to stamp every silver row with indication_profile_id and to correctly
-de-duplicate: the same NCT ID in two profiles is valid, not a duplicate).
+IndicationProfile that supplies the profile_id (used to stamp every silver row
+with indication_profile_id and to correctly de-duplicate: the same NCT ID in
+two profiles is valid, not a duplicate) and, optionally, the profile's
+condition taxonomy overlay. Since Issue #52 a profile without a taxonomy still
+transforms: MeSH browse terms are the default condition identity and condition
+text rows fall back (mapping_source text_fallback).
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pyarrow.compute as pc
@@ -24,7 +28,12 @@ from src.transform.export_parquet import DEFAULT_FLUSH_ROWS, SilverRunWriter
 from src.transform.flatten_studies import flatten_study, iter_bronze_study_records
 from src.transform.normalize_conditions import get_taxonomy
 from src.transform.normalize_locations import get_geography_rules
-from src.transform.silver_stats import write_transform_stats
+from src.transform.silver_stats import (
+    expected_trial_rows,
+    load_transform_stats,
+    stats_path,
+    write_transform_stats,
+)
 from src.utils.logging import setup_logging
 
 if TYPE_CHECKING:
@@ -37,6 +46,33 @@ PROGRESS_EVERY = 100_000
 ENTITY_NAMES = (
     "silver_trials",
     "silver_trial_conditions",
+    "silver_trial_condition_mesh",
+    "silver_trial_interventions",
+    "silver_trial_arms",
+    "silver_trial_sponsors",
+    "silver_trial_locations",
+    "silver_trial_outcomes",
+    "silver_trial_baseline_demographics",
+)
+
+PRE_UPGRADE_ENTITY_NAMES = (
+    "silver_trials",
+    "silver_trial_conditions",
+    "silver_trial_interventions",
+    "silver_trial_arms",
+    "silver_trial_sponsors",
+    "silver_trial_locations",
+    "silver_trial_outcomes",
+    "silver_trial_baseline_demographics",
+)
+
+# The entity set before silver_trial_arms (#64) and silver_trial_baseline_demographics (#74):
+# runs transformed by older code are complete under the legacy set but miss the new
+# entities, so the ENTITY_NAMES check above flags them for a rebuild they cannot
+# survive once retention has pruned their bronze pages.
+LEGACY_ENTITY_NAMES = (
+    "silver_trials",
+    "silver_trial_conditions",
     "silver_trial_interventions",
     "silver_trial_sponsors",
     "silver_trial_locations",
@@ -44,7 +80,45 @@ ENTITY_NAMES = (
 )
 
 
+class BronzeRebuildMismatch(ValueError):
+    """A bronze rebuild may not replace its run's retained silver.
+
+    Raised before any file is written when the rebuild's study count differs
+    from the manifest's expected count (records minus duplicate and missing-NCT
+    exclusions), holds fewer studies than the retained silver_trials file or
+    the retained transform stats expect, or excludes records while neither
+    retained reference (silver_trials row count, transform stats) is readable.
+    Nothing is written; the retained silver stays byte-identical.
+    """
+
+
+def _parquet_row_count(path: Path) -> int | None:
+    """Row count from Parquet metadata; None when the file is missing or unreadable."""
+    try:
+        return int(pq.ParquetFile(path).metadata.num_rows)
+    except Exception:
+        return None
+
+
+def _human_list(items: list[str]) -> str:
+    """'a', 'a and b', 'a, b and c' — for a grammatical abort sentence."""
+    if len(items) <= 1:
+        return items[0] if items else ""
+    return ", ".join(items[:-1]) + " and " + items[-1]
+
+
 def _already_transformed(cfg: ProjectConfig, run_id: str) -> bool:
+    """Every entity file exists AND the run's transform stats exist.
+
+    Stats are removed before the first file swap and the fresh stats are
+    written only after every swap succeeded, so they double as the completion
+    marker: a run interrupted mid-swap — by a raised exception, SIGTERM or
+    SIGKILL, none of which can run cleanup — keeps its entity files but has no
+    stats and is rebuilt whole on the next plain transform instead of staying
+    permanently mixed.
+    """
+    if not stats_path(cfg, run_id).exists():
+        return False
     return all(
         (cfg.paths.silver / entity / f"run_id={run_id}.parquet").exists() for entity in ENTITY_NAMES
     )
@@ -94,6 +168,8 @@ def _carry_forward_rows(
     value_set = pa.array(sorted(seen_nct_ids), type=pa.string())
     for entity in ENTITY_NAMES:
         prev_path = cfg.paths.silver / entity / f"run_id={prev_run_id}.parquet"
+        if not prev_path.exists():
+            continue
         parquet_file = pq.ParquetFile(prev_path)
         total_carried = 0
         for batch in parquet_file.iter_batches(batch_size=FLUSH_ROWS):
@@ -127,6 +203,53 @@ def _carry_forward_rows(
     return carried
 
 
+def _has_existing_silver(cfg: ProjectConfig, run_id: str) -> bool:
+    """True when any final silver entity file for run_id exists on disk.
+
+    Used to detect an overwrite: close() would replace these retained files.
+    """
+    return any(
+        (cfg.paths.silver / entity / f"run_id={run_id}.parquet").exists() for entity in ENTITY_NAMES
+    )
+
+
+def _has_pre_upgrade_silver(cfg: ProjectConfig, run_id: str) -> bool:
+    """Check whether all pre-upgrade required silver entity files exist for run_id.
+
+    Returns True if every entity in PRE_UPGRADE_ENTITY_NAMES is present on disk.
+    Missing silver_trial_condition_mesh is tolerated (pre-upgrade historical run).
+    """
+    return all(
+        (cfg.paths.silver / entity / f"run_id={run_id}.parquet").exists()
+        for entity in PRE_UPGRADE_ENTITY_NAMES
+    )
+
+
+def _legacy_run_without_bronze(cfg: ProjectConfig, run_id: str) -> bool:
+    """Identify a likely pre-#64 or pre-#74 run with complete old silver and no bronze.
+
+    Rebuilding needs the bronze pages, so the only safe action is to keep the
+    existing silver and skip; a new-entity backfill for such a run requires
+    re-ingestion. If transform stats show the entity was actually produced,
+    the run is broken (not legacy) and must fail loudly.
+    """
+    if (cfg.paths.bronze_api_responses / f"run_id={run_id}").exists():
+        return False
+    if _already_transformed(cfg, run_id):
+        return False
+    stats = load_transform_stats(cfg, run_id) or {}
+    row_counts = stats.get("row_counts") or {}
+    demographics_path = (
+        cfg.paths.silver / "silver_trial_baseline_demographics" / f"run_id={run_id}.parquet"
+    )
+    if not demographics_path.exists() and "silver_trial_baseline_demographics" in row_counts:
+        return False
+    return all(
+        (cfg.paths.silver / entity / f"run_id={run_id}.parquet").exists()
+        for entity in LEGACY_ENTITY_NAMES
+    )
+
+
 def build_silver_for_run(
     manifest: IngestionManifest,
     cfg: ProjectConfig,
@@ -138,21 +261,19 @@ def build_silver_for_run(
     if not run_dir.exists():
         raise FileNotFoundError(f"Bronze pages missing for run {run_id}: {run_dir}")
 
-    # A named profile with no taxonomy is a caller bug, not a licence to borrow
-    # another profile's: the rows would carry this profile's
-    # `indication_profile_id` while classifying conditions by someone else's
-    # aliases. Only a caller that predates the registry (profile is None) gets the
-    # global ADRD singleton.
-    if profile is not None and profile.taxonomy is None:
+    # Step 1: Guard against ingest_only profiles. They have no place in the
+    # shared silver tree (their bronze records are held without classification).
+    if profile is not None and profile.ingest_only:
         raise ValueError(
-            f"Profile '{profile.profile_id}' has no condition_taxonomy and cannot be "
-            "transformed; it is ingest_only (see its config/profiles/*.yml)."
+            f"Profile '{profile.profile_id}' is ingest_only (see its config/profiles/*.yml) "
+            "and cannot be transformed into the shared silver tree."
         )
-    if profile is not None:
-        assert profile.taxonomy is not None
-        taxonomy = profile.taxonomy
-    else:
-        taxonomy = get_taxonomy()
+
+    # Step 2: Taxonomy is an optional overlay (Issue #52): MeSH browse terms are the
+    # default condition identity. A non-ingest-only profile without a taxonomy
+    # still transforms — condition text rows fall back (mapping_source text_fallback)
+    # and the registry's conditionBrowseModule carries the browsable identity.
+    taxonomy = profile.taxonomy if profile is not None else get_taxonomy()
     geography = get_geography_rules()
     profile_id = profile.profile_id if profile else "adrd"
     snapshot_ts = manifest.started_at_utc.isoformat()
@@ -215,6 +336,88 @@ def build_silver_for_run(
                 current_run_id=run_id,
                 snapshot_ts=snapshot_ts,
             )
+
+        # An incomplete bronze rebuild (a lost page, truncated records, or lost
+        # studies hidden behind repeated/NCT-less records) must never replace the
+        # retained silver: it could be the only surviving copy. Fail BEFORE close()
+        # swaps any tmp file in; the except below then discards every tmp file and
+        # the old silver stays byte-identical. Four checks compare the rebuild
+        # against what is known — the manifest expectation, the retained
+        # silver_trials row count, the retained transform stats, and an
+        # unreadable-reference guard when the rebuild carries exclusions — so lost
+        # studies cannot hide behind the rebuild's own exclusions or fail the
+        # guard open.
+        expected = (
+            manifest.record_count
+            - duplicate_count
+            - skipped_no_nct
+            + carried_counts.get("silver_trials", 0)
+        )
+        total_study_count = study_count + carried_counts.get("silver_trials", 0)
+        if _has_existing_silver(cfg, run_id):
+            retained_trials = _parquet_row_count(
+                cfg.paths.silver / "silver_trials" / f"run_id={run_id}.parquet"
+            )
+            stats_expected = expected_trial_rows(
+                load_transform_stats(cfg, run_id), manifest.record_count
+            )
+            problems: list[str] = []
+            if total_study_count != expected:
+                problems.append(f"the manifest expects {expected} studies")
+            if retained_trials is not None and total_study_count < retained_trials:
+                problems.append(f"the retained silver_trials file holds {retained_trials} trials")
+            if stats_expected is not None and total_study_count < stats_expected:
+                problems.append(f"the retained transform stats expect {stats_expected} trials")
+            if (
+                not problems
+                and duplicate_count + skipped_no_nct > 0
+                and retained_trials is None
+                and stats_expected is None
+            ):
+                problems.append(
+                    f"neither a readable retained silver_trials file nor retained transform "
+                    f"stats bounds its {duplicate_count + skipped_no_nct} excluded records"
+                )
+            if problems:
+                if total_study_count != expected:
+                    advice = (
+                        "Restore this run's bronze pages (from a backup or a re-fetch of the "
+                        "same query written back under this run_id) and re-run the transform. "
+                    )
+                else:
+                    advice = (
+                        "No bronze page is missing: the bronze reproduces its manifest but "
+                        "holds fewer studies than the retained silver, so the retained silver "
+                        "is the only copy of the studies the bronze can no longer produce. "
+                        "Restore the original page content (re-fetch the same query) and "
+                        "re-run the transform, or keep the retained silver as written. "
+                    )
+                advice += (
+                    "Removing this run's bronze directory is irreversible and only "
+                    "appropriate when the lost studies cannot be restored and every "
+                    "retained silver entity file for the run is present; if a retained "
+                    "entity is also missing, the run can never be rebuilt and the retained "
+                    "silver is the only surviving copy."
+                )
+                raise BronzeRebuildMismatch(
+                    f"Run {run_id}: the bronze rebuild produced {total_study_count} studies "
+                    f"({manifest.record_count} records, {duplicate_count} repeated NCT IDs, "
+                    f"{skipped_no_nct} without an NCT ID), but {_human_list(problems)}; "
+                    f"nothing was written. {advice}"
+                )
+    except BaseException:
+        writer.discard()
+        raise
+    # Remove the previous stats BEFORE the first swap; the fresh stats are
+    # written last, after close() succeeds. Any interruption mid-swap — a raised
+    # exception, SIGTERM or SIGKILL, none of which can run cleanup — then leaves
+    # the run without stats, so _already_transformed is false and the next plain
+    # transform rebuilds the run whole.
+    try:
+        stats_path(cfg, run_id).unlink(missing_ok=True)
+    except OSError:
+        pass
+    try:
         counts = writer.close()
     except BaseException:
         writer.discard()
@@ -278,15 +481,16 @@ def run_transform(
     cfg = config or (profile.config if profile else None) or get_config()
     manifests = load_manifests(cfg.paths.bronze_manifests)
 
-    if run_id:
-        selected = [m for m in manifests if m.ingestion_run_id == run_id]
+    target_run_id = run_id
+    if target_run_id:
+        selected = [m for m in manifests if m.ingestion_run_id == target_run_id]
         if not selected:
-            raise ValueError(f"No manifest found for run {run_id}")
+            raise ValueError(f"No manifest found for run {target_run_id}")
         if selected[0].status != "success":
             log.warning(
                 "Run {} has status '{}' (not 'success'); transforming because it was "
                 "explicitly requested. It remains excluded from complete-snapshot metrics.",
-                run_id,
+                target_run_id,
                 selected[0].status,
             )
     else:
@@ -294,14 +498,37 @@ def run_transform(
 
     processed: list[str] = []
     for manifest in selected:
-        if not force and _already_transformed(cfg, manifest.ingestion_run_id):
+        current_run_id = manifest.ingestion_run_id
+        if not force and _already_transformed(cfg, current_run_id):
             log.info(
                 "Run {} already transformed; skipping (use --force to rebuild).",
-                manifest.ingestion_run_id,
+                current_run_id,
             )
             continue
+        if not force and not target_run_id and _legacy_run_without_bronze(cfg, current_run_id):
+            log.warning(
+                "Run {}: silver may predate newly added entities (#64, #74) and its "
+                "bronze pages are pruned; keeping the existing silver without the new entity "
+                "instead of failing the refresh. Re-ingest the run to backfill.",
+                current_run_id,
+            )
+            continue
+        # A new entity in ENTITY_NAMES marks every pre-upgrade run as not yet
+        # transformed, but runs whose bronze was pruned can never be rebuilt:
+        # skip them ONLY when all pre-upgrade required silver entity files exist,
+        # keeping their retained silver exactly as written. Any other missing
+        # silver (partial or complete loss) must fail loudly via build_silver_for_run
+        # raising FileNotFoundError.
+        if not (cfg.paths.bronze_api_responses / f"run_id={manifest.ingestion_run_id}").exists():
+            if _has_pre_upgrade_silver(cfg, manifest.ingestion_run_id):
+                log.warning(
+                    "Run {}: bronze pages pruned; keeping existing silver as written "
+                    "(the run cannot be rebuilt without its bronze).",
+                    manifest.ingestion_run_id,
+                )
+                continue
         build_silver_for_run(manifest, cfg, profile=profile)
-        processed.append(manifest.ingestion_run_id)
+        processed.append(current_run_id)
 
     if not processed:
         log.info("No runs to transform ({} manifests inspected).", len(manifests))

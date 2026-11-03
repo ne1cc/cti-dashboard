@@ -138,7 +138,7 @@ erDiagram
 
 ### Registry-Wide Ingestion & Transform
 
-The platform supports snapshotting the **entire** ClinicalTrials.gov registry — all conditions, worldwide, no status/type filter (~600k+ studies) — using a minimal API `fields` projection (ADR 0083) that cuts per-study bronze payload size from ~17.3 KB to ~7.7 KB (~4.7 GB full registry).
+The platform supports snapshotting the **entire** ClinicalTrials.gov registry — all conditions, worldwide, no status/type filter (~600k+ studies) — using a minimal API `fields` projection (ADR 0083) that cuts per-study bronze payload size from ~17.3 KB to ~8.30 KB (8,496 B) (~5.18 GB estimated full registry).
 
 - **No profile required:** Bare `python -m src.cli ingest` (or `make ingest-registry`) snapshots the entire registry.
 - **Transformable silver:** `python -m src.cli transform` builds full-registry silver Parquet using `REGISTRY_TAXONOMY` (mapping conditions to `uncategorized`).
@@ -302,7 +302,7 @@ For complete drill-through specifications, provenance requirements, and analytic
 | [`docs/feasibility_case_study.md`](docs/feasibility_case_study.md) | national descriptive memo, complete state table, and evidence appendix |
 | [`docs/executive_memo_template.md`](docs/executive_memo_template.md) | stakeholder memo template with required scope and evidence references |
 | [`docs/DEPLOY_STREAMLIT.md`](docs/DEPLOY_STREAMLIT.md) | deploy the dashboard to Streamlit Community Cloud |
-| [`docs/DEPLOY_FLY.md`](docs/DEPLOY_FLY.md) | deploy the dashboard to Fly.io with an auto-refreshing pipeline |
+| [`docs/OPERATIONS.md`](docs/OPERATIONS.md) | container refresh loop, retention sizing, and operations history |
 | [`docs/competitive_positioning.md`](docs/competitive_positioning.md) | positioning as an open feasibility workbench vs. commercial platforms |
 | [`docs/archive/development_log.md`](docs/archive/development_log.md) | historical step-by-step build record (Phases 1–7) |
 | [`docs/archive/platform_updates_2026-09-04.md`](docs/archive/platform_updates_2026-09-04.md) | historical architecture and tooling updates |

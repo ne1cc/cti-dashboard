@@ -158,6 +158,12 @@ def priority_queue(profile_id: str) -> pd.DataFrame:
             raw segment metrics, ordered by active recruiting trials,
             distinct sponsors, and priority queue key.
     """
+    if not _has_column("mart_feasibility_priority_queue", "operational_completeness_share"):
+        st.error(
+            "Priority Queue is unavailable because the warehouse has an outdated "
+            "mart. Rebuild it with `make pipeline`."
+        )
+        st.stop()
     return query(
         "select * from main_marts.mart_feasibility_priority_queue"
         " where indication_profile_id = ?"
@@ -185,7 +191,10 @@ def trials_for_segment(
         pd.DataFrame: Trial records with NCT ID, brief title, overall status, phase,
             lead sponsor, enrollment count, study first post date, and registry URL.
     """
-    sql = """
+    mesh_clause = (
+        "and c.mesh_id is null" if _has_column("bridge_trial_condition", "mesh_id") else ""
+    )
+    sql = f"""
         select distinct
             d.nct_id,
             d.current_brief_title as brief_title,
@@ -203,6 +212,7 @@ def trials_for_segment(
               select max(snapshot_date) from main_marts.fct_trial_site
               where indication_profile_id = ?)
           and c.condition_group = ?
+          {mesh_clause}
           and s.state_normalized = ?
           and coalesce(d.current_phase, '') = coalesce(?, '')
           and d.current_overall_status = 'RECRUITING'

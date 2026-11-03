@@ -1,0 +1,195 @@
+{
+ "studies": [
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT10000003",
+     "briefTitle": "Anti-Amyloid Antibody in Prodromal Alzheimer Disease",
+     "officialTitle": "A Phase 2 Study of Anti-Amyloid Antibody in Prodromal Alzheimer Disease With Biomarker Confirmation"
+    },
+    "statusModule": {
+     "overallStatus": "COMPLETED",
+     "lastKnownStatus": "COMPLETED",
+     "statusVerifiedDate": "2025-06-01",
+     "startDateStruct": {"date": "2020-03-01"},
+     "primaryCompletionDateStruct": {"date": "2024-12-31"},
+     "completionDateStruct": {"date": "2025-05-31"},
+     "studyFirstPostDateStruct": {"date": "2020-04-10"},
+     "resultsFirstPostDateStruct": {"date": "2026-06-15"},
+     "lastUpdatePostDateStruct": {"date": "2026-07-01"}
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {"name": "Biomark Pharma", "class": "INDUSTRY"},
+     "collaborators": [{"name": "Academic Dementia Consortium", "class": "ACADEMIC"}]
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": ["PHASE2"],
+     "enrollmentInfo": {"count": 118, "type": "Actual"}
+    },
+    "conditionsModule": {"conditions": ["Mild Cognitive Impairment"]},
+    "armsInterventionsModule": {
+     "interventions": [{"name": "Anti-amyloid antibody", "type": "Biological"}, {"name": "Standard care", "type": "Other"}]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [{"measure": "CDR-SB change from baseline", "timeFrame": "104 weeks"}]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "55 Years",
+     "maximumAge": "85 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: prodromal AD with amyloid PET positivity."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {"facility": "Mayo Clinic Study Site", "city": "Rochester", "state": "Minnesota", "zip": "55905", "country": "United States", "status": "COMPLETED"}
+     ]
+    }
+   },
+   "resultsSection": {
+    "baselineCharacteristicsModule": {
+     "groups": [
+      {"id": "BG000", "title": "Anti-amyloid antibody", "description": "Intravenous infusions every four weeks."},
+      {"id": "BG001", "title": "Standard care", "description": "Usual clinical management."}
+     ],
+     "denoms": [
+      {"units": "Participants", "counts": [{"groupId": "BG000", "value": "58"}, {"groupId": "BG001", "value": "60"}]}
+     ],
+     "measures": [
+      {
+       "title": "Sex: Female, Male",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {"title": null, "categories": [
+         {"title": "Female", "measurements": [{"groupId": "BG000", "value": "24"}, {"groupId": "BG001", "value": "26"}]},
+         {"title": "Male", "measurements": [{"groupId": "BG000", "value": "34"}, {"groupId": "BG001", "value": "34"}]}
+        ]}
+       ]
+      }
+     ]
+    }
+   },
+   "hasResults": true
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT10000006",
+     "briefTitle": "Anti-Amyloid Antibody in Early Alzheimer Disease With GRACE Score Stratification",
+     "officialTitle": "A Phase 3 Study of Anti-Amyloid Antibody in Early Alzheimer Disease Stratified by GRACE Score"
+    },
+    "statusModule": {
+     "overallStatus": "COMPLETED",
+     "lastKnownStatus": "COMPLETED",
+     "statusVerifiedDate": "2023-01-01",
+     "startDateStruct": {"date": "2018-02-01"},
+     "primaryCompletionDateStruct": {"date": "2022-09-30"},
+     "completionDateStruct": {"date": "2022-12-31"},
+     "studyFirstPostDateStruct": {"date": "2018-03-01"},
+     "resultsFirstPostDateStruct": {"date": "2023-05-20"},
+     "lastUpdatePostDateStruct": {"date": "2023-06-01"}
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {"name": "Synapse Therapeutics", "class": "INDUSTRY"}
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": ["PHASE3"],
+     "enrollmentInfo": {"count": 461, "type": "Actual"}
+    },
+    "conditionsModule": {"conditions": ["Alzheimer Disease"]},
+    "armsInterventionsModule": {
+     "interventions": [{"name": "Anti-amyloid antibody high dose", "type": "Biological"}, {"name": "Placebo", "type": "Drug"}]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [{"measure": "CDR-SB change from baseline", "timeFrame": "78 weeks"}]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "55 Years",
+     "maximumAge": "90 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: early Alzheimer disease with biomarker confirmation."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {"facility": "Cedar Cognitive Institute", "city": "Boston", "state": "Massachusetts", "zip": "02114", "country": "United States", "status": "COMPLETED"}
+     ]
+    }
+   },
+   "resultsSection": {
+    "baselineCharacteristicsModule": {
+     "groups": [
+      {"id": "BG000", "title": "Anti-amyloid antibody high dose", "description": "Titration then maintenance dosing."},
+      {"id": "BG001", "title": "Placebo", "description": "Matching placebo."}
+     ],
+     "denoms": [
+      {"units": "hospital units", "counts": [{"groupId": "BG000", "value": "3"}, {"groupId": "BG001", "value": "3"}]},
+      {"units": "Participants", "counts": [{"groupId": "BG000", "value": "458"}, {"groupId": "BG001", "value": "464"}]}
+     ],
+     "measures": [
+      {
+       "title": "Gender",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "denoms": [{"units": "Participants", "counts": [{"groupId": "BG000", "value": "229"}, {"groupId": "BG001", "value": "232"}]}],
+       "classes": [
+        {"title": null, "categories": [
+         {"title": "Female", "measurements": [{"groupId": "BG000", "value": "120"}, {"groupId": "BG001", "value": "122"}]},
+         {"title": "Male", "measurements": [{"groupId": "BG000", "value": "109"}, {"groupId": "BG001", "value": "110"}]}
+        ]}
+       ]
+      },
+      {
+       "title": "Mean Age (Years)",
+       "paramType": "MEAN",
+       "dispersionType": "STANDARD_DEVIATION",
+       "unitOfMeasure": "years",
+       "classes": [
+        {"title": null, "categories": [{"title": null, "measurements": [{"groupId": "BG000", "value": "71.4", "spread": "7.0"}, {"groupId": "BG001", "value": "70.9", "spread": "7.3"}]}]}
+       ]
+      },
+      {
+       "title": "GRACE score",
+       "paramType": "MEDIAN",
+       "unitOfMeasure": "points",
+       "classes": [
+        {"title": null, "categories": [{"title": null, "measurements": [{"groupId": "BG000", "value": "112.5"}, {"groupId": "BG001", "value": "111.8"}]}]}
+       ]
+      },
+      {
+       "title": "Race (NIH/OMB)",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "denoms": [{"units": "Participants", "counts": [{"groupId": "BG000", "value": "229"}, {"groupId": "BG001", "value": "232"}]}],
+       "classes": [
+        {"title": null, "categories": [
+         {"title": "White", "measurements": [{"groupId": "BG000", "value": "134"}, {"groupId": "BG001", "value": "140"}]},
+         {"title": "Unknown or Not Reported", "measurements": [{"groupId": "BG000", "value": "2"}, {"groupId": "BG001", "value": "2"}]}
+        ]}
+       ]
+      },
+      {
+       "title": "Ethnicity (NIH/OMB)",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "denoms": [{"units": "Participants", "counts": [{"groupId": "BG000", "value": "229"}, {"groupId": "BG001", "value": "232"}]}],
+       "classes": [
+        {"title": null, "categories": [
+         {"title": "Hispanic or Latino", "measurements": [{"groupId": "BG000", "value": "5"}, {"groupId": "BG001", "value": "6"}]},
+         {"title": "Not Hispanic or Latino", "measurements": [{"groupId": "BG000", "value": "222"}, {"groupId": "BG001", "value": "224"}]},
+         {"title": "Unknown or Not Reported", "measurements": [{"groupId": "BG000", "value": "2"}, {"groupId": "BG001", "value": "2"}]}
+        ]}
+       ]
+      }
+     ]
+    }
+   },
+   "hasResults": true
+  }
+ ],
+ "totalCount": 2,
+ "nextPageToken": null
+}

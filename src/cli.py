@@ -211,8 +211,8 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         if indication_profile.ingest_only:
             log.error(
-                "Profile '{}' is ingest_only: no condition taxonomy, so bronze "
-                "cannot be transformed. Use 'orchestrate' for the refreshable profiles.",
+                "Profile '{}' is ingest_only: bronze cannot be transformed into the "
+                "shared silver tree. Use 'orchestrate' for the refreshable profiles.",
                 indication_profile.profile_id,
             )
             return 2
@@ -275,8 +275,8 @@ def main(argv: list[str] | None = None) -> int:
             # Same contract as `transform` above: 2 = usage, 1 = data failure.
             # An ingest_only profile is refused *here*, before the loop, because
             # the branch that follows would hand it to run_transform, which has
-            # no taxonomy to classify with (see
-            # src/transform/build_silver_entities.py). The registry-wide profile
+            # no place for unclassified bronze records in the shared silver tree
+            # (see src/transform/build_silver_entities.py). The registry-wide profile
             # is not in the default loop (orchestrate: false), but naming it
             # explicitly is allowed — that is exactly ingest+transform for the
             # whole registry.
@@ -287,8 +287,8 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
             if profiles[0].ingest_only:
                 log.error(
-                    "Profile '{}' is ingest_only: it has no taxonomy, so it can never be "
-                    "transformed. Use 'orchestrate' without --profile for the orchestrated "
+                    "Profile '{}' is ingest_only: it can never be transformed into the "
+                    "shared silver tree. Use 'orchestrate' without --profile for the refreshable "
                     "profiles.",
                     profiles[0].profile_id,
                 )

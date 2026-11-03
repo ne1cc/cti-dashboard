@@ -104,13 +104,45 @@ models:
       - name: sex_eligibility_unknown_flag
         data_type: BOOLEAN
         description: True when sex eligibility is unstated, empty, or unknown.
+      - name: has_derived_mesh
+        data_type: BOOLEAN
+        description: >
+          True when the run's MeSH extraction produced at least one usable
+          silver_trial_condition_mesh row for the trial (direct term or
+          ancestor), false when it was extracted but produced none, or null
+          (unknown) when MeSH was never extracted (retained historical runs
+          predating Issue #52).
+      - name: current_intervention_model
+        data_type: VARCHAR
+        description: Registry designInfo.interventionModel (PARALLEL, SINGLE_GROUP, ...); null when unstated.
+      - name: current_masking
+        data_type: VARCHAR
+        description: Registry masking level (NONE, SINGLE, DOUBLE, TRIPLE, QUADRUPLE); null when unstated.
+      - name: has_placebo_arm
+        data_type: BOOLEAN
+        description: >
+          True when any registry arm group declares type PLACEBO_COMPARATOR;
+          null when the trial's current snapshot predates the field (unknown,
+          not asserted false).
+      - name: why_stopped
+        data_type: VARCHAR
+        description: Registry statusModule.whyStopped, verbatim; populated for terminated/withdrawn/suspended trials.
+      - name: brief_summary
+        data_type: VARCHAR
+        description: Registry descriptionModule.briefSummary, stored verbatim (registry-provided text, never generated).
+      - name: primary_outcome_time_frame
+        data_type: VARCHAR
+        description: timeFrame of the first registry primary outcome, verbatim (e.g. "78 weeks"); null when absent.
 
   - name: dim_condition
     description: >
-      Normalized condition per indication profile. Grain: profile x
-      condition_normalized. Counts cover one profile's listings; the key hashes
-      both columns because a per-profile row cannot be addressed by the entity
-      alone.
+      Condition node per indication profile (Issue #52). A node is a taxonomy
+      condition_group (node_id "group:<slug>", the overlay/fallback text
+      mapping) or a registry MeSH browse identity (node_id = mesh id), from
+      each trial's current record in that profile. MeSH nodes include the
+      registry-supplied ancestor closure, so any tree node is selectable with
+      no per-disease configuration. Grain: profile x node_id; counts cover one
+      profile's listings and the key hashes both columns.
     contract:
       enforced: true
     columns:
@@ -121,12 +153,42 @@ models:
         data_type: VARCHAR
         description: Indication profile whose query scope produced this row. Part of the model's grain.
         tests: [not_null]
+      - name: node_id
+        data_type: VARCHAR
+        description: >
+          Namespaced node identity: "group:<slug>" for taxonomy groups, the
+          bare mesh id for MeSH nodes; the two cannot collide.
+        tests: [not_null]
       - name: condition_normalized
         data_type: VARCHAR
+        description: Node label (taxonomy group slug or MeSH term).
       - name: condition_display_name
         data_type: VARCHAR
+        description: >
+          Display exemplar: the profile's lexicographically smallest raw
+          condition text behind the node, or the MeSH term when the node has
+          no text rows.
       - name: condition_group
         data_type: VARCHAR
+        description: Legacy alias of condition_normalized kept for existing consumers.
+      - name: mesh_id
+        data_type: VARCHAR
+        description: MeSH browse id for mesh nodes, null for taxonomy group nodes.
+      - name: is_ancestor
+        data_type: BOOLEAN
+        description: >
+          True when every membership edge of this MeSH node is an
+          ancestor-closure edge (never directly applied in this profile).
+          False for taxonomy group nodes and nodes applied directly at least
+          once.
+      - name: mapping_source
+        data_type: VARCHAR
+        description: >
+          mesh for registry MeSH nodes; yaml_overlay when any condition text
+          behind a group node matched a taxonomy rule; text_fallback otherwise.
+        tests:
+          - accepted_values:
+              values: [mesh, yaml_overlay, text_fallback]
       - name: dementia_relevance_flag
         data_type: BOOLEAN
       - name: mapping_confidence
@@ -337,7 +399,14 @@ models:
         data_type: VARCHAR
 
   - name: bridge_trial_condition
-    description: One row per profile per trial per condition group.
+    description: >
+      One row per profile per trial per condition node (Issue #52 grain): a
+      taxonomy condition_group (node_id "group:<slug>", how every existing
+      group-based view consumes the bridge) or a registry MeSH browse identity
+      (node_id = mesh id). MeSH rows carry the registry's ancestor closure
+      (is_ancestor), so any tree node is selectable; count marts read
+      int_trial_condition_mapping (group-only), and similarity excludes all
+      MeSH rows (mesh_id is null).
     contract:
       enforced: true
     columns:
@@ -351,15 +420,46 @@ models:
           - relationships:
               to: ref('dim_trial')
               field: trial_key
-      - name: condition_group
+      - name: condition_key
         data_type: VARCHAR
-        tests: [not_null]
+        description: Same two inputs as dim_condition.condition_key (node_id x indication_profile_id).
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_condition')
+              field: condition_key
       - name: nct_id
         data_type: VARCHAR
       - name: indication_profile_id
         data_type: VARCHAR
         description: Indication profile whose query scope produced this row. Part of the model's grain.
         tests: [not_null]
+      - name: node_id
+        data_type: VARCHAR
+        description: Namespaced node identity ("group:<slug>" or mesh id); part of the model's grain.
+        tests: [not_null]
+      - name: condition_group
+        data_type: VARCHAR
+        description: >
+          Node label (taxonomy group slug or MeSH term); legacy column name
+          kept for existing consumers, which filter on group slugs that MeSH
+          term labels never collide with.
+        tests: [not_null]
+      - name: mesh_id
+        data_type: VARCHAR
+        description: MeSH browse id for mesh rows, null for taxonomy group rows.
+      - name: is_ancestor
+        data_type: BOOLEAN
+        description: >
+          True for registry ancestor-closure edges (browsing only); false for
+          taxonomy group rows and directly applied MeSH terms.
+        tests: [not_null]
+      - name: mapping_source
+        data_type: VARCHAR
+        description: mesh | yaml_overlay | text_fallback (Issue #52).
+        tests:
+          - accepted_values:
+              values: [mesh, yaml_overlay, text_fallback]
       - name: dementia_relevance_flag
         data_type: BOOLEAN
       - name: mapping_confidence
@@ -811,9 +911,9 @@ models:
       - name: record_quality_ok_share
         data_type: DOUBLE
         description: Share of trials in this segment meeting baseline record quality criteria.
-      - name: data_confidence_share
+      - name: operational_completeness_share
         data_type: DOUBLE
-        description: Operational data completeness share (retained pending Issue #78).
+        description: Operational data completeness share (0.5 segment record-quality-ok share + 0.5 latest successful-run usable-location share; the usable-location half is constant across segments of one profile); display-only signal, not scientific confidence.
       - name: priority_explanation
         data_type: VARCHAR
         description: Plain-language summary of raw segment metrics for human review.
@@ -1152,3 +1252,56 @@ models:
         tests: [not_null]
       - name: registry_url
         data_type: VARCHAR
+
+  - name: mart_baseline_demographics_coverage
+    description: >
+      Per indication profile, condition group, and completion year: the share of
+      COMPLETED trials with posted results whose baseline characteristics report
+      sex, age, race, or ethnicity (issue #74). Race/ethnicity coverage counts
+      only rows whose dimension resolved from explicit evidence (measure title,
+      label prefix, or reviewed seed row); trials with ambiguous combined
+      race/ethnicity tables are counted in the denominator and surfaced through
+      ambiguous_combined_trials_count instead of being guessed into a category.
+    contract:
+      enforced: true
+    columns:
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this row. Part of the model's grain.
+        tests: [not_null]
+      - name: condition_group
+        data_type: VARCHAR
+        description: Normalized condition group (taxonomy). Part of the model's grain.
+        tests: [not_null]
+      - name: completion_year
+        data_type: BIGINT
+        description: Year the trial completed; null when the registry date is missing or unparseable.
+      - name: trials_with_results_count
+        data_type: BIGINT
+        description: Denominator — distinct completed trials with posted results in the grain.
+        tests: [not_null]
+      - name: reports_sex_count
+        data_type: BIGINT
+        description: Trials whose baseline characteristics include a sex measure.
+      - name: reports_age_count
+        data_type: BIGINT
+        description: Trials whose baseline characteristics include an age measure.
+      - name: reports_race_count
+        data_type: BIGINT
+        description: Trials with at least one race row whose dimension resolved from explicit evidence.
+      - name: reports_ethnicity_count
+        data_type: BIGINT
+        description: Trials with at least one ethnicity row whose dimension resolved from explicit evidence.
+      - name: ambiguous_combined_trials_count
+        data_type: BIGINT
+        description: Trials carrying an ambiguous combined race/ethnicity row (kept unmapped by design).
+      - name: reports_sex_share
+        data_type: DOUBLE
+      - name: reports_age_share
+        data_type: DOUBLE
+      - name: reports_race_share
+        data_type: DOUBLE
+      - name: reports_ethnicity_share
+        data_type: DOUBLE
+      - name: ambiguous_combined_share
+        data_type: DOUBLE

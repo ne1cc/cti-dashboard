@@ -48,11 +48,12 @@ api:
   # Slim field projection: exactly the modules silver reads (flatten_studies.py)
   # plus the two results modules that carry participant demographics for the
   # planned results phase (verified against GET /studies/metadata, the Data
-  # Structure source, 2026-10-30). ~7.7 KB/study vs ~17.3 KB full-record.
+  # Structure source, 2026-10-30). ~8.30 KB/study (8,496 B) vs ~17.3 KB full-record.
   fields:
     - protocolSection.identificationModule
     - protocolSection.statusModule
     - protocolSection.designModule
+    - protocolSection.descriptionModule
     - protocolSection.sponsorCollaboratorsModule
     - protocolSection.conditionsModule
     - protocolSection.armsInterventionsModule
@@ -127,20 +128,20 @@ ingestion:
 # rather than 0.0 on those weeks — and a 14-day observed history is likewise under
 # the 90-day gate, so the 90d recruiting-growth figures show "not enough history"
 # while newly_registered_90d (registry first-post dates) stays computable.
-# (d) fly volumes extend cti_data --size 2 is the
-# user's action that restores (a)'s premise; raise this back to 6 only after
-# extending. docs/DEPLOY_FLY.md ("What to expect") carries the full arithmetic.
+# (d) The former Fly volume needed more space to restore (a)'s premise.
+# Size and measure the current host before raising this horizon;
+# docs/OPERATIONS.md ("What to expect") carries the full arithmetic.
 #
-# Registry storage budget (issue #53; measured live 2026-11-02 outside data/,
-# see docs/decisions/0083-ingest-source.md for measured numbers and benchmarks):
+# Registry storage budget (issue #53; based on 2,000-study live probe
+# 2026-11-02 outside data/, see docs/decisions/0083-ingest-source.md):
 #   - registry bronze JSON per full run, with the fields projection:
-#     MEASURED ~5.18 GB (~610k studies x ~8.49 KB) — kept for the latest run
+#     estimated ~5.18 GB (~610k studies x 8,496 B / ~8.30 KB) — kept for the latest run
 #     only (bronze_runs_to_keep: 1); a mid-run instant briefly holds the
 #     previous and the new run (~2x) until prune-data reclaims it.
-#   - weekly incremental run: MEASURED ~76.5 MB (~9k changed studies/week,
+#   - weekly incremental run: estimated ~76.5 MB (~9k changed studies/week,
 #     ~22s fetch time).
-#   - registry silver per snapshot: MEASURED ~1.67 GB per complete snapshot
-#     (2,739 bytes/study); snapshot_runs_to_keep: 3 retains 3 complete snapshots
+#   - registry silver per snapshot: estimated ~1.67 GB per complete snapshot
+#     (2,739 bytes/study, ~2.67 KB); snapshot_runs_to_keep: 3 retains 3 complete snapshots
 #     (~5.01 GB total silver). Total combined steady-state storage: ~10.19 GB.
 retention:
   bronze_runs_to_keep: 1

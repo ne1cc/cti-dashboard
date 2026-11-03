@@ -44,6 +44,7 @@ api:
     - protocolSection.identificationModule
     - protocolSection.statusModule
     - protocolSection.designModule
+    - protocolSection.descriptionModule
     - protocolSection.sponsorCollaboratorsModule
     - protocolSection.conditionsModule
     - protocolSection.armsInterventionsModule
@@ -98,9 +99,10 @@ ingestion:
 
 # Run retention for this profile (make prune-data, src/utils/retention.py).
 # Same horizon as every other profile — one knob, no special cases. With the
-# fields projection a registry bronze run is ~4.7 GB (MEASURED 2026-10-30),
-# so the single retained run below is the dominant term on any laptop; raw
-# JSON is kept for the latest run only, by exactly this horizon.
+# fields projection a registry bronze run is estimated ~5.18 GB (~8.30 KB/study
+# extrapolated from 2,000-study probe), so the single retained run below is
+# the dominant term on any laptop; raw JSON is kept for the latest run only,
+# by exactly this horizon.
 retention:
   bronze_runs_to_keep: 1
   snapshot_runs_to_keep: 3

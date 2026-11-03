@@ -87,7 +87,7 @@ class RetentionConfig(BaseModel):
     This default is the shipped horizon (3), not a looser one: the depth was
     brought down from 6 by a dated volume measurement (1 GB deployed, 499.7 MB
     steady state and 866.5 MB worst-instant at 3 snapshots for two profiles,
-    2026-09-07, commit 78c2050 — docs/DEPLOY_FLY.md). A config with no
+    2026-09-07, commit 78c2050 — docs/OPERATIONS.md). A config with no
     `retention:` block must not reintroduce the setting that overflows it.
     """
 

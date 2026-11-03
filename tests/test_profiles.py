@@ -198,7 +198,7 @@ def test_refreshable_env_var_scopes_profiles(
     """CTI_REFRESHABLE_PROFILES pins which profiles the full pipeline refreshes.
 
     The deployment sets it because the deployed volume and VM cannot run every
-    refreshable profile (docs/DEPLOY_FLY.md, "Adding indication profiles")."""
+    refreshable profile (docs/OPERATIONS.md, "Adding indication profiles")."""
     _write_refreshable_profile(tmp_profiles_dir, "alpha")
     _write_refreshable_profile(tmp_profiles_dir, "beta")
     monkeypatch.setenv("CTI_REFRESHABLE_PROFILES", "alpha")

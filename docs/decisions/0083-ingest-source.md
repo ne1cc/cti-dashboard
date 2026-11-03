@@ -23,9 +23,9 @@ Issue #53 scoped a spike comparing three potential ingestion sources for a full 
 | Evaluation Dimension | 1. Paginated API (Selected) | 2. Registry Bulk Download | 3. AACT Relational Dump |
 |---|---|---|---|
 | **Data Freshness** | Real-time (live API v2, updated daily by NLM) | Daily (bulk archive generated nightly) | Delayed (daily/weekly batch refresh by CTTI) |
-| **Field Projection** | Supported via `fields` parameter (~7.7 KB/study) | Not supported; full record zip only (~10.5 GB) | Tabular relational export, not raw JSON |
-| **Storage per Full Run** | ~4.7 GB bronze JSON (projected) | ~10.5 GB uncompressed JSON | ~5–8 GB relational CSVs/SQL dump |
-| **Incremental Refresh** | Supported natively via Essie date range filter `AREA[LastUpdatePostDate]RANGE[<since>,MAX]` (~70 MB/week) | Not supported; full re-download required every run | Incremental changelogs complex; no raw API hash |
+| **Field Projection** | Supported via `fields` parameter (~8.30 KB/study) | Not supported; full record zip only (~10.5 GB) | Tabular relational export, not raw JSON |
+| **Storage per Full Run** | ~5.18 GB bronze JSON (estimated) | ~10.5 GB uncompressed JSON | ~5–8 GB relational CSVs/SQL dump |
+| **Incremental Refresh** | Supported natively via Essie date range filter `AREA[LastUpdatePostDate]RANGE[<since>,MAX]` (~76.5 MB/week) | Not supported; full re-download required every run | Incremental changelogs complex; no raw API hash |
 | **Schema Drift & Provenance** | Preserves `source_json_hash`, per-page metadata, and existing `schema_drift.py` | Preserves raw JSON, but requires custom archive extraction pipeline | Breaks raw JSON hashing, provenance, and drift detection |
 | **Terms of Use & Access** | Public API v2, no authentication required | Public archive, no authentication required | Third-party terms, account registration required |
 | **Pipeline Compatibility** | 100% compatible with existing `CTGClient`, retry/backoff, and pagination | Requires new zip download/extraction adapter | Requires secondary ETL and database sync |
@@ -39,6 +39,7 @@ The platform adopts **Option 1: Paginated API with `fields` Projection**:
    - `protocolSection.identificationModule`
    - `protocolSection.statusModule`
    - `protocolSection.designModule`
+   - `protocolSection.descriptionModule`
    - `protocolSection.sponsorCollaboratorsModule`
    - `protocolSection.conditionsModule`
    - `protocolSection.armsInterventionsModule`
@@ -51,12 +52,12 @@ The platform adopts **Option 1: Paginated API with `fields` Projection**:
 2. **Page Size & Pacing:** Set `pageSize: 1000` (API-coerced maximum) and `min_request_interval_seconds: 1.2` (~50 req/min, complying with community consensus while backing off on 429s).
 3. **Incremental Refresh:** Use Essie filter `AREA[LastUpdatePostDate]RANGE[<since>,MAX]` with 1-day safety overlap. Upsert incremental silver rows by NCT ID onto the previous completed snapshot.
 4. **Registry Taxonomy:** Provide `REGISTRY_TAXONOMY` in `normalize_conditions.py` mapping unclassified conditions to `uncategorized`, allowing full-registry silver Parquet generation.
-5. **Measured Benchmark & Sizing (Verified live 2026-11-02 outside data/):**
+5. **Benchmark & Sizing (2,000-study live probe measured 2026-11-02 outside data/; registry totals estimated):**
    - **Bronze Ingestion:**
      - Live 2,000-study probe (2 pages x 1,000 studies): 16,992,233 bytes (16.21 MB).
      - Average size per study: 8,496 bytes (~8.30 KB).
      - Average page transfer time: 1.27s (combined with 1.2s pacing = ~2.47s/page).
-     - Full registry projection (~610k studies, ~610 pages): ~5.18 GB bronze JSON, ~25.1 minutes total fetch time.
+     - Full registry projection (~610k studies, ~610 pages): estimated ~5.18 GB bronze JSON, ~25.1 minutes total fetch time.
      - Weekly incremental (~9,000 studies, ~9 pages): ~76.5 MB bronze JSON, ~22 seconds fetch time.
    - **Silver Transformation:**
      - 2,000 studies transformed in 1.04s (~1,923 studies/second).

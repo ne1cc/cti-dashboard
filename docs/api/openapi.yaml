@@ -960,6 +960,45 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/StudyIntervention'
+        arms:
+          type: array
+          description: |
+            Registry arm groups. All text is stored verbatim as provided by the
+            registry (never generated or paraphrased).
+          items:
+            $ref: '#/components/schemas/StudyArm'
+        has_placebo_arm:
+          type:
+            - boolean
+            - 'null'
+          description: |
+            True when any registry arm group declares type PLACEBO_COMPARATOR;
+            false when the snapshot lists arms with no placebo arm; null when
+            the stored snapshot predates the field (unknown, not asserted false
+            from absent historical data).
+          example: true
+        why_stopped:
+          type:
+            - string
+            - 'null'
+          description: |
+            Registry-provided reason the study stopped (statusModule.whyStopped),
+            passed through verbatim. Populated for terminated/withdrawn/suspended trials.
+          example: 'Insufficient enrollment'
+        brief_summary:
+          type:
+            - string
+            - 'null'
+          description: |
+            Registry-provided brief summary (descriptionModule.briefSummary),
+            stored verbatim. This text is registry-provided, never generated.
+          example: 'To evaluate the safety and efficacy of ...'
+        primary_outcome_time_frame:
+          type:
+            - string
+            - 'null'
+          description: timeFrame of the first registry primary outcome, verbatim.
+          example: '78 weeks'
         eligibility:
           $ref: '#/components/schemas/StructuredEligibility'
         sites:
@@ -1022,6 +1061,39 @@ components:
             - string
             - 'null'
           example: 'QUADRUPLE'
+
+    StudyArm:
+      type: object
+      description: |
+        Registry arm group. Labels, types, descriptions and intervention name
+        lists are registry-provided and stored verbatim.
+      properties:
+        label:
+          type:
+            - string
+            - 'null'
+          example: 'Placebo'
+        arm_type:
+          type:
+            - string
+            - 'null'
+          description: |
+            Registry arm group type: EXPERIMENTAL, ACTIVE_COMPARATOR,
+            PLACEBO_COMPARATOR, SHAM_COMPARATOR, NO_INTERVENTION, or OTHER;
+            null when the registry omits it.
+          example: 'PLACEBO_COMPARATOR'
+        description:
+          type:
+            - string
+            - 'null'
+          description: Registry-provided arm description, verbatim.
+          example: '120 subjects will take two daily doses of placebo ...'
+        intervention_names:
+          type: array
+          description: Registry interventionNames for this arm, verbatim.
+          items:
+            type: string
+          example: ['Drug: Donepezil']
 
     EnrollmentInfo:
       type: object

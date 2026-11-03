@@ -14,6 +14,34 @@ Global rules:
 - Every metric is a *registry-listing signal*. None measures patients,
   enrollment performance, or site capacity.
 
+## Condition identity (Issue #52)
+A trial's condition identity comes from the registry's MeSH browse module
+(`silver_trial_condition_mesh`: direct terms plus the supplied ancestor
+closure, study-level); the YAML taxonomies are optional overlays on top. The
+`mapping_source` column says how a condition row's group was assigned:
+
+| mapping_source | meaning |
+|---|---|
+| `mesh` | registry MeSH browse identity (bridge/dim mesh nodes) |
+| `yaml_overlay` | a profile taxonomy rule matched the condition text |
+| `text_fallback` | no taxonomy match (or no taxonomy); the profile's catch-all group, or `unmapped` when the profile has no taxonomy |
+
+- `dim_condition` grain: profile × condition node — `group:<slug>` (taxonomy)
+  or a MeSH id. MeSH nodes include ancestor-closure edges, so any tree node is
+  selectable; `is_ancestor` is true only where every membership edge is a
+  closure edge.
+- `bridge_trial_condition` grain: profile × trial × node, with the same node
+  namespace. Existing group-based segments read only the `group:` rows; count
+  marts read `int_trial_condition_mapping` (which contains only taxonomy condition
+  groups), and similarity excludes all MeSH rows (`mesh_id is null`) so closure
+  adds browsing reach without multiplying counts or shifting similarity.
+- `same_condition` in `mart_trial_similarity` = two trials share ≥1 taxonomy
+  condition group (`mesh_id is null`); MeSH rows are excluded so candidate pair
+  discovery, similarity scores, and factor weights are unchanged from the
+  taxonomy-only definitions.
+- Coverage/disagreement review: `docs/condition_mesh_coverage.md`
+  (fixture-limited).
+
 ## Activity metrics (`mart_trial_activity`)
 | Metric | Definition |
 |---|---|
@@ -117,7 +145,7 @@ Per ADR 0077, the composite priority score and categorical priority bands were r
 2. **Recent Growth (`new_recruiting_90d`):** sum of recruiting transitions inside the 90-day window; **null until the profile's observed history covers 90 days** (`observed_history_days` quantifies how short the history is). Shown as "not enough history" — unknown, never zero. `newly_registered_90d` is reported beside it as a separately-labelled registration count.
 3. **Sponsor Concentration (`sponsor_hhi`):** Herfindahl-Hirschman Index (Σ s_i²) measuring market concentration across segment sponsors, bounded in [0, 1.0].
 4. **Site Overlap Rate (`site_overlap_rate`, `site_overlap_share`):** Share of segment trials listing ≥1 facility that hosts multiple recruiting trials in this indication profile.
-5. **Operational Completeness Adjustment (`data_confidence_share`):** 0.5 × segment record-quality-ok share + 0.5 × run-level usable-location share. Reflects reporting and location usability; not scientific confidence.
+5. **Operational Completeness (`operational_completeness_share`):** 0.5 × segment record-quality-ok share + 0.5 × run-level usable-location share. The usable-location half is a run-level value from the profile's latest successful ingestion run, so it is constant across all segments of one profile. Reflects reporting and location usability; not scientific confidence.
 6. `priority_explanation` is assembled from fixed component phrases — the same inputs always yield the same sentence. Every row carries an `interpretation_note`.
 
 ## Audit definitions and scope
@@ -221,9 +249,10 @@ counts recruiting listings whose first-post date is ≥ snapshot minus 90 days �
 registrations, not transitions, computable from a single captured date. Site
 overlap share is distinct recruiting segment
 trials listing any facility with >1 recruiting trial in the profile / distinct
-recruiting segment trials. The legacy operational completeness input is 0.5 ×
-segment record-quality-ok share + 0.5 × latest successful-run usable-location share;
-missing shares coalesce to zero. It is not scientific confidence.
+recruiting segment trials. The operational completeness input (`operational_completeness_share`)
+is 0.5 × segment record-quality-ok share + 0.5 × latest successful-run usable-location share;
+missing shares coalesce to zero. The usable-location half is a run-level value, constant
+across segments of one profile. It is not scientific confidence.
 
 Monthly counts use distinct NCT IDs across captured observations in the month.
 The three-calendar-month `RANGE` includes the current month and its three prior
@@ -257,3 +286,46 @@ configuration identity was not recorded. Raw page references can stop resolving
 after configured bronze pruning. Export does not promise an indefinite archive.
 
 Registry-derived signals support preliminary feasibility review. They do not measure site-level recruitment performance or establish scientific validity. Counts reflect captured public records and the displayed inclusion rules.
+## Baseline demographics and coverage (`mart_baseline_demographics_coverage`, Issue #74)
+
+Source: `resultsSection.baselineCharacteristicsModule` (posted results), extracted as
+`silver_trial_baseline_demographics` — one row per (measure, class, category, group)
+measurement, with labels kept exactly as sponsors reported them. The participant
+head-count is parsed only when the measure is a participant count (`COUNT_OF_PARTICIPANTS`
+or `NUMBER` with unit Participants); mean/median ages stay raw strings.
+`group_denominator` resolves from the most specific scope the registry reports for
+the group — class, then measure, then module — preferring the participant-denominated
+`denoms` entry when a scope lists several units; `percent_of_group_denominator` derives
+from that base in staging.
+
+**Dimension classification** (staging, from the measure title, on word boundaries so
+"Gender" is sex, "Mean Age" is age, and "GRACE score" is not race): `sex` (sex/gender),
+`age`, `race`, `ethnicity`, `race_ethnicity_combined`, `race_ethnicity_not_collected`,
+`other`.
+
+**OMB mapping** (`dbt_clinical_trials/seeds/omb_race_ethnicity_mapping.csv`, versioned and PR-reviewed):
+maps a normalized sponsor label to an OMB race/ethnicity category with
+`mapping_confidence` (`high`/`medium`/`low`) and `manually_reviewed`. Unmapped labels stay
+unmapped. Combined race/ethnicity tables are mapped per label only where the dimension is
+explicit — a `Race:`/`Ethnicity:` label prefix, an exact `Race`/`Ethnicity` class title,
+or a seed row scoped to one dimension. Dimension-neutral buckets ("Unknown or Not
+Reported", "Not Stated", "Other") inside a combined table without such context keep
+their reported label, stay unmapped, and set `is_ambiguous_combined_flag`.
+
+**Coverage metrics** (per indication profile × condition group × completion year):
+
+| Metric | Definition |
+|---|---|
+| trials_with_results_count | distinct COMPLETED trials with posted results in their profile's latest successful ingestion run (denominator) |
+| reports_sex_count / share | baseline characteristics include a sex measure |
+| reports_age_count / share | include an age measure |
+| reports_race_count / share | ≥1 race row whose dimension resolved from explicit evidence |
+| reports_ethnicity_count / share | ≥1 ethnicity row whose dimension resolved from explicit evidence |
+| ambiguous_combined_trials_count / share | denominator trials carrying ≥1 ambiguous combined row |
+
+Demographics count only from the same latest successful run as the trial row: a race
+table that a sponsor later amended out of the results section stops counting
+once the newer snapshot lands. `completion_year` is null when the registry
+completion date is missing or unparseable; those trials stay on a null-year row
+rather than being dropped. Coverage numbers are queryable wherever demographics
+are consumed; a dashboard surface is out of scope for #74.

@@ -8,7 +8,7 @@ models:
       trial frequency is below var('similarity_max_token_df'), emitted in both
       orientations. Replaces the unbounded pairwise self-join that measured
       28 GB of DuckDB temporary storage at twelve profiles
-      (docs/DEPLOY_FLY.md, 2026-10-04). A trial with no surviving shared
+      (docs/OPERATIONS.md, 2026-10-04). A trial with no surviving shared
       token gets no pairs here, so mart_trial_similarity emits no rows for it.
     columns:
       - name: candidate_pair_key

@@ -7,7 +7,7 @@
 -- self-join of int_trial_comparability_features within a profile, which
 -- materialized and scored N^2 pairs; at the twelve-profile registry that
 -- measured 28 GB of DuckDB temporary storage without completing
--- (docs/DEPLOY_FLY.md, "Adding indication profiles", 2026-10-04). Candidates
+-- (docs/OPERATIONS.md, "Adding indication profiles", 2026-10-04). Candidates
 -- are pairs sharing at least one condition-group token: the inverted index
 -- over bridge_trial_condition turns discovery into a join on
 -- (indication_profile_id, token), whose cost is the sum of per-token
@@ -27,7 +27,7 @@
 -- the ten profiles added 2026-10 have two to four populated groups each, so
 -- at full registry scale every group in oncology_colorectal and
 -- type2_diabetes reached the cap and those profiles got zero pairs
--- (2026-10-19 twelve-profile build, docs/DEPLOY_FLY.md). Phase splits each
+-- (2026-10-19 twelve-profile build, docs/OPERATIONS.md). Phase splits each
 -- group five to eight ways, and same_condition + same_phase are the two
 -- heaviest-weighted factors a candidate pair can match on together.
 --
@@ -47,6 +47,10 @@ with tokens as (
     inner join {{ ref('int_trial_comparability_features') }} as features
         on bridge.indication_profile_id = features.indication_profile_id
         and bridge.nct_id = features.nct_id
+    -- MeSH rows excluded (both direct terms and ancestor closure), matching the
+    -- same_condition input in int_trial_comparability_features: token discovery
+    -- remains strictly at the taxonomy condition-group level (Issue #52 review).
+    where bridge.mesh_id is null
 ),
 
 token_frequency as (
