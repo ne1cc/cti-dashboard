@@ -1,6 +1,8 @@
 import dataclasses
 import json
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import duckdb
@@ -334,10 +336,22 @@ def test_implicit_upgrade_refuses_a_missing_bronze_page(tmp_path: Path, force: b
 
     before = _retained_silver_bytes(cfg, run_id)
     assert len(before) == 6
-    with pytest.raises(
-        BronzeRebuildMismatch, match="produced 3 studies but the manifest expects 4"
-    ):
+    # Round-6 finding 2: the whole abort sentence is pinned, not a fragment.
+    expected_message = (
+        f"Run {run_id}: the bronze rebuild produced 3 studies "
+        "(4 records, 0 repeated NCT IDs, 0 without an NCT ID), but the manifest "
+        "expects 4 studies, the retained silver_trials file holds 4 trials and the "
+        "retained transform stats expect 4 trials; nothing was written. Restore this "
+        "run's bronze pages (from a backup or a re-fetch of the same query written "
+        "back under this run_id) and re-run the transform. Removing this run's bronze "
+        "directory is irreversible and only appropriate when the lost studies cannot "
+        "be restored and every retained silver entity file for the run is present; if "
+        "a retained entity is also missing, the run can never be rebuilt and the "
+        "retained silver is the only surviving copy."
+    )
+    with pytest.raises(BronzeRebuildMismatch) as excinfo:
         build_silver_entities.run_transform(config=cfg, force=force)
+    assert str(excinfo.value) == expected_message
     assert _retained_silver_bytes(cfg, run_id) == before
     assert list(cfg.paths.silver.glob("*/run_id=*.parquet.tmp")) == []
 
@@ -362,9 +376,7 @@ def test_implicit_upgrade_refuses_a_truncated_bronze_page(tmp_path: Path, force:
     (run_dir / "page=00001.json").write_text(json.dumps({"studies": [make_study("NCT00000001")]}))
 
     before = _retained_silver_bytes(cfg, run_id)
-    with pytest.raises(
-        BronzeRebuildMismatch, match="produced 2 studies but the manifest expects 4"
-    ):
+    with pytest.raises(BronzeRebuildMismatch, match="the bronze rebuild produced 2 studies"):
         build_silver_entities.run_transform(config=cfg, force=force)
     assert _retained_silver_bytes(cfg, run_id) == before
     assert list(cfg.paths.silver.glob("*/run_id=*.parquet.tmp")) == []
@@ -486,12 +498,25 @@ def test_implicit_upgrade_refuses_a_page_replaced_by_a_copy_of_another(tmp_path:
     shutil.copy(run_dir / "page=00001.json", run_dir / "page=00002.json")
 
     before = _retained_silver_bytes(cfg, run_id)
-    with pytest.raises(
-        BronzeRebuildMismatch, match="the retained silver_trials file holds 10 trials"
-    ) as excinfo:
+    # Round-6 finding 2: the whole abort sentence is pinned, not a fragment —
+    # it must state the rebuilt count, both exclusions, and the retained counts.
+    expected_message = (
+        f"Run {run_id}: the bronze rebuild produced 5 studies "
+        "(10 records, 5 repeated NCT IDs, 0 without an NCT ID), but the retained "
+        "silver_trials file holds 10 trials and the retained transform stats expect "
+        "10 trials; nothing was written. No bronze page is missing: the bronze "
+        "reproduces its manifest but holds fewer studies than the retained silver, "
+        "so the retained silver is the only copy of the studies the bronze can no "
+        "longer produce. Restore the original page content (re-fetch the same query) "
+        "and re-run the transform, or keep the retained silver as written. Removing "
+        "this run's bronze directory is irreversible and only appropriate when the "
+        "lost studies cannot be restored and every retained silver entity file for "
+        "the run is present; if a retained entity is also missing, the run can never "
+        "be rebuilt and the retained silver is the only surviving copy."
+    )
+    with pytest.raises(BronzeRebuildMismatch) as excinfo:
         build_silver_entities.run_transform(config=cfg, force=force)
-    assert "the retained transform stats expect 10 trials" in str(excinfo.value)
-    assert "Bronze is incomplete" not in str(excinfo.value)
+    assert str(excinfo.value) == expected_message
     assert stats_path(cfg, run_id).exists()  # retained stats survive a guard abort
     assert _retained_silver_bytes(cfg, run_id) == before
     assert _retained_trials_rows(cfg, run_id) == 10
@@ -531,8 +556,9 @@ def test_interrupted_close_marks_the_run_for_a_full_rebuild(tmp_path: Path, monk
 
     close() replaces final files one entity at a time; an I/O failure there can
     leave some entities rebuilt and others legacy. The run's stats are removed
-    on that path, so _already_transformed is false and the next plain transform
-    rebuilds the run whole from the (already count-verified) bronze.
+    before the first swap, so _already_transformed is false on that path and the
+    next plain transform rebuilds the run whole from the (already
+    count-verified) bronze.
     """
     import src.transform.export_parquet as export_parquet_module
 
@@ -559,6 +585,124 @@ def test_interrupted_close_marks_the_run_for_a_full_rebuild(tmp_path: Path, monk
     assert stats_path(cfg, run_id).exists()
     assert (cfg.paths.silver / "silver_trial_condition_mesh" / f"run_id={run_id}.parquet").exists()
     assert _retained_trials_rows(cfg, run_id) == 10
+    assert list(cfg.paths.silver.glob("*/run_id=*.parquet.tmp")) == []
+
+
+KILL_MID_SWAP_SCRIPT = """\
+import os
+import signal
+import sys
+from pathlib import Path
+
+sys.path.insert(0, sys.argv[3])
+
+from src.config import ApiConfig, IngestionConfig, PathsConfig, ProjectConfig
+from src.transform import build_silver_entities
+
+cfg = ProjectConfig(
+    api=ApiConfig(base_url="https://ctg.test/api/v2"),
+    paths=PathsConfig(
+        bronze_api_responses=Path(sys.argv[1]) / "bronze" / "api_responses",
+        bronze_manifests=Path(sys.argv[1]) / "bronze" / "manifests",
+        silver=Path(sys.argv[1]) / "silver",
+        gold=Path(sys.argv[1]) / "gold",
+        duckdb=Path(sys.argv[1]) / "warehouse" / "warehouse.duckdb",
+        quarantine=Path(sys.argv[1]) / "quarantine",
+    ),
+    ingestion=IngestionConfig(),
+)
+
+swaps = 0
+real_replace = os.replace
+
+
+def kill_before_nth_swap(src, dst):
+    global swaps
+    swaps += 1
+    if swaps == int(sys.argv[2]):
+        os.kill(os.getpid(), signal.SIGKILL)
+    return real_replace(src, dst)
+
+
+os.replace = kill_before_nth_swap
+build_silver_entities.run_transform(config=cfg)
+"""
+
+
+@pytest.mark.parametrize("kill_before_swap", [4, 6])
+def test_a_killed_process_mid_swap_is_rebuilt_whole_on_the_next_plain_run(
+    tmp_path: Path, kill_before_swap: int
+):
+    """Round-6 finding 1: SIGKILL during close() must not strand a mixed run.
+
+    A killed process cannot run the except-path cleanup, so the stats removal
+    must happen before the first swap. The subprocess kills itself from a
+    patched os.replace before the Nth entity swap, leaving a mixed tree with no
+    stats; a plain rerun then rebuilds the run whole with 10 trials.
+    """
+    cfg = make_config(tmp_path)
+    run_id = "r_upgrade_killed"
+    _ten_trial_run(cfg, run_id)
+
+    repo_root = Path(__file__).resolve().parents[1]
+    script = tmp_path / "kill_mid_swap.py"
+    script.write_text(KILL_MID_SWAP_SCRIPT)
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            str(tmp_path),
+            str(kill_before_swap),
+            str(repo_root),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert proc.returncode == -9, proc.stderr
+    assert not stats_path(cfg, run_id).exists()
+    assert not _already_transformed(cfg, run_id)
+    # Swaps before the kill already replaced earlier entities: the tree is mixed.
+    assert (cfg.paths.silver / "silver_trial_condition_mesh" / f"run_id={run_id}.parquet").exists()
+    assert _retained_trials_rows(cfg, run_id) == 10
+
+    assert build_silver_entities.run_transform(config=cfg) == [run_id]
+    assert _already_transformed(cfg, run_id)
+    assert stats_path(cfg, run_id).exists()
+    assert (cfg.paths.silver / "silver_trial_condition_mesh" / f"run_id={run_id}.parquet").exists()
+    assert _retained_trials_rows(cfg, run_id) == 10
+    assert list(cfg.paths.silver.glob("*/run_id=*.parquet.tmp")) == []
+
+
+@pytest.mark.parametrize("force", [False, True])
+def test_implicit_upgrade_aborts_when_no_retained_reference_is_readable(
+    tmp_path: Path, force: bool
+):
+    """Round-6 finding 4: unbounded exclusions must not fail the guard open.
+
+    With the retained silver_trials file unreadable (here: deleted) and no
+    transform stats, a rebuild that excluded records could be shrinking
+    retained silver for legitimate or illegitimate reasons — indistinguishable.
+    The guard must abort instead of replacing retained silver.
+    """
+    cfg = make_config(tmp_path)
+    run_id = "r_upgrade_unreadable_refs"
+    run_dir = _ten_trial_run(cfg, run_id)
+
+    shutil.copy(run_dir / "page=00001.json", run_dir / "page=00002.json")
+    stats_path(cfg, run_id).unlink()
+    (cfg.paths.silver / "silver_trials" / f"run_id={run_id}.parquet").unlink()
+
+    before = _retained_silver_bytes(cfg, run_id)
+    with pytest.raises(
+        BronzeRebuildMismatch,
+        match=(
+            "neither a readable retained silver_trials file nor retained transform "
+            "stats bounds its 5 excluded records"
+        ),
+    ):
+        build_silver_entities.run_transform(config=cfg, force=force)
+    assert _retained_silver_bytes(cfg, run_id) == before
     assert list(cfg.paths.silver.glob("*/run_id=*.parquet.tmp")) == []
 
 

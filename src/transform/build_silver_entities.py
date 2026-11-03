@@ -63,7 +63,15 @@ PRE_UPGRADE_ENTITY_NAMES = (
 
 
 class BronzeRebuildMismatch(ValueError):
-    """A bronze rebuild did not reproduce the manifest's expected study count."""
+    """A bronze rebuild may not replace its run's retained silver.
+
+    Raised before any file is written when the rebuild's study count differs
+    from the manifest's expected count (records minus duplicate and missing-NCT
+    exclusions), holds fewer studies than the retained silver_trials file or
+    the retained transform stats expect, or excludes records while neither
+    retained reference (silver_trials row count, transform stats) is readable.
+    Nothing is written; the retained silver stays byte-identical.
+    """
 
 
 def _parquet_row_count(path: Path) -> int | None:
@@ -74,13 +82,22 @@ def _parquet_row_count(path: Path) -> int | None:
         return None
 
 
+def _human_list(items: list[str]) -> str:
+    """'a', 'a and b', 'a, b and c' — for a grammatical abort sentence."""
+    if len(items) <= 1:
+        return items[0] if items else ""
+    return ", ".join(items[:-1]) + " and " + items[-1]
+
+
 def _already_transformed(cfg: ProjectConfig, run_id: str) -> bool:
     """Every entity file exists AND the run's transform stats exist.
 
-    Stats are written after close() swaps the final files in, so they double as
-    the completion marker: a run whose swap was interrupted mid-way keeps its
-    entity files but loses its stats and is rebuilt whole on the next plain
-    transform instead of staying permanently mixed.
+    Stats are removed before the first file swap and the fresh stats are
+    written only after every swap succeeded, so they double as the completion
+    marker: a run interrupted mid-swap — by a raised exception, SIGTERM or
+    SIGKILL, none of which can run cleanup — keeps its entity files but has no
+    stats and is rebuilt whole on the next plain transform instead of staying
+    permanently mixed.
     """
     if not stats_path(cfg, run_id).exists():
         return False
@@ -177,52 +194,80 @@ def build_silver_for_run(
         # studies hidden behind repeated/NCT-less records) must never replace the
         # retained silver: it could be the only surviving copy. Fail BEFORE close()
         # swaps any tmp file in; the except below then discards every tmp file and
-        # the old silver stays byte-identical. Three count checks compare the
-        # rebuild against what is known, so lost studies cannot hide behind the
-        # rebuild's own duplicate/missing-NCT exclusions.
+        # the old silver stays byte-identical. Four checks compare the rebuild
+        # against what is known — the manifest expectation, the retained
+        # silver_trials row count, the retained transform stats, and an
+        # unreadable-reference guard when the rebuild carries exclusions — so lost
+        # studies cannot hide behind the rebuild's own exclusions or fail the
+        # guard open.
         expected = manifest.record_count - duplicate_count - skipped_no_nct
         if _has_existing_silver(cfg, run_id):
-            reasons: list[str] = []
-            if study_count != expected:
-                reasons.append(
-                    f"produced {study_count} studies but the manifest expects {expected} "
-                    f"({manifest.record_count} records minus {duplicate_count} duplicate and "
-                    f"{skipped_no_nct} missing-NCT exclusions)"
-                )
             retained_trials = _parquet_row_count(
                 cfg.paths.silver / "silver_trials" / f"run_id={run_id}.parquet"
             )
-            if retained_trials is not None and study_count < retained_trials:
-                reasons.append(f"the retained silver_trials file holds {retained_trials} trials")
             stats_expected = expected_trial_rows(
                 load_transform_stats(cfg, run_id), manifest.record_count
             )
+            problems: list[str] = []
+            if study_count != expected:
+                problems.append(f"the manifest expects {expected} studies")
+            if retained_trials is not None and study_count < retained_trials:
+                problems.append(f"the retained silver_trials file holds {retained_trials} trials")
             if stats_expected is not None and study_count < stats_expected:
-                reasons.append(f"the retained transform stats expect {stats_expected} trials")
-            if reasons:
+                problems.append(f"the retained transform stats expect {stats_expected} trials")
+            if (
+                not problems
+                and duplicate_count + skipped_no_nct > 0
+                and retained_trials is None
+                and stats_expected is None
+            ):
+                problems.append(
+                    f"neither a readable retained silver_trials file nor retained transform "
+                    f"stats bounds its {duplicate_count + skipped_no_nct} excluded records"
+                )
+            if problems:
+                if study_count != expected:
+                    advice = (
+                        "Restore this run's bronze pages (from a backup or a re-fetch of the "
+                        "same query written back under this run_id) and re-run the transform. "
+                    )
+                else:
+                    advice = (
+                        "No bronze page is missing: the bronze reproduces its manifest but "
+                        "holds fewer studies than the retained silver, so the retained silver "
+                        "is the only copy of the studies the bronze can no longer produce. "
+                        "Restore the original page content (re-fetch the same query) and "
+                        "re-run the transform, or keep the retained silver as written. "
+                    )
+                advice += (
+                    "Removing this run's bronze directory is irreversible and only "
+                    "appropriate when the lost studies cannot be restored and every "
+                    "retained silver entity file for the run is present; if a retained "
+                    "entity is also missing, the run can never be rebuilt and the retained "
+                    "silver is the only surviving copy."
+                )
                 raise BronzeRebuildMismatch(
-                    f"Run {run_id}: the bronze rebuild "
-                    + "; ".join(reasons)
-                    + ". Replacing the retained silver with this rebuild would be irreversible, "
-                    "so nothing was written. Restore the missing bronze pages, or remove this "
-                    "run's bronze directory to keep its retained silver as written, then re-run "
-                    "the transform."
+                    f"Run {run_id}: the bronze rebuild produced {study_count} studies "
+                    f"({manifest.record_count} records, {duplicate_count} repeated NCT IDs, "
+                    f"{skipped_no_nct} without an NCT ID), but {_human_list(problems)}; "
+                    f"nothing was written. {advice}"
                 )
     except BaseException:
         writer.discard()
         raise
+    # Remove the previous stats BEFORE the first swap; the fresh stats are
+    # written last, after close() succeeds. Any interruption mid-swap — a raised
+    # exception, SIGTERM or SIGKILL, none of which can run cleanup — then leaves
+    # the run without stats, so _already_transformed is false and the next plain
+    # transform rebuilds the run whole.
+    try:
+        stats_path(cfg, run_id).unlink(missing_ok=True)
+    except OSError:
+        pass
     try:
         counts = writer.close()
     except BaseException:
         writer.discard()
-        # close() swaps final files one entity at a time; an I/O failure mid-swap
-        # leaves some entities rebuilt and others legacy. Drop the run's stats so
-        # _already_transformed is false and the next plain transform rebuilds the
-        # run whole.
-        try:
-            stats_path(cfg, run_id).unlink(missing_ok=True)
-        except OSError:
-            pass
         raise
 
     if duplicate_count:
