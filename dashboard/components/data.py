@@ -158,6 +158,12 @@ def priority_queue(profile_id: str) -> pd.DataFrame:
             raw segment metrics, ordered by active recruiting trials,
             distinct sponsors, and priority queue key.
     """
+    if not _has_column("mart_feasibility_priority_queue", "operational_completeness_share"):
+        st.error(
+            "Priority Queue is unavailable because the warehouse has an outdated "
+            "mart. Rebuild it with `make pipeline`."
+        )
+        st.stop()
     return query(
         "select * from main_marts.mart_feasibility_priority_queue"
         " where indication_profile_id = ?"
