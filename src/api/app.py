@@ -48,6 +48,7 @@ from src.api.models import (
     TrialSummary,
 )
 from src.api.patient import register_patient_routes
+from src.api.ratelimit import SlidingWindowLimiter
 from src.api.warehouse import (
     DuckDBWarehouseManager,
     WarehouseNotReadyError,
@@ -137,6 +138,7 @@ class APIContainer:
             else os.environ.get("CTI_CACHE_PATH", ".api_cache.db")
         )
         self.circuit_breaker = circuit_breaker or CircuitBreaker()
+        self.live_limiter = SlidingWindowLimiter()
 
         # Warehouse DuckDB configuration
         resolved_wh_path = (
@@ -148,6 +150,19 @@ class APIContainer:
             self.warehouse = DuckDBWarehouseManager(resolved_wh_path)
         else:
             self.warehouse = None
+
+
+def enforce_live_rate_limit(request: Request, deps: "APIContainer") -> None:
+    """429 a client that floods the live path; each miss costs an upstream call."""
+    # Behind Fly's proxy the socket peer is the proxy, so prefer its forwarded header.
+    client = request.headers.get("fly-client-ip") or (
+        request.client.host if request.client else "?"
+    )
+    wait = deps.live_limiter.retry_after(client)
+    if wait:
+        raise HTTPException(
+            429, "Too many requests; slow down.", headers={"Retry-After": str(wait)}
+        )
 
 
 def _sanitized_payload(data: dict[str, Any]) -> tuple[str, str]:
@@ -624,6 +639,7 @@ def create_app(
             return result
 
         # Live API backend path
+        enforce_live_rate_limit(request, deps)
         unsupported = [
             name
             for name, value in (
@@ -772,6 +788,7 @@ def create_app(
             return detail
 
         # Live API backend path
+        enforce_live_rate_limit(request, deps)
         cache_key = canonical_cache_key("trial_detail", {"nct_id": canonical_nct})
 
         def fetch_upstream() -> tuple[str, str]:
