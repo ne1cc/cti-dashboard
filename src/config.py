@@ -33,6 +33,17 @@ class ApiConfig(BaseModel):
     format: str = "json"
     page_size: int = 100
     count_total: bool = True
+    # Field projection (GET /studies `fields`): branch names under the study
+    # record whose descendants are all included, e.g.
+    # "protocolSection.identificationModule". Empty means "return everything",
+    # which is what a slim registry build must never do (issue #53).
+    fields: list[str] = []
+    # Minimum wall-clock spacing between HTTP requests. The API publishes no
+    # numeric rate limit (no rate-limit response headers, OpenAPI spec and NLM
+    # bulletins silent as of 2026-10-30); ~50 requests/minute is the community
+    # consensus, so the shipped configs set 1.2s. 429s retry with backoff
+    # regardless (retry_policy.py).
+    min_request_interval_seconds: float = 0.0
     query_params: dict[str, Any] = {}
     http: HttpConfig = HttpConfig()
 
@@ -76,7 +87,7 @@ class RetentionConfig(BaseModel):
     This default is the shipped horizon (3), not a looser one: the depth was
     brought down from 6 by a dated volume measurement (1 GB deployed, 499.7 MB
     steady state and 866.5 MB worst-instant at 3 snapshots for two profiles,
-    2026-09-07, commit 78c2050 — docs/DEPLOY_FLY.md). A config with no
+    2026-09-07, commit 78c2050 — docs/OPERATIONS.md). A config with no
     `retention:` block must not reintroduce the setting that overflows it.
     """
 

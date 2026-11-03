@@ -213,15 +213,15 @@ matched_candidates AS (
       )
       AND (
           $cond IS NULL OR
-          lower(dt.brief_title) LIKE '%' || lower($cond) || '%' OR
+          lower(dt.brief_title) LIKE '%' || lower($cond) || '%' ESCAPE '\' OR
           EXISTS (
               SELECT 1 FROM stg_trial_conditions tc
               WHERE tc.nct_id = dt.nct_id
                 AND (dt.ingestion_run_id IS NULL OR tc.ingestion_run_id = dt.ingestion_run_id)
                 AND (
-                    lower(tc.condition_raw) LIKE '%' || lower($cond) || '%' OR
-                    lower(tc.condition_group) LIKE '%' || lower($cond) || '%' OR
-                    lower(tc.condition_normalized) LIKE '%' || lower($cond) || '%'
+                    lower(tc.condition_raw) LIKE '%' || lower($cond) || '%' ESCAPE '\' OR
+                    lower(tc.condition_group) LIKE '%' || lower($cond) || '%' ESCAPE '\' OR
+                    lower(tc.condition_normalized) LIKE '%' || lower($cond) || '%' ESCAPE '\'
                 )
           )
       )

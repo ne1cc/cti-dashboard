@@ -1,0 +1,469 @@
+{
+ "studies": [
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT10000001",
+     "briefTitle": "Donepezil Maintenance Dosing in Mild to Moderate Alzheimer Disease",
+     "officialTitle": "A Phase 3 Randomized Study of Maintenance Versus Tapered Donepezil in Mild to Moderate Alzheimer Disease"
+    },
+    "statusModule": {
+     "overallStatus": "COMPLETED",
+     "lastKnownStatus": "COMPLETED",
+     "statusVerifiedDate": "2024-08-01",
+     "startDateStruct": {"date": "2019-01-15"},
+     "primaryCompletionDateStruct": {"date": "2023-12-31"},
+     "completionDateStruct": {"date": "2024-06-30"},
+     "studyFirstPostDateStruct": {"date": "2019-02-20"},
+     "resultsFirstPostDateStruct": {"date": "2024-10-05"},
+     "lastUpdatePostDateStruct": {"date": "2025-01-10"}
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {"name": "NeuroPharm Inc", "class": "INDUSTRY"},
+     "collaborators": [{"name": "Alzheimer Research Network", "class": "NETWORK"}]
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": ["PHASE3"],
+     "enrollmentInfo": {"count": 146, "type": "Actual"}
+    },
+    "conditionsModule": {"conditions": ["Alzheimer Disease"]},
+    "armsInterventionsModule": {
+     "interventions": [
+      {"name": "Donepezil 10 mg maintenance", "type": "Drug", "description": "Continuous daily dose."},
+      {"name": "Placebo oral tablet", "type": "Drug"}
+     ]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [{"measure": "ADAS-Cog13 change from baseline", "timeFrame": "78 weeks"}]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "55 Years",
+     "maximumAge": "90 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: probable Alzheimer disease (NINCDS-ADRDA). Exclusion: severe renal impairment."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {"facility": "Duke Memory Center", "city": "Durham", "state": "North Carolina", "zip": "27710", "country": "United States", "status": "COMPLETED"},
+      {"facility": "UCSF Memory Clinic", "city": "San Francisco", "state": "CA", "zip": "94143", "country": "United States", "status": "COMPLETED"}
+     ]
+    }
+   },
+   "resultsSection": {
+    "baselineCharacteristicsModule": {
+     "groups": [
+      {"id": "BG000", "title": "Donepezil 10 mg maintenance", "description": "Continuous daily dosing."},
+      {"id": "BG001", "title": "Placebo", "description": "Matching placebo."}
+     ],
+     "denoms": [
+      {"units": "Participants", "counts": [{"groupId": "BG000", "value": "68"}, {"groupId": "BG001", "value": "78"}]}
+     ],
+     "measures": [
+      {
+       "title": "Age, Continuous",
+       "paramType": "MEDIAN",
+       "dispersionType": "STANDARD_DEVIATION",
+       "unitOfMeasure": "years",
+       "classes": [
+        {"title": null, "categories": [{"title": null, "measurements": [{"groupId": "BG000", "value": "79.5", "spread": "7.2"}, {"groupId": "BG001", "value": "78", "spread": "6.9"}]}]}
+       ]
+      },
+      {
+       "title": "Sex: Female, Male",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {"title": null, "categories": [
+         {"title": "Female", "measurements": [{"groupId": "BG000", "value": "30"}, {"groupId": "BG001", "value": "38"}]},
+         {"title": "Male", "measurements": [{"groupId": "BG000", "value": "38"}, {"groupId": "BG001", "value": "40"}]}
+        ]}
+       ]
+      },
+      {
+       "title": "Ethnicity (NIH/OMB)",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {"title": null, "categories": [
+         {"title": "Hispanic or Latino", "measurements": [{"groupId": "BG000", "value": "4"}, {"groupId": "BG001", "value": "3"}]},
+         {"title": "Not Hispanic or Latino", "measurements": [{"groupId": "BG000", "value": "62"}, {"groupId": "BG001", "value": "73"}]},
+         {"title": "Unknown or Not Reported", "measurements": [{"groupId": "BG000", "value": "2"}, {"groupId": "BG001", "value": "2"}]}
+        ]}
+       ]
+      },
+      {
+       "title": "Race (NIH/OMB)",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {"title": null, "categories": [
+         {"title": "American Indian or Alaska Native", "measurements": [{"groupId": "BG000", "value": "1"}, {"groupId": "BG001", "value": "0"}]},
+         {"title": "Asian", "measurements": [{"groupId": "BG000", "value": "3"}, {"groupId": "BG001", "value": "2"}]},
+         {"title": "Native Hawaiian or Other Pacific Islander", "measurements": [{"groupId": "BG000", "value": "0"}, {"groupId": "BG001", "value": "0"}]},
+         {"title": "Black or African American", "measurements": [{"groupId": "BG000", "value": "12"}, {"groupId": "BG001", "value": "11"}]},
+         {"title": "White", "measurements": [{"groupId": "BG000", "value": "48"}, {"groupId": "BG001", "value": "61"}]},
+         {"title": "More than one race", "measurements": [{"groupId": "BG000", "value": "2"}, {"groupId": "BG001", "value": "2"}]},
+         {"title": "Unknown or Not Reported", "measurements": [{"groupId": "BG000", "value": "2"}, {"groupId": "BG001", "value": "2"}]}
+        ]}
+       ]
+      }
+     ]
+    }
+   },
+   "hasResults": true
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT10000002",
+     "briefTitle": "Combination Memantine and Cholinesterase Inhibitor in Alzheimer Disease",
+     "officialTitle": "A Randomized Double-Blind Study of Combination Therapy in Moderate Alzheimer Disease"
+    },
+    "statusModule": {
+     "overallStatus": "COMPLETED",
+     "lastKnownStatus": "COMPLETED",
+     "statusVerifiedDate": "2024-11-01",
+     "startDateStruct": {"date": "2018-05-01"},
+     "primaryCompletionDateStruct": {"date": "2024-03-31"},
+     "completionDateStruct": {"date": "2024-09-30"},
+     "studyFirstPostDateStruct": {"date": "2018-06-15"},
+     "resultsFirstPostDateStruct": {"date": "2025-02-01"},
+     "lastUpdatePostDateStruct": {"date": "2025-03-01"}
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {"name": "Cognitive Therapeutics LLC", "class": "INDUSTRY"}
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": ["PHASE3"],
+     "enrollmentInfo": {"count": 92, "type": "Actual"}
+    },
+    "conditionsModule": {"conditions": ["Alzheimer Disease"]},
+    "armsInterventionsModule": {
+     "interventions": [{"name": "Memantine combination", "type": "Drug"}, {"name": "Monotherapy", "type": "Drug"}]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [{"measure": "NPI change from baseline", "timeFrame": "24 weeks"}]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "50 Years",
+     "maximumAge": "85 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: moderate Alzheimer disease (MMSE 5-14)."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {"facility": "Johns Hopkins Cognitive Center", "city": "Baltimore", "state": "Maryland", "zip": "21205", "country": "United States", "status": "COMPLETED"}
+     ]
+    }
+   },
+   "resultsSection": {
+    "baselineCharacteristicsModule": {
+     "groups": [
+      {"id": "BG000", "title": "Combination therapy", "description": "Memantine added to cholinesterase inhibitor."},
+      {"id": "BG001", "title": "Monotherapy", "description": "Cholinesterase inhibitor alone."}
+     ],
+     "denoms": [
+      {"units": "Participants", "counts": [{"groupId": "BG000", "value": "45"}, {"groupId": "BG001", "value": "47"}]}
+     ],
+     "measures": [
+      {
+       "title": "Sex: Female, Male",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {"title": null, "categories": [
+         {"title": "Female", "measurements": [{"groupId": "BG000", "value": "28"}, {"groupId": "BG001", "value": "30"}]},
+         {"title": "Male", "measurements": [{"groupId": "BG000", "value": "17"}, {"groupId": "BG001", "value": "17"}]}
+        ]}
+       ]
+      },
+      {
+       "title": "Race/Ethnicity, Customized",
+       "paramType": "NUMBER",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {"title": null, "categories": [
+         {"title": "American Indian or Alaska Native", "measurements": [{"groupId": "BG000", "value": "0"}, {"groupId": "BG001", "value": "1"}]},
+         {"title": "Asian", "measurements": [{"groupId": "BG000", "value": "2"}, {"groupId": "BG001", "value": "3"}]},
+         {"title": "Black or African American", "measurements": [{"groupId": "BG000", "value": "6"}, {"groupId": "BG001", "value": "5"}]},
+         {"title": "Native Hawaiian or Other Pacific Islander", "measurements": [{"groupId": "BG000", "value": "0"}, {"groupId": "BG001", "value": "0"}]},
+         {"title": "White", "measurements": [{"groupId": "BG000", "value": "35"}, {"groupId": "BG001", "value": "36"}]},
+         {"title": "Not Reported Due to Confidentiality Regulations", "measurements": [{"groupId": "BG000", "value": "1"}, {"groupId": "BG001", "value": "1"}]},
+         {"title": "Other", "measurements": [{"groupId": "BG000", "value": "0"}, {"groupId": "BG001", "value": "0"}]},
+         {"title": "Multiple: American Indian or Alaska Native and White", "measurements": [{"groupId": "BG000", "value": "1"}, {"groupId": "BG001", "value": "1"}]},
+         {"title": "Unknown", "measurements": [{"groupId": "BG000", "value": "0"}, {"groupId": "BG001", "value": "0"}]}
+        ]}
+       ]
+      }
+     ]
+    }
+   },
+   "hasResults": true
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT10000003",
+     "briefTitle": "Anti-Amyloid Antibody in Prodromal Alzheimer Disease",
+     "officialTitle": "A Phase 2 Study of Anti-Amyloid Antibody in Prodromal Alzheimer Disease With Biomarker Confirmation"
+    },
+    "statusModule": {
+     "overallStatus": "COMPLETED",
+     "lastKnownStatus": "COMPLETED",
+     "statusVerifiedDate": "2025-02-01",
+     "startDateStruct": {"date": "2020-03-01"},
+     "primaryCompletionDateStruct": {"date": "2024-12-31"},
+     "completionDateStruct": {"date": "2025-05-31"},
+     "studyFirstPostDateStruct": {"date": "2020-04-10"},
+     "resultsFirstPostDateStruct": {"date": "2025-08-15"},
+     "lastUpdatePostDateStruct": {"date": "2025-09-01"}
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {"name": "Biomark Pharma", "class": "INDUSTRY"},
+     "collaborators": [{"name": "Academic Dementia Consortium", "class": "ACADEMIC"}]
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": ["PHASE2"],
+     "enrollmentInfo": {"count": 118, "type": "Actual"}
+    },
+    "conditionsModule": {"conditions": ["Mild Cognitive Impairment"]},
+    "armsInterventionsModule": {
+     "interventions": [{"name": "Anti-amyloid antibody", "type": "Biological"}, {"name": "Standard care", "type": "Other"}]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [{"measure": "CDR-SB change from baseline", "timeFrame": "104 weeks"}]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "55 Years",
+     "maximumAge": "85 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: prodromal AD with amyloid PET positivity."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {"facility": "Mayo Clinic Study Site", "city": "Rochester", "state": "Minnesota", "zip": "55905", "country": "United States", "status": "COMPLETED"}
+     ]
+    }
+   },
+   "resultsSection": {
+    "baselineCharacteristicsModule": {
+     "groups": [
+      {"id": "BG000", "title": "Anti-amyloid antibody", "description": "Intravenous infusions every four weeks."},
+      {"id": "BG001", "title": "Standard care", "description": "Usual clinical management."}
+     ],
+     "denoms": [
+      {"units": "Participants", "counts": [{"groupId": "BG000", "value": "58"}, {"groupId": "BG001", "value": "60"}]}
+     ],
+     "measures": [
+      {
+       "title": "Sex: Female, Male",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {"title": null, "categories": [
+         {"title": "Female", "measurements": [{"groupId": "BG000", "value": "24"}, {"groupId": "BG001", "value": "26"}]},
+         {"title": "Male", "measurements": [{"groupId": "BG000", "value": "34"}, {"groupId": "BG001", "value": "34"}]}
+        ]}
+       ]
+      },
+      {
+       "title": "Race/Ethnicity, Customized",
+       "paramType": "NUMBER",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {"title": "Hispanic or Latino", "categories": [{"title": null, "measurements": [{"groupId": "BG000", "value": "3"}, {"groupId": "BG001", "value": "3"}]}]},
+        {"title": "Not Hispanic or Latino", "categories": [{"title": null, "measurements": [{"groupId": "BG000", "value": "54"}, {"groupId": "BG001", "value": "55"}]}]},
+        {"title": "Not Stated", "categories": [{"title": null, "measurements": [{"groupId": "BG000", "value": "1"}, {"groupId": "BG001", "value": "2"}]}]}
+       ]
+      },
+      {
+       "title": "Race/Ethnicity, Customized",
+       "paramType": "NUMBER",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {"title": "Asian", "categories": [{"title": null, "measurements": [{"groupId": "BG000", "value": "2"}, {"groupId": "BG001", "value": "1"}]}]},
+        {"title": "Black or African American", "categories": [{"title": null, "measurements": [{"groupId": "BG000", "value": "5"}, {"groupId": "BG001", "value": "6"}]}]},
+        {"title": "White", "categories": [{"title": null, "measurements": [{"groupId": "BG000", "value": "49"}, {"groupId": "BG001", "value": "50"}]}]},
+        {"title": "Unknown", "categories": [{"title": null, "measurements": [{"groupId": "BG000", "value": "2"}, {"groupId": "BG001", "value": "3"}]}]}
+       ]
+      }
+     ]
+    }
+   },
+   "hasResults": true
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT10000004",
+     "briefTitle": "Memantine Extended Release in Dementia With Lewy Bodies",
+     "officialTitle": "A Randomized Placebo-Controlled Study of Memantine Extended Release in Dementia With Lewy Bodies"
+    },
+    "statusModule": {
+     "overallStatus": "COMPLETED",
+     "lastKnownStatus": "COMPLETED",
+     "statusVerifiedDate": "2025-05-01",
+     "startDateStruct": {"date": "2021-02-01"},
+     "primaryCompletionDateStruct": {"date": "2025-01-31"},
+     "completionDateStruct": {"date": "2025-07-31"},
+     "studyFirstPostDateStruct": {"date": "2021-03-01"},
+     "resultsFirstPostDateStruct": {"date": "2025-11-20"},
+     "lastUpdatePostDateStruct": {"date": "2025-12-01"}
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {"name": "Lewy Body Research Foundation", "class": "OTHER"}
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": ["PHASE2"],
+     "enrollmentInfo": {"count": 62, "type": "Actual"}
+    },
+    "conditionsModule": {"conditions": ["Dementia with Lewy Bodies"]},
+    "armsInterventionsModule": {
+     "interventions": [{"name": "Memantine ER", "type": "Drug"}, {"name": "Placebo", "type": "Drug"}]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [{"measure": "Clinician Assessment of Fluctuation change", "timeFrame": "24 weeks"}]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "60 Years",
+     "maximumAge": "88 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: probable DLB per consensus criteria."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {"facility": "UCSD Movement Disorder Center", "city": "San Diego", "state": "California", "zip": "92093", "country": "United States", "status": "COMPLETED"}
+     ]
+    }
+   },
+   "resultsSection": {
+    "baselineCharacteristicsModule": {
+     "groups": [
+      {"id": "BG000", "title": "Memantine ER", "description": "Daily extended-release capsules."},
+      {"id": "BG001", "title": "Placebo", "description": "Matching capsules."}
+     ],
+     "denoms": [
+      {"units": "Participants", "counts": [{"groupId": "BG000", "value": "30"}, {"groupId": "BG001", "value": "32"}]}
+     ],
+     "measures": [
+      {
+       "title": "Sex: Female, Male",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {"title": null, "categories": [
+         {"title": "Female", "measurements": [{"groupId": "BG000", "value": "14"}, {"groupId": "BG001", "value": "15"}]},
+         {"title": "Male", "measurements": [{"groupId": "BG000", "value": "16"}, {"groupId": "BG001", "value": "17"}]}
+        ]}
+       ]
+      },
+      {
+       "title": "Race and Ethnicity Not Collected",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {"title": null, "categories": [{"title": null, "measurements": [{"groupId": "BG000", "value": "30"}, {"groupId": "BG001", "value": "32"}]}]}
+       ]
+      }
+     ]
+    }
+   },
+   "hasResults": true
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT10000005",
+     "briefTitle": "Tau Vaccine in Frontotemporal Dementia",
+     "officialTitle": "A Phase 1/2 Study of Active Tau Immunization in Frontotemporal Dementia With Tau Pathology"
+    },
+    "statusModule": {
+     "overallStatus": "COMPLETED",
+     "lastKnownStatus": "COMPLETED",
+     "statusVerifiedDate": "2023-09-01",
+     "startDateStruct": {"date": "2019-06-01"},
+     "primaryCompletionDateStruct": {"date": "2023-04-30"},
+     "completionDateStruct": {"date": "2023-08-31"},
+     "studyFirstPostDateStruct": {"date": "2019-07-01"},
+     "resultsFirstPostDateStruct": {"date": "2023-12-10"},
+     "lastUpdatePostDateStruct": {"date": "2024-01-15"}
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {"name": "TauRx Biotherapeutics", "class": "INDUSTRY"}
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": ["PHASE1/PHASE2"],
+     "enrollmentInfo": {"count": 49, "type": "Actual"}
+    },
+    "conditionsModule": {"conditions": ["Frontotemporal Dementia"]},
+    "armsInterventionsModule": {
+     "interventions": [{"name": "Tau vaccine", "type": "Biological"}, {"name": "Placebo", "type": "Drug"}]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [{"measure": "Safety: incidence of adverse events", "timeFrame": "52 weeks"}]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "45 Years",
+     "maximumAge": "80 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: behavioral variant FTD with tau biomarker."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {"facility": "UCSF Memory and Aging Center", "city": "San Francisco", "state": "California", "zip": "94158", "country": "United States", "status": "COMPLETED"}
+     ]
+    }
+   },
+   "resultsSection": {
+    "baselineCharacteristicsModule": {
+     "groups": [
+      {"id": "BG000", "title": "Tau vaccine", "description": "Monthly intramuscular injections."},
+      {"id": "BG001", "title": "Placebo", "description": "Matching injections."}
+     ],
+     "denoms": [
+      {"units": "Participants", "counts": [{"groupId": "BG000", "value": "25"}, {"groupId": "BG001", "value": "24"}]}
+     ],
+     "measures": [
+      {
+       "title": "Age, Continuous",
+       "paramType": "MEAN",
+       "dispersionType": "STANDARD_DEVIATION",
+       "unitOfMeasure": "years",
+       "classes": [
+        {"title": null, "categories": [{"title": null, "measurements": [{"groupId": "BG000", "value": "71.2", "spread": "6.8"}, {"groupId": "BG001", "value": "70.8", "spread": "7.1"}]}]}
+       ]
+      },
+      {
+       "title": "Race/Ethnicity, Customized",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {"title": null, "categories": [
+         {"title": "Race: White", "measurements": [{"groupId": "BG000", "value": "15"}, {"groupId": "BG001", "value": "16"}]},
+         {"title": "Race: Black or African American", "measurements": [{"groupId": "BG000", "value": "3"}, {"groupId": "BG001", "value": "2"}]},
+         {"title": "Race: Asian", "measurements": [{"groupId": "BG000", "value": "5"}, {"groupId": "BG001", "value": "4"}]},
+         {"title": "Ethnicity: Hispanic or Latino", "measurements": [{"groupId": "BG000", "value": "4"}, {"groupId": "BG001", "value": "3"}]},
+         {"title": "Ethnicity: Not Hispanic or Latino", "measurements": [{"groupId": "BG000", "value": "20"}, {"groupId": "BG001", "value": "20"}]},
+         {"title": "Ethnicity: Prefer not to say", "measurements": [{"groupId": "BG000", "value": "1"}, {"groupId": "BG001", "value": "1"}]}
+        ]}
+       ]
+      }
+     ]
+    }
+   },
+   "hasResults": true
+  }
+ ],
+ "totalCount": 5,
+ "nextPageToken": null
+}

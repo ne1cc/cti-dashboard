@@ -39,12 +39,16 @@ trial_fields as (
 -- same condition_raw to different condition_group values, so an unprofiled
 -- list(distinct condition_group) would credit an NSCLC trial with ADRD's
 -- condition groups and inflate same_condition in both directions.
+-- MeSH rows (both direct terms and ancestor closure) are excluded: similarity
+-- scores are kept strictly at the taxonomy condition-group level (mesh_id is null)
+-- so pair discovery and weighting remain stable (Issue #52 review).
 conditions as (
     select
         indication_profile_id,
         nct_id,
         list(distinct condition_group) as condition_groups
     from {{ ref('bridge_trial_condition') }}
+    where mesh_id is null
     group by 1, 2
 ),
 

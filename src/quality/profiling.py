@@ -100,14 +100,16 @@ def profile_run(run_id: str, config: ProjectConfig | None = None) -> dict[str, A
         # expectation. The transform records how many it excluded, which keeps
         # this exact; without those stats a shortfall is not treated as
         # explained.
-        expected = expected_trial_rows(load_transform_stats(cfg, run_id), manifest.record_count)
+        stats = load_transform_stats(cfg, run_id)
+        expected = expected_trial_rows(stats, manifest.record_count)
         expectation = expected if expected is not None else manifest.record_count
+        carried = int(stats.get("carried_rows", 0)) if stats else 0
         report["reconciliation"] = {
             "manifest_found": True,
             "manifest_record_count": manifest.record_count,
             "silver_trials_row_count": rows,
             "distinct_nct_ids": trials.get("distinct_nct_ids"),
-            "excluded_records": manifest.record_count - rows,
+            "excluded_records": manifest.record_count - (rows - carried),
             "expected_silver_rows": expected,
             "rows_match_expectation": rows == expectation,
             "nct_ids_unique": trials.get("distinct_nct_ids") == rows,
