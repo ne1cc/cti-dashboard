@@ -13,6 +13,7 @@ from components.formatting import (  # noqa: E402
     format_phase,
     format_priority_explanation,
     format_snapshot_date,
+    hhi_status,
 )
 
 
@@ -79,3 +80,22 @@ def test_priority_summary_labels_growth_and_registrations_distinctly(mode: str) 
         assert "105 of 90 days observed" not in text
 
     pd.testing.assert_series_equal(row, before)
+
+
+def test_hhi_status_for_missing_and_present_values():
+    """Suppressed values carry their sponsor count; available values need no label."""
+    assert hhi_status(None, 2) == "insufficient data (2 sponsors)"
+    assert hhi_status(float("nan"), 0) == "insufficient data (0 sponsors)"
+    assert hhi_status(None, None) == "insufficient data (sponsor count unavailable)"
+    assert hhi_status(0.375, 3) == ""
+
+
+def test_hhi_status_does_not_change_numeric_sorting():
+    """The label stays in a separate column from sortable numeric HHI."""
+    df = pd.DataFrame({"sponsor_hhi": [0.9, None, 0.2], "sponsor_count": [3, 1, 4]})
+    df["hhi_status"] = [
+        hhi_status(v, n) for v, n in zip(df.sponsor_hhi, df.sponsor_count, strict=True)
+    ]
+    sorted_df = df.sort_values("sponsor_hhi")
+    assert sorted_df.sponsor_hhi.iloc[:2].tolist() == [0.2, 0.9]
+    assert sorted_df.hhi_status.iloc[-1] == "insufficient data (1 sponsors)"

@@ -651,6 +651,85 @@ def solo_fixture_roots(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Pa
     }
 
 
+# --- Issue #79 fixture: sponsor_hhi suppression thresholds -------------------
+# One ADRD run whose recruiting segments carry 0, 1, 2 and 3 distinct sponsors:
+#   (alzheimers_disease, NC, PHASE2)  4 trials, 3 sponsors {1/4, 1/4, 2/4} -> HHI 0.375
+#   (alzheimers_disease, NC, PHASE3)  2 trials, 2 sponsors -> HHI 0.5
+#   (alzheimers_disease, CA, PHASE3)  1 trial, 1 sponsor  -> HHI 1.0
+#   the sole NCT00000009 segment      1 trial, 0 named sponsors
+# Built twice (project defaults, and min_sponsors_for_hhi=2) so the suppression
+# edge is observable moving with the var: the two-sponsor segment is null at 3
+# and 0.5 at 2; the three-sponsor one is 0.375 at both.
+def _hhi_threshold_run() -> FixtureRun:
+    return replace(
+        _base_adrd_run(),
+        run_id="20260901T120000Z_fixture08",
+        added=(
+            AddedStudy(
+                nct_id="NCT00000021",
+                clone_of="NCT00000001",
+                overall_status="RECRUITING",
+                sponsor="Threshold Sponsor Two",
+                location=("Duke Memory Center", "Durham", "North Carolina"),
+            ),
+            AddedStudy(
+                nct_id="NCT00000022",
+                clone_of="NCT00000001",
+                overall_status="RECRUITING",
+                phase="PHASE2",
+                sponsor="Threshold Sponsor Three",
+                location=("Duke Memory Center", "Durham", "North Carolina"),
+            ),
+            AddedStudy(
+                nct_id="NCT00000023",
+                clone_of="NCT00000001",
+                overall_status="RECRUITING",
+                phase="PHASE2",
+                sponsor="Threshold Sponsor Four",
+                location=("Duke Memory Center", "Durham", "North Carolina"),
+            ),
+            AddedStudy(
+                nct_id="NCT00000024",
+                clone_of="NCT00000001",
+                overall_status="RECRUITING",
+                phase="PHASE2",
+                sponsor="Threshold Sponsor Five",
+                location=("Duke Memory Center", "Durham", "North Carolina"),
+            ),
+            AddedStudy(
+                nct_id="NCT00000025",
+                clone_of="NCT00000001",
+                overall_status="RECRUITING",
+                phase="PHASE2",
+                sponsor="Threshold Sponsor Five",
+                location=("Duke Memory Center", "Durham", "North Carolina"),
+            ),
+        ),
+        study_overrides={
+            # Zero named sponsors: a null lead-sponsor group counts no distinct
+            # sponsor, so sponsor_count is 0 and HHI must stay null.
+            "NCT00000009": {
+                "sponsorCollaboratorsModule": {"leadSponsor": {"name": None, "class": "OTHER"}}
+            },
+        },
+    )
+
+
+@pytest.fixture(scope="session")
+def hhi_threshold_roots(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
+    """The Issue #79 warehouse at the default threshold and at min_sponsors_for_hhi=2."""
+    run = _hhi_threshold_run()
+    return {
+        "default": _build_fixture_root(tmp_path_factory, "fixture_hhi_default", [run]),
+        "min_two": _build_fixture_root(
+            tmp_path_factory,
+            "fixture_hhi_min_two",
+            [run],
+            dbt_vars={"min_sponsors_for_hhi": 2},
+        ),
+    }
+
+
 AUDIT_RUN2_ID = "20260901T130000Z_audit02"
 AUDIT_FAILED_RUN_ID = "20260902T100000Z_auditfailed"
 

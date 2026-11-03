@@ -172,8 +172,12 @@ select
         newly_registered_90d
             || ' newly registered within 90 days (registry first-post date,'
             || ' not a recruiting transition)',
-        'sponsor concentration HHI ' || round(sponsor_hhi, 2)
-            || ' across ' || sponsor_count || ' sponsor(s)',
+        case when sponsor_hhi is null then
+            'sponsor concentration: insufficient data (' || sponsor_count || ' sponsors)'
+        else
+            'sponsor concentration HHI ' || round(sponsor_hhi, 2)
+                || ' across ' || sponsor_count || ' sponsor(s)'
+        end,
         round(coalesce(site_overlap_share, 0) * 100)
             || '% of trials share a multi-trial facility listing',
         'data confidence ' || round(data_confidence_share * 100) || '%'

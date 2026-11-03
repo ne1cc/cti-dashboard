@@ -42,9 +42,9 @@ select
     t.segment_trial_count,
     max({{ safe_divide('c.sponsor_trial_count', 't.segment_trial_count') }})
         as top_sponsor_share,
-    sum(
-        power({{ safe_divide('c.sponsor_trial_count', 't.segment_trial_count') }}, 2)
-    ) as sponsor_hhi
+    case when t.sponsor_count >= {{ var('min_sponsors_for_hhi', 3) }} then
+        sum(power({{ safe_divide('c.sponsor_trial_count', 't.segment_trial_count') }}, 2))
+    end as sponsor_hhi
 from segment_totals t
 inner join sponsor_counts c
     using (

@@ -798,7 +798,7 @@ models:
         description: Share of segment trials held by the leading sponsor.
       - name: sponsor_hhi
         data_type: DOUBLE
-        description: Herfindahl-Hirschman Index of lead sponsor concentration, bounded in [0, 1].
+        description: Herfindahl-Hirschman Index of lead sponsor concentration; null below the configured minimum distinct sponsors.
       - name: competition_signal_band
         data_type: VARCHAR
         description: Descriptive competition signal tier derived from sponsor concentration.

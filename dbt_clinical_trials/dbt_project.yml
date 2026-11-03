@@ -15,6 +15,7 @@ clean-targets:
 # (tests/test_profiles.py::test_dbt_ingest_only_var_matches_registry) — dbt
 # cannot import src.profiles, so the list is duplicated and guarded.
 vars:
+  min_sponsors_for_hhi: 3
   ingest_only_profiles: ['full_catalog']
   # Candidate-pair guard for int_similarity_candidates: a condition-group
   # token whose per-profile trial count reaches this is dropped from pair
