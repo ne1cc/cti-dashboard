@@ -186,10 +186,10 @@ Remediation in PR `fix/production-volume-and-profile-scope`:
   67 s is what a same-day retry of a failed refresh costs. The same
   one-profile run finished in 19 seconds on an unloaded desktop, so treat the
   container figures as the ones that matter and not a floor.
-  A longer refresh means a longer serving outage, and the outage is bounded by
-  `kill_timeout` (270s): `entrypoint.sh` defers SIGTERM until the in-flight
-  `make pipeline` returns, and `auto_stop_machines = 'off'` means nothing else
-  comes to serve meanwhile.
+  A longer refresh means a longer serving outage. The former Fly deployment
+  used a 270-second `kill_timeout`; the current host must configure its own
+  shutdown grace period. `entrypoint.sh` defers SIGTERM until the in-flight
+  `make pipeline` returns.
   It has to pause: DuckDB takes one writer *or* readers, and the dashboard
   caches its read-only connection for the life of the process. While paused,
   the host's proxy sees an unresponsive upstream, but nothing restarts: an
@@ -449,12 +449,13 @@ loop-driven runs with manually driven ones, so it cannot settle the 10:19Z
 trigger. The per-tick `refresh check:` line added here is what makes the next
 occurrence answerable.
 
-## The pre-cutover flat bronze tree is stranded on the live volume, and only you can delete it
+## The pre-cutover flat bronze tree on the former Fly volume
 
 Item 2 names what the old layout left behind: `data/bronze/manifests/` and
 `data/bronze/api_responses/`, flat under `data/bronze/` instead of nested under a
-profile id. Those directories are still on the deployed volume, and nothing in this
-repo will ever remove them. `dbt_clinical_trials/models/staging/_sources.yml` globs
+profile id. Those directories were present on the former Fly volume, which has
+since been deleted. Other hosts have not been checked.
+`dbt_clinical_trials/models/staging/_sources.yml` globs
 the per-profile paths, so a flat directory is not a source; `src/utils/retention.py`
 prunes only inside roots a profile's config names — its anti-stranding rule, because
 a page directory no manifest names is invisible to every later prune — and a flat
@@ -473,20 +474,11 @@ du -sh /app/data                                                   # the current
 ls /app/data/bronze/    # the live tree is per-profile: adrd/, oncology_nsclc/
 ```
 
-The same walk may find `data/bronze/_schema_baseline.json` — the single global
-baseline the per-profile drift check replaced. It is gone from the repository and
-inert on the volume.
+The old tree could also contain `data/bronze/_schema_baseline.json`, the single
+global baseline the per-profile drift check replaced. It is gone from the repository.
 
-Remove them only **after** a refresh that landed both profiles, i.e. after
-`pipeline succeeded` appears in `/app/data/logs/pipeline.log` and each of
-`/app/data/bronze/adrd/manifests/` and `/app/data/bronze/oncology_nsclc/manifests/`
-holds that run's manifest. Before that point they are the only copy of the last
-pre-cutover ingestion:
-
-```bash
-rm -rf /app/data/bronze/manifests /app/data/bronze/api_responses
-du -sh /app/data   # the drop from the figure recorded above is what you recovered
-```
+Do not assume this historical flat tree exists on another host. Inspect the
+current host and confirm the data and retention policy before removing anything.
 
 ## Egress from Fly was verified (2026-09)
 
@@ -499,11 +491,11 @@ IP: the container's run `20260905T191901Z_77632421` reported
 
 ## Notes
 
-- **The scheduled refresh covers both refreshable indications, and the
-  dashboard serves one at a time.** `make pipeline` runs `orchestrate`, which
-  walks every profile in `config/profiles/` that is not `ingest_only`: the
-  2026-09-07 container run logged `Orchestrating 2 profile(s): ['adrd',
-  'oncology_nsclc']` (commit `78c2050`). `full_catalog` stays opt-in —
+- **The scheduled refresh covers the configured refreshable indications, and
+  the dashboard serves one at a time.** `make pipeline` runs `orchestrate`;
+  `CTI_REFRESHABLE_PROFILES` can limit the eligible profiles. The former Fly
+  deployment ran two profiles, `adrd` and `oncology_nsclc` (2026-09-07,
+  commit `78c2050`). `full_catalog` stays opt-in —
   `ingest_only: true` at `config/profiles/full_catalog.yml:21` — so its
   registry-wide pages never reach silver by accident. The dashboard does not
   blend the two: `dashboard/app.py` renders a profile selector and every read
@@ -511,6 +503,6 @@ IP: the container's run `20260905T191901Z_77632421` reported
   trials from both profiles in the shared `dim_trial` stay distinguishable.
   What is still single-profile by default is the manual entry point:
   `make ingest` sends the Makefile's `CONDITION` (`Alzheimer Disease`, the
-  `adrd` profile). Use `make orchestrate` for both.
+  `adrd` profile). Use `make orchestrate` for the configured profiles.
 - This app is a **portfolio demonstration**, not clinical decision
   support.
