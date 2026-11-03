@@ -51,3 +51,6 @@ seeds:
         population: bigint
         fips_code: varchar
         state_code: varchar
+    omb_race_ethnicity_mapping:
+      +column_types:
+        manually_reviewed: boolean
