@@ -247,7 +247,13 @@ processes can share the file, while writes require exclusive access.
 
 ### Metric Definitions
 
-Fully documented in [`docs/metric_definitions.md`](docs/metric_definitions.md). Core rules: trial counts are always `COUNT(DISTINCT nct_id)`; site counts use the documented facility grain and are never presented as investigator capacity; only complete (`success`) snapshots feed metrics.
+Fully documented in [`docs/metric_definitions.md`](docs/metric_definitions.md). Core
+rules: trial counts are always `COUNT(DISTINCT nct_id)`; site counts use the documented
+facility grain and are never presented as investigator capacity; only complete
+(`success`) snapshots feed metrics. The state choropleth defaults to population-adjusted
+listings (per 100k residents from U.S. Census Bureau Vintage 2024 estimates) with a toggle
+for raw counts; population normalization controls for state size without measuring disease
+prevalence or patient access.
 
 ### Registry Segment Metrics Methodology
 
@@ -271,10 +277,6 @@ For complete drill-through specifications, provenance requirements, and analytic
 - Raw recruiting counts are not population-adjusted.
 - Portfolio demonstration only; real decisions require qualified clinical-operations review. See [`docs/assumptions_and_limitations.md`](docs/assumptions_and_limitations.md).
 
-### Scenario-Value Methodology
-
-No fake ROI. A configurable scenario calculator (`config/roi_assumptions.yml`) lets an organization test whether a feasibility-review process could justify its cost using *its own* site-startup and study-burn assumptions, under low/base/high scenarios.
-
 ---
 
 ## Documentation Index
@@ -297,7 +299,7 @@ No fake ROI. A configurable scenario calculator (`config/roi_assumptions.yml`) l
 | [`docs/feasibility_case_study.md`](docs/feasibility_case_study.md) | national descriptive memo, complete state table, and evidence appendix |
 | [`docs/executive_memo_template.md`](docs/executive_memo_template.md) | stakeholder memo template with required scope and evidence references |
 | [`docs/DEPLOY_STREAMLIT.md`](docs/DEPLOY_STREAMLIT.md) | deploy the dashboard to Streamlit Community Cloud |
-| [`docs/DEPLOY_FLY.md`](docs/DEPLOY_FLY.md) | deploy the dashboard to Fly.io with an auto-refreshing pipeline |
+| [`docs/OPERATIONS.md`](docs/OPERATIONS.md) | container refresh loop, retention sizing, and operations history |
 | [`docs/competitive_positioning.md`](docs/competitive_positioning.md) | positioning as an open feasibility workbench vs. commercial platforms |
 | [`docs/archive/development_log.md`](docs/archive/development_log.md) | historical step-by-step build record (Phases 1–7) |
 | [`docs/archive/platform_updates_2026-09-04.md`](docs/archive/platform_updates_2026-09-04.md) | historical architecture and tooling updates |

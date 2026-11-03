@@ -251,6 +251,13 @@
        "name": "Metformin extended release",
        "type": "Drug"
       }
+     ],
+     "armGroups": [
+      {
+       "label": "Metformin extended release",
+       "type": "EXPERIMENTAL",
+       "interventionNames": ["Drug: Metformin extended release"]
+      }
      ]
     },
     "outcomesModule": {

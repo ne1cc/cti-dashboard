@@ -28,9 +28,12 @@ PRIORITY_DERIVED_RULES = (
     "site_overlap_rate (alias site_overlap_share) measures the share of recruiting trials in the "
     "segment that share at least one facility with another competing trial in the same "
     "indication profile, divided by distinct recruiting segment trials (bounded [0, 1]). "
-    "Growth sums daily recruiting entrants over 90 days, requiring a previous "
-    "non-null non-recruiting status; with one captured date, first-post >= "
-    "snapshot minus 90 days is the proxy. "
+    "new_recruiting_90d sums daily recruiting entrants over the inclusive 90-day window "
+    "(entrant requires a previous non-null non-recruiting status) and is null until "
+    "observed snapshot history covers the window and the latest snapshot gap does not "
+    "itself span it — null means not enough history, never zero. newly_registered_90d "
+    "counts recruiting studies whose registry first-post date falls within 90 days: a "
+    "registration count, not a recruiting transition. "
     "operational_completeness_share is operational data completeness (0.5 segment "
     "record-quality-ok share + 0.5 latest successful-run usable-location share; "
     "missing shares coalesce to zero). "
@@ -219,7 +222,7 @@ def render_metric_audit(
         if metric == "competition" and not observations.empty:
             mode = st.selectbox(
                 "Audit metric inputs",
-                ["Current count", "90-day growth observations", "First-post (90-day proxy)"],
+                ["Current count", "90-day growth observations", "Newly registered (first posted)"],
                 key=f"{key}_{profile_id}_window",
             )
             if mode == "90-day growth observations":
@@ -233,17 +236,20 @@ def render_metric_audit(
                 st.caption(
                     "Contributors are captured recruiting-entry events in this inclusive "
                     "90-day window. Predecessor evidence is retained even before the window. "
+                    "The displayed mart figure stays null until observed history covers the "
+                    "window; this audit lists the raw events regardless. "
                     "Eligible coverage and count-input contributors remain separate."
                 )
-            elif mode == "First-post (90-day proxy)":
+            elif mode == "Newly registered (first posted)":
                 end = pd.Timestamp(pd.to_datetime(observations.snapshot_date).max()).date()
-                metric = "first_post_proxy"
+                metric = "first_post_registered"
                 display_context["growth_window_start"] = str(end - timedelta(days=90))
                 display_context["growth_window_end"] = str(end)
                 st.caption(
-                    "Proxy contributors require RECRUITING and source first-post date "
+                    "Contributors require RECRUITING and source first-post date "
                     ">= snapshot date minus 90 days; the lower bound is inclusive, "
-                    "with no upper bound, matching the source formula."
+                    "with no upper bound, matching the source formula. These are "
+                    "registration events, not recruiting transitions."
                 )
         if observations.attrs.get("audit_unavailable"):
             st.warning(observations.attrs["audit_unavailable"])
@@ -361,7 +367,7 @@ def render_metric_audit(
                 ),
             },
         )
-        if metric in {"recent_recruiting", "first_post_proxy"}:
+        if metric in {"recent_recruiting", "first_post_registered"}:
             st.subheader("Metric-specific contributing events and source evidence")
             events = result["events"].copy()
             events["phase_normalized"] = events["phase_normalized"].map(format_phase)
@@ -396,7 +402,7 @@ def render_metric_audit(
                     "event_date": st.column_config.DateColumn(
                         "Recruiting entry date"
                         if metric == "recent_recruiting"
-                        else "First posted (proxy)",
+                        else "First posted (registered)",
                         format="MMM D, YYYY",
                     ),
                     "predecessor_snapshot_date": st.column_config.DateColumn(

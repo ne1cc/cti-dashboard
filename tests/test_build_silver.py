@@ -1,4 +1,5 @@
 import json
+import shutil
 from pathlib import Path
 
 import duckdb
@@ -11,7 +12,12 @@ from src.ingest.snapshot_manifest import IngestionManifest, write_manifest
 from src.profiles import get_registry
 from src.quality.profiling import profile_run
 from src.transform import build_silver_entities
-from src.transform.build_silver_entities import _already_transformed, build_silver_for_run
+from src.transform.build_silver_entities import (
+    _already_transformed,
+    _legacy_run_without_bronze,
+    build_silver_for_run,
+    run_transform,
+)
 from src.transform.export_parquet import ENTITY_COLUMNS
 from src.transform.silver_stats import stats_path
 from src.utils.dates import utc_now
@@ -225,6 +231,83 @@ def test_profile_run_treats_dedup_shortfall_as_expected(tmp_path: Path, monkeypa
     assert stats["row_counts"]["silver_trials"] == 2
 
 
+def test_run_transform_skips_a_retained_run_whose_bronze_was_pruned(tmp_path: Path):
+    """A pipeline upgrade must not fail on retained pre-feature silver.
+
+    Adding `silver_trial_arms` to ENTITY_NAMES marks every pre-upgrade run as
+    not-yet-transformed, but a run whose bronze was pruned (`bronze_runs_to_keep: 1`)
+    can never be rebuilt: `run_transform` must skip it and keep its silver
+    exactly as written instead of raising FileNotFoundError.
+    """
+    cfg = make_config(tmp_path)
+    run_id = "r_upgraded_volume"
+    run_dir = cfg.paths.bronze_api_responses / f"run_id={run_id}"
+    write_bronze_page(run_dir, 1, [make_study("NCT00000001")])
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+    write_manifest(cfg.paths.bronze_manifests, make_manifest(run_id, record_count=1))
+    build_silver_for_run(make_manifest(run_id, record_count=1), cfg)
+
+    # Rewind to the pre-feature shape: drop the arms entity, the new trial
+    # columns, and prune the bronze like `bronze_runs_to_keep: 1` would.
+    trials_path = cfg.paths.silver / "silver_trials" / f"run_id={run_id}.parquet"
+    legacy_columns = (
+        "intervention_model",
+        "masking",
+        "has_placebo_arm",
+        "why_stopped",
+        "brief_summary",
+        "primary_outcome_time_frame",
+    )
+    table = pq.read_table(trials_path)
+    pq.write_table(
+        table.select([c for c in table.column_names if c not in legacy_columns]), trials_path
+    )
+    (cfg.paths.silver / "silver_trial_arms" / f"run_id={run_id}.parquet").unlink()
+    shutil.rmtree(run_dir)
+    before = pd.read_parquet(trials_path)
+
+    assert build_silver_entities.run_transform(config=cfg) == []
+
+    after = pd.read_parquet(trials_path)
+    assert list(after.columns) == list(before.columns)
+    assert after["nct_id"].tolist() == before["nct_id"].tolist()
+
+
+def _pruned_bronze_run(tmp_path: Path, *, keep_silver: bool) -> tuple[ProjectConfig, str]:
+    cfg = make_config(tmp_path)
+    run_id = "r_pruned"
+    run_dir = cfg.paths.bronze_api_responses / f"run_id={run_id}"
+    write_bronze_page(run_dir, 1, [make_study("NCT00000001")])
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+    write_manifest(cfg.paths.bronze_manifests, make_manifest(run_id, record_count=1))
+    build_silver_for_run(make_manifest(run_id, record_count=1), cfg)
+    (cfg.paths.silver / "silver_trial_arms" / f"run_id={run_id}.parquet").unlink()
+    if not keep_silver:
+        (cfg.paths.silver / "silver_trials" / f"run_id={run_id}.parquet").unlink()
+    shutil.rmtree(run_dir)
+    return cfg, run_id
+
+
+@pytest.mark.parametrize(("explicit_run", "force"), [(True, False), (False, True), (True, True)])
+def test_run_transform_explicit_rebuild_of_a_pruned_run_still_raises(
+    tmp_path: Path, explicit_run: bool, force: bool
+):
+    """Either rebuild option must raise when retained silver has no bronze source."""
+    cfg, run_id = _pruned_bronze_run(tmp_path, keep_silver=True)
+
+    with pytest.raises(FileNotFoundError, match="Bronze pages missing"):
+        build_silver_entities.run_transform(
+            run_id=run_id if explicit_run else None, force=force, config=cfg
+        )
+
+
+def test_run_transform_raises_for_a_run_with_no_silver_and_no_bronze(tmp_path: Path):
+    cfg, _ = _pruned_bronze_run(tmp_path, keep_silver=False)
+
+    with pytest.raises(FileNotFoundError, match="Bronze pages missing"):
+        build_silver_entities.run_transform(config=cfg)
+
+
 def test_profile_run_records_an_absent_manifest_instead_of_nothing_to_do(tmp_path: Path):
     """A run missing from the manifest directory must not read as reconcilable-clean.
 
@@ -293,3 +376,77 @@ def test_build_silver_preserves_exact_page_record_provenance(tmp_path, with_meta
             (cfg.paths.bronze_api_responses / row["raw_page_reference"]).read_text()
         )
         assert original_page["studies"][row["raw_study_ordinal"]] == study
+
+
+def _write_legacy_silver(cfg: ProjectConfig, run_id: str) -> None:
+    for entity in build_silver_entities.LEGACY_ENTITY_NAMES:
+        path = cfg.paths.silver / entity / f"run_id={run_id}.parquet"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"legacy")
+
+
+def test_run_transform_skips_a_legacy_run_whose_bronze_is_pruned(tmp_path: Path):
+    """The #74 upgrade path (review round 1, finding 1).
+
+    Retention keeps bronze_runs_to_keep=1 but silver snapshots longer, so the
+    first refresh after the new entity ships sees legacy-complete runs with no
+    bronze to rebuild from. Skipping with a warning must not abort the loop —
+    a raise here fails the profile and blocks every later run's transform.
+    """
+    cfg = make_config(tmp_path)
+    run_id = "r_legacy_pruned"
+    _write_legacy_silver(cfg, run_id)
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+    write_manifest(cfg.paths.bronze_manifests, make_manifest(run_id, record_count=1))
+
+    assert not _already_transformed(cfg, run_id)
+    assert _legacy_run_without_bronze(cfg, run_id)
+    assert run_transform(config=cfg) == []
+    # The legacy silver is left untouched, not half-rebuilt.
+    assert (cfg.paths.silver / "silver_trials" / f"run_id={run_id}.parquet").exists()
+    assert not (cfg.paths.silver / "silver_trial_baseline_demographics").exists()
+
+
+def test_run_transform_still_raises_when_silver_is_incomplete_and_bronze_pruned(tmp_path: Path):
+    """A truly broken run (silver missing entities, bronze gone) keeps failing."""
+    cfg = make_config(tmp_path)
+    run_id = "r_broken"
+    path = cfg.paths.silver / "silver_trials" / f"run_id={run_id}.parquet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"stale")
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+    write_manifest(cfg.paths.bronze_manifests, make_manifest(run_id, record_count=1))
+
+    with pytest.raises(FileNotFoundError, match="Bronze pages missing"):
+        run_transform(config=cfg)
+
+
+@pytest.mark.parametrize("explicit_run", [False, True])
+def test_force_rebuild_does_not_skip_pruned_bronze(tmp_path: Path, explicit_run: bool):
+    cfg = make_config(tmp_path)
+    run_id = "r_force_pruned"
+    _write_legacy_silver(cfg, run_id)
+    new_entity = (
+        cfg.paths.silver / "silver_trial_baseline_demographics" / f"run_id={run_id}.parquet"
+    )
+    new_entity.parent.mkdir(parents=True, exist_ok=True)
+    new_entity.write_bytes(b"existing")
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+    write_manifest(cfg.paths.bronze_manifests, make_manifest(run_id, record_count=1))
+
+    with pytest.raises(FileNotFoundError, match="Bronze pages missing"):
+        run_transform(run_id=run_id if explicit_run else None, force=True, config=cfg)
+
+
+def test_pruned_bronze_with_recorded_demographics_is_not_legacy(tmp_path: Path):
+    cfg = make_config(tmp_path)
+    run_id = "r_missing_demographics"
+    _write_legacy_silver(cfg, run_id)
+    stats = cfg.paths.silver / "_transform_stats" / f"run_id={run_id}.json"
+    stats.parent.mkdir(parents=True, exist_ok=True)
+    stats.write_text('{"row_counts": {"silver_trial_baseline_demographics": 1}}')
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+    write_manifest(cfg.paths.bronze_manifests, make_manifest(run_id, record_count=1))
+
+    with pytest.raises(FileNotFoundError, match="Bronze pages missing"):
+        run_transform(config=cfg)

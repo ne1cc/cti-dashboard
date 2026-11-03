@@ -1,9 +1,18 @@
-"""Flatten nested ClinicalTrials.gov study JSON into the six silver entities.
+"""Flatten nested ClinicalTrials.gov study JSON into the seven silver entities.
 
 Grounded in the actual API v2 structure (verified against saved bronze pages):
 protocolSection.{identification,status,sponsorCollaborators,design,conditions,
-armsInterventions,outcomes,eligibility,contactsLocations}Module + top-level
-hasResults. Location contact/investigator fields are deliberately not extracted.
+armsInterventions,description,outcomes,eligibility,contactsLocations}Module,
+top-level hasResults, and resultsSection.baselineCharacteristicsModule (who actually
+enrolled: per-group counts for sex, age, race, and ethnicity measures).
+Location contact/investigator fields are deliberately not extracted. Arm groups,
+masking, whyStopped, briefSummary and the primary outcome's timeFrame are stored
+verbatim from the registry.
+
+Baseline demographics rows keep labels exactly as sponsors reported them;
+mapping those labels onto OMB race/ethnicity categories happens downstream in
+dbt (seeds/omb_race_ethnicity_mapping.csv), where the decisions are versioned
+and reviewable.
 """
 
 import json
@@ -32,6 +41,11 @@ def _struct_date(status_module: dict[str, Any], key: str) -> str | None:
     return str(val) if isinstance(val, str) else None
 
 
+def _struct_date_type(status_module: dict[str, Any], key: str) -> str | None:
+    val = dig(status_module, key, "type")
+    return str(val) if isinstance(val, str) else None
+
+
 def normalize_phases(phases: list[str] | None) -> tuple[str | None, str]:
     """Returns (phase_raw, phase_normalized). Multi-phase studies join with '/'.
     Missing → UNKNOWN; NA → NOT_APPLICABLE."""
@@ -40,6 +54,150 @@ def normalize_phases(phases: list[str] | None) -> tuple[str | None, str]:
     raw = "|".join(phases)
     normalized = [("NOT_APPLICABLE" if p == "NA" else p) for p in phases]
     return raw, "/".join(normalized)
+
+
+PLACEBO_ARM_TYPE = "PLACEBO_COMPARATOR"
+
+
+def has_placebo_arm(arm_groups: list[dict[str, Any]] | None) -> bool:
+    """True when any registry arm group declares type PLACEBO_COMPARATOR."""
+    return any(
+        isinstance(arm, dict) and arm.get("type") == PLACEBO_ARM_TYPE for arm in arm_groups or []
+    )
+
+
+_COUNT_PARTICIPANTS = "participants"
+
+
+def _participant_count(param_type: Any, unit_of_measure: Any, value: Any) -> int | None:
+    """Parse a measurement value as a participant head-count, else None.
+
+    Only numeric participant-unit values from count-type measures count;
+    "79.5" (median age) or "68" with unit "years" must never become a count.
+    """
+    if param_type not in ("COUNT_OF_PARTICIPANTS", "NUMBER"):
+        return None
+    if (
+        not isinstance(unit_of_measure, str)
+        or unit_of_measure.strip().lower() != _COUNT_PARTICIPANTS
+    ):
+        return None
+    text = str(value).strip() if value is not None else ""
+    return int(text) if text.isdigit() else None
+
+
+def _denominator_map(denoms: Any) -> dict[str, int | None]:
+    """groupId -> participant count from one module/measure/class ``denoms[]``.
+
+    A denoms list can carry several unit entries ("Participants", "hospital
+    units", ...); only the participant-denominated entry counts the people in a
+    group, so it wins, with a fall back to the first entry when no entry names
+    participants (keeps the pre-#74 behaviour for exotic units). Counts parse
+    only as bare integers, mirroring ``_participant_count``.
+    """
+    chosen: list[Any] | None = None
+    first: list[Any] | None = None
+    for denom in denoms or []:
+        if not isinstance(denom, dict) or not isinstance(denom.get("counts"), list):
+            continue
+        if first is None:
+            first = denom["counts"]
+        if "participant" in str(denom.get("units") or "").strip().lower():
+            chosen = denom["counts"]
+            break
+    result: dict[str, int | None] = {}
+    for count in chosen or first or []:
+        if isinstance(count, dict) and count.get("groupId"):
+            value = count.get("value")
+            text = str(value).strip() if value is not None else ""
+            result.setdefault(count["groupId"], int(text) if text.isdigit() else None)
+    return result
+
+
+def _baseline_demographics_rows(
+    study: dict[str, Any], base: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Extract resultsSection.baselineCharacteristicsModule into flat rows.
+
+    Grain: one row per (measure, class, category, group) measurement. Labels are
+    stored exactly as reported — combined race/ethnicity tables often carry the
+    label in class.title rather than category.title, so the pair is preserved
+    and disambiguation is left to the dbt mapping layer.
+
+    ``group_denominator`` is the most specific denominator the registry reports
+    for the group — class, then measure, then module scope (review round 1,
+    finding 2: a measure can denominate its own groups, e.g. NCT03046121's
+    "Race (NIH/OMB)" 229 vs the module's 458).
+    """
+    module = dig(study, "resultsSection", "baselineCharacteristicsModule")
+    if not isinstance(module, dict):
+        return []
+    group_titles = {
+        group.get("id"): group.get("title")
+        for group in module.get("groups") or []
+        if isinstance(group, dict) and group.get("id")
+    }
+    module_denominators = _denominator_map(module.get("denoms"))
+    rows = []
+    for measure_index, measure in enumerate(module.get("measures") or []):
+        if not isinstance(measure, dict):
+            continue
+        measure_denominators = _denominator_map(measure.get("denoms"))
+        for class_index, cls in enumerate(measure.get("classes") or []):
+            if not isinstance(cls, dict):
+                continue
+            class_denominators = _denominator_map(cls.get("denoms"))
+            for category_index, category in enumerate(cls.get("categories") or []):
+                if not isinstance(category, dict):
+                    continue
+                measurements = category.get("measurements") or [None]
+                for measurement in measurements:
+                    if measurement is not None and not isinstance(measurement, dict):
+                        continue
+                    group_id = measurement.get("groupId") if measurement else None
+                    value = measurement.get("value") if measurement else None
+                    denominator = None
+                    if isinstance(group_id, str):
+                        denominator = next(
+                            (
+                                scope[group_id]
+                                for scope in (
+                                    class_denominators,
+                                    measure_denominators,
+                                    module_denominators,
+                                )
+                                if scope.get(group_id) is not None
+                            ),
+                            None,
+                        )
+                    rows.append(
+                        {
+                            **base,
+                            "measure_index": measure_index,
+                            "measure_title": measure.get("title"),
+                            "param_type": measure.get("paramType"),
+                            "unit_of_measure": measure.get("unitOfMeasure"),
+                            "class_index": class_index,
+                            "class_title": cls.get("title"),
+                            "category_index": category_index,
+                            "category_title": category.get("title"),
+                            "group_id": group_id,
+                            "group_title": group_titles.get(group_id),
+                            "group_denominator": denominator,
+                            "participant_count": _participant_count(
+                                measure.get("paramType"),
+                                measure.get("unitOfMeasure"),
+                                value,
+                            ),
+                            "value_raw": str(value) if value is not None else None,
+                            "value_spread": (
+                                str(measurement.get("spread"))
+                                if measurement and measurement.get("spread") is not None
+                                else None
+                            ),
+                        }
+                    )
+    return rows
 
 
 def trial_quality_flags(row: dict[str, Any]) -> str:
@@ -86,8 +244,16 @@ def flatten_study(
     identification = protocol.get("identificationModule", {})
     status = protocol.get("statusModule", {})
     design = protocol.get("designModule", {})
+    description = protocol.get("descriptionModule") or {}
     sponsors_module = protocol.get("sponsorCollaboratorsModule", {})
     eligibility = protocol.get("eligibilityModule", {})
+    arm_groups = dig(protocol, "armsInterventionsModule", "armGroups")
+    primary_outcomes = dig(protocol, "outcomesModule", "primaryOutcomes") or []
+    first_primary_time_frame = (
+        primary_outcomes[0].get("timeFrame")
+        if primary_outcomes and isinstance(primary_outcomes[0], dict)
+        else None
+    )
 
     nct_id = identification.get("nctId")
     source_json_hash = sha256_json(study)
@@ -118,7 +284,9 @@ def flatten_study(
         "expanded_access_info": dig(status, "expandedAccessInfo", "hasExpandedAccess"),
         "start_date": _struct_date(status, "startDateStruct"),
         "primary_completion_date": _struct_date(status, "primaryCompletionDateStruct"),
+        "primary_completion_date_type": _struct_date_type(status, "primaryCompletionDateStruct"),
         "completion_date": _struct_date(status, "completionDateStruct"),
+        "completion_date_type": _struct_date_type(status, "completionDateStruct"),
         "study_first_post_date": _struct_date(status, "studyFirstPostDateStruct"),
         "results_first_post_date": _struct_date(status, "resultsFirstPostDateStruct"),
         "last_update_post_date": _struct_date(status, "lastUpdatePostDateStruct"),
@@ -128,6 +296,12 @@ def flatten_study(
         "enrollment_type": dig(design, "enrollmentInfo", "type"),
         "allocation": dig(design, "designInfo", "allocation"),
         "primary_purpose": dig(design, "designInfo", "primaryPurpose"),
+        "intervention_model": dig(design, "designInfo", "interventionModel"),
+        "masking": dig(design, "designInfo", "maskingInfo", "masking"),
+        "has_placebo_arm": has_placebo_arm(arm_groups),
+        "why_stopped": status.get("whyStopped"),
+        "brief_summary": description.get("briefSummary"),
+        "primary_outcome_time_frame": first_primary_time_frame,
         "lead_sponsor_name": dig(sponsors_module, "leadSponsor", "name"),
         "responsible_party_type": dig(sponsors_module, "responsibleParty", "type"),
         "healthy_volunteers": eligibility.get("healthyVolunteers"),
@@ -166,6 +340,21 @@ def flatten_study(
                 "intervention_type": item.get("type"),
                 "intervention_description": item.get("description"),
                 "intervention_normalized": normalize_text(item.get("name")),
+            }
+        )
+
+    arms = []
+    for arm_ordinal, arm in enumerate(arm_groups or []):
+        if not isinstance(arm, dict):
+            continue
+        arms.append(
+            {
+                **base,
+                "arm_ordinal": arm_ordinal,
+                "arm_label": arm.get("label"),
+                "arm_type": arm.get("type"),
+                "arm_description": arm.get("description"),
+                "intervention_names": arm.get("interventionNames"),
             }
         )
 
@@ -243,9 +432,11 @@ def flatten_study(
         "silver_trials": [trial],
         "silver_trial_conditions": conditions,
         "silver_trial_interventions": interventions,
+        "silver_trial_arms": arms,
         "silver_trial_sponsors": sponsors,
         "silver_trial_locations": locations,
         "silver_trial_outcomes": outcomes,
+        "silver_trial_baseline_demographics": _baseline_demographics_rows(study, base),
     }
 
 

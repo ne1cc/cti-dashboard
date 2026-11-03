@@ -20,6 +20,12 @@ sources:
         description: One row per NCT ID + raw condition + run, with taxonomy mapping.
       - name: silver_trial_interventions
         description: One row per NCT ID + intervention + run.
+      - name: silver_trial_arms
+        description: >
+          One row per NCT ID + arm group + run, with the original zero-based
+          arm_ordinal. Labels, types (including PLACEBO_COMPARATOR),
+          descriptions and intervention name lists are stored verbatim from the
+          registry.
       - name: silver_trial_sponsors
         description: One row per NCT ID + sponsor/collaborator + run.
       - name: silver_trial_locations
@@ -29,6 +35,14 @@ sources:
           Non-U.S. rows preserved and flagged unusable for U.S.-scope marts.
       - name: silver_trial_outcomes
         description: One row per NCT ID + outcome type + outcome index + run.
+      - name: silver_trial_baseline_demographics
+        description: >
+          One row per NCT ID + baseline-characteristics measure + class + category
+          + group measurement + run, extracted from
+          resultsSection.baselineCharacteristicsModule. Category and class titles
+          are kept exactly as sponsors reported them (combined race/ethnicity
+          tables may carry the label in either field); OMB mapping happens in
+          staging via the omb_race_ethnicity_mapping seed.
 
   - name: bronze
     description: >

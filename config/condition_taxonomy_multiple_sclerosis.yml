@@ -1,9 +1,11 @@
 version: 1
 default:
   condition_group: other_neurologic_conditions
+  display_name: Other Neurologic Conditions
   dementia_relevance: false
 groups:
 - condition_group: multiple_sclerosis
+  display_name: Multiple Sclerosis (MS)
   dementia_relevance: false
   exact:
   - multiple sclerosis

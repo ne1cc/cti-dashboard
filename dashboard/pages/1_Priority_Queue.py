@@ -28,18 +28,21 @@ st.caption(
     "concentration HHI, or site overlap) according to your operational screening "
     "criteria. Scientific validity is not measured."
 )
-filtered = segment_filters(queue)
+filtered = segment_filters(queue, profile_id=profile_id)
 
-if bool(filtered["growth_uses_registry_proxy_flag"].any()):
+observed_history_days = int(queue["observed_history_days"].max()) if not queue.empty else 0
+if observed_history_days < 90:
     st.warning(
-        "Recent recruiting growth metric (recent_growth_input) currently uses "
-        "the registry first-post-date proxy because multi-snapshot history has "
-        "not accrued yet."
+        f"Only {observed_history_days} of the 90 days of snapshot history "
+        "needed for recruiting-growth figures have been observed, so "
+        'new_recruiting_90d shows "not enough history" — unknown, not '
+        'zero. "Newly registered (first posted)" counts are computed from '
+        "registry dates and are available now."
     )
 
 filtered = filtered.copy()
 filtered["registry_search_url"] = [
-    clinicaltrials_gov_search_url(cg, st_val)
+    clinicaltrials_gov_search_url(cg, st_val, profile_id)
     for cg, st_val in zip(filtered["condition_group"], filtered["state_normalized"], strict=False)
 ]
 
@@ -64,7 +67,9 @@ queue_columns = [
     "priority_explanation",
 ]
 display_df = filtered[queue_columns].copy()
-display_df["condition_group"] = display_df["condition_group"].apply(format_condition_group)
+display_df["condition_group"] = display_df["condition_group"].apply(
+    lambda g: format_condition_group(g, profile_id)
+)
 display_df["phase_normalized"] = display_df["phase_normalized"].map(format_phase)
 display_df["priority_explanation"] = [
     format_priority_explanation(row) for _, row in filtered.iterrows()
@@ -143,7 +148,9 @@ export_columns = [
     "site_overlap_rate",
     "distinct_sponsors",
     "listed_site_count",
-    "recent_growth_input",
+    "new_recruiting_90d",
+    "newly_registered_90d",
+    "observed_history_days",
     "operational_completeness_share",
     "registry_search_url",
     "priority_explanation",
@@ -165,22 +172,32 @@ selected_rows = (
 if selected_rows:
     segment = filtered.iloc[selected_rows[0]]
     st.subheader(
-        f"Segment details — {format_condition_group(segment['condition_group'])} · "
+        f"Segment details — {format_condition_group(segment['condition_group'], profile_id)} · "
         f"{segment['state_normalized']} · {format_phase(segment['phase_normalized'])}"
     )
-    growth_label = (
-        "First-posted registry proxy"
-        if bool(segment.get("growth_uses_registry_proxy_flag", False))
-        else "Recent recruiting growth"
-    )
-    growth_val = (
-        f"{int(segment['recent_growth_input'])} newly posted (proxy)"
-        if bool(segment.get("growth_uses_registry_proxy_flag", False))
-        else f"{int(segment['recent_growth_input'])} newly recruiting"
-    )
+    segment_history = int(segment["observed_history_days"])
+    if pd.notna(segment["new_recruiting_90d"]):
+        growth_label = "Recent recruiting growth (90d)"
+        growth_val = (
+            f"{int(segment['new_recruiting_90d'])} newly recruiting "
+            f"({segment_history} days of history observed)"
+        )
+    elif segment_history >= 90:
+        growth_label = "Recent recruiting growth"
+        growth_val = "not enough history (gap between snapshots exceeds window) — unknown, not zero"
+    else:
+        growth_label = "Recent recruiting growth"
+        growth_val = (
+            f"not enough history ({segment_history} of 90 days observed) — unknown, not zero"
+        )
     details_rows = [
         ("Active recruiting trials", f"{int(segment['active_recruiting_trials'])} trials"),
         (growth_label, growth_val),
+        (
+            "Newly registered (first posted)",
+            f"{int(segment['newly_registered_90d'])} first posted within 90 days "
+            "(registration count, not a recruiting transition)",
+        ),
         ("Sponsor count", f"{int(segment['distinct_sponsors'])} distinct sponsor(s)"),
         ("Sponsor concentration HHI", f"{segment['sponsor_hhi']:.3f}"),
         ("Top sponsor share", f"{segment['top_sponsor_share'] * 100:.1f}%"),
@@ -201,7 +218,8 @@ if selected_rows:
     st.caption(segment["priority_explanation"])
 
     st.subheader(
-        f"Constituent Clinical Trials — {format_condition_group(segment['condition_group'])} · "
+        "Constituent Clinical Trials — "
+        f"{format_condition_group(segment['condition_group'], profile_id)} · "
         f"{segment['state_normalized']} · {segment['phase_normalized']}"
     )
     st.caption(

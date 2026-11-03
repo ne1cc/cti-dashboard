@@ -23,6 +23,8 @@ import duckdb
 from src.api.gazetteer import register_gazetteer_views
 from src.api.models import (
     DataProvenance,
+    EligibilitySection,
+    EligibilitySections,
     EnrollmentInfo,
     GeoPoint,
     NearestSiteSummary,
@@ -31,6 +33,7 @@ from src.api.models import (
     SponsorDetail,
     StructuredEligibility,
     StructuredEligibilitySummary,
+    StudyArm,
     StudyCondition,
     StudyDates,
     StudyDesign,
@@ -41,6 +44,7 @@ from src.api.models import (
     TrialsListResponse,
     TrialSummary,
 )
+from src.transform.eligibility_sections import split_eligibility_sections
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +61,7 @@ REQUIRED_TABLES = (
     "stg_trial_sponsors",
     "stg_trial_conditions",
     "stg_trial_interventions",
+    "stg_trial_arms",
 )
 
 
@@ -515,6 +520,8 @@ class DuckDBWarehouseManager:
             phase_normalized=phase_normalized,
             allocation=r.get("allocation"),
             primary_purpose=r.get("primary_purpose"),
+            intervention_model=r.get("intervention_model"),
+            masking=r.get("masking"),
         )
 
         enrollment = EnrollmentInfo(
@@ -577,7 +584,24 @@ class DuckDBWarehouseManager:
                     )
                 )
 
+        # Arm groups (registry text passed through verbatim)
+        arms: list[StudyArm] = []
+        raw_arms = r.get("arms") or []
+        for arm in raw_arms:
+            if not isinstance(arm, dict):
+                continue
+            arms.append(
+                StudyArm(
+                    label=arm.get("label"),
+                    arm_type=arm.get("arm_type"),
+                    description=arm.get("description"),
+                    intervention_names=arm.get("intervention_names") or [],
+                )
+            )
+
         # Eligibility (Issue #62)
+        criteria_text = r.get("criteria_text")
+        sections_parsed = split_eligibility_sections(criteria_text)
         eligibility = StructuredEligibility(
             minimum_age_raw=r.get("minimum_age_raw"),
             maximum_age_raw=r.get("maximum_age_raw"),
@@ -589,7 +613,19 @@ class DuckDBWarehouseManager:
             gender_description=r.get("gender_description"),
             accepts_healthy_volunteers=r.get("accepts_healthy_volunteers"),
             std_age_groups=r.get("std_age_groups") or [],
-            criteria_text=r.get("criteria_text"),
+            criteria_text=criteria_text,
+            eligibility_sections=EligibilitySections(
+                parsed=sections_parsed.parsed,
+                sections=[
+                    EligibilitySection(kind=s.kind, heading=s.heading_raw, items=s.items)
+                    for s in sections_parsed.sections
+                ],
+                inclusion=sections_parsed.inclusion,
+                exclusion=sections_parsed.exclusion,
+                unclassified=sections_parsed.unclassified,
+            )
+            if sections_parsed is not None
+            else None,
         )
 
         # Sites (ADR 0065 strict compliance: strictly zero investigator contact PII)
@@ -647,6 +683,11 @@ class DuckDBWarehouseManager:
             sponsors=sponsors,
             conditions=conditions,
             interventions=interventions,
+            arms=arms,
+            has_placebo_arm=r.get("has_placebo_arm"),
+            why_stopped=r.get("why_stopped"),
+            brief_summary=r.get("brief_summary"),
+            primary_outcome_time_frame=r.get("primary_outcome_time_frame"),
             eligibility=eligibility,
             sites=sites,
             registry_url=f"https://clinicaltrials.gov/study/{canonical_nct}",
