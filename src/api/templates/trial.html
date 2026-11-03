@@ -2,5 +2,16 @@
 {% block title %}Trial details{% endblock %}
 {% block content %}
 {% if error %}<h1>Trial details</h1><p class="error" role="alert">{{ error }}</p>
-{% else %}<h1>{{ trial.brief_title }}</h1><p>Trial ID: {{ trial.nct_id }}</p><p><a href="{{ trial.registry_url }}">Open the official ClinicalTrials.gov record</a></p>{% endif %}
+{% else %}<article class="trial-detail-card">
+  <h1>{{ trial.brief_title }}</h1>
+  <p>Trial ID: {{ trial.nct_id }}</p>
+  {% if trial.overall_status %}<p>Status: {{ trial.overall_status|replace('_', ' ')|capitalize }}</p>{% endif %}
+  <p><a href="{{ trial.registry_url }}">Open the official ClinicalTrials.gov record</a></p>
+  <button type="button" class="shortlist-btn button-secondary"
+    data-nct-id="{{ trial.nct_id }}"
+    data-title="{{ trial.brief_title }}"
+    data-status="{{ trial.overall_status or '' }}"
+    data-site="{% if trial.nearest_site %}{{ trial.nearest_site.facility_name }}{% if trial.nearest_site.city %}, {{ trial.nearest_site.city }}{% endif %}{% if trial.nearest_site.state %}, {{ trial.nearest_site.state }}{% endif %}{% endif %}"
+    data-updated="{{ trial.last_update_post_date or '' }}">Save to shortlist</button>
+</article>{% endif %}
 {% endblock %}

@@ -242,3 +242,56 @@ def test_stale_live_data_shows_cached_retrieval_time(patient_client, monkeypatch
     assert result.status_code == 200
     assert "2000-01-01T00:00:00Z" in result.text
     assert "cached data may be stale" in result.text
+
+
+def test_shortlist_route_and_static_js_assets(patient_client):
+    client, _ = patient_client
+    # Verify shortlist page
+    response = client.get("/shortlist")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["referrer-policy"] == "no-referrer"
+    assert "Saved Clinical Trials for Appointment Discussion" in response.text
+    assert "Medical Disclaimer:" in response.text
+    assert 'id="shortlist-container"' in response.text
+    assert 'id="print-shortlist-btn"' in response.text
+    assert "/patient.js" in response.text
+    assert 'href="/shortlist"' in response.text
+
+    # Verify patient.js static asset
+    js_response = client.get("/patient.js")
+    assert js_response.status_code == 200
+    assert "javascript" in js_response.headers.get("content-type", "")
+    assert "cti_trial_shortlist" in js_response.text
+    assert "window.print" in js_response.text
+
+
+def test_shortlist_buttons_present_on_search_and_detail(patient_client):
+    client, _ = patient_client
+    # Results page has shortlist button with data attributes
+    search_page = client.get("/trials", params={"cond": "Alzheimer"})
+    assert search_page.status_code == 200
+    assert 'class="shortlist-btn' in search_page.text
+    assert 'data-nct-id="NCT04245644"' in search_page.text
+    assert "data-title=" in search_page.text
+
+    # Detail page has shortlist button
+    detail_page = client.get("/trials/NCT04245644")
+    assert detail_page.status_code == 200
+    assert 'class="shortlist-btn' in detail_page.text
+    assert 'data-nct-id="NCT04245644"' in detail_page.text
+
+
+def test_print_and_responsive_css_rules(patient_client):
+    client, _ = patient_client
+    css_res = client.get("/patient.css")
+    assert css_res.status_code == 200
+    css_text = css_res.text
+    # Print rules
+    assert "@media print" in css_text
+    assert "page-break-inside: avoid" in css_text or "break-inside: avoid" in css_text
+    assert ".print-header" in css_text
+    assert ".print-disclaimer" in css_text
+    # Responsive rules
+    assert "@media (max-width: 480px)" in css_text
+    assert "min-width: 320px" in css_text

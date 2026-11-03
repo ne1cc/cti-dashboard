@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Your Shortlist - Clinical Trial Finder{% endblock %}
+{% block content %}
+<div class="print-header">
+  <h1>Saved Clinical Trials for Appointment Discussion</h1>
+  <p class="print-subhead">Generated from Clinical Trial Finder · Confidential Patient Reference</p>
+</div>
+<div class="screen-header">
+  <h1>Your shortlisted trials</h1>
+  <p class="notice">Saved in your browser for this device only. No account or login required.</p>
+</div>
+<div id="shortlist-actions" class="shortlist-actions" style="display: none;">
+  <button type="button" id="print-shortlist-btn" class="print-btn">Print shortlist</button>
+  <button type="button" id="clear-shortlist-btn" class="button-secondary clear-btn">Clear all</button>
+</div>
+<div id="shortlist-container">
+  <noscript>
+    <p class="notice">Your shortlist is saved locally in your browser and requires JavaScript to display.</p>
+  </noscript>
+</div>
+<div class="print-disclaimer">
+  <p><strong>Medical Disclaimer:</strong> This printout is for informational discussion with your healthcare team. It is not medical advice and does not guarantee eligibility or enrollment in any clinical trial.</p>
+  <p>{{ freshness }}</p>
+</div>
+{% endblock %}
