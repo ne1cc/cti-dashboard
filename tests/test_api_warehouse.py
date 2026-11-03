@@ -680,6 +680,15 @@ def test_warehouse_search_filter_condition(client_warehouse: TestClient) -> None
     assert resp_empty.json()["pagination"]["total_count"] == 0
 
 
+@pytest.mark.parametrize("wildcard", ["%", "_", "Alz_eimer"])
+def test_warehouse_search_treats_like_wildcards_literally(
+    client_warehouse: TestClient, wildcard: str
+) -> None:
+    resp = client_warehouse.get("/v1/trials", params={"cond": wildcard})
+    assert resp.status_code == 200
+    assert resp.json()["items"] == []
+
+
 def test_warehouse_search_filter_phase(client_warehouse: TestClient) -> None:
     resp = client_warehouse.get("/v1/trials?phase=PHASE3")
     assert resp.status_code == 200
