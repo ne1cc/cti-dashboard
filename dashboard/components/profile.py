@@ -38,7 +38,7 @@ def render_profile_selector() -> str:
     drift out of sync. `format_func` only affects what the reader sees.
 
     Returns:
-        str: The selected indication profile id, e.g. `"adrd"`.
+        str: The selected indication profile id.
     """
     profiles = refreshable_profiles()
     if not profiles:

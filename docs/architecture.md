@@ -28,7 +28,7 @@ flowchart TB
 
     subgraph SILVER["Silver — normalized (src/transform)"]
         FLAT["flatten_studies.py<br/>nested JSON → tabular"]
-        ENTITIES["Parquet entities:<br/>silver_trials · silver_trial_conditions<br/>silver_trial_interventions · silver_trial_sponsors<br/>silver_trial_locations · silver_trial_outcomes"]
+        ENTITIES["Parquet entities:<br/>silver_trials · silver_trial_conditions<br/>silver_trial_interventions · silver_trial_sponsors<br/>silver_trial_locations · silver_trial_outcomes<br/>silver_trial_baseline_demographics"]
         TAX["condition_taxonomy.yml<br/>config-driven ADRD mapping"]
         GEO["geography_rules.yml<br/>US state normalization"]
     end
@@ -162,8 +162,8 @@ collection. This is documented, not hidden.
 ## 5. Reproducibility and operations
 
 - The [Makefile command reference](../README.md#development-and-pipeline-commands) covers pipeline order, refresh, checks, cleanup, and DuckDB access.
-- All query parameters, taxonomy, geography rules, score weights, and scenario
-  assumptions live in `config/*.yml` under version control.
+- All query parameters, taxonomy, geography rules, and score weights
+  live in `config/*.yml` under version control.
 - `.env` supplies optional local overrides to the legacy config loader; the public API requires no key.
 - Logging via loguru with run-context fields; no sensitive data is ever logged
   (the source is public, but site contacts/investigators are still excluded from
@@ -179,7 +179,6 @@ collection. This is documented, not hidden.
 | [`config/shared_paths.yml`](../config/shared_paths.yml) | Silver, gold, and DuckDB destinations injected into profile configs, overriding those profile path fields |
 | `config/condition_taxonomy*.yml` / [`config/geography_rules.yml`](../config/geography_rules.yml) | Profile-selected condition mapping/confidence rules / state-name normalization |
 | [`config/similarity_weights.yml`](../config/similarity_weights.yml) | Comparability factor weights mirrored in the similarity dbt seed, checked by pytest |
-| [`config/roi_assumptions.yml`](../config/roi_assumptions.yml) | Scenario-calculator assumptions and disclaimer |
 | [`dbt_clinical_trials/dbt_project.yml`](../dbt_clinical_trials/dbt_project.yml) / `dbt_clinical_trials/profiles.yml` | Schema routing, seed types, and score-band vars / dbt connection settings (created from the example at setup) |
 | `.env` / [`.env.example`](../.env.example) | Optional local environment settings / sample values; loader behavior is described below |
 

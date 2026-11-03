@@ -35,6 +35,14 @@ sources:
           Non-U.S. rows preserved and flagged unusable for U.S.-scope marts.
       - name: silver_trial_outcomes
         description: One row per NCT ID + outcome type + outcome index + run.
+      - name: silver_trial_baseline_demographics
+        description: >
+          One row per NCT ID + baseline-characteristics measure + class + category
+          + group measurement + run, extracted from
+          resultsSection.baselineCharacteristicsModule. Category and class titles
+          are kept exactly as sponsors reported them (combined race/ethnicity
+          tables may carry the label in either field); OMB mapping happens in
+          staging via the omb_race_ethnicity_mapping seed.
 
   - name: bronze
     description: >
