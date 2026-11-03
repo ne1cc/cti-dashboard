@@ -181,7 +181,15 @@ FULL_STUDY = {
         },
         "conditionsModule": {"conditions": ["Alzheimer Disease"]},
         "armsInterventionsModule": {
-            "interventions": [{"name": "Drug X", "type": "DRUG", "description": "d"}]
+            "interventions": [{"name": "Drug X", "type": "DRUG", "description": "d"}],
+            "armGroups": [
+                {
+                    "label": "Drug X",
+                    "type": "EXPERIMENTAL",
+                    "description": "d",
+                    "interventionNames": ["Drug: Drug X"],
+                }
+            ],
         },
         "contactsLocationsModule": {
             "locations": [
