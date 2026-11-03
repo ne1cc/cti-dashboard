@@ -30,8 +30,7 @@ proprietary commercial databases.
 ## Current Product Assessment
 
 The repository (`ne1cc/cti-dashboard`) is publicly deployed. The
-deployment pipeline, first-boot warehouse build, weekly refresh process,
-and automatic Fly deployment on pushes to `main` are live. The app runs
+first-boot warehouse build and weekly refresh process are live. The app runs
 one always-on process because the background refresh loop needs to remain
 active, persists the warehouse on a mounted volume, and health-checks the
 Streamlit service.
@@ -46,7 +45,7 @@ The existing analytical foundation is already strong:
 | History | Weekly snapshot history through `fct_trial_snapshot` | Enables time-series and change-detection features, far more valuable than static registry search |
 | Intelligence marts | Trial activity, recruiting competition, site overlap, geography trends, data reliability, feasibility priority queue | Covers the baseline feasibility workflow |
 | User experience | Registry Segments, Competition Landscape, Geography Trends, Site Overlap, Sponsor Landscape, Data Reliability, Trial Explorer, Trial Similarity | A coherent decision journey rather than disconnected charts |
-| Deployment | Docker, Fly configuration, GitHub Actions auto-deploy, live demo | Makes the project interviewable and usable by others, not just locally runnable |
+| Deployment | Docker, GitHub Actions CI, live demo | Makes the project interviewable and usable by others, not just locally runnable |
 
 ### What is already comparable
 

@@ -1,8 +1,8 @@
 """Sidebar indication-profile selector.
 
 Registry-driven on purpose: `page_setup()` runs before `require_warehouse()` on
-every page, and a freshly mounted Fly volume has no warehouse to query until the
-first-boot pipeline finishes (docs/DEPLOY_FLY.md, "First boot"). A selector that
+every page, and a freshly mounted volume has no warehouse to query until the
+first-boot pipeline finishes (docs/OPERATIONS.md, "What to expect"). A selector that
 read `select distinct indication_profile_id` would crash all nine pages during
 exactly the window where the dashboard has nothing to show yet.
 """
