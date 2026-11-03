@@ -47,6 +47,10 @@ with tokens as (
     inner join {{ ref('int_trial_comparability_features') }} as features
         on bridge.indication_profile_id = features.indication_profile_id
         and bridge.nct_id = features.nct_id
+    -- MeSH rows excluded (both direct terms and ancestor closure), matching the
+    -- same_condition input in int_trial_comparability_features: token discovery
+    -- remains strictly at the taxonomy condition-group level (Issue #52 review).
+    where bridge.mesh_id is null
 ),
 
 token_frequency as (

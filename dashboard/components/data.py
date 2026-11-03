@@ -185,7 +185,10 @@ def trials_for_segment(
         pd.DataFrame: Trial records with NCT ID, brief title, overall status, phase,
             lead sponsor, enrollment count, study first post date, and registry URL.
     """
-    sql = """
+    mesh_clause = (
+        "and c.mesh_id is null" if _has_column("bridge_trial_condition", "mesh_id") else ""
+    )
+    sql = f"""
         select distinct
             d.nct_id,
             d.current_brief_title as brief_title,
@@ -203,6 +206,7 @@ def trials_for_segment(
               select max(snapshot_date) from main_marts.fct_trial_site
               where indication_profile_id = ?)
           and c.condition_group = ?
+          {mesh_clause}
           and s.state_normalized = ?
           and coalesce(d.current_phase, '') = coalesce(?, '')
           and d.current_overall_status = 'RECRUITING'
