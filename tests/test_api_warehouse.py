@@ -1507,3 +1507,113 @@ def test_warehouse_timestamps_consistent_under_non_utc_timezone(
         monkeypatch.delenv("TZ", raising=False)
         if hasattr(time, "tzset"):
             time.tzset()
+
+
+def test_warehouse_related_trials_success(client_warehouse: TestClient) -> None:
+    """Validate /v1/trials/{nct_id}/related returns comparable trials with factor disclosures."""
+    resp = client_warehouse.get("/v1/trials/NCT00000001/related")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["target_nct_id"] == "NCT00000001"
+    assert "methodology_disclaimer" in data
+    assert len(data["related_trials"]) >= 1
+
+    item = data["related_trials"][0]
+    assert item["nct_id"] == "NCT00000002"
+    assert item["similarity_rank"] == 1
+    assert 0.0 <= item["similarity_score"] <= 1.0
+    assert "comparability_factors" in item
+    factors = item["comparability_factors"]
+    assert "same_condition" in factors
+    assert "same_phase" in factors
+    assert "explanation_summary" in factors
+    assert factors["same_condition"]["matched"] is True
+
+    # Check caching and snapshot headers
+    assert resp.headers.get("Data-Snapshot") is not None
+    assert resp.headers.get("ETag") is not None
+    assert resp.headers.get("Cache-Control") is not None
+
+
+def test_warehouse_related_trials_limit_and_min_score(client_warehouse: TestClient) -> None:
+    """Validate limit and min_score query parameters."""
+    # Min score above candidate score returns empty related_trials
+    resp_high_score = client_warehouse.get(
+        "/v1/trials/NCT00000001/related", params={"min_score": 0.95}
+    )
+    assert resp_high_score.status_code == 200
+    assert resp_high_score.json()["related_trials"] == []
+
+    # Limit parameter
+    resp_limit = client_warehouse.get("/v1/trials/NCT00000001/related", params={"limit": 1})
+    assert resp_limit.status_code == 200
+    assert len(resp_limit.json()["related_trials"]) <= 1
+
+
+def test_warehouse_related_trials_not_found_and_invalid(client_warehouse: TestClient) -> None:
+    """Validate 404 for unknown NCT and 400 for malformed NCT."""
+    resp_404 = client_warehouse.get("/v1/trials/NCT99999999/related")
+    assert resp_404.status_code == 404
+    assert resp_404.headers["content-type"].startswith("application/problem+json")
+    assert resp_404.json()["code"] == "STUDY_NOT_FOUND"
+
+    resp_400 = client_warehouse.get("/v1/trials/invalid_nct/related")
+    assert resp_400.status_code == 400
+    assert resp_400.headers["content-type"].startswith("application/problem+json")
+    assert resp_400.json()["code"] == "INVALID_NCT_ID"
+
+
+def test_warehouse_related_trials_precomputed_mart(tmp_path: Path) -> None:
+    """Validate that precomputed mart_trial_similarity rows are served when available."""
+    db_path = tmp_path / "precomputed.duckdb"
+    _init_fixture_database(db_path)
+
+    # Insert a precomputed row in mart_trial_similarity table matching real dbt schema
+    con = duckdb.connect(str(db_path))
+    con.execute("""
+    CREATE TABLE mart_trial_similarity AS
+    SELECT
+        'adrd' AS indication_profile_id,
+        'NCT00000001' AS nct_id_a,
+        'NCT00000004' AS nct_id_b,
+        0.85 AS similarity_score,
+        1 AS similarity_rank,
+        1 AS same_condition,
+        0.15 AS weight_same_condition,
+        0.15 AS weighted_same_condition,
+        0 AS same_phase,
+        0.20 AS weight_same_phase,
+        0.00 AS weighted_same_phase,
+        1 AS geography_overlap,
+        0.15 AS weight_geography_overlap,
+        0.15 AS weighted_geography_overlap,
+        0 AS intervention_type_overlap,
+        0.15 AS weight_intervention_type_overlap,
+        0.00 AS weighted_intervention_type_overlap,
+        1 AS study_design_match,
+        0.15 AS weight_study_design_match,
+        0.15 AS weighted_study_design_match,
+        0 AS eligibility_compatible,
+        0.10 AS weight_eligibility_compatible,
+        0.00 AS weighted_eligibility_compatible,
+        1 AS enrollment_band_match,
+        0.10 AS weight_enrollment_band_match,
+        0.10 AS weighted_enrollment_band_match,
+        'precomputed match summary' AS similarity_explanation;
+    """)
+    con.close()
+
+    mgr = DuckDBWarehouseManager(db_path)
+    container = APIContainer(warehouse=mgr)
+    with TestClient(create_app(container=container)) as client:
+        resp = client.get("/v1/trials/NCT00000001/related")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["related_trials"]) == 1
+        assert data["related_trials"][0]["nct_id"] == "NCT00000004"
+        assert data["related_trials"][0]["similarity_score"] == 0.85
+        assert (
+            data["related_trials"][0]["comparability_factors"]["explanation_summary"]
+            == "precomputed match summary"
+        )
+    mgr.close()

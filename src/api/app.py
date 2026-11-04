@@ -43,6 +43,7 @@ from src.api.models import (
     PaginationMetadata,
     ProblemDetail,
     ReadinessStatus,
+    RelatedTrialsResponse,
     TrialDetail,
     TrialsListResponse,
     TrialSummary,
@@ -812,6 +813,79 @@ def create_app(
             )
         set_live_response_headers(response, entry)
         return detail
+
+    @app.get(
+        "/v1/trials/{nct_id}/related",
+        response_model=RelatedTrialsResponse,
+        tags=["Similarity"],
+    )
+    def get_related_trials(
+        nct_id: str,
+        request: Request,
+        response: Response,
+        deps: ContainerDep,
+        limit: int = Query(default=10, ge=1, le=25),
+        min_score: float | None = Query(default=None, ge=0.0, le=1.0),
+    ) -> Any:
+        canonical_nct = nct_id.strip().upper()
+        if not NCT_REGEX.fullmatch(canonical_nct):
+            return create_problem_response(
+                400,
+                "Invalid NCT ID",
+                "Expected an NCT identifier followed by eight digits.",
+                str(request.url),
+                code="INVALID_NCT_ID",
+            )
+
+        if deps.warehouse is not None:
+            try:
+                related = deps.warehouse.get_related_trials(
+                    canonical_nct, limit=limit, min_score=min_score
+                )
+                snap_id, snap_ts = deps.warehouse.get_snapshot_metadata()
+            except (TimeoutError, WarehouseNotReadyError):
+                raise
+            except Exception as err:
+                logger.error("Warehouse related trials query failed", exc_info=err)
+                return create_problem_response(
+                    500,
+                    "Internal Server Error",
+                    "Warehouse related trials query failed.",
+                    str(request.url),
+                    code="WAREHOUSE_QUERY_ERROR",
+                )
+
+            if related is None:
+                return create_problem_response(
+                    404,
+                    "Not Found",
+                    f"Study {canonical_nct} was not found in the warehouse.",
+                    str(request.url),
+                    code="STUDY_NOT_FOUND",
+                )
+
+            not_modified_resp = apply_cache_headers_and_check_etag(
+                request, response, related.model_dump(), snap_id, snap_ts
+            )
+            if not_modified_resp is not None:
+                return not_modified_resp
+
+            return related
+
+        # Live API backend fallback
+        enforce_live_rate_limit(request, deps)
+        cache_key = canonical_cache_key("trial_detail", {"nct_id": canonical_nct})
+
+        def fetch_upstream() -> tuple[str, str]:
+            study, _ = deps.ctg_client.fetch_study(canonical_nct)
+            return _sanitized_payload(study)
+
+        entry = deps.cache.stale_if_error(cache_key, fetch_upstream, deps.circuit_breaker)
+        set_live_response_headers(response, entry)
+        return RelatedTrialsResponse(
+            target_nct_id=canonical_nct,
+            related_trials=[],
+        )
 
     register_patient_routes(app)
     return app

@@ -22,14 +22,18 @@ import duckdb
 
 from src.api.gazetteer import register_gazetteer_views
 from src.api.models import (
+    ComparabilityFactors,
     DataProvenance,
     EligibilitySection,
     EligibilitySections,
     EnrollmentInfo,
+    FactorScore,
     GeoPoint,
     NearestSiteSummary,
     PaginationMetadata,
     ReadinessStatus,
+    RelatedTrialItem,
+    RelatedTrialsResponse,
     SponsorDetail,
     StructuredEligibility,
     StructuredEligibilitySummary,
@@ -51,6 +55,7 @@ logger = logging.getLogger(__name__)
 SQL_DIR = Path(__file__).resolve().parent / "sql"
 SEARCH_SQL_PATH = SQL_DIR / "search.sql"
 DETAIL_SQL_PATH = SQL_DIR / "detail.sql"
+RELATED_SQL_PATH = SQL_DIR / "related.sql"
 
 REQUIRED_TABLES = (
     "dim_trial",
@@ -142,6 +147,47 @@ class DuckDBConnectionPool:
             # Offline Gazetteer fallback coordinates (Issue #63): always present
             # (empty when reference files are missing) so queries stay bindable.
             register_gazetteer_views(conn, self.gazetteer_dir)
+            tables = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT table_name FROM information_schema.tables;"
+                ).fetchall()
+            }
+            if "stg_trial_condition_mesh" not in tables:
+                conn.execute(
+                    "CREATE TEMPORARY VIEW IF NOT EXISTS stg_trial_condition_mesh AS "
+                    "SELECT cast(null as varchar) as nct_id, cast(null as varchar) as mesh_id, "
+                    "cast(null as boolean) as is_ancestor WHERE false;"
+                )
+            if "mart_trial_similarity" not in tables:
+                conn.execute(
+                    "CREATE TEMPORARY VIEW IF NOT EXISTS mart_trial_similarity AS "
+                    "SELECT cast(null as varchar) as nct_id_a, cast(null as varchar) as nct_id_b, "
+                    "cast(null as double) as similarity_score, "
+                    "cast(null as int) as similarity_rank, "
+                    "cast(null as int) as same_condition, "
+                    "cast(null as double) as weight_same_condition, "
+                    "cast(null as double) as weighted_same_condition, "
+                    "cast(null as int) as same_phase, "
+                    "cast(null as double) as weight_same_phase, "
+                    "cast(null as double) as weighted_same_phase, "
+                    "cast(null as int) as geography_overlap, "
+                    "cast(null as double) as weight_geography_overlap, "
+                    "cast(null as double) as weighted_geography_overlap, "
+                    "cast(null as int) as intervention_type_overlap, "
+                    "cast(null as double) as weight_intervention_type_overlap, "
+                    "cast(null as double) as weighted_intervention_type_overlap, "
+                    "cast(null as int) as study_design_match, "
+                    "cast(null as double) as weight_study_design_match, "
+                    "cast(null as double) as weighted_study_design_match, "
+                    "cast(null as int) as eligibility_compatible, "
+                    "cast(null as double) as weight_eligibility_compatible, "
+                    "cast(null as double) as weighted_eligibility_compatible, "
+                    "cast(null as int) as enrollment_band_match, "
+                    "cast(null as double) as weight_enrollment_band_match, "
+                    "cast(null as double) as weighted_enrollment_band_match, "
+                    "cast(null as varchar) as similarity_explanation WHERE false;"
+                )
             return conn
         except Exception as err:
             raise WarehouseNotReadyError(f"Failed to connect to DuckDB warehouse: {err}") from err
@@ -232,6 +278,7 @@ class DuckDBWarehouseManager:
         )
         self._search_sql = SEARCH_SQL_PATH.read_text(encoding="utf-8")
         self._detail_sql = DETAIL_SQL_PATH.read_text(encoding="utf-8")
+        self._related_sql = RELATED_SQL_PATH.read_text(encoding="utf-8")
         self._cached_snapshot_meta: tuple[str, str] | None = None
 
     def close(self) -> None:
@@ -698,4 +745,149 @@ class DuckDBWarehouseManager:
             registry_url=f"https://clinicaltrials.gov/study/{canonical_nct}",
             registry_contact_url=f"https://clinicaltrials.gov/study/{canonical_nct}#contacts-locations",
             provenance=provenance,
+        )
+
+    def get_related_trials(
+        self,
+        nct_id: str,
+        limit: int = 10,
+        min_score: float | None = None,
+    ) -> RelatedTrialsResponse | None:
+        """Fetch ranked comparable clinical trials for target NCT ID.
+
+        Prefers precomputed mart_trial_similarity if present for the trial;
+        otherwise executes on-demand MeSH-ancestor + phase candidate blocking
+        and comparability scoring (Issue #55).
+        """
+        canonical_nct = nct_id.strip().upper()
+        with self.pool.connection() as conn:
+            # Check target trial existence
+            exists_dim = conn.execute(
+                "SELECT 1 FROM dim_trial WHERE nct_id = ?", [canonical_nct]
+            ).fetchone()
+            if exists_dim is None:
+                exists_stg = conn.execute(
+                    "SELECT 1 FROM stg_trials WHERE nct_id = ?", [canonical_nct]
+                ).fetchone()
+                if exists_stg is None:
+                    return None
+
+            # Check if precomputed mart_trial_similarity has rows for this target
+            mart_sql = """
+                SELECT
+                    m.nct_id_b AS nct_id,
+                    COALESCE(dt.current_brief_title, '') AS brief_title,
+                    COALESCE(dt.current_overall_status, '') AS overall_status,
+                    COALESCE(dt.current_phase, '') AS phase,
+                    COALESCE(dt.current_lead_sponsor, '') AS lead_sponsor,
+                    m.similarity_score,
+                    m.similarity_rank,
+                    m.same_condition,
+                    m.weight_same_condition,
+                    m.weighted_same_condition,
+                    m.same_phase,
+                    m.weight_same_phase,
+                    m.weighted_same_phase,
+                    m.geography_overlap,
+                    m.weight_geography_overlap,
+                    m.weighted_geography_overlap,
+                    m.intervention_type_overlap,
+                    m.weight_intervention_type_overlap,
+                    m.weighted_intervention_type_overlap,
+                    m.study_design_match,
+                    m.weight_study_design_match,
+                    m.weighted_study_design_match,
+                    m.eligibility_compatible,
+                    m.weight_eligibility_compatible,
+                    m.weighted_eligibility_compatible,
+                    m.enrollment_band_match,
+                    m.weight_enrollment_band_match,
+                    m.weighted_enrollment_band_match,
+                    m.similarity_explanation,
+                    COALESCE(
+                        dt.registry_url, 'https://clinicaltrials.gov/study/' || m.nct_id_b
+                    ) AS registry_url
+                FROM mart_trial_similarity m
+                LEFT JOIN dim_trial dt ON m.nct_id_b = dt.nct_id
+                WHERE m.nct_id_a = ?
+                  AND (? IS NULL OR m.similarity_score >= ?)
+                ORDER BY m.similarity_score DESC, m.similarity_rank ASC, m.nct_id_b ASC
+                LIMIT ?;
+            """
+            cursor = conn.execute(mart_sql, [canonical_nct, min_score, min_score, limit])
+            cols = [d[0] for d in cursor.description]
+            rows = cursor.fetchall()
+
+            # If mart returned no rows, compute on demand
+            if not rows:
+                cursor = conn.execute(
+                    self._related_sql,
+                    {
+                        "nct_id": canonical_nct,
+                        "min_score": min_score,
+                        "limit": limit,
+                    },
+                )
+                cols = [d[0] for d in cursor.description]
+                rows = cursor.fetchall()
+
+        items: list[RelatedTrialItem] = []
+        for row in rows:
+            r = dict(zip(cols, row, strict=True))
+            factors = ComparabilityFactors(
+                same_condition=FactorScore(
+                    matched=bool(r["same_condition"]),
+                    weight=float(r["weight_same_condition"]),
+                    weighted_score=float(r["weighted_same_condition"]),
+                ),
+                same_phase=FactorScore(
+                    matched=bool(r["same_phase"]),
+                    weight=float(r["weight_same_phase"]),
+                    weighted_score=float(r["weighted_same_phase"]),
+                ),
+                geography_overlap=FactorScore(
+                    matched=bool(r["geography_overlap"]),
+                    weight=float(r["weight_geography_overlap"]),
+                    weighted_score=float(r["weighted_geography_overlap"]),
+                ),
+                intervention_type_overlap=FactorScore(
+                    matched=bool(r["intervention_type_overlap"]),
+                    weight=float(r["weight_intervention_type_overlap"]),
+                    weighted_score=float(r["weighted_intervention_type_overlap"]),
+                ),
+                study_design_match=FactorScore(
+                    matched=bool(r["study_design_match"]),
+                    weight=float(r["weight_study_design_match"]),
+                    weighted_score=float(r["weighted_study_design_match"]),
+                ),
+                eligibility_compatible=FactorScore(
+                    matched=bool(r["eligibility_compatible"]),
+                    weight=float(r["weight_eligibility_compatible"]),
+                    weighted_score=float(r["weighted_eligibility_compatible"]),
+                ),
+                enrollment_band_match=FactorScore(
+                    matched=bool(r["enrollment_band_match"]),
+                    weight=float(r["weight_enrollment_band_match"]),
+                    weighted_score=float(r["weighted_enrollment_band_match"]),
+                ),
+                explanation_summary=r["similarity_explanation"] or "",
+            )
+            items.append(
+                RelatedTrialItem(
+                    nct_id=r["nct_id"],
+                    brief_title=r["brief_title"] or "",
+                    overall_status=r["overall_status"] or "",
+                    phase=r["phase"] or "",
+                    lead_sponsor=r["lead_sponsor"] or "",
+                    similarity_score=float(r["similarity_score"]),
+                    similarity_rank=int(r["similarity_rank"]),
+                    comparability_factors=factors,
+                    registry_url=r["registry_url"]
+                    or f"https://clinicaltrials.gov/study/{r['nct_id']}",
+                )
+            )
+
+        return RelatedTrialsResponse(
+            target_nct_id=canonical_nct,
+            related_trials=items,
         )
