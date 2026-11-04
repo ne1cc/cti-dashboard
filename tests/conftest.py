@@ -1,3 +1,4 @@
+import os
 import shutil
 import subprocess
 from dataclasses import replace
@@ -9,7 +10,10 @@ import pytest
 from tests.fixture_warehouse import (
     AddedStudy,
     FixtureRun,
+    _clear_caches,
+    build_dbt_fixture,
     build_fixture_warehouse,
+    prepare_fixture_root,
     variant_page,
 )
 
@@ -440,6 +444,50 @@ UNSTAMPED_NSCLC_RUN = FixtureRun(
     manifest_profile=UNSTAMPED_MANIFEST_PROFILE,
 )
 
+# Issue #74: a third ADRD run whose five studies (tests/fixtures/
+# bronze_snapshot_results) carry resultsSection.baselineCharacteristicsModule
+# with the messy label shapes the registry really contains — canonical NIH/OMB
+# categories, a combined "Race/Ethnicity, Customized" table labelled in
+# category titles, two combined tables labelled in class titles, an explicit
+# "Race and Ethnicity Not Collected" marker, and "Race:/Ethnicity:"-prefixed
+# custom labels. New NCT IDs and the base pages stay untouched so every pinned
+# cardinality on the other warehouses holds.
+DEMOGRAPHICS_RUN_ID = "20260901T120002Z_fixture05"
+DEMOGRAPHICS_RUN_AT = FIXTURE_SNAPSHOT_DAY + timedelta(hours=12)
+
+DEMOGRAPHICS_ADRD_RUN = FixtureRun(
+    profile="adrd",
+    run_id=DEMOGRAPHICS_RUN_ID,
+    started_at=DEMOGRAPHICS_RUN_AT,
+    condition=ADRD_CONDITION,
+    fixture_dir="bronze_snapshot_results",
+)
+
+# The same day's later re-pull (page=00002): NCT10000003's amended results keep
+# only the sex table — its race/ethnicity rows exist solely in the superseded
+# 12:00 snapshot — plus NCT10000006, whose module carries the live-verified
+# shapes page=00001 lacks: measure-level denoms distinct from the module's, a
+# non-participant units entry ahead of Participants, and the measure titles
+# ("Gender", "Mean Age (Years)", "GRACE score") that word-boundary matching
+# must classify (review round 1, findings 2-4). It stays on FIXTURE_SNAPSHOT_DAY
+# — one hour later, not one day later — for two reasons: history keeps one row
+# per snapshot *date* (latest timestamp wins), so 13:00 deterministically
+# supersedes the 12:00 run as that day's record, and fct_trial_snapshot marks
+# currency per profile by max(snapshot_date), so a later day would strip every
+# other ADRD trial of its current record and fail
+# assert_one_current_record_per_trial.
+DEMOGRAPHICS_RUN2_ID = "20260901T130000Z_fixture07"
+DEMOGRAPHICS_RUN2_AT = FIXTURE_SNAPSHOT_DAY + timedelta(hours=13)
+
+DEMOGRAPHICS_ADRD_RUN2 = FixtureRun(
+    profile="adrd",
+    run_id=DEMOGRAPHICS_RUN2_ID,
+    started_at=DEMOGRAPHICS_RUN2_AT,
+    condition=ADRD_CONDITION,
+    fixture_dir="bronze_snapshot_results",
+    page="page=00002.json",
+)
+
 
 # The similarity-mart fixtures (tests/test_similarity_candidates.py). The ADRD
 # run is the dense one: 52 cloned listings sharing "Alzheimer Disease",
@@ -537,6 +585,24 @@ def fixture_project_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
         tmp_path_factory,
         "fixture_project",
         [_base_adrd_run(), _base_nsclc_run()],
+    )
+
+
+@pytest.fixture(scope="session")
+def demographics_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """The base warehouse plus the two DEMOGRAPHICS_ADRD runs (issue #74).
+
+    Built lazily and session-scoped like the other roots: only the baseline-
+    demographics tests request it, so a run of the suite that touches neither
+    pays no third `dbt build`. The base two runs are included so the coverage
+    mart's denominator logic can be seen against trials that have no results
+    section at all; the second demographics run supplies the superseded-
+    snapshot and denominator-scope shapes the first lacks.
+    """
+    return _build_fixture_root(
+        tmp_path_factory,
+        "fixture_demographics",
+        [_base_adrd_run(), _base_nsclc_run(), DEMOGRAPHICS_ADRD_RUN, DEMOGRAPHICS_ADRD_RUN2],
     )
 
 
@@ -802,6 +868,83 @@ def audit_event_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
         ],
         session_timezone="America/Los_Angeles",
     )
+
+
+# --- legacy-silver upgrade fixture (issue #64 round-1 finding 1) --------------
+# The six trial columns the participant-design change added to silver_trials.
+# Dropped from a retained run's file to reproduce its pre-feature shape.
+PRE_PARTICIPANT_DESIGN_TRIAL_COLUMNS = (
+    "intervention_model",
+    "masking",
+    "has_placebo_arm",
+    "why_stopped",
+    "brief_summary",
+    "primary_outcome_time_frame",
+)
+
+
+def _degrade_adrd_run_to_pre_participant_design_shape(root: Path, run_id: str) -> None:
+    """Rewinds run `run_id` to the state an upgrade meets on a real volume.
+
+    Production keeps silver and manifests for several runs while
+    `bronze_runs_to_keep: 1` prunes all but the latest bronze, so upgrading the
+    code leaves retained pre-feature silver (no arms entity, no new trial
+    columns) whose source pages are gone. Silver files are edited in place;
+    nothing is deleted except the already-pruned bronze pages.
+    """
+    import pyarrow.parquet as pq
+
+    silver = root / "data" / "silver"
+    (silver / "silver_trial_arms" / f"run_id={run_id}.parquet").unlink()
+    trials = silver / "silver_trials" / f"run_id={run_id}.parquet"
+    table = pq.read_table(trials)
+    pq.write_table(
+        table.select(
+            [c for c in table.column_names if c not in PRE_PARTICIPANT_DESIGN_TRIAL_COLUMNS]
+        ),
+        trials,
+    )
+    shutil.rmtree(root / "data" / "bronze" / "adrd" / "api_responses" / f"run_id={run_id}")
+
+
+@pytest.fixture(scope="session")
+def legacy_silver_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A volume upgraded across the participant-design change: ADRD run
+    fixture01 keeps pre-feature silver while its bronze is pruned; NSCLC run
+    fixture02 stays current.
+
+    Built lazily and session-scoped like the other roots: only the
+    legacy-upgrade regression tests request it, so the rest of the suite pays
+    no extra `dbt build`. The transform step inside the build is itself part
+    of the regression: it must skip the pruned-bronze run instead of failing
+    the upgrade on its missing bronze.
+    """
+    root = tmp_path_factory.mktemp("fixture_legacy_silver")
+    prepare_fixture_root(root, [_base_adrd_run(), _base_nsclc_run()])
+    _degrade_adrd_run_to_pre_participant_design_shape(root, FIXTURE_RUN_ID)
+
+    prev_cti_root = os.environ.get("CTI_PROJECT_ROOT")
+    os.environ["CTI_PROJECT_ROOT"] = str(root)
+    _clear_caches()
+    try:
+        from src.profiles import load_profile, load_shared_paths
+        from src.transform.build_silver_entities import run_transform
+
+        shared = load_shared_paths(root / "config" / "shared_paths.yml")
+        adrd = load_profile(root / "config/profiles/adrd.yml", shared=shared)
+        processed = run_transform(profile=adrd)
+        assert processed == [], (
+            "a retained run whose bronze was pruned must be skipped, not rebuilt"
+        )
+    finally:
+        if prev_cti_root is not None:
+            os.environ["CTI_PROJECT_ROOT"] = prev_cti_root
+        else:
+            os.environ.pop("CTI_PROJECT_ROOT", None)
+        _clear_caches()
+
+    build_dbt_fixture(root)
+    return root
 
 
 # --- Change Radar fixture ------------------------------------------------------

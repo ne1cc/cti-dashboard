@@ -18,7 +18,8 @@ def test_cli_parser_ingest():
 
 
 def test_cli_parser_ingest_profile_default():
-    """--profile default is still the default and maps to adrd at runtime."""
+    """--profile default is still the default and maps to full_catalog (the
+    registry-wide profile) at runtime."""
     parser = build_parser()
     args = parser.parse_args(["ingest"])
     assert args.profile == "default"
@@ -56,7 +57,9 @@ def test_cli_parser_max_pages_refuses_negative():
 
 
 def test_cli_main_ingest_resolves_profile_via_registry(monkeypatch):
-    """main() resolves --profile to an IndicationProfile via ProfileRegistry."""
+    """main() resolves --profile to an IndicationProfile via ProfileRegistry.
+
+    The default is the registry-wide profile since issue #53."""
     captured = {}
 
     class FakeManifest:
@@ -67,14 +70,14 @@ def test_cli_main_ingest_resolves_profile_via_registry(monkeypatch):
         return FakeManifest()
 
     class FakeProfile:
-        profile_id = "adrd"
+        profile_id = "full_catalog"
         ingest_only = False
         # duck-typed as IndicationProfile for hasattr check
         pass
 
     class FakeRegistry:
         def get(self, profile_id):
-            assert profile_id == "adrd"
+            assert profile_id == "full_catalog"
             return FakeProfile()
 
     monkeypatch.setattr("src.cli.get_registry", lambda: FakeRegistry())
@@ -490,7 +493,7 @@ def test_cli_main_transform_resolves_profile_from_registry(monkeypatch):
     assert calls[1]["config"] is profile.config
 
 
-def test_cli_main_transform_default_resolves_to_adrd(monkeypatch):
+def test_cli_main_transform_default_resolves_to_registry(monkeypatch):
     calls: list[dict] = []
 
     def fake_run_transform(**kwargs):
@@ -501,17 +504,34 @@ def test_cli_main_transform_default_resolves_to_adrd(monkeypatch):
     monkeypatch.setattr("src.quality.profiling.profile_run", lambda *a, **k: {})
 
     assert main(["transform"]) == 0
-    assert calls[0]["profile"].profile_id == "adrd"
+    assert calls[0]["profile"].profile_id == "full_catalog"
 
 
 def test_cli_main_transform_refuses_ingest_only_profile(monkeypatch, caplog):
-    monkeypatch.setattr(
-        "src.transform.build_silver_entities.run_transform",
-        lambda **k: (_ for _ in ()).throw(AssertionError("must not run")),
-    )
-    # Exit 2 = usage error: full_catalog has no taxonomy, so there is nothing
-    # to transform and inventing one would produce a misleading warehouse.
-    assert main(["transform", "--profile", "full_catalog"]) == 2
+    """Exit 2 = usage error: an ingest_only profile has no taxonomy, so there
+    is nothing to transform and inventing one would produce a misleading
+    warehouse. No shipped profile is ingest_only since issue #53, so a minimal
+    duck-typed one stands in for the guard."""
+    ran = []
+
+    def must_not_run(**kwargs):
+        ran.append(kwargs)
+        return []
+
+    class FakeIngestOnlyProfile:
+        profile_id = "ingest_only_test"
+        ingest_only = True
+
+    class FakeRegistry:
+        def get(self, profile_id):
+            assert profile_id == "ingest_only_test"
+            return FakeIngestOnlyProfile()
+
+    monkeypatch.setattr("src.transform.build_silver_entities.run_transform", must_not_run)
+    monkeypatch.setattr("src.cli.get_registry", lambda: FakeRegistry())
+
+    assert main(["transform", "--profile", "ingest_only_test"]) == 2
+    assert ran == []
 
 
 def test_cli_main_transform_unknown_profile_is_usage_error_not_data_failure(monkeypatch):
@@ -538,15 +558,20 @@ def test_cli_main_transform_unknown_profile_is_usage_error_not_data_failure(monk
     assert [c["profile"].profile_id for c in calls] == ["adrd"]
 
 
-def test_cli_main_transform_refuses_legacy_full_catalog_alias(monkeypatch):
+def test_cli_main_transform_accepts_legacy_full_catalog_alias(monkeypatch):
     """The --profile help text promises 'full-catalog' is still accepted: it
-    normalizes to full_catalog, which is ingest_only and refused the same way."""
-    monkeypatch.setattr(
-        "src.transform.build_silver_entities.run_transform",
-        lambda **k: (_ for _ in ()).throw(AssertionError("must not run")),
-    )
+    normalizes to full_catalog, which is transformable since issue #53."""
+    calls: list[dict] = []
 
-    assert main(["transform", "--profile", "full-catalog"]) == 2
+    def fake_run_transform(**kwargs):
+        calls.append(kwargs)
+        return []
+
+    monkeypatch.setattr("src.transform.build_silver_entities.run_transform", fake_run_transform)
+    monkeypatch.setattr("src.quality.profiling.profile_run", lambda *a, **k: {})
+
+    assert main(["transform", "--profile", "full-catalog"]) == 0
+    assert [c["profile"].profile_id for c in calls] == ["full_catalog"]
 
 
 def test_legacy_full_catalog_config_file_is_gone() -> None:

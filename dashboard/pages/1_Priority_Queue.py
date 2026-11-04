@@ -62,7 +62,7 @@ queue_columns = [
     "site_overlap_rate",
     "distinct_sponsors",
     "listed_site_count",
-    "data_confidence_share",
+    "operational_completeness_share",
     "registry_search_url",
     "priority_explanation",
 ]
@@ -120,8 +120,8 @@ queue_event = st.dataframe(
             width=100,
             help="Attributable clinical facility listings in this state for this segment",
         ),
-        "data_confidence_share": st.column_config.NumberColumn(
-            "Completeness adjustment",
+        "operational_completeness_share": st.column_config.NumberColumn(
+            "Operational completeness",
             format="percent",
             width=160,
             help="0.5 record-quality-ok share + 0.5 latest usable-location share",
@@ -151,7 +151,7 @@ export_columns = [
     "new_recruiting_90d",
     "newly_registered_90d",
     "observed_history_days",
-    "data_confidence_share",
+    "operational_completeness_share",
     "registry_search_url",
     "priority_explanation",
     "interpretation_note",
@@ -159,14 +159,7 @@ export_columns = [
 ]
 st.download_button(
     "Download filtered segments as CSV",
-    filtered[export_columns]
-    .rename(
-        columns={
-            "data_confidence_share": "legacy_operational_completeness_adjustment",
-        }
-    )
-    .to_csv(index=False)
-    .encode("utf-8"),
+    filtered[export_columns].to_csv(index=False).encode("utf-8"),
     file_name="registry_segments.csv",
     mime="text/csv",
     help="Exports exactly the rows and filters currently shown above, "
@@ -210,7 +203,7 @@ if selected_rows:
         ("Top sponsor share", f"{segment['top_sponsor_share'] * 100:.1f}%"),
         ("Site overlap rate", f"{segment['site_overlap_rate'] * 100:.1f}% of trials"),
         ("Listed site affiliations", f"{int(segment['listed_site_count'])} sites"),
-        ("Operational completeness", f"{segment['data_confidence_share'] * 100:.1f}%"),
+        ("Operational completeness", f"{segment['operational_completeness_share'] * 100:.1f}%"),
     ]
     details_df = pd.DataFrame(details_rows, columns=["Metric", "Observed Value"])
     st.dataframe(

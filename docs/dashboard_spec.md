@@ -1,6 +1,6 @@
 # Dashboard Specification
 
-Audience: Director of Clinical Operations / Head of Site Feasibility.
+Audience: analysts doing landscape screening (a hypothesis, not a validated user; see ADR 0082).
 Stack: Streamlit multipage over read-only DuckDB (`make dashboard`).
 Every page renders the shared disclaimer banner via
 `components/guardrails.page_setup()` (test-enforced) and a guarded footer.

@@ -62,6 +62,24 @@ Issue #62 formalizes structured participant criteria and enforces explicit unsta
 
 ---
 
+## 2b. Participant-Relevant Design Data (arms, masking, stop reason, timing)
+
+All rows below store registry text verbatim — never generated, paraphrased or
+interpreted. Additive on the `/v1/trials/{nct_id}` detail payload.
+
+| API Field | Upstream CTG v2 Field | Silver Column | Warehouse Model & Column | Business Rule & Derivation |
+|---|---|---|---|---|
+| `arms[]` | `protocolSection.armsInterventionsModule.armGroups[]` (`label`, `type`, `description`, `interventionNames`) | `silver_trial_arms.arm_label` / `arm_type` / `arm_description` / `intervention_names` | `stg_trial_arms` (grain: profile × NCT × run × `arm_ordinal`) | Arm list preserved in registry order via zero-based `arm_ordinal`. `arm_type` includes `PLACEBO_COMPARATOR`; null when the registry omits it. |
+| `has_placebo_arm` | Derived from `armGroups[].type` | `silver_trials.has_placebo_arm` | `dim_trial.has_placebo_arm` | True when any arm group declares type `PLACEBO_COMPARATOR`. |
+| `study_design.masking` | `protocolSection.designModule.designInfo.maskingInfo.masking` | `silver_trials.masking` | `dim_trial.current_masking` | Masking level (`NONE`, `SINGLE`, `DOUBLE`, `TRIPLE`, `QUADRUPLE`); null when unstated. |
+| `study_design.intervention_model` | `protocolSection.designModule.designInfo.interventionModel` | `silver_trials.intervention_model` | `dim_trial.current_intervention_model` | `PARALLEL`, `SINGLE_GROUP`, `FACTORIAL`, etc. |
+| `why_stopped` | `protocolSection.statusModule.whyStopped` | `silver_trials.why_stopped` | `dim_trial.why_stopped` | Verbatim registry stop reason; populated for terminated/withdrawn/suspended trials. |
+| `brief_summary` | `protocolSection.descriptionModule.briefSummary` | `silver_trials.brief_summary` | `dim_trial.brief_summary` | Verbatim registry-provided brief summary; never generated. |
+| `primary_outcome_time_frame` | `protocolSection.outcomesModule.primaryOutcomes[0].timeFrame` | `silver_trials.primary_outcome_time_frame` | `dim_trial.primary_outcome_time_frame` | Verbatim timing of the first primary outcome (e.g. "78 weeks"). |
+| `dates.start_date` / `dates.primary_completion_date` | `protocolSection.statusModule.startDateStruct.date` / `primaryCompletionDateStruct.date` | `silver_trials.start_date` / `primary_completion_date` | `dim_trial.start_date` / `primary_completion_date` | Already covered in section 1; listed here as the participant-facing "how long?" dates. |
+
+---
+
 ## 3. Study Locations & Sites (ADR 0065 Privacy Guardrails)
 
 In strict adherence to **ADR 0065**, facility-level and central investigator names, personal email addresses, and personal telephone numbers are **deliberately excluded** from the data pipeline and read API models.

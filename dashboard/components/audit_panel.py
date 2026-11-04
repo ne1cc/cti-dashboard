@@ -35,9 +35,9 @@ PRIORITY_DERIVED_RULES = (
     "does not exceed the window) — null means not enough history, never zero. newly_registered_90d "
     "counts recruiting studies whose registry first-post date falls within 90 days: a "
     "registration count, not a recruiting transition. "
-    "data_confidence_share retains operational data completeness (0.5 segment "
+    "operational_completeness_share is operational data completeness (0.5 segment "
     "record-quality-ok share + 0.5 latest successful-run usable-location share; "
-    "missing shares coalesce to zero) as a quality signal pending Issue #78. "
+    "missing shares coalesce to zero). "
     "This panel audits count inputs and underlying study records; derived metric values "
     "remain warehouse calculations."
 )
@@ -175,11 +175,7 @@ def render_metric_audit(
                     & (segments.state_normalized == chosen_segment[1])
                     & (segments.phase_normalized == chosen_segment[2])
                 ]
-            display_context["displayed_metric_values"] = values.rename(
-                columns=lambda name: name.replace(
-                    "data_confidence", "legacy_operational_completeness"
-                )
-            ).to_dict("records")
+            display_context["displayed_metric_values"] = values.to_dict("records")
         if sponsors is not None:
             sponsor = st.selectbox(
                 "Audit sponsor",
