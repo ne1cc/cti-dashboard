@@ -29,7 +29,7 @@ missing counts and unknown types; study totals are never apportioned to sites.
 
 Download the JSON audit for selected run IDs/dates, `competition-audit-v2`, active
 rule hashes, evaluation UTC, threshold, decisions, contributors, enrollment and raw
-page/ordinal/hash lineage, qualifying growth/proxy events and predecessor evidence.
+page/ordinal/hash lineage, qualifying recruiting transition and newly registered first-post events and predecessor evidence.
 The audit retains wider eligible/count-input denominators; unrelated derived formulas,
 windows and warehouse values are disclosed rather than recalculated from the union.
 See [metric definitions](metric_definitions.md) and

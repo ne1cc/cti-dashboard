@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Trial search results{% endblock %}
+{% block content %}
+<h1>Trial search results</h1>
+{% include "_form.html" %}
+{% if error %}<p class="error" role="alert">{{ error }}</p>
+{% elif not items %}<p>No trials found on this page. Try changing your search.</p>
+{% else %}<p>{{ items|length }} trial{{ '' if items|length == 1 else 's' }} on this page</p>
+<ul class="results">{% for item in items %}<li><article><h2><a href="/trials/{{ item.nct_id|urlencode }}">{{ item.brief_title }}</a></h2><p>{{ item.overall_status|replace('_', ' ')|capitalize }} · {{ item.nct_id }}</p></article></li>{% endfor %}</ul>{% endif %}
+{% if next_url %}<a class="next" href="{{ next_url }}">Next page</a>{% endif %}
+{% endblock %}

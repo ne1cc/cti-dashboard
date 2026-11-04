@@ -23,7 +23,7 @@ col1.metric(
     f"{len(sponsors):,}",
     help=(
         "Organizations designated as the primary/lead sponsor on "
-        "currently recruiting ADRD clinical trials."
+        "currently recruiting clinical trials."
     ),
 )
 col2.metric(

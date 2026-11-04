@@ -19,7 +19,7 @@ DEFINITIONS = {
         "Distinct recruiting entry events in the selected inclusive "
         "window, with captured predecessor evidence."
     ),
-    "first_post_proxy": (
+    "first_post_registered": (
         "Distinct currently recruiting studies whose source "
         "first-post date meets the lower boundary (no upper bound)."
     ),
@@ -35,7 +35,7 @@ OBSERVATION_SOURCES = {
     "recent_recruiting": (
         "int_trial_status_history with predecessor selected before window filtering"
     ),
-    "first_post_proxy": "int_trial_status_history at competition latest profile date",
+    "first_post_registered": "int_trial_status_history at competition latest profile date",
     "competition": "int_trial_status_history at mart_recruiting_competition latest profile date",
     "history": "int_trial_status_history: latest study observation per profile/date",
     "facility": "int_trial_status_history at fct_trial_snapshot latest profile date",
@@ -82,7 +82,7 @@ def compute_audit(
     if evaluated.tzinfo is None:
         raise ValueError("evaluation_time must include a UTC offset")
     evaluated = evaluated.tz_convert("UTC")
-    event_metric = metric in {"recent_recruiting", "first_post_proxy"}
+    event_metric = metric in {"recent_recruiting", "first_post_registered"}
     if event_metric and (window_start is None or window_end is None):
         raise ValueError("Event audit requires explicit window_start and window_end")
     evidence_columns = ["previous_status", "predecessor_snapshot_id", "predecessor_snapshot_date"]
@@ -190,7 +190,7 @@ def compute_audit(
         if count_status == "recruiting" and not recruiting:
             reason = "not_confirmed_recruiting"
         elif (
-            metric in {"competition", "history", "recent_recruiting", "first_post_proxy"}
+            metric in {"competition", "history", "recent_recruiting", "first_post_registered"}
             and key not in condition_keys
         ):
             reason = "missing_condition_mapping"
@@ -235,7 +235,7 @@ def compute_audit(
                 event_reason = (
                     "missing_first_post_date"
                     if pd.isna(first_post)
-                    else "outside_first_post_proxy_boundary"
+                    else "outside_first_post_registered_boundary"
                 )
             if reason is None and not event_qualifies:
                 reason = event_reason
@@ -243,7 +243,7 @@ def compute_audit(
         if membership == "undetermined":
             flags.append("undetermined_region_membership")
         if (
-            metric in {"competition", "history", "recent_recruiting", "first_post_proxy"}
+            metric in {"competition", "history", "recent_recruiting", "first_post_registered"}
             and key not in condition_keys
         ):
             flags.append("missing_condition_mapping")
@@ -388,7 +388,7 @@ def compute_audit(
                 "inclusive lower bound; no upper bound. Current status must "
                 "be RECRUITING."
             )
-            if metric == "first_post_proxy"
+            if metric == "first_post_registered"
             else None
         ),
         enrollment_scope="Latest included observation per study; per-run totals separate.",

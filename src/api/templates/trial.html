@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Trial details{% endblock %}
+{% block content %}
+{% if error %}<h1>Trial details</h1><p class="error" role="alert">{{ error }}</p>
+{% else %}<h1>{{ trial.brief_title }}</h1><p>Trial ID: {{ trial.nct_id }}</p><p><a href="{{ trial.registry_url }}">Open the official ClinicalTrials.gov record</a></p>{% endif %}
+{% endblock %}

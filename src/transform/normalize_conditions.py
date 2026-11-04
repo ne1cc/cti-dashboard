@@ -1,7 +1,12 @@
-"""Config-driven ADRD condition taxonomy mapping.
+"""Config-driven condition taxonomy overlay mapping.
 
-Deterministic, version-controlled YAML rules (config/condition_taxonomy.yml).
+Deterministic, version-controlled YAML rules (config/condition_taxonomy*.yml).
 No runtime LLM classification. Groups are evaluated in order; first match wins.
+
+Since Issue #52 the YAML taxonomies are optional overlays on top of the
+registry's MeSH browse terms (silver_trial_condition_mesh): rows matched by a
+taxonomy rule carry mapping_source yaml_overlay, everything else falls back
+(text_fallback) and MeSH identity carries the browsable condition grouping.
 """
 
 from dataclasses import dataclass
@@ -30,6 +35,12 @@ class TaxonomyGroup:
     dementia_relevance: bool
     exact: tuple[str, ...]
     substrings: tuple[str, ...]
+    display_name: str | None = None
+
+    @property
+    def label(self) -> str:
+        """Return the configured display name, falling back to the group key."""
+        return self.display_name or self.condition_group
 
 
 @dataclass(frozen=True)
@@ -37,6 +48,24 @@ class ConditionTaxonomy:
     groups: tuple[TaxonomyGroup, ...]
     default_group: str
     default_dementia_relevance: bool
+    default_display_name: str | None = None
+
+    @property
+    def default_label(self) -> str:
+        """Return the default display name, falling back to the default group key."""
+        return self.default_display_name or self.default_group
+
+    def get_group_label(self, group_key: str) -> str:
+        """Resolve a condition group identifier to its human-readable display label.
+
+        Falls back cleanly to the group key if no display label metadata exists.
+        """
+        for group in self.groups:
+            if group.condition_group == group_key:
+                return group.display_name or group.condition_group
+        if group_key == self.default_group:
+            return self.default_display_name or self.default_group
+        return group_key
 
     def map_condition(self, condition_raw: object) -> ConditionMapping:
         cleaned = normalize_text(condition_raw)
@@ -66,14 +95,28 @@ def load_taxonomy(path: str | Path | None = None) -> ConditionTaxonomy:
             dementia_relevance=bool(entry["dementia_relevance"]),
             exact=tuple(entry.get("exact") or []),
             substrings=tuple(entry.get("substrings") or []),
+            display_name=entry.get("display_name") or entry.get("label"),
         )
         for entry in raw["groups"]
     )
+    default_entry = raw.get("default", {})
     return ConditionTaxonomy(
         groups=groups,
-        default_group=raw["default"]["condition_group"],
-        default_dementia_relevance=bool(raw["default"]["dementia_relevance"]),
+        default_group=default_entry["condition_group"],
+        default_dementia_relevance=bool(default_entry["dementia_relevance"]),
+        default_display_name=default_entry.get("display_name") or default_entry.get("label"),
     )
+
+
+# The registry-wide profile (full_catalog) has no indication taxonomy: every
+# condition maps to "uncategorized" with no dementia flag. Keeping this as a
+# taxonomy — not a special case in flatten — is what lets one silver path serve
+# both indication profiles and the whole registry (issue #53).
+REGISTRY_TAXONOMY = ConditionTaxonomy(
+    groups=(),
+    default_group="uncategorized",
+    default_dementia_relevance=False,
+)
 
 
 @lru_cache(maxsize=1)

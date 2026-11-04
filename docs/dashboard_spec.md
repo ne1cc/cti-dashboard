@@ -1,6 +1,6 @@
 # Dashboard Specification
 
-Audience: Director of Clinical Operations / Head of Site Feasibility.
+Audience: analysts doing landscape screening (a hypothesis, not a validated user; see ADR 0082).
 Stack: Streamlit multipage over read-only DuckDB (`make dashboard`).
 Every page renders the shared disclaimer banner via
 `components/guardrails.page_setup()` (test-enforced) and a guarded footer.
@@ -25,8 +25,8 @@ sections, and three separately named metric audits (see [Competition Audit](comp
 
 ### 1 · Registry Segments
 Segment-level activity metrics, condition/state/phase multiselects with
-dynamic row-count reconciliation caption, proxy warning when growth uses
-the registry-date fallback, interactive selectable raw metrics table sorted
+dynamic row-count reconciliation caption, history warning when snapshot
+history is too short for recruiting growth, interactive selectable raw metrics table sorted
 by active recruiting trials (click a row to inspect segment details), CSV
 export button with full decision-brief columns and embedded guardrail
 notes, horizontal bar chart of active recruiting trials across top 15
@@ -51,12 +51,10 @@ workload/performance.
 Top lead sponsors by recruiting listings (colored by registry sponsor
 class), full table, "not market share" caption.
 
-### 6 · Data Reliability & Assumptions
+### 6 · Data Reliability
 Run reliability table (success + partial runs shown; only success feeds
-analytics), latest-run confidence metrics, known limitations, and the
-**illustrative scenario explorer**: sliders adjust session-only copies of
-`config/roi_assumptions.yml`; the disclaimer always renders above results
-and the file is never written.
+analytics), latest-run confidence metrics, data reconciliation status,
+and known limitations.
 
 ### 7 · Trial Explorer
 Individual registry records with status/phase filters and free-text

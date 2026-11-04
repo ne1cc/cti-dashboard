@@ -130,6 +130,22 @@ def test_new_profile_taxonomies_map_primary_conditions(registry: ProfileRegistry
         assert taxonomy.map_condition("Unrelated condition").condition_group.startswith("other_")
 
 
+def test_slim_fields_projection_consistent(registry: ProfileRegistry) -> None:
+    from src.config import load_config
+
+    base_cfg = load_config()
+    adrd_cfg = registry.get("adrd").config
+    full_cfg = registry.get("full_catalog").config
+
+    assert adrd_cfg.api.fields == full_cfg.api.fields, "adrd and full_catalog fields must match"
+    assert full_cfg.api.fields == base_cfg.api.fields, (
+        "full_catalog and project_config fields must match"
+    )
+    assert adrd_cfg.api.fields is not None and len(adrd_cfg.api.fields) == 13
+    assert "hasResults" in adrd_cfg.api.fields
+    assert "protocolSection.descriptionModule" in adrd_cfg.api.fields
+
+
 def test_ingest_only_profiles_have_no_taxonomy(registry: ProfileRegistry) -> None:
     for profile in registry.all():
         if profile.ingest_only:
@@ -170,3 +186,17 @@ def test_nsclc_query_targets_nsclc(registry: ProfileRegistry) -> None:
     profile = registry.get("oncology_nsclc")
     assert profile.config.api.query_params["query.cond"] == "Non-Small Cell Lung Cancer"
     assert profile.config.api.query_params["filter.advanced"] == "AREA[StudyType]INTERVENTIONAL"
+
+
+def test_all_shipped_profiles_have_display_labels_in_taxonomy(registry: ProfileRegistry) -> None:
+    for profile in registry.refreshable():
+        tax = profile.taxonomy
+        assert tax is not None, f"Profile {profile.profile_id} missing taxonomy"
+        assert tax.default_display_name is not None, (
+            f"Profile {profile.profile_id} default group missing display_name"
+        )
+        for group in tax.groups:
+            assert group.display_name is not None, (
+                f"Profile {profile.profile_id} group {group.condition_group} missing display_name"
+            )
+            assert group.label == group.display_name

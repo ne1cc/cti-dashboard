@@ -13,12 +13,15 @@ from typing import Any
 
 from src.api.models import (
     DataProvenance,
+    EligibilitySection,
+    EligibilitySections,
     EnrollmentInfo,
     GeoPoint,
     NearestSiteSummary,
     SponsorDetail,
     StructuredEligibility,
     StructuredEligibilitySummary,
+    StudyArm,
     StudyCondition,
     StudyDates,
     StudyDesign,
@@ -29,6 +32,7 @@ from src.api.models import (
     TrialSummary,
 )
 from src.transform.eligibility import parse_age_to_years
+from src.transform.eligibility_sections import split_eligibility_sections
 from src.transform.flatten_studies import normalize_phases, trial_quality_flags
 from src.utils.dates import parse_partial_date
 
@@ -335,13 +339,51 @@ def normalize_study_detail(
                 )
             )
 
+    # Arm groups (registry text passed through verbatim)
+    arms: list[StudyArm] = []
+    for arm in interventions_mod.get("armGroups") or []:
+        if isinstance(arm, dict):
+            names = arm.get("interventionNames")
+            arms.append(
+                StudyArm(
+                    label=arm.get("label"),
+                    arm_type=arm.get("type"),
+                    description=arm.get("description"),
+                    intervention_names=[str(n) for n in names] if isinstance(names, list) else [],
+                )
+            )
+    has_placebo = any(arm.arm_type == "PLACEBO_COMPARATOR" for arm in arms)
+
+    brief_summary = (protocol.get("descriptionModule") or {}).get("briefSummary")
+    why_stopped = status.get("whyStopped")
+    primary_outcomes = (protocol.get("outcomesModule") or {}).get("primaryOutcomes") or []
+    primary_outcome_time_frame = (
+        primary_outcomes[0].get("timeFrame")
+        if primary_outcomes and isinstance(primary_outcomes[0], dict)
+        else None
+    )
+
+    criteria_text = elig.get("eligibilityCriteria")
+    sections_parsed = split_eligibility_sections(criteria_text)
     eligibility = StructuredEligibility(
         **_normalize_eligibility(elig).model_dump(),
         minimum_age_raw=elig.get("minimumAge"),
         maximum_age_raw=elig.get("maximumAge"),
         gender_based=elig.get("genderBased"),
         gender_description=elig.get("genderDescription"),
-        criteria_text=elig.get("eligibilityCriteria"),
+        criteria_text=criteria_text,
+        eligibility_sections=EligibilitySections(
+            parsed=sections_parsed.parsed,
+            sections=[
+                EligibilitySection(kind=s.kind, heading=s.heading_raw, items=s.items)
+                for s in sections_parsed.sections
+            ],
+            inclusion=sections_parsed.inclusion,
+            exclusion=sections_parsed.exclusion,
+            unclassified=sections_parsed.unclassified,
+        )
+        if sections_parsed is not None
+        else None,
     )
 
     # Sites / Facilities (ADR 0065: excludes contacts and investigator personal details)
@@ -427,6 +469,11 @@ def normalize_study_detail(
         sponsors=sponsors,
         conditions=conditions,
         interventions=interventions,
+        arms=arms,
+        has_placebo_arm=has_placebo,
+        why_stopped=why_stopped,
+        brief_summary=brief_summary,
+        primary_outcome_time_frame=primary_outcome_time_frame,
         eligibility=eligibility,
         sites=sites,
         registry_url=registry_url,

@@ -960,6 +960,45 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/StudyIntervention'
+        arms:
+          type: array
+          description: |
+            Registry arm groups. All text is stored verbatim as provided by the
+            registry (never generated or paraphrased).
+          items:
+            $ref: '#/components/schemas/StudyArm'
+        has_placebo_arm:
+          type:
+            - boolean
+            - 'null'
+          description: |
+            True when any registry arm group declares type PLACEBO_COMPARATOR;
+            false when the snapshot lists arms with no placebo arm; null when
+            the stored snapshot predates the field (unknown, not asserted false
+            from absent historical data).
+          example: true
+        why_stopped:
+          type:
+            - string
+            - 'null'
+          description: |
+            Registry-provided reason the study stopped (statusModule.whyStopped),
+            passed through verbatim. Populated for terminated/withdrawn/suspended trials.
+          example: 'Insufficient enrollment'
+        brief_summary:
+          type:
+            - string
+            - 'null'
+          description: |
+            Registry-provided brief summary (descriptionModule.briefSummary),
+            stored verbatim. This text is registry-provided, never generated.
+          example: 'To evaluate the safety and efficacy of ...'
+        primary_outcome_time_frame:
+          type:
+            - string
+            - 'null'
+          description: timeFrame of the first registry primary outcome, verbatim.
+          example: '78 weeks'
         eligibility:
           $ref: '#/components/schemas/StructuredEligibility'
         sites:
@@ -1022,6 +1061,39 @@ components:
             - string
             - 'null'
           example: 'QUADRUPLE'
+
+    StudyArm:
+      type: object
+      description: |
+        Registry arm group. Labels, types, descriptions and intervention name
+        lists are registry-provided and stored verbatim.
+      properties:
+        label:
+          type:
+            - string
+            - 'null'
+          example: 'Placebo'
+        arm_type:
+          type:
+            - string
+            - 'null'
+          description: |
+            Registry arm group type: EXPERIMENTAL, ACTIVE_COMPARATOR,
+            PLACEBO_COMPARATOR, SHAM_COMPARATOR, NO_INTERVENTION, or OTHER;
+            null when the registry omits it.
+          example: 'PLACEBO_COMPARATOR'
+        description:
+          type:
+            - string
+            - 'null'
+          description: Registry-provided arm description, verbatim.
+          example: '120 subjects will take two daily doses of placebo ...'
+        intervention_names:
+          type: array
+          description: Registry interventionNames for this arm, verbatim.
+          items:
+            type: string
+          example: ['Drug: Donepezil']
 
     EnrollmentInfo:
       type: object
@@ -1228,7 +1300,96 @@ components:
             - string
             - 'null'
           description: Full unstructured eligibility criteria narrative block from protocol.
-          example: 'Inclusion Criteria: 1. Age 55 to 85. 2. Confirmed biomarker evidence of amyloid. Exclusion Criteria: 1. Current significant psychiatric disorder.'
+          example: "Inclusion Criteria:\n\n* Age 55 to 85.\n* Confirmed biomarker evidence of amyloid.\n\nExclusion Criteria:\n\n* Current significant psychiatric disorder."
+        eligibility_sections:
+          anyOf:
+            - $ref: '#/components/schemas/EligibilitySections'
+            - type: 'null'
+          description: |
+            Structural split of criteria_text into inclusion/exclusion sections
+            (Issue #67). These are the study's own criteria: review them with a
+            clinician and the study team. Null when criteria_text is absent or blank.
+
+    EligibilitySection:
+      type: object
+      description: |
+        One ordered chunk of the split criteria text: a verbatim heading plus
+        the items under it. The leading chunk has no heading and is unclassified.
+      required:
+        - kind
+        - heading
+        - items
+      properties:
+        kind:
+          type: string
+          description: 'Section kind: inclusion, exclusion, or unclassified.'
+          example: exclusion
+        heading:
+          type:
+            - string
+            - 'null'
+          description: Verbatim heading line (bullet marker stripped), or null when absent.
+          example: 'Exclusion Criteria (PCP):'
+        items:
+          type: array
+          items:
+            type: string
+          description: |
+            Items of this section with bullet and list markers stripped, in source
+            order. See criteria_text for the exact verbatim source blob.
+          example: ['none']
+
+    EligibilitySections:
+      type: object
+      description: |
+        Deterministic structural split of the registry criteria text per Issue #67.
+        Split by heading and bullet structure only: never interpreted, scored, or
+        paraphrased. Text that cannot be confidently classified is kept in
+        unclassified, so nothing is dropped. sections is the lossless
+        representation: ordered chunks with their verbatim headings, so repeated
+        same-kind headings keep separate boundaries.
+      required:
+        - parsed
+      properties:
+        parsed:
+          type: boolean
+          description: True when at least one Inclusion/Exclusion heading was recognized.
+          example: true
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/EligibilitySection'
+          description: |
+            Lossless ordered split: one entry per heading-bounded chunk (plus the
+            leading unclassified chunk). Concatenating each heading with its items
+            rebuilds the source text (bullet and numbered list markers stripped;
+            see criteria_text for the exact verbatim source blob).
+        inclusion:
+          type: array
+          items:
+            type: string
+          description: |
+            Convenience view: inclusion items (bullet markers stripped) merged across all inclusion
+            sections, in source order. Repeated same-kind heading boundaries are
+            only visible in sections.
+          example: ['Age 55 to 85.', 'Confirmed biomarker evidence of amyloid.']
+        exclusion:
+          type: array
+          items:
+            type: string
+          description: |
+            Convenience view: exclusion items (bullet markers stripped) merged across all exclusion
+            sections, in source order. Repeated same-kind heading boundaries are
+            only visible in sections.
+          example: ['Current significant psychiatric disorder.']
+        unclassified:
+          type: array
+          items:
+            type: string
+          description: |
+            Items that could not be attributed to Inclusion or Exclusion
+            (e.g. no recognizable headings; bullet markers stripped).
+          example: []
 
     TrialSite:
       type: object
