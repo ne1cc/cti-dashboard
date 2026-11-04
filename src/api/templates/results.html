@@ -3,6 +3,35 @@
 {% block content %}
 <h1>Trial search results</h1>
 {% include "_form.html" %}
+{% if matched_concept %}
+<section class="concept-disclosure" aria-label="Condition search concept">
+  <p class="concept-banner">Showing trials for: <strong>{{ matched_concept }}</strong>{% if matched_from %} <span class="matched-from">(matched from &ldquo;{{ matched_from }}&rdquo;)</span>{% endif %}</p>
+  {% if broader_terms or narrower_terms %}
+  <div class="concept-hierarchy">
+    {% if broader_terms %}
+    <div class="hierarchy-group widen">
+      <span class="hierarchy-label">Widen search:</span>
+      <div class="hierarchy-chips">
+        {% for term in broader_terms %}
+        <a class="hierarchy-chip" href="/trials?cond={{ term.term|urlencode }}{% if fields.get('postal_code') %}&postal_code={{ fields.get('postal_code')|urlencode }}{% endif %}{% if fields.get('radius_mi') %}&radius_mi={{ fields.get('radius_mi')|urlencode }}{% endif %}{% if fields.get('age') %}&age={{ fields.get('age')|urlencode }}{% endif %}{% if fields.get('sex') %}&sex={{ fields.get('sex')|urlencode }}{% endif %}{% if fields.get('status') %}&status={{ fields.get('status')|urlencode }}{% endif %}">{{ term.term }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    {% if narrower_terms %}
+    <div class="hierarchy-group narrow">
+      <span class="hierarchy-label">Narrow search:</span>
+      <div class="hierarchy-chips">
+        {% for term in narrower_terms %}
+        <a class="hierarchy-chip" href="/trials?cond={{ term.term|urlencode }}{% if fields.get('postal_code') %}&postal_code={{ fields.get('postal_code')|urlencode }}{% endif %}{% if fields.get('radius_mi') %}&radius_mi={{ fields.get('radius_mi')|urlencode }}{% endif %}{% if fields.get('age') %}&age={{ fields.get('age')|urlencode }}{% endif %}{% if fields.get('sex') %}&sex={{ fields.get('sex')|urlencode }}{% endif %}{% if fields.get('status') %}&status={{ fields.get('status')|urlencode }}{% endif %}">{{ term.term }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
 {% if error %}<p class="error" role="alert">{{ error }}</p>
 {% elif not items %}<p>No trials found on this page. Try changing your search.</p>
 {% else %}<p>{{ items|length }} trial{{ '' if items|length == 1 else 's' }} on this page</p>

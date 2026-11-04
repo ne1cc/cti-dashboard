@@ -198,17 +198,49 @@
     container.appendChild(ul);
   }
 
+  function initAutocomplete() {
+    var condInput = document.getElementById('cond');
+    var datalist = document.getElementById('condition-list');
+    if (!condInput || !datalist) return;
+
+    var timer = null;
+    condInput.addEventListener('input', function () {
+      var query = condInput.value.trim();
+      if (timer) clearTimeout(timer);
+      if (query.length < 2) return;
+
+      timer = setTimeout(function () {
+        fetch('/v1/conditions?q=' + encodeURIComponent(query) + '&limit=8')
+          .then(function (res) {
+            return res.ok ? res.json() : null;
+          })
+          .then(function (data) {
+            if (!data || !data.items) return;
+            datalist.innerHTML = '';
+            data.items.forEach(function (item) {
+              var opt = document.createElement('option');
+              opt.value = item.condition_name;
+              datalist.appendChild(opt);
+            });
+          })
+          .catch(function () {});
+      }, 250);
+    });
+  }
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () {
       updateNavBadge();
       syncButtons();
       renderShortlist();
       initListeners();
+      initAutocomplete();
     });
   } else {
     updateNavBadge();
     syncButtons();
     renderShortlist();
     initListeners();
+    initAutocomplete();
   }
 })();

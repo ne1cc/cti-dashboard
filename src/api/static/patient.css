@@ -120,6 +120,71 @@ button:hover { background: #054366; }
   border-radius: 0.25rem;
 }
 .notice { grid-column: 1 / -1; margin: 0; font-size: .9rem; color: #405461; }
+.concept-disclosure {
+  background: #ffffff;
+  border: 1px solid #075b88;
+  border-left: 4px solid #075b88;
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+  margin-block: 1rem;
+}
+.concept-banner {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.1rem;
+  color: #143b53;
+}
+.concept-banner strong {
+  color: #075b88;
+}
+.matched-from {
+  font-size: 0.95rem;
+  color: #56717f;
+  font-style: italic;
+  font-weight: normal;
+}
+.concept-hierarchy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #d9e3e7;
+}
+.hierarchy-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.hierarchy-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #56717f;
+  min-width: 6.5rem;
+}
+.hierarchy-chips {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.hierarchy-chip {
+  display: inline-block;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: #eef5f8;
+  color: #075b88;
+  border: 1px solid #b9cbd2;
+  border-radius: 1rem;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+.hierarchy-chip:hover {
+  background: #d8e9f0;
+  border-color: #075b88;
+  text-decoration: underline;
+}
 .results { list-style: none; margin: 1rem 0; padding: 0; }
 .results li { background: white; border: 1px solid #b9cbd2; border-radius: .5rem; padding: 1rem; margin-bottom: .75rem; }
 .results h2, .results p { margin: .25rem 0; }

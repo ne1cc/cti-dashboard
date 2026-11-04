@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from starlette.types import Message, Scope
 
+from src.api.conditions import resolve_consumer_condition
 from src.utils.privacy import patient_request
 
 _ROOT = Path(__file__).resolve().parent
@@ -188,6 +189,24 @@ def register_patient_routes(app: FastAPI) -> None:
             )
         fields["cond"] = fields["cond"] or condition
         params = {key: value for key, value in fields.items() if value and key != "age"}
+
+        matched_concept: str | None = None
+        matched_from: str | None = None
+        broader_terms: list[dict[str, Any]] = []
+        narrower_terms: list[dict[str, Any]] = []
+
+        if fields["cond"]:
+            resolved = resolve_consumer_condition(fields["cond"])
+            if resolved:
+                matched_concept = resolved.condition_name
+                if fields["cond"].strip().lower() != resolved.condition_name.lower():
+                    matched_from = fields["cond"].strip()
+                broader_terms = [b.model_dump() for b in resolved.broader]
+                narrower_terms = [n.model_dump() for n in resolved.narrower]
+                params["cond"] = resolved.condition_name
+            else:
+                matched_concept = fields["cond"]
+
         if fields["age"]:
             params["min_age"] = fields["age"]
             params["max_age"] = fields["age"]
@@ -209,6 +228,10 @@ def register_patient_routes(app: FastAPI) -> None:
                 error=message,
                 items=[],
                 next_url=None,
+                matched_concept=matched_concept,
+                matched_from=matched_from,
+                broader_terms=broader_terms,
+                narrower_terms=narrower_terms,
             )
         next_cursor = data.get("pagination", {}).get("next_cursor")
         next_url = None
@@ -223,6 +246,10 @@ def register_patient_routes(app: FastAPI) -> None:
             error=None,
             items=data.get("items", []),
             next_url=next_url,
+            matched_concept=matched_concept,
+            matched_from=matched_from,
+            broader_terms=broader_terms,
+            narrower_terms=narrower_terms,
         )
 
     @app.get("/trials/{nct_id}", include_in_schema=False)

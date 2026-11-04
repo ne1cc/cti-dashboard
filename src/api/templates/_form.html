@@ -1,5 +1,5 @@
 <form action="/trials" method="get" class="search-form">
-  <div><label for="cond">Condition or health topic</label><input id="cond" name="cond" value="{{ fields.get('cond', '') }}" autocomplete="off"></div>
+  <div><label for="cond">Condition or health topic</label><input id="cond" name="cond" value="{{ fields.get('cond', '') }}" autocomplete="off" list="condition-list"><datalist id="condition-list"></datalist></div>
   <div><label for="postal_code">U.S. ZIP code</label><input id="postal_code" name="postal_code" value="{{ fields.get('postal_code', '') }}" inputmode="numeric" pattern="[0-9]{5}" maxlength="5"></div>
   <div><label for="radius_mi">Distance in miles</label><input id="radius_mi" name="radius_mi" type="number" min="1" max="500" value="{{ fields.get('radius_mi', '') or '50' }}"></div>
   <div><label for="age">Age in years</label><input id="age" name="age" type="number" min="0" max="130" value="{{ fields.get('age', '') }}"></div>
