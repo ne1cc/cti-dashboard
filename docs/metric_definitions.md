@@ -62,7 +62,7 @@ closure, study-level); the YAML taxonomies are optional overlays on top. The
 | recruiting_count_90d_baseline | first recruiting-count value inside the 90-day window |
 | recruiting_growth_90d | (recruiting count − baseline) / baseline; null unless the 90-day window is covered, the segment was observed at the window's earliest snapshot (guaranteeing baseline was captured at the window start), the baseline predates counted transitions (no transitions at the baseline snapshot itself, preventing manufactured 0.0), and baseline count is > 0 (safe_divide). Never manufactured 0.0 for newly appearing segments or unknown history |
 | top_sponsor_share | max lead-sponsor share of segment recruiting trials |
-| sponsor_hhi | Σ (lead-sponsor share)², 0..1; 1.0 = single sponsor |
+| sponsor_hhi | Σ (lead-sponsor share)², 0..1; null below `min_sponsors_for_hhi` distinct named sponsors (default 3) |
 | density_percentile | `percent_rank()` ordered by recruiting count within profile × snapshot date |
 | competition_signal_band | percentile cuts: < 0.5 `low`, < 0.8 `moderate`, else `elevated` — **relative** cuts, not absolute judgments |
 
@@ -145,7 +145,7 @@ Per ADR 0077, the composite priority score and categorical priority bands were r
 
 1. **Active Recruiting Trials (`active_recruiting_trials`, `recruiting_trial_count`):** Number of distinct trials actively recruiting in the segment (`COUNT(DISTINCT nct_id)`).
 2. **Recent Growth (`new_recruiting_90d`):** sum of recruiting transitions inside the 90-day window; **null until the profile's observed history covers 90 days** (`observed_history_days` quantifies how short the history is). Shown as "not enough history" — unknown, never zero. `newly_registered_90d` is reported beside it as a separately-labelled registration count.
-3. **Sponsor Concentration (`sponsor_hhi`):** Herfindahl-Hirschman Index (Σ s_i²) measuring market concentration across segment sponsors, bounded in [0, 1.0].
+3. **Sponsor Concentration (`sponsor_hhi`):** Herfindahl-Hirschman Index (Σ s_i²), bounded in [0, 1.0]; null when fewer than `min_sponsors_for_hhi` distinct named sponsors are present (default 3).
 4. **Site Overlap Rate (`site_overlap_rate`, `site_overlap_share`):** Share of segment trials listing ≥1 facility that hosts multiple recruiting trials in this indication profile.
 5. **Operational Completeness (`operational_completeness_share`):** 0.5 × segment record-quality-ok share + 0.5 × run-level usable-location share. The usable-location half is a run-level value from the profile's latest successful ingestion run, so it is constant across all segments of one profile. Reflects reporting and location usability; not scientific confidence.
 6. `priority_explanation` is assembled from fixed component phrases — the same inputs always yield the same sentence. Every row carries an `interpretation_note`.

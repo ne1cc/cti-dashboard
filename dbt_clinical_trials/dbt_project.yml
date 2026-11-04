@@ -17,6 +17,7 @@ clean-targets:
 # Empty since issue #53: no shipped profile is bronze-only any more (the
 # registry-wide full_catalog profile transforms via REGISTRY_TAXONOMY).
 vars:
+  min_sponsors_for_hhi: 3
   ingest_only_profiles: []
   # Candidate-pair guard for int_similarity_candidates: a condition-group
   # token whose per-profile trial count reaches this is dropped from pair

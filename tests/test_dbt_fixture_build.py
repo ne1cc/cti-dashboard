@@ -861,8 +861,8 @@ def test_registry_segments_raw_metrics_non_empty(
         " count(distinct active_recruiting_trials), count(distinct sponsor_hhi)"
         " from main_marts.mart_feasibility_priority_queue group by 1 order by 1",
     ) == [
-        ("adrd", 1, 2, 8, 2, 1),
-        ("oncology_nsclc", 1, 1, 4, 1, 1),
+        ("adrd", 1, 2, 8, 2, 0),
+        ("oncology_nsclc", 1, 1, 4, 1, 0),
     ]
     # The top segment is the one whose recruiting count doubled:
     assert _rows(

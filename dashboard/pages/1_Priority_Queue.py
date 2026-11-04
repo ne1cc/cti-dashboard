@@ -6,7 +6,7 @@ import streamlit as st
 from components import data
 from components.audit_panel import PRIORITY_DERIVED_RULES, render_metric_audit
 from components.filters import segment_filters
-from components.formatting import format_phase, format_priority_explanation
+from components.formatting import format_phase, format_priority_explanation, hhi_status
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import (
     clinicaltrials_gov_search_url,
@@ -71,6 +71,16 @@ display_df["condition_group"] = display_df["condition_group"].apply(
     lambda g: format_condition_group(g, profile_id)
 )
 display_df["phase_normalized"] = display_df["phase_normalized"].map(format_phase)
+display_df.insert(
+    list(display_df.columns).index("sponsor_hhi") + 1,
+    "hhi_status",
+    [
+        hhi_status(value, count)
+        for value, count in zip(
+            display_df["sponsor_hhi"], display_df["distinct_sponsors"], strict=True
+        )
+    ],
+)
 display_df["priority_explanation"] = [
     format_priority_explanation(row) for _, row in filtered.iterrows()
 ]
@@ -93,6 +103,7 @@ queue_event = st.dataframe(
             width=135,
             help="Actively recruiting trials in this segment (status RECRUITING)",
         ),
+        "hhi_status": st.column_config.TextColumn("HHI status"),
         "sponsor_hhi": st.column_config.NumberColumn(
             "Sponsor concentration",
             format="%.3f",
@@ -199,7 +210,12 @@ if selected_rows:
             "(registration count, not a recruiting transition)",
         ),
         ("Sponsor count", f"{int(segment['distinct_sponsors'])} distinct sponsor(s)"),
-        ("Sponsor concentration HHI", f"{segment['sponsor_hhi']:.3f}"),
+        (
+            "Sponsor concentration HHI",
+            f"{segment['sponsor_hhi']:.3f}"
+            if pd.notna(segment["sponsor_hhi"])
+            else hhi_status(segment["sponsor_hhi"], segment["sponsor_count"]),
+        ),
         ("Top sponsor share", f"{segment['top_sponsor_share'] * 100:.1f}%"),
         ("Site overlap rate", f"{segment['site_overlap_rate'] * 100:.1f}% of trials"),
         ("Listed site affiliations", f"{int(segment['listed_site_count'])} sites"),

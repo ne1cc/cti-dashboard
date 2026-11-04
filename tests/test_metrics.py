@@ -60,7 +60,7 @@ def test_mart_feasibility_priority_queue_metrics_and_column_bounds(
         ).fetchall()
         assert rows, "mart_feasibility_priority_queue must contain rows"
         for hhi, overlap_rate, overlap_share, active_recruiting, recruiting_count in rows:
-            assert 0.0 <= hhi <= 1.0, f"sponsor_hhi out of bounds: {hhi}"
+            assert hhi is None or 0.0 <= hhi <= 1.0, f"sponsor_hhi out of bounds: {hhi}"
             assert 0.0 <= overlap_rate <= 1.0, f"site_overlap_rate out of bounds: {overlap_rate}"
             assert 0.0 <= overlap_share <= 1.0, f"site_overlap_share out of bounds: {overlap_share}"
             assert active_recruiting == recruiting_count, (

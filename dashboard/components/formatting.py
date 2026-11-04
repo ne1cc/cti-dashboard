@@ -39,6 +39,15 @@ def format_snapshot_date(value: str | pd.Timestamp | datetime | date | None) -> 
     return f"{stamp:%b} {stamp.day}, {stamp.year}"
 
 
+def hhi_status(value: float | None, sponsor_count: float | None) -> str:
+    """Explain a suppressed HHI using the warehouse sponsor count."""
+    if pd.isna(value):
+        if sponsor_count is None or pd.isna(sponsor_count):
+            return "insufficient data (sponsor count unavailable)"
+        return f"insufficient data ({int(sponsor_count)} sponsors)"
+    return ""
+
+
 def format_priority_explanation(row: pd.Series) -> str:
     """Summarize segment metrics without presenting first-post counts as recruiting events."""
     observed = row.get("observed_history_days", 0)
@@ -51,11 +60,16 @@ def format_priority_explanation(row: pd.Series) -> str:
         growth = "Newly recruiting: not enough history (snapshots do not cover the window)"
     else:
         growth = f"Newly recruiting: not enough history ({observed:.0f} of 90 days observed)"
+    hhi = (
+        f"HHI {row['sponsor_hhi']:.2f}"
+        if pd.notna(row["sponsor_hhi"])
+        else hhi_status(row["sponsor_hhi"], row["sponsor_count"])
+    )
     return (
         f"Recruiting trials: {row['recruiting_trial_count']:.0f} · "
         f"{growth} · "
         f"Newly registered (first posted): {row['newly_registered_90d']:.0f} · "
-        f"Sponsors: {row['sponsor_count']:.0f} (HHI {row['sponsor_hhi']:.2f}) · "
+        f"Sponsors: {row['sponsor_count']:.0f} ({hhi}) · "
         f"Trials sharing sites: {row['site_overlap_share']:.0%} · "
         f"Operational completeness: {row['operational_completeness_share']:.0%}"
     )
