@@ -59,22 +59,15 @@ coverage_flags as (
         snapshot_date,
         observed_history_days,
         previous_snapshot_date,
+        window_90d_earliest_date,
         (
             observed_history_days >= 30
             and window_30d_earliest_date <= snapshot_date - interval 30 day + interval 7 day
-            and (
-                window_30d_earliest_pred_date is null
-                or window_30d_earliest_pred_date >= snapshot_date - interval 30 day - interval 1 day
-            )
             and coalesce(previous_snapshot_date >= snapshot_date - interval 30 day, false)
         ) as is_30d_covered,
         (
             observed_history_days >= 90
             and window_90d_earliest_date <= snapshot_date - interval 90 day + interval 7 day
-            and (
-                window_90d_earliest_pred_date is null
-                or window_90d_earliest_pred_date >= snapshot_date - interval 90 day - interval 1 day
-            )
             and coalesce(previous_snapshot_date >= snapshot_date - interval 90 day, false)
         ) as is_90d_covered
     from profile_window_coverage
@@ -125,6 +118,8 @@ segment_baseline as (
         state_normalized,
         phase_normalized,
         snapshot_date,
+        first_value(snapshot_date) over segment_90d
+            as segment_90d_first_snapshot_date,
         first_value(entered_recruiting_count) over segment_90d
             as segment_90d_first_entered_recruiting_count
     from {{ ref('mart_recruiting_competition') }}
@@ -168,7 +163,7 @@ where (
             h.is_30d_covered
             and (
                 se.window_30d_earliest_entrant_pred_date is null
-                or se.window_30d_earliest_entrant_pred_date >= c.snapshot_date - interval 30 day - interval 1 day
+                or se.window_30d_earliest_entrant_pred_date >= c.snapshot_date - interval 30 day
             )
         ) is distinct from (c.new_recruiting_30d is not null)
     ) or (
@@ -177,7 +172,7 @@ where (
             h.is_90d_covered
             and (
                 se.window_90d_earliest_entrant_pred_date is null
-                or se.window_90d_earliest_entrant_pred_date >= c.snapshot_date - interval 90 day - interval 1 day
+                or se.window_90d_earliest_entrant_pred_date >= c.snapshot_date - interval 90 day
             )
         ) is distinct from (c.new_recruiting_90d is not null)
     ) or (
@@ -187,9 +182,13 @@ where (
             not h.is_90d_covered
             or (
                 se.window_90d_earliest_entrant_pred_date is not null
-                and se.window_90d_earliest_entrant_pred_date < c.snapshot_date - interval 90 day - interval 1 day
+                and se.window_90d_earliest_entrant_pred_date < c.snapshot_date - interval 90 day
             )
         )
+    ) or (
+        -- growth must be null when segment was not observed at the earliest in-window snapshot
+        c.recruiting_growth_90d is not null
+        and sb.segment_90d_first_snapshot_date <> h.window_90d_earliest_date
     ) or (
         -- growth must be null when entrants occur at the baseline snapshot
         c.recruiting_growth_90d is not null

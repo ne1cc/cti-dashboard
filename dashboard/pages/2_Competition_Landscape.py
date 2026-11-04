@@ -179,7 +179,8 @@ render_metric_audit(
             )
             + "entrant requires previous captured status non-null and not RECRUITING; "
             "it is null until observed history covers 90 days (earliest in-window snapshot "
-            "and predecessor within 7-day cadence tolerance) and the latest snapshot gap "
+            "within seven days of the boundary and entrant predecessors inside the window) "
+            "and the latest snapshot gap "
             "does not itself span the window (a transition across a longer gap has unobserved "
             "timing inside it), so null means "
             f"not enough history, never zero. Observed history here: {observed_history_days} days. "
