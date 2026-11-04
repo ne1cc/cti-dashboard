@@ -340,7 +340,7 @@ Supporting public-interest analysis (journalists, patient advocates, researchers
 - **Grain**: indication_profile_id × condition_group × sponsor_class × stopped_year × overall_status × why_stopped
 - **Statuses tracked**: `TERMINATED`, `WITHDRAWN`, `SUSPENDED` (from `dim_trial`).
 - **Verbatim Reason Rule**: The sponsor-reported reason (`why_stopped`) is passed through exactly as submitted to the registry. The warehouse and analytics pipeline explicitly forbid categorizing or normalizing these reasons into evaluative labels such as "failure", "recruitment failure", or "poor performance".
-- **Contributing IDs**: `contributing_nct_ids` provides a pipe-delimited list of NCT IDs contributing to each row's count, ensuring every aggregate is directly verifiable down to individual registry records.
+- **Contributing IDs**: `contributing_nct_ids` provides a comma-separated list of NCT IDs contributing to each row's count, ensuring every aggregate is directly verifiable down to individual registry records.
 
 ### Results Posting & Overdue Heuristic (`mart_results_posting_transparency`)
 - **Grain**: indication_profile_id × sponsor_class × lead_sponsor
@@ -349,5 +349,6 @@ Supporting public-interest analysis (journalists, patient advocates, researchers
 - **Confidence Intervals**: 95% two-sided Wilson score confidence intervals (`ci_lower`, `ci_upper`) bounded between $[0.0, 1.0]$. Wilson score intervals are used instead of normal approximations to provide robust coverage for small denominators and extreme proportions near 0 or 1.
 - **Results Overdue Heuristic**: `results_overdue_rate = results_overdue_count / total_evaluable_trials`, where `results_overdue_count` counts evaluable trials without posted results.
 - **Small-$n$ Ranking Safeguard**: `is_ranked` flag is `TRUE` only when `total_evaluable_trials >= 5`. Rows with $n < 5$ are flagged as unranked (`is_ranked = FALSE`) to prevent misleading ranking volatility on tiny sample sizes.
+- **Contributing & Filtered NCT IDs**: `evaluable_nct_ids` lists comma-separated NCT IDs evaluable under the 12-month heuristic, `posted_nct_ids` lists evaluable trials with posted results, `overdue_nct_ids` lists evaluable trials without posted results, and `contributing_nct_ids` lists all trials for that sponsor.
 - **Legal Caveat & Non-Applicability Notice**: The 12-month post-PCD heuristic is an observational transparency metric and does NOT determine legal compliance with statutory results-reporting mandates (such as FDAAA 801 or 42 CFR Part 11). FDAAA 801 "applicable clinical trial" (ACT) determinations depend on non-public regulatory facts (e.g., FDA IND/IDE status, device export authorization under section 802, or certificate of delay/good cause extensions) that cannot be definitively determined from public registry fields alone.
 

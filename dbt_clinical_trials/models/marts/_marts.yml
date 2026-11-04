@@ -1412,6 +1412,9 @@ models:
         data_type: BOOLEAN
         description: Whether sponsor meets minimum sample size threshold (n >= 5) for ranking.
         tests: [not_null]
+      - name: evaluable_nct_ids
+        data_type: VARCHAR
+        description: Comma-separated list of contributing NCT IDs that are evaluable under the 12-month heuristic.
       - name: contributing_nct_ids
         data_type: VARCHAR
         description: Comma-separated list of all contributing NCT IDs for this sponsor.
@@ -1420,5 +1423,5 @@ models:
         description: Comma-separated list of contributing NCT IDs that are overdue under the heuristic.
       - name: posted_nct_ids
         data_type: VARCHAR
-        description: Comma-separated list of contributing NCT IDs with posted results.
+        description: Comma-separated list of evaluable contributing NCT IDs with posted results.
 

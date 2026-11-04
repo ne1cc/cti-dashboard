@@ -41,14 +41,19 @@ grouped as (
         count(distinct case when is_past_12m_pcd and not has_results_flag then nct_id end) as results_overdue_count,
         string_agg(distinct nct_id, ', ' order by nct_id) as contributing_nct_ids,
         string_agg(
+            distinct case when is_past_12m_pcd then nct_id end,
+            ', '
+            order by case when is_past_12m_pcd then nct_id end
+        ) as evaluable_nct_ids,
+        string_agg(
             distinct case when is_past_12m_pcd and not has_results_flag then nct_id end,
             ', '
             order by case when is_past_12m_pcd and not has_results_flag then nct_id end
         ) as overdue_nct_ids,
         string_agg(
-            distinct case when has_results_flag then nct_id end,
+            distinct case when is_past_12m_pcd and has_results_flag then nct_id end,
             ', '
-            order by case when has_results_flag then nct_id end
+            order by case when is_past_12m_pcd and has_results_flag then nct_id end
         ) as posted_nct_ids
     from trial_scope
     group by
@@ -76,6 +81,7 @@ select
     {{ wilson_ci_upper('results_posted_evaluable_count', 'total_evaluable_trials') }} as ci_upper,
     {{ safe_divide('results_overdue_count', 'total_evaluable_trials') }} as results_overdue_rate,
     (total_evaluable_trials >= 5) as is_ranked,
+    evaluable_nct_ids,
     contributing_nct_ids,
     overdue_nct_ids,
     posted_nct_ids

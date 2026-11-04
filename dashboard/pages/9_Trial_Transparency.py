@@ -19,6 +19,24 @@ data.require_warehouse(profile_id)
 
 render_page_guide("trial_transparency", profile_id)
 
+
+def _parse_nct_ids(val: pd.Series | str | None) -> set[str]:
+    """Extract distinct NCT IDs from a string or series of comma-delimited NCT strings."""
+    ncts: set[str] = set()
+    if isinstance(val, pd.Series):
+        for item in val.dropna():
+            for nct in str(item).split(","):
+                cleaned = nct.strip()
+                if cleaned:
+                    ncts.add(cleaned)
+    elif isinstance(val, str):
+        for nct in val.split(","):
+            cleaned = nct.strip()
+            if cleaned:
+                ncts.add(cleaned)
+    return ncts
+
+
 stopped_df = data.early_stop_transparency(profile_id)
 results_df = data.results_posting_transparency(profile_id)
 
@@ -38,30 +56,33 @@ with tab_stopped:
     if stopped_df.empty:
         st.info("No terminated, withdrawn, or suspended trials recorded for this profile.")
     else:
-        total_stopped_trials = int(stopped_df["stopped_trial_count"].sum())
+        total_stopped_ncts = _parse_nct_ids(stopped_df["contributing_nct_ids"])
+        total_stopped_trials = len(total_stopped_ncts)
         with_reason_df = stopped_df[
             stopped_df["why_stopped"].notna() & (stopped_df["why_stopped"].str.strip() != "")
         ]
-        with_reason_count = (
-            int(with_reason_df["stopped_trial_count"].sum()) if not with_reason_df.empty else 0
-        )
+        with_reason_ncts = _parse_nct_ids(with_reason_df["contributing_nct_ids"])
+        with_reason_count = len(with_reason_ncts)
         no_reason_count = total_stopped_trials - with_reason_count
 
         kpi1, kpi2, kpi3 = st.columns(3)
         kpi1.metric(
             "Early-stopped listings",
             f"{total_stopped_trials:,}",
-            help="Total terminated, withdrawn, and suspended registry records in this profile.",
+            help=(
+                "Total distinct terminated, withdrawn, and suspended "
+                "registry records in this profile."
+            ),
         )
         kpi2.metric(
             "With reported reason",
             f"{with_reason_count:,}",
-            help="Trials where the sponsor supplied a whyStopped reason in the registry.",
+            help="Distinct trials where the sponsor supplied a whyStopped reason in the registry.",
         )
         kpi3.metric(
             "No reason reported",
             f"{no_reason_count:,}",
-            help="Trials where whyStopped was left blank or null in the public registry.",
+            help="Distinct trials where whyStopped was left blank or null in the public registry.",
         )
 
         # Filters
@@ -94,12 +115,19 @@ with tab_stopped:
 
         # Visualization
         if not filtered_stopped.empty:
-            agg_chart = (
-                filtered_stopped.groupby(["sponsor_class", "overall_status"])["stopped_trial_count"]
-                .sum()
-                .reset_index()
-                .rename(columns={"stopped_trial_count": "Trials"})
-            )
+            chart_rows = []
+            for (s_class, status), sub_df in filtered_stopped.groupby(
+                ["sponsor_class", "overall_status"]
+            ):
+                distinct_ncts = _parse_nct_ids(sub_df["contributing_nct_ids"])
+                chart_rows.append(
+                    {
+                        "sponsor_class": s_class,
+                        "overall_status": status,
+                        "Trials": len(distinct_ncts),
+                    }
+                )
+            agg_chart = pd.DataFrame(chart_rows)
             agg_chart["Sponsor Class"] = (
                 agg_chart["sponsor_class"].str.replace("_", " ").str.title()
             )
@@ -160,6 +188,9 @@ with tab_stopped:
 
         st.caption(
             "Every count connects to contributing NCT IDs above. "
+            "Note: Breakdown by condition group is non-additive across condition groups "
+            "because individual trials may map to multiple condition groups. "
+            "Profile-level KPIs and sponsor-class totals count distinct trials. "
             "Public records reflect sponsor reporting on ClinicalTrials.gov."
         )
 
@@ -248,25 +279,26 @@ with tab_results:
                 ci_l = max(0.0, center - margin)
                 ci_u = min(1.0, center + margin)
 
-            all_ncts = []
-            for nct_str in group["contributing_nct_ids"].dropna():
-                all_ncts.extend([item.strip() for item in nct_str.split(",") if item.strip()])
-            unique_ncts = sorted(set(all_ncts))
+            evaluable_ncts = sorted(_parse_nct_ids(group["evaluable_nct_ids"]))
+            posted_ncts = sorted(_parse_nct_ids(group["posted_nct_ids"]))
+            overdue_ncts = sorted(_parse_nct_ids(group["overdue_nct_ids"]))
 
             class_summary_rows.append(
                 {
                     "indication_profile_id": profile_id,
                     "sponsor_class": str(s_class).replace("_", " ").title(),
                     "total_evaluable_trials": n,
+                    "evaluable_nct_ids": ", ".join(evaluable_ncts) if evaluable_ncts else None,
                     "results_posted_count": x,
+                    "posted_nct_ids": ", ".join(posted_ncts) if posted_ncts else None,
                     "results_overdue_count": overdue,
+                    "overdue_nct_ids": ", ".join(overdue_ncts) if overdue_ncts else None,
                     "results_posted_rate": rate,
                     "ci_lower": ci_l,
                     "ci_upper": ci_u,
                     "ci_range": (
                         f"{ci_l:.1%} – {ci_u:.1%}" if ci_l is not None and ci_u is not None else "—"
                     ),
-                    "contributing_nct_ids": ", ".join(unique_ncts),
                 }
             )
 
@@ -280,11 +312,13 @@ with tab_results:
                 "indication_profile_id",
                 "sponsor_class",
                 "total_evaluable_trials",
+                "evaluable_nct_ids",
                 "results_posted_count",
+                "posted_nct_ids",
                 "results_overdue_count",
+                "overdue_nct_ids",
                 "results_posted_rate",
                 "ci_range",
-                "contributing_nct_ids",
             ],
             hide_index=True,
             width="content",
@@ -294,24 +328,26 @@ with tab_results:
                 "total_evaluable_trials": st.column_config.NumberColumn(
                     "Evaluable (n)", format="%d", help="Denominator: PCD >12 months ago"
                 ),
+                "evaluable_nct_ids": st.column_config.TextColumn(
+                    "Evaluable NCT IDs", width="medium"
+                ),
                 "results_posted_count": st.column_config.NumberColumn(
                     "Results Posted (x)", format="%d"
                 ),
+                "posted_nct_ids": st.column_config.TextColumn("Posted NCT IDs", width="medium"),
                 "results_overdue_count": st.column_config.NumberColumn("Overdue", format="%d"),
+                "overdue_nct_ids": st.column_config.TextColumn("Overdue NCT IDs", width="medium"),
                 "results_posted_rate": st.column_config.NumberColumn(
                     "Posting Rate", format="percent"
                 ),
                 "ci_range": st.column_config.TextColumn("95% Wilson CI", width="medium"),
-                "contributing_nct_ids": st.column_config.TextColumn(
-                    "Contributing NCT IDs", width="medium"
-                ),
             },
         )
 
         st.markdown("#### Lead sponsor reporting transparency")
 
         # Separate ranked (n >= 5) and unranked (n < 5)
-        evaluable_sponsors = results_df[results_df["total_evaluable_trials"] > 0].copy()
+        evaluable_sponsors = results_df.copy()
         evaluable_sponsors["display_sponsor_class"] = (
             evaluable_sponsors["sponsor_class"].str.replace("_", " ").str.title()
         )
@@ -343,12 +379,13 @@ with tab_results:
                     "lead_sponsor",
                     "display_sponsor_class",
                     "total_evaluable_trials",
+                    "evaluable_nct_ids",
                     "results_posted_evaluable_count",
+                    "posted_nct_ids",
                     "results_overdue_count",
+                    "overdue_nct_ids",
                     "results_posted_rate",
                     "ci_range",
-                    "overdue_nct_ids",
-                    "posted_nct_ids",
                 ],
                 hide_index=True,
                 width="content",
@@ -359,18 +396,21 @@ with tab_results:
                     "total_evaluable_trials": st.column_config.NumberColumn(
                         "Evaluable (n)", format="%d"
                     ),
+                    "evaluable_nct_ids": st.column_config.TextColumn(
+                        "Evaluable NCT IDs", width="medium"
+                    ),
                     "results_posted_evaluable_count": st.column_config.NumberColumn(
                         "Posted (x)", format="%d"
                     ),
+                    "posted_nct_ids": st.column_config.TextColumn("Posted NCT IDs", width="medium"),
                     "results_overdue_count": st.column_config.NumberColumn("Overdue", format="%d"),
+                    "overdue_nct_ids": st.column_config.TextColumn(
+                        "Overdue NCT IDs", width="medium"
+                    ),
                     "results_posted_rate": st.column_config.NumberColumn(
                         "Posting Rate", format="percent"
                     ),
                     "ci_range": st.column_config.TextColumn("95% Wilson CI", width="medium"),
-                    "overdue_nct_ids": st.column_config.TextColumn(
-                        "Overdue NCT IDs", width="medium"
-                    ),
-                    "posted_nct_ids": st.column_config.TextColumn("Posted NCT IDs", width="medium"),
                 },
             )
 
@@ -391,11 +431,13 @@ with tab_results:
                         "lead_sponsor",
                         "display_sponsor_class",
                         "total_evaluable_trials",
+                        "evaluable_nct_ids",
                         "results_posted_evaluable_count",
+                        "posted_nct_ids",
                         "results_overdue_count",
+                        "overdue_nct_ids",
                         "results_posted_rate",
                         "ci_range",
-                        "contributing_nct_ids",
                     ],
                     hide_index=True,
                     width="content",
@@ -408,19 +450,25 @@ with tab_results:
                         "total_evaluable_trials": st.column_config.NumberColumn(
                             "Evaluable (n)", format="%d"
                         ),
+                        "evaluable_nct_ids": st.column_config.TextColumn(
+                            "Evaluable NCT IDs", width="medium"
+                        ),
                         "results_posted_evaluable_count": st.column_config.NumberColumn(
                             "Posted", format="%d"
                         ),
+                        "posted_nct_ids": st.column_config.TextColumn(
+                            "Posted NCT IDs", width="medium"
+                        ),
                         "results_overdue_count": st.column_config.NumberColumn(
                             "Overdue", format="%d"
+                        ),
+                        "overdue_nct_ids": st.column_config.TextColumn(
+                            "Overdue NCT IDs", width="medium"
                         ),
                         "results_posted_rate": st.column_config.NumberColumn(
                             "Posting Rate", format="percent"
                         ),
                         "ci_range": st.column_config.TextColumn("95% Wilson CI", width="medium"),
-                        "contributing_nct_ids": st.column_config.TextColumn(
-                            "Contributing NCT IDs", width="medium"
-                        ),
                     },
                 )
 

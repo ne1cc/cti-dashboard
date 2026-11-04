@@ -209,7 +209,7 @@ exposed per arm through the Read API `arms` field, sourced from
 | mart_data_reliability | ingestion run | reconciliation + usability shares |
 | mart_feasibility_priority_queue | segment @ latest snapshot | segment-level recruiting trial counts, distinct sponsors, sponsor HHI, site overlap, and deterministic interpretation note |
 | mart_early_stop_transparency | profile × condition × sponsor class × year × status × why_stopped | stopped trial counts (TERMINATED, WITHDRAWN, SUSPENDED), verbatim sponsor reasons, contributing NCT IDs |
-| mart_results_posting_transparency | profile × condition × sponsor class × completion year × status | results posted/overdue rates with 95% Wilson CIs, small-n ranking threshold flag, NCT lists |
+| mart_results_posting_transparency | profile × sponsor_class × lead_sponsor | results posted/overdue rates with 95% Wilson CIs, small-n ranking threshold flag, NCT lists |
 
 Full column-level metric semantics: `docs/metric_definitions.md`.
 

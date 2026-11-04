@@ -157,10 +157,69 @@ def test_data_readers_profile_isolated(
         assert "ci_lower" in df_results_adrd.columns
         assert "ci_upper" in df_results_adrd.columns
         assert "is_ranked" in df_results_adrd.columns
+        assert "evaluable_nct_ids" in df_results_adrd.columns
+        assert "posted_nct_ids" in df_results_adrd.columns
+        assert "overdue_nct_ids" in df_results_adrd.columns
 
     df_early_stop_nsclc = early_stop_transparency("nsclc")
     if not df_early_stop_nsclc.empty:
         assert (df_early_stop_nsclc["indication_profile_id"] == "nsclc").all()
+
+
+def test_mart_results_posting_nct_id_consistency(fixture_project_root: Path) -> None:
+    """Verify NCT ID lists match their respective counts exactly."""
+    con = _duckdb_connection(fixture_project_root)
+    try:
+        rows = con.execute(
+            """
+            select
+                lead_sponsor,
+                total_evaluable_trials,
+                results_posted_evaluable_count,
+                results_overdue_count,
+                evaluable_nct_ids,
+                posted_nct_ids,
+                overdue_nct_ids
+            from main_marts.mart_results_posting_transparency
+            """
+        ).fetchall()
+
+        for (
+            sponsor,
+            n,
+            posted_cnt,
+            overdue_cnt,
+            eval_ids,
+            post_ids,
+            overdue_ids,
+        ) in rows:
+            if n == 0:
+                assert eval_ids is None, f"{sponsor} has n=0 but eval_ids={eval_ids}"
+                assert post_ids is None, f"{sponsor} has n=0 but post_ids={post_ids}"
+                assert overdue_ids is None, f"{sponsor} has n=0 but overdue_ids={overdue_ids}"
+            else:
+                eval_set = {x.strip() for x in eval_ids.split(",") if x.strip()}
+                assert len(eval_set) == n, (
+                    f"{sponsor}: eval list count mismatch ({len(eval_set)} != {n})"
+                )
+
+                if posted_cnt > 0:
+                    assert post_ids is not None
+                    post_set = {x.strip() for x in post_ids.split(",") if x.strip()}
+                    assert len(post_set) == posted_cnt
+                    assert post_set.issubset(eval_set)
+                else:
+                    assert post_ids is None
+
+                if overdue_cnt > 0:
+                    assert overdue_ids is not None
+                    overdue_set = {x.strip() for x in overdue_ids.split(",") if x.strip()}
+                    assert len(overdue_set) == overdue_cnt
+                    assert overdue_set.issubset(eval_set)
+                else:
+                    assert overdue_ids is None
+    finally:
+        con.close()
 
 
 def test_no_failure_categorization_in_marts(fixture_project_root: Path) -> None:
