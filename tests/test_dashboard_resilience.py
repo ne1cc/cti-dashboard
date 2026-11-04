@@ -424,6 +424,7 @@ def test_guidance_all_pages_have_guidance():
         "data_reliability",
         "trial_explorer",
         "trial_similarity",
+        "trial_transparency",
     }
     assert set(PAGE_GUIDANCE.keys()) == expected_keys
     for _key, guide in PAGE_GUIDANCE.items():

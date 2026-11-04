@@ -660,3 +660,46 @@ def metric_audit_observations(profile_id: str, metric: str = "competition") -> p
             [profile_id, profile_id],
         )
     raise ValueError(f"Unknown audit metric: {metric}")
+
+
+def early_stop_transparency(profile_id: str) -> pd.DataFrame:
+    """Fetch terminated, withdrawn, and suspended trial counts and verbatim reasons.
+
+    Args:
+        profile_id: Indication profile id to scope the stopped trials to.
+
+    Returns:
+        pd.DataFrame: Records from ``main_marts.mart_early_stop_transparency``
+            containing condition group, sponsor class, stopped year, status,
+            verbatim why_stopped reason, stopped trial count, and contributing NCT IDs.
+    """
+    if not _table_exists("mart_early_stop_transparency"):
+        return pd.DataFrame()
+    return query(
+        "select * from main_marts.mart_early_stop_transparency "
+        "where indication_profile_id = ? "
+        "order by stopped_year desc nulls last, stopped_trial_count desc, condition_group",
+        [profile_id],
+    )
+
+
+def results_posting_transparency(profile_id: str) -> pd.DataFrame:
+    """Fetch results posting transparency rates and confidence intervals by sponsor.
+
+    Args:
+        profile_id: Indication profile id to scope the transparency metrics to.
+
+    Returns:
+        pd.DataFrame: Records from ``main_marts.mart_results_posting_transparency``
+            containing sponsor class, lead sponsor, evaluable trial counts,
+            results posted counts, overdue counts, posting rates, Wilson score CIs,
+            and ranking flags.
+    """
+    if not _table_exists("mart_results_posting_transparency"):
+        return pd.DataFrame()
+    return query(
+        "select * from main_marts.mart_results_posting_transparency "
+        "where indication_profile_id = ? "
+        "order by total_evaluable_trials desc, results_posted_rate desc nulls last, lead_sponsor",
+        [profile_id],
+    )
