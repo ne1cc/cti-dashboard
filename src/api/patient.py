@@ -255,4 +255,20 @@ def register_patient_routes(app: FastAPI) -> None:
             )
         # Construct the destination from the validated identifier, never untrusted upstream markup.
         trial["registry_url"] = f"https://clinicaltrials.gov/study/{canonical}"
-        return _page("trial.html", freshness=_freshness(headers), error=None, trial=trial)
+        related_trials: list[dict[str, Any]] = []
+        try:
+            rel_status, _, rel_data = await _read_api(
+                app, request, f"/v1/trials/{canonical}/related", {"limit": "5"}
+            )
+            if rel_status == 200 and isinstance(rel_data, dict):
+                related_trials = rel_data.get("related_trials", [])
+        except Exception:
+            related_trials = []
+
+        return _page(
+            "trial.html",
+            freshness=_freshness(headers),
+            error=None,
+            trial=trial,
+            related_trials=related_trials,
+        )
