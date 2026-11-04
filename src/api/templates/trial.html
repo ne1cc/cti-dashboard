@@ -13,5 +13,29 @@
     data-status="{{ trial.overall_status or '' }}"
     data-site="{% if trial.nearest_site %}{{ trial.nearest_site.facility_name }}{% if trial.nearest_site.city %}, {{ trial.nearest_site.city }}{% endif %}{% if trial.nearest_site.state %}, {{ trial.nearest_site.state }}{% endif %}{% endif %}"
     data-updated="{{ trial.last_update_post_date or '' }}">Save to shortlist</button>
-</article>{% endif %}
+</article>
+
+{% if related_trials %}
+<section class="related-trials-section" aria-labelledby="related-trials-heading">
+  <h2 id="related-trials-heading">Related trials</h2>
+  <p class="section-subtitle">Same condition, comparable eligibility</p>
+  <ul class="related-trials-list">
+    {% for item in related_trials %}
+    <li class="related-trial-item">
+      <h3><a href="/trials/{{ item.nct_id }}">{{ item.brief_title }}</a></h3>
+      <div class="related-trial-meta">
+        <span class="trial-id">{{ item.nct_id }}</span>
+        {% if item.phase %}<span class="trial-phase">{{ item.phase }}</span>{% endif %}
+        {% if item.overall_status %}<span class="trial-status">{{ item.overall_status|replace('_', ' ')|capitalize }}</span>{% endif %}
+        {% if item.lead_sponsor %}<span class="trial-sponsor">{{ item.lead_sponsor }}</span>{% endif %}
+      </div>
+      {% if item.comparability_factors and item.comparability_factors.explanation_summary %}
+      <p class="similarity-explanation">{{ item.comparability_factors.explanation_summary }}</p>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endif %}
 {% endblock %}
