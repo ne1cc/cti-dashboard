@@ -22,14 +22,18 @@ import duckdb
 
 from src.api.gazetteer import register_gazetteer_views
 from src.api.models import (
+    ComparabilityFactors,
     DataProvenance,
     EligibilitySection,
     EligibilitySections,
     EnrollmentInfo,
+    FactorScore,
     GeoPoint,
     NearestSiteSummary,
     PaginationMetadata,
     ReadinessStatus,
+    RelatedTrialItem,
+    RelatedTrialsResponse,
     SponsorDetail,
     StructuredEligibility,
     StructuredEligibilitySummary,
@@ -51,6 +55,7 @@ logger = logging.getLogger(__name__)
 SQL_DIR = Path(__file__).resolve().parent / "sql"
 SEARCH_SQL_PATH = SQL_DIR / "search.sql"
 DETAIL_SQL_PATH = SQL_DIR / "detail.sql"
+RELATED_SQL_PATH = SQL_DIR / "related.sql"
 
 REQUIRED_TABLES = (
     "dim_trial",
@@ -134,7 +139,15 @@ class DuckDBConnectionPool:
                     "SELECT schema_name FROM information_schema.schemata;"
                 ).fetchall()
             }
-            candidates = ["main_marts", "main_staging", "marts", "staging", "main"]
+            candidates = [
+                "main_marts",
+                "main_staging",
+                "main_seeds",
+                "marts",
+                "staging",
+                "seeds",
+                "main",
+            ]
             valid = [s for s in candidates if s in schemas]
             if valid:
                 path_str = ",".join(valid)
@@ -232,6 +245,7 @@ class DuckDBWarehouseManager:
         )
         self._search_sql = SEARCH_SQL_PATH.read_text(encoding="utf-8")
         self._detail_sql = DETAIL_SQL_PATH.read_text(encoding="utf-8")
+        self._related_sql = RELATED_SQL_PATH.read_text(encoding="utf-8")
         self._cached_snapshot_meta: tuple[str, str] | None = None
 
     def close(self) -> None:
@@ -698,4 +712,100 @@ class DuckDBWarehouseManager:
             registry_url=f"https://clinicaltrials.gov/study/{canonical_nct}",
             registry_contact_url=f"https://clinicaltrials.gov/study/{canonical_nct}#contacts-locations",
             provenance=provenance,
+        )
+
+    def get_related_trials(
+        self,
+        nct_id: str,
+        limit: int = 10,
+        min_score: float | None = None,
+    ) -> RelatedTrialsResponse | None:
+        """Fetch ranked comparable clinical trials for target NCT ID.
+
+        Executes on-demand MeSH-ancestor + phase candidate blocking
+        and comparability scoring (Issue #55).
+        """
+        canonical_nct = nct_id.strip().upper()
+        with self.pool.connection() as conn:
+            # Check target trial existence
+            exists_dim = conn.execute(
+                "SELECT 1 FROM dim_trial WHERE upper(nct_id) = ?", [canonical_nct]
+            ).fetchone()
+            if exists_dim is None:
+                exists_stg = conn.execute(
+                    "SELECT 1 FROM stg_trials WHERE upper(nct_id) = ?", [canonical_nct]
+                ).fetchone()
+                if exists_stg is None:
+                    return None
+
+            cursor = conn.execute(
+                self._related_sql,
+                {
+                    "nct_id": canonical_nct,
+                    "min_score": min_score,
+                    "limit": limit,
+                },
+            )
+            cols = [d[0] for d in cursor.description]
+            rows = cursor.fetchall()
+
+        items: list[RelatedTrialItem] = []
+        for row in rows:
+            r = dict(zip(cols, row, strict=True))
+            factors = ComparabilityFactors(
+                same_condition=FactorScore(
+                    matched=bool(r["same_condition"]),
+                    weight=float(r["weight_same_condition"]),
+                    weighted_score=float(r["weighted_same_condition"]),
+                ),
+                same_phase=FactorScore(
+                    matched=bool(r["same_phase"]),
+                    weight=float(r["weight_same_phase"]),
+                    weighted_score=float(r["weighted_same_phase"]),
+                ),
+                geography_overlap=FactorScore(
+                    matched=bool(r["geography_overlap"]),
+                    weight=float(r["weight_geography_overlap"]),
+                    weighted_score=float(r["weighted_geography_overlap"]),
+                ),
+                intervention_type_overlap=FactorScore(
+                    matched=bool(r["intervention_type_overlap"]),
+                    weight=float(r["weight_intervention_type_overlap"]),
+                    weighted_score=float(r["weighted_intervention_type_overlap"]),
+                ),
+                study_design_match=FactorScore(
+                    matched=bool(r["study_design_match"]),
+                    weight=float(r["weight_study_design_match"]),
+                    weighted_score=float(r["weighted_study_design_match"]),
+                ),
+                eligibility_compatible=FactorScore(
+                    matched=bool(r["eligibility_compatible"]),
+                    weight=float(r["weight_eligibility_compatible"]),
+                    weighted_score=float(r["weighted_eligibility_compatible"]),
+                ),
+                enrollment_band_match=FactorScore(
+                    matched=bool(r["enrollment_band_match"]),
+                    weight=float(r["weight_enrollment_band_match"]),
+                    weighted_score=float(r["weighted_enrollment_band_match"]),
+                ),
+                explanation_summary=r["similarity_explanation"] or "",
+            )
+            items.append(
+                RelatedTrialItem(
+                    nct_id=r["nct_id"],
+                    brief_title=r["brief_title"] or "",
+                    overall_status=r["overall_status"] or "",
+                    phase=r["phase"] or "",
+                    lead_sponsor=r["lead_sponsor"] or "",
+                    similarity_score=float(r["similarity_score"]),
+                    similarity_rank=int(r["similarity_rank"]),
+                    comparability_factors=factors,
+                    registry_url=r["registry_url"]
+                    or f"https://clinicaltrials.gov/study/{r['nct_id']}",
+                )
+            )
+
+        return RelatedTrialsResponse(
+            target_nct_id=canonical_nct,
+            related_trials=items,
         )

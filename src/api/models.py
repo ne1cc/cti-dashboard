@@ -483,6 +483,73 @@ class ProblemDetail(BaseModel):
     )
 
 
+class FactorScore(BaseModel):
+    """Component factor contributing to pairwise trial comparability."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    matched: bool = Field(..., description="Whether this comparability factor matched")
+    weight: float = Field(..., description="Configured factor weight in composite scoring")
+    weighted_score: float = Field(..., description="Weighted score contribution")
+
+
+class ComparabilityFactors(BaseModel):
+    """Component factors contributing to the pairwise similarity score."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    same_condition: FactorScore = Field(..., description="Condition similarity score")
+    same_phase: FactorScore = Field(..., description="Phase match score")
+    geography_overlap: FactorScore = Field(..., description="Geography overlap score")
+    intervention_type_overlap: FactorScore = Field(
+        ..., description="Intervention type overlap score"
+    )
+    study_design_match: FactorScore = Field(..., description="Study design match score")
+    eligibility_compatible: FactorScore = Field(
+        ..., description="Eligibility criteria compatibility score"
+    )
+    enrollment_band_match: FactorScore = Field(..., description="Enrollment band match score")
+    explanation_summary: str = Field(
+        ..., description="Concise explanation summary of matching factors"
+    )
+
+
+class RelatedTrialItem(BaseModel):
+    """One related trial with comparability factors and score."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    nct_id: str = Field(..., pattern=r"^NCT\d{8}$", description="NCT identifier")
+    brief_title: str = Field(..., description="Brief study title")
+    overall_status: str = Field(..., description="Current overall status")
+    phase: str = Field(..., description="Normalized trial phase")
+    lead_sponsor: str = Field(..., description="Lead sponsor name")
+    similarity_score: float = Field(..., ge=0.0, le=1.0, description="Overall comparability score")
+    similarity_rank: int = Field(..., ge=1, le=25, description="Rank among comparable trials")
+    comparability_factors: ComparabilityFactors = Field(
+        ..., description="Breakdown of factor scores"
+    )
+    registry_url: str = Field(..., description="Canonical ClinicalTrials.gov study URL")
+
+
+class RelatedTrialsResponse(BaseModel):
+    """Ranked list of comparable clinical trials for a target trial."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    target_nct_id: str = Field(..., pattern=r"^NCT\d{8}$", description="Target trial NCT ID")
+    related_trials: list[RelatedTrialItem] = Field(
+        default_factory=list, description="Ranked related trials"
+    )
+    methodology_disclaimer: str = Field(
+        default=(
+            "Deterministic design comparability signal based on public registry attributes. "
+            "NOT clinical equivalence or medical advice."
+        ),
+        description="Non-clinical interpretation disclaimer",
+    )
+
+
 class ReadinessStatus(BaseModel):
     """System and warehouse readiness status model for /readyz."""
 

@@ -402,3 +402,13 @@ def test_warehouse_endpoint_responses_conform_to_openapi(
     assert resp_400.status_code == 400
     assert resp_400.headers["content-type"].startswith("application/problem+json")
     jsonschema.validate(instance=resp_400.json(), schema=problem_schema)
+
+    # 5. GET /v1/trials/{nct_id}/related conforms to RelatedTrialsResponse schema
+    related_schema = _dereference_schema(openapi_doc, schemas["RelatedTrialsResponse"])
+    resp_rel = client.get("/v1/trials/NCT00000001/related")
+    assert resp_rel.status_code == 200
+    assert resp_rel.headers.get("Data-Snapshot") is not None
+    assert resp_rel.headers.get("ETag") is not None
+    assert resp_rel.headers.get("Cache-Control") is not None
+    rel_data = resp_rel.json()
+    jsonschema.validate(instance=rel_data, schema=related_schema)

@@ -19,6 +19,7 @@ thresholds) would let a scoring change hide behind a discovery change.
 from pathlib import Path
 
 import duckdb
+import pytest
 
 from tests.test_dbt_fixture_build import _rows
 
@@ -286,3 +287,39 @@ def test_reference_model_is_not_built_without_its_var(
     finally:
         conn.close()
     assert present is not None and present[0] == 0
+
+
+def test_on_demand_similarity_equals_mart_scoring(
+    similarity_equivalence_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """On-demand API SQL scoring matches mart_trial_similarity scores and explanations."""
+    from src.api.warehouse import DuckDBWarehouseManager
+
+    monkeypatch.chdir(similarity_equivalence_root)
+    warehouse = similarity_equivalence_root / "data" / "warehouse" / "clinical_trials.duckdb"
+    mgr = DuckDBWarehouseManager(warehouse)
+    try:
+        # Check target NCT00000001 (ADRD Phase 3)
+        res = mgr.get_related_trials("NCT00000001", limit=25)
+        assert res is not None
+
+        with duckdb.connect(str(warehouse), read_only=True) as conn:
+            raw_mart_rows = conn.execute(
+                """
+                select nct_id_b, similarity_score, similarity_explanation
+                from main_marts.mart_trial_similarity
+                where nct_id_a = 'NCT00000001'
+                """
+            ).fetchall()
+            mart_rows = {r[0]: (r[1], r[2]) for r in raw_mart_rows}
+
+        assert len(res.related_trials) > 0
+        # For pairs present in the precomputed mart, on-demand scoring must match exactly
+        for item in res.related_trials:
+            if item.nct_id in mart_rows:
+                expected_score, expected_explanation = mart_rows[item.nct_id]
+                assert item.similarity_score == pytest.approx(expected_score, abs=1e-4)
+                assert item.comparability_factors.explanation_summary == expected_explanation
+    finally:
+        mgr.close()
