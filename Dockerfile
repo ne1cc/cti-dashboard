@@ -14,12 +14,13 @@ COPY dbt_clinical_trials/ dbt_clinical_trials/
 COPY src/ src/
 COPY dashboard/ dashboard/
 COPY config/ config/
-COPY tests/ tests/
 COPY .streamlit/ .streamlit/
 COPY Makefile README.md entrypoint.sh ./
 RUN chmod +x entrypoint.sh
 
-RUN uv sync --all-groups --frozen
+# Runtime image: no dev tools; UV_NO_DEV stops `uv run` re-adding them at boot.
+ENV UV_NO_DEV=1
+RUN uv sync --no-dev --frozen
 RUN uv run dbt deps --project-dir dbt_clinical_trials --profiles-dir dbt_clinical_trials
 RUN test -f dbt_clinical_trials/profiles.yml || cp dbt_clinical_trials/profiles.yml.example dbt_clinical_trials/profiles.yml
 RUN uv run python -m src.cli init-data-dirs > /dev/null
