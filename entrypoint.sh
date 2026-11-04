@@ -38,8 +38,8 @@ run_logged() {
 }
 
 # DuckDB does not create parent directories for a new database file (verified:
-# duckdb.connect() raises IOException on a missing directory), and a Fly Volume
-# mounts as EMPTY on its very first boot, shadowing whatever the Dockerfile
+# duckdb.connect() raises IOException on a missing directory), and a freshly mounted volume
+# is EMPTY on its very first boot, shadowing whatever the Dockerfile
 # baked into this path. Recreate the full tree on every boot from the profile
 # registry — a hardcoded list here is how a newly added profile fails on its
 # first write in production.
@@ -202,7 +202,7 @@ while :; do
         break
     fi
     if ! kill -0 "$DASHBOARD_PID" 2>/dev/null; then
-        log "dashboard exited; exiting so Fly restarts the machine"
+        log "dashboard exited; exiting so the host restarts the container"
         exit 1
     fi
     if [ "$SERVE_API" = 1 ] && ! kill -0 "$API_PID" 2>/dev/null; then
@@ -210,7 +210,7 @@ while :; do
         exit 1
     fi
     # Background sleep + wait: bash returns from `wait` when a signal is
-    # trapped, so a SIGTERM from `fly deploy` is honoured within TICK_SECONDS
+    # trapped, so a SIGTERM from the host (redeploy, stop) is honoured within TICK_SECONDS
     # instead of after a full check interval.
     sleep "$TICK_SECONDS" &
     wait $! 2>/dev/null || true

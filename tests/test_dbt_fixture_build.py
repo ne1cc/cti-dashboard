@@ -42,6 +42,7 @@ STAGING_WITH_PROFILE = [
     "stg_trials",
     "stg_trial_conditions",
     "stg_trial_interventions",
+    "stg_trial_arms",
     "stg_trial_locations",
     "stg_trial_outcomes",
     "stg_trial_sponsors",
@@ -89,6 +90,7 @@ SHARED_DIMS_WITH_PROFILE = ["dim_condition", "dim_sponsor", "dim_geography"]
 # (partition by indication_profile_id, nct_id, ...)` is a per-profile latest-run
 # pick that no earlier task's list mentioned.
 MARTS_WITH_PROFILE_SCOPED_WINDOWS = [
+    "mart_baseline_demographics_coverage",
     "mart_trial_activity",
     "mart_site_overlap",
     "mart_condition_geography_trends",
@@ -100,6 +102,7 @@ MARTS_WITH_PROFILE_SCOPED_WINDOWS = [
     # same guard so a repartitioned rank cannot slip in through the oracle.
     "mart_trial_similarity_reference",
     "fct_trial_site",
+    "dim_condition",
 ]
 
 _SQL_COMMENT_RE = re.compile(r"--[^\n]*|\{#.*?#\}", re.DOTALL)
@@ -530,62 +533,263 @@ def test_segment_marts_are_grained_per_profile(fixture_project_root: Path) -> No
     ) == [("adrd", 0.0, 0.0, 1), ("oncology_nsclc", 0.0, 0.0, 1)]
 
 
-def test_trends_growth_guard_emits_non_null_only_on_a_two_month_segment(
-    two_month_fixture_root: Path,
+def test_trends_growth_guard_emits_non_null_only_when_the_window_spans_three_months(
+    multi_month_fixture_root: Path,
 ) -> None:
-    """The positive arm of mart_condition_geography_trends' nulling guard.
+    """The positive arm of mart_condition_geography_trends' full-window guard.
 
-    `assert_trends_growth_needs_two_months.sql` proves the negative arm -- no
-    non-null `recruiting_growth_3m` survives a one-month window -- but no other
-    committed warehouse ever reaches `months_in_window >= 2` (the base and
-    divergent roots put every snapshot inside September, so `case when
-    months_in_window >= 2` never fires and a regression that nulled growth on
-    *every* row would pass CI forever). `two_month_fixture_root` re-dates ADRD's
-    second run to 2026-10-06, giving one profile two `activity_month`s and the
-    other one, so the arm finally has data that can satisfy it.
+    `assert_trends_growth_needs_full_window.sql` proves the rule -- no non-null
+    `recruiting_growth_3m` survives a window whose earliest observed month is
+    less than three months back -- but no committed data reaches the positive
+    arm by accident: the base and divergent roots sit inside one month, and a
+    two-month warehouse (the old guard's ceiling) must now stay null. ADRD is
+    re-dated to span 2026-09/10/12, so only its December rows whose window
+    reaches back to September (>= 3 months) may emit; October rows and
+    December segments that first appeared in October reach back only one or
+    two months and must stay null. NSCLC remains single-month.
 
-    `months_in_window` is deliberately re-derived from the mart's own columns
-    with the same trailing-3m window the model and the dbt test use, rather than
-    read from the output -- it is not one of the mart's eleven contract columns,
-    and widening the contract to make the test easier would change the model.
+    The window is re-derived from the mart's own columns with the same
+    trailing-3m frame the model and the dbt test use, not read from an
+    emitted helper.
 
-    Values measured on a `dbt build` of this root: adrd 30 rows across 2 months
-    with 6 non-null growth (the October segments that also have a September row);
-    oncology_nsclc 16 rows / 1 month / 0 non-null. The last leg is the per-
-    *segment* proof: inside ADRD -- a profile with two months -- there are October
-    segments with no September partner, so their `months_in_window` is 1 and their
-    growth stays null. A guard keyed on the profile's month count instead of the
-    segment's would emit a value there and go red.
+    Values measured on a `dbt build` of this root: adrd 46 rows across
+    3 months with 6 non-null growth (December segments that also have a
+    September row); oncology_nsclc 16 rows / 1 month / 0 non-null.
     """
     per_profile = _rows(
-        two_month_fixture_root,
+        multi_month_fixture_root,
         "select indication_profile_id, count(*), count(distinct activity_month),"
         " count(recruiting_growth_3m) from main_marts.mart_condition_geography_trends"
         " group by 1 order by 1",
     )
-    assert per_profile == [("adrd", 30, 2, 6), ("oncology_nsclc", 16, 1, 0)]
-    october_single_month = _rows(
-        two_month_fixture_root,
-        "with m as ("
-        " select indication_profile_id, condition_group, state_normalized, activity_month,"
-        " recruiting_growth_3m,"
-        " count(distinct activity_month) over ("
+    assert per_profile == [("adrd", 46, 3, 6), ("oncology_nsclc", 16, 1, 0)]
+    covered = _rows(
+        multi_month_fixture_root,
+        "with w as ("
+        " select activity_month, recruiting_trial_count, recruiting_growth_3m,"
+        " recruiting_count_3m_baseline,"
+        " min(activity_month) over ("
         "  partition by indication_profile_id, condition_group, state_normalized"
         "  order by activity_month"
         "  range between interval 3 months preceding and current row"
-        " ) as months_in_window"
+        " ) as window_first_month"
         " from main_marts.mart_condition_geography_trends"
         " where indication_profile_id = 'adrd')"
-        " select count(*), count(recruiting_growth_3m) from m"
-        " where extract(month from activity_month) = 10 and months_in_window = 1",
+        " select round(recruiting_growth_3m, 4), recruiting_trial_count,"
+        " recruiting_count_3m_baseline"
+        " from w"
+        " where datediff('month', window_first_month, activity_month) >= 3"
+        " and recruiting_count_3m_baseline > 0"
+        " order by 2 desc, 1 nulls last",
     )
-    assert october_single_month[0][0] >= 1, (
-        "no October-only segment to prove the guard is per-segment"
+    # Only the six September-rooted segments with a non-zero September baseline
+    # qualify; NC's recruiting count triples between September and December, the
+    # rest stay flat. Eight further covered segments had a zero September
+    # baseline, where relative growth is undefined and stays null (the
+    # safe_divide contract) -- asserted separately below.
+    assert covered == [(2.0, 3, 1), (0.0, 1, 1), (0.0, 1, 1), (0.0, 1, 1), (0.0, 1, 1), (0.0, 1, 1)]
+    zero_baseline = _rows(
+        multi_month_fixture_root,
+        "with w as ("
+        " select activity_month, recruiting_growth_3m, recruiting_count_3m_baseline,"
+        " min(activity_month) over ("
+        "  partition by indication_profile_id, condition_group, state_normalized"
+        "  order by activity_month"
+        "  range between interval 3 months preceding and current row"
+        " ) as window_first_month"
+        " from main_marts.mart_condition_geography_trends"
+        " where indication_profile_id = 'adrd')"
+        " select count(*), count(recruiting_growth_3m) from w"
+        " where datediff('month', window_first_month, activity_month) >= 3"
+        " and recruiting_count_3m_baseline = 0",
     )
-    assert october_single_month[0][1] == 0, (
-        f"an October segment whose own window holds one month emitted "
-        f"{october_single_month[0][1]} non-null growth -- the guard is not per-segment"
+    assert zero_baseline == [(8, 0)]
+    under_covered = _rows(
+        multi_month_fixture_root,
+        "with w as ("
+        " select activity_month, recruiting_growth_3m,"
+        " min(activity_month) over ("
+        "  partition by indication_profile_id, condition_group, state_normalized"
+        "  order by activity_month"
+        "  range between interval 3 months preceding and current row"
+        " ) as window_first_month"
+        " from main_marts.mart_condition_geography_trends"
+        " where indication_profile_id = 'adrd')"
+        " select count(*), count(recruiting_growth_3m) from w"
+        " where datediff('month', window_first_month, activity_month) < 3"
+        " and activity_month >= '2026-10-01'",
     )
+    # October rows (window reaches one month back) and December rows of the
+    # October-only added segments (two months back) all stay null: a guard
+    # keyed on the profile's month count instead of the segment's window
+    # would emit values there.
+    assert under_covered[0][0] >= 1, "no under-covered row to prove the guard is per-segment"
+    assert under_covered[0][1] == 0, (
+        f"an under-covered window emitted {under_covered[0][1]} non-null growth values"
+    )
+
+
+def test_windowed_growth_figures_need_observed_history(
+    fixture_project_root: Path,
+    divergent_fixture_root: Path,
+) -> None:
+    """1- and 2-snapshot histories leave every windowed transition figure null.
+
+    On the single-snapshot root each profile has observed 0 days of history;
+    on the divergent root each holds two snapshots a week apart (7 observed
+    days by the second). Both are far under the 30- and 90-day windows, so
+    new_recruiting_30d, new_recruiting_90d and recruiting_growth_90d must be
+    null everywhere -- not 0, which is how the old mart reported "no history"
+    and read as "no new trials". newly_registered_90d is a registry-date count
+    and stays computable; observed_history_days quantifies the gap. Measured
+    on dbt builds of both roots.
+    """
+    assert _rows(
+        fixture_project_root,
+        "select cast(snapshot_date as varchar), min(observed_history_days),"
+        " max(observed_history_days), count(new_recruiting_30d),"
+        " count(new_recruiting_90d), count(recruiting_growth_90d),"
+        " count(newly_registered_90d)"
+        " from main_marts.mart_recruiting_competition group by 1 order by 1",
+    ) == [("2026-09-01", 0, 0, 0, 0, 0, 10)]
+    # The divergent root's second ADRD snapshot gives a two-snapshot profile
+    # (7 observed days by 09-08). The 08-25 un-stamped NSCLC run never reaches
+    # fct_trial_snapshot -- its manifest predates profile stamping -- so NSCLC
+    # stays a one-snapshot profile there.
+    assert _rows(
+        divergent_fixture_root,
+        "select cast(snapshot_date as varchar), indication_profile_id,"
+        " max(observed_history_days), count(new_recruiting_30d),"
+        " count(new_recruiting_90d), count(recruiting_growth_90d)"
+        " from main_marts.mart_recruiting_competition"
+        " group by 1, 2 order by 1, 2",
+    ) == [
+        ("2026-09-01", "adrd", 0, 0, 0, 0),
+        ("2026-09-01", "oncology_nsclc", 0, 0, 0, 0),
+        ("2026-09-08", "adrd", 7, 0, 0, 0),
+    ]
+
+
+def test_growth_history_gating_across_snapshot_depths_and_gaps(
+    growth_history_fixture_root: Path,
+) -> None:
+    """Three snapshots with a month-gap, and a 105-day gap crossing the window.
+
+    ADRD holds snapshots at 2026-09-01, 09-08 and 10-01: 30 observed days as
+    of the third, so its 30-day figure is emitted only there (and the sole
+    entrant, observed on 09-08, is the transition it counts), while every
+    90-day figure stays null -- three snapshots are not 90 days of history.
+    NSCLC holds 09-01 then 12-15 and 12-22. The 105-day jump is longer than
+    the 90-day window itself: NCT00000002's entry is first observed on 12-15,
+    but its timing inside any 90-day window ending there is unobserved, so
+    every windowed figure on 12-15 stays null even though entered_recruiting_flag
+    is set. On 12-22 the latest gap is 7 days and observed history is 112
+    days, but the predecessor 09-01 predates the 90-day window start (09-23) by
+    22 days (> 14-day tolerance) and the earliest in-window snapshot (12-15) sits
+    83 days past the window start, so the window is not covered and 90-day
+    figures stay null ("not enough history").
+    Measured on a `dbt build` of this root.
+    """
+    assert _rows(
+        growth_history_fixture_root,
+        "select indication_profile_id, cast(snapshot_date as varchar),"
+        " min(observed_history_days), max(observed_history_days), count(*),"
+        " count(new_recruiting_30d), count(new_recruiting_90d),"
+        " count(recruiting_growth_90d)"
+        " from main_marts.mart_recruiting_competition group by 1, 2 order by 1, 2",
+    ) == [
+        ("adrd", "2026-09-01", 0, 0, 6, 0, 0, 0),
+        ("adrd", "2026-09-08", 7, 7, 8, 0, 0, 0),
+        ("adrd", "2026-10-01", 30, 30, 8, 8, 0, 0),
+        ("oncology_nsclc", "2026-09-01", 0, 0, 4, 0, 0, 0),
+        ("oncology_nsclc", "2026-12-15", 105, 105, 5, 0, 0, 0),
+        ("oncology_nsclc", "2026-12-22", 112, 112, 8, 0, 0, 0),
+    ]
+    # The one ADRD entrant (a status flip observed on 09-08) is what the
+    # covered 30-day window at 10-01 sums; the added recruits of the second
+    # snapshot are new listings with a null previous status, never entrants.
+    assert _rows(
+        growth_history_fixture_root,
+        "select condition_group, state_normalized, phase_normalized, new_recruiting_30d"
+        " from main_marts.mart_recruiting_competition"
+        " where indication_profile_id = 'adrd' and new_recruiting_30d > 0",
+    ) == [("mild_cognitive_impairment", "MA", "PHASE2", 1)]
+    # The 12-15 gap arm: an entry was observed there, and no windowed figure
+    # may claim it.
+    assert _rows(
+        growth_history_fixture_root,
+        "select count(*) from main_marts.fct_trial_snapshot"
+        " where indication_profile_id = 'oncology_nsclc'"
+        " and snapshot_date = '2026-12-15' and entered_recruiting_flag",
+    ) == [(1,)]
+    # The 12-22 gap arm: despite a recent 7-day snapshot pair, the boundary
+    # predecessor (09-01) sits 22 days before the 90-day window opens (09-23),
+    # which exceeds the 14-day tolerance, keeping windowed figures null.
+    uncovered_90d = _rows(
+        growth_history_fixture_root,
+        "select count(new_recruiting_90d), count(recruiting_growth_90d)"
+        " from main_marts.mart_recruiting_competition"
+        " where indication_profile_id = 'oncology_nsclc' and snapshot_date = '2026-12-22'",
+    )
+    assert uncovered_90d == [(0, 0)]
+    # The monthly mart on the same root: NSCLC's December rows reach back to
+    # a September baseline exactly three months away, so growth is emitted
+    # there despite the intervening empty months; ADRD never spans three
+    # calendar months and stays null throughout.
+    assert _rows(
+        growth_history_fixture_root,
+        "select indication_profile_id, count(*), count(recruiting_growth_3m),"
+        " min(observed_history_days), max(observed_history_days)"
+        " from main_marts.mart_condition_geography_trends group by 1 order by 1",
+    ) == [("adrd", 32, 0, 7, 30), ("oncology_nsclc", 32, 4, 0, 112)]
+
+
+def test_mart_condition_geography_trends_population_columns(
+    fixture_project_root: Path,
+) -> None:
+    """Verify mart_condition_geography_trends populates Census population, source, vintage,
+    and correct recruiting_trials_per_100k rates."""
+    import yaml
+
+    rows = _rows(
+        fixture_project_root,
+        """
+        select
+            state_normalized,
+            recruiting_trial_count,
+            population,
+            population_source,
+            population_vintage,
+            recruiting_trials_per_100k
+        from main_marts.mart_condition_geography_trends
+        where state_normalized in ('CA', 'NC')
+        order by state_normalized, indication_profile_id
+        """,
+    )
+    assert len(rows) > 0, "No CA or NC rows in mart_condition_geography_trends"
+    for state, recruiting, pop, src, vintage, rate in rows:
+        assert src == "U.S. Census Bureau"
+        assert vintage == "Vintage 2024"
+        assert pop is not None and pop > 0
+        if state == "CA":
+            assert pop == 39431263
+        elif state == "NC":
+            assert pop == 11046024
+        expected_rate = round(100000.0 * recruiting / pop, 4)
+        assert rate == expected_rate
+
+    # Contract declaration check for the 4 population columns
+    from src.utils.paths import project_root
+
+    doc = yaml.safe_load(
+        (project_root() / "dbt_clinical_trials/models/marts/_marts.yml").read_text(encoding="utf-8")
+    )
+    model_block = next(m for m in doc["models"] if m["name"] == "mart_condition_geography_trends")
+    columns = {c["name"]: c["data_type"] for c in model_block["columns"]}
+    assert columns["population"] == "BIGINT"
+    assert columns["population_source"] == "VARCHAR"
+    assert columns["population_vintage"] == "VARCHAR"
+    assert columns["recruiting_trials_per_100k"] == "DOUBLE"
 
 
 def test_mart_feasibility_priority_queue_shape(fixture_project_root: Path) -> None:
@@ -888,8 +1092,8 @@ def test_shared_dimensions_are_per_profile(fixture_project_root: Path) -> None:
       That leaves the four fixture-shape literals below as literals about *this*
       warehouse, which is the point of building a second one rather than
       re-dating this: ``(14, 7)`` / ``(18, 9)``, ``dupes == [(7,)]`` /
-      ``[(9,)]``, dim_condition's ``[("adrd", 10), ("oncology_nsclc", 11)]``
-      partition with its ``(21, 21, 2)`` rows/keys/profiles triple, and the
+      ``[(9,)]``, dim_condition's ``[("adrd", 6), ("oncology_nsclc", 4)]``
+      partition with its ``(10, 10, 2)`` rows/keys/profiles triple, and the
       ``[(10,)]`` cross-profile dim_trial self-join. All four were re-checked on
       2026-09-06 after the divergent fixture landed and all four still hold --
       none of them was ever a prediction about Task 12's fixture, only
@@ -897,13 +1101,15 @@ def test_shared_dimensions_are_per_profile(fixture_project_root: Path) -> None:
       future model change makes the base fixture's membership asymmetric, it
       goes red and the non-discrimination argument two sentences up has to be
       re-made rather than inherited.
-    * dim_condition is excluded from the multiplicity loop by measurement: 21
-      rows, 21 distinct condition_normalized, 0 entities listed by both
-      profiles. condition_normalized is taxonomy-free text (normalize_text of
-      the raw string) and the two bronze fixtures describe different
-      conditions, so the entity sets are disjoint and ``count(*) >
-      count(distinct entity)`` is false for a reason unrelated to this task.
-      Its profile partition and composite-key uniqueness are asserted instead.
+    * dim_condition is excluded from the multiplicity loop by measurement: 10
+      rows, 10 distinct condition_key, 0 nodes listed by both profiles.
+      Issue #52 re-grained it from profile x condition_normalized (21 rows on
+      this fixture) to profile x condition node (taxonomy group or MeSH
+      identity); neither bronze fixture carries a derived section, so its rows
+      are the collapsed group nodes -- 6 ADRD taxonomy groups and 4 NSCLC
+      groups. Its profile partition and composite-key uniqueness are asserted
+      instead; the mesh half of the grain is pinned in
+      tests/test_condition_mesh.py, which is where a derived section exists.
     """
     shapes = {
         "dim_sponsor": ("sponsor_normalized", 14, 7),
@@ -927,12 +1133,12 @@ def test_shared_dimensions_are_per_profile(fixture_project_root: Path) -> None:
         fixture_project_root,
         "select indication_profile_id, count(*) from main_marts.dim_condition"
         " group by 1 order by 1",
-    ) == [("adrd", 10), ("oncology_nsclc", 11)]
+    ) == [("adrd", 6), ("oncology_nsclc", 4)]
     assert _rows(
         fixture_project_root,
         "select count(*), count(distinct condition_key), count(distinct indication_profile_id)"
         " from main_marts.dim_condition",
-    ) == [(21, 21, 2)]
+    ) == [(10, 10, 2)]
 
     # Step 2's key change, asserted where it bites: the bridge and the dimension
     # must hash the same two inputs. Measured counterfactual -- re-hashing the
@@ -1373,7 +1579,7 @@ def test_marts_contracts_enforced(fixture_project_root: Path) -> None:
         if node["resource_type"] == "model"
         and node["original_file_path"].startswith("models/marts/")
     }
-    assert len(marts) == 18
+    assert len(marts) == 20
     for name, node in marts.items():
         assert node["contract"]["enforced"] is True, name
         assert {c["name"] for c in node["columns"].values()}, name
@@ -1386,7 +1592,7 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
 
     ``test_marts_contracts_enforced`` proves every mart has an enforced contract
     and never proves *which* columns are in it, so it stays green whether or not
-    ``indication_profile_id`` is declared. This closes that gap over the 15
+    ``indication_profile_id`` is declared. This closes that gap over the
     trial-grain marts; ``dim_date`` is excluded because the calendar spine is
     global on purpose (Task 11). Read from ``_marts.yml`` rather than the built
     manifest so the not_null test is checked where it is authored.
@@ -1413,7 +1619,7 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
     # Membership, not just cardinality: a pin on len() alone stays green if a
     # mart is renamed or dim_date's exclusion clause goes stale, because the set
     # keeps its size while iterating something else. Names taken from
-    # _marts.yml's 16 model blocks minus dim_date, 2026-09-06.
+    # _marts.yml's 20 model blocks minus dim_date.
     assert trial_grain == {
         "bridge_trial_condition",
         "bridge_trial_sponsor",
@@ -1423,6 +1629,7 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
         "dim_trial",
         "fct_trial_site",
         "fct_trial_snapshot",
+        "mart_baseline_demographics_coverage",
         "mart_condition_geography_trends",
         "mart_data_reliability",
         "mart_feasibility_priority_queue",
@@ -1432,6 +1639,7 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
         "mart_trial_similarity",
         "mart_study_snapshot_audit",
         "mart_location_snapshot_audit",
+        "mart_trial_change_events",
     }
     for model in doc["models"]:
         if model["name"] not in trial_grain:
@@ -1482,3 +1690,128 @@ def test_similarity_top_25_cap_trims_a_busy_profile(similarity_equivalence_root:
     max_candidates = {p: hi for p, hi, _ in rows}
     assert max_candidates["adrd"] > 25, "the cap never binds on the dense profile"
     assert max_candidates["oncology_nsclc"] < 25, "NSCLC must stay under the cap"
+
+
+def test_participant_design_fields_reach_gold_and_staging(
+    fixture_project_root: Path,
+) -> None:
+    """Registry arms, masking, stop reason and outcome timing survive to gold.
+
+    The base bronze page carries the design data on ADRD NCT00000002
+    (EXPERIMENTAL + PLACEBO_COMPARATOR arms, DOUBLE masking, PARALLEL model,
+    brief summary, first primary outcome timeFrame), NCT00000003
+    (EXPERIMENTAL + ACTIVE_COMPARATOR, no placebo), NCT00000007 (TERMINATED
+    with a verbatim whyStopped and no arms) and NCT00000008 (no armGroups at
+    all). NSCLC NCT00000003 carries one EXPERIMENTAL arm so the arms entity
+    covers both profiles.
+    """
+    (masking, model, placebo, summary, time_frame) = _rows(
+        fixture_project_root,
+        """
+        select current_masking, current_intervention_model, has_placebo_arm,
+               brief_summary, primary_outcome_time_frame
+        from main_marts.dim_trial
+        where nct_id = 'NCT00000002' and indication_profile_id = 'adrd'
+        """,
+    )[0]
+    assert masking == "DOUBLE"
+    assert model == "PARALLEL"
+    assert placebo is True
+    assert summary.startswith(
+        "This study collects CSF biomarkers in amnestic mild cognitive impairment"
+    )
+    assert time_frame == "12 months"
+
+    # Registry stop reason passes through verbatim for a TERMINATED trial.
+    (why_stopped,) = _rows(
+        fixture_project_root,
+        """
+        select why_stopped from main_marts.dim_trial
+        where nct_id = 'NCT00000007' and indication_profile_id = 'adrd'
+        """,
+    )[0]
+    assert why_stopped == "Trial terminated early due to slower-than-planned enrollment."
+
+    # Non-placebo arms never raise the flag; arm rows keep registry order.
+    placebo_non, arm_types = _rows(
+        fixture_project_root,
+        """
+        select
+            (select has_placebo_arm from main_marts.dim_trial
+              where nct_id = 'NCT00000003' and indication_profile_id = 'adrd'),
+            list(arm_type order by arm_ordinal)
+        from main_staging.stg_trial_arms
+        where nct_id = 'NCT00000003' and indication_profile_id = 'adrd'
+        """,
+    )[0]
+    assert placebo_non is False
+    assert arm_types == ["EXPERIMENTAL", "ACTIVE_COMPARATOR"]
+
+    # A trial with no armGroups yields no arm rows and a false flag, and the
+    # arms entity stays profile-stamped across both profiles.
+    arms_rows = _rows(
+        fixture_project_root,
+        """
+        select indication_profile_id, count(*)
+        from main_staging.stg_trial_arms
+        group by 1 order by 1
+        """,
+    )
+    assert dict(arms_rows) == {"adrd": 4, "oncology_nsclc": 1}
+    (no_arms_flag,) = _rows(
+        fixture_project_root,
+        """
+        select has_placebo_arm from main_marts.dim_trial
+        where nct_id = 'NCT00000008' and indication_profile_id = 'adrd'
+        """,
+    )[0]
+    assert no_arms_flag is False
+
+
+def test_legacy_silver_without_bronze_builds_and_keeps_placebo_unknown(
+    legacy_silver_fixture_root: Path,
+) -> None:
+    """The round-1 blocking regression: upgrading a real volume.
+
+    Production retains silver for every run while pruning all but the latest
+    bronze, so ADRD run fixture01 survives as pre-feature silver (no arms
+    entity, no new trial columns) with no source pages to rebuild from. The
+    transform must skip it (asserted when `legacy_silver_fixture_root` is
+    built) and an isolated `dbt build` must still succeed, with the legacy
+    rows keeping unknown as NULL instead of being coerced to "no placebo".
+    The current NSCLC run keeps real values, so the assertions discriminate.
+    """
+    # The legacy run contributes no arm rows; only the current run does.
+    assert _rows(
+        legacy_silver_fixture_root,
+        "select distinct ingestion_run_id from main_staging.stg_trial_arms",
+    ) == [(NSCLC_FIXTURE_RUN_ID,)]
+
+    # Legacy trial rows stay nullable through staging: 10 rows, none of them
+    # carrying a placebo flag; the current run's rows all carry one.
+    staging = _rows(
+        legacy_silver_fixture_root,
+        """
+        select indication_profile_id, count(*), count(has_placebo_arm)
+        from main_staging.stg_trials
+        group by 1 order by 1
+        """,
+    )
+    assert staging == [("adrd", 10, 0), ("oncology_nsclc", 10, 10)]
+
+    # ...and gold: unknown stays unknown on the legacy profile, and the fresh
+    # profile keeps its concrete false (one EXPERIMENTAL arm, no placebo).
+    assert _rows(
+        legacy_silver_fixture_root,
+        """
+        select distinct has_placebo_arm from main_marts.dim_trial
+        where indication_profile_id = 'adrd'
+        """,
+    ) == [(None,)]
+    assert _rows(
+        legacy_silver_fixture_root,
+        """
+        select distinct has_placebo_arm from main_marts.dim_trial
+        where indication_profile_id = 'oncology_nsclc'
+        """,
+    ) == [(False,)]

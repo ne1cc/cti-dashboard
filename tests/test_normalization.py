@@ -56,6 +56,50 @@ def test_unrelated_condition_gets_default_low_confidence():
     assert mapping.mapping_confidence == "low"
 
 
+def test_taxonomy_display_labels_and_fallback(tmp_path):
+    from src.transform.normalize_conditions import load_taxonomy
+
+    # 1. Loaded labels on default taxonomy
+    assert TAXONOMY.get_group_label("alzheimers_disease") == "Alzheimer's Disease"
+    assert TAXONOMY.get_group_label("mild_cognitive_impairment") == (
+        "Mild Cognitive Impairment (MCI)"
+    )
+    assert TAXONOMY.get_group_label("non_dementia_other") == "Other Conditions"
+    assert TAXONOMY.default_label == "Other Conditions"
+
+    # 2. Unknown group falls back cleanly to group key
+    assert TAXONOMY.get_group_label("completely_unknown_group") == "completely_unknown_group"
+
+    # 3. Custom taxonomy without display_name metadata falls back to condition_group
+    custom_yaml = tmp_path / "custom_taxonomy.yml"
+    custom_yaml.write_text(
+        """
+version: 1
+default:
+  condition_group: other_custom
+  dementia_relevance: false
+groups:
+  - condition_group: custom_group_a
+    dementia_relevance: false
+    exact:
+      - test condition
+    substrings: []
+  - condition_group: custom_group_b
+    display_name: "Custom Label B"
+    dementia_relevance: false
+    exact: []
+    substrings: []
+""",
+        encoding="utf-8",
+    )
+    custom_tax = load_taxonomy(custom_yaml)
+    assert custom_tax.get_group_label("custom_group_a") == "custom_group_a"
+    assert custom_tax.get_group_label("custom_group_b") == "Custom Label B"
+    assert custom_tax.get_group_label("other_custom") == "other_custom"
+    assert custom_tax.groups[0].label == "custom_group_a"
+    assert custom_tax.groups[1].label == "Custom Label B"
+
+
 # --- geography ---------------------------------------------------------------
 
 
@@ -271,3 +315,114 @@ def test_flatten_preserves_absent_std_ages_and_gender_based():
     assert trial["std_age_groups"] is None
     assert trial["gender_based"] is None
     assert trial["gender_description"] is None
+
+
+# --- participant-relevant design data (arms, masking, stop reason, timing) ---
+
+
+def _study_with_design(overrides: dict) -> dict:
+    import copy
+
+    study = copy.deepcopy(FIXTURE_STUDY)
+    study["protocolSection"].update(overrides)
+    return study
+
+
+def test_flatten_captures_placebo_arm_masking_and_stop_reason():
+    study = _study_with_design(
+        {
+            "statusModule": {
+                **FIXTURE_STUDY["protocolSection"]["statusModule"],
+                "overallStatus": "TERMINATED",
+                "whyStopped": "Accrual fell short of the enrollment target.",
+            },
+            "designModule": {
+                **FIXTURE_STUDY["protocolSection"]["designModule"],
+                "designInfo": {
+                    "allocation": "RANDOMIZED",
+                    "primaryPurpose": "TREATMENT",
+                    "interventionModel": "PARALLEL",
+                    "maskingInfo": {"masking": "DOUBLE", "whoMasked": ["PARTICIPANT"]},
+                },
+            },
+            "armsInterventionsModule": {
+                "interventions": [{"type": "DRUG", "name": "Compound-X"}],
+                "armGroups": [
+                    {
+                        "label": "Compound-X",
+                        "type": "EXPERIMENTAL",
+                        "description": "Oral tablet twice daily.",
+                        "interventionNames": ["Drug: Compound-X"],
+                    },
+                    {
+                        "label": "Placebo",
+                        "type": "PLACEBO_COMPARATOR",
+                        "interventionNames": ["Drug: Placebo"],
+                    },
+                ],
+            },
+            "descriptionModule": {
+                "briefSummary": "Registry-written summary of the trial's purpose.",
+            },
+        }
+    )
+    rows = flatten_study(study, "run1", "2026-10-02T00:00:00+00:00", TAXONOMY, GEOGRAPHY)
+
+    trial = rows["silver_trials"][0]
+    assert trial["has_placebo_arm"] is True
+    assert trial["masking"] == "DOUBLE"
+    assert trial["intervention_model"] == "PARALLEL"
+    # Registry text passes through verbatim
+    assert trial["why_stopped"] == "Accrual fell short of the enrollment target."
+    assert trial["brief_summary"] == "Registry-written summary of the trial's purpose."
+    assert trial["primary_outcome_time_frame"] == "52 weeks"
+
+    arms = rows["silver_trial_arms"]
+    assert [arm["arm_ordinal"] for arm in arms] == [0, 1]
+    assert arms[0]["arm_label"] == "Compound-X"
+    assert arms[0]["arm_type"] == "EXPERIMENTAL"
+    assert arms[0]["arm_description"] == "Oral tablet twice daily."
+    assert arms[0]["intervention_names"] == ["Drug: Compound-X"]
+    assert arms[1]["arm_type"] == "PLACEBO_COMPARATOR"
+    assert arms[1]["arm_description"] is None
+    for arm in arms:
+        assert arm["nct_id"] == "NCT00000001"
+        assert arm["indication_profile_id"] == "adrd"
+
+
+def test_flatten_non_placebo_arms_leave_the_flag_false():
+    study = _study_with_design(
+        {
+            "armsInterventionsModule": {
+                "interventions": [],
+                "armGroups": [
+                    {"label": "Drug A", "type": "EXPERIMENTAL"},
+                    {"label": "Drug B", "type": "ACTIVE_COMPARATOR"},
+                ],
+            }
+        }
+    )
+    rows = flatten_study(study, "run1", "2026-10-02T00:00:00+00:00", TAXONOMY, GEOGRAPHY)
+    assert rows["silver_trials"][0]["has_placebo_arm"] is False
+    assert [arm["arm_type"] for arm in rows["silver_trial_arms"]] == [
+        "EXPERIMENTAL",
+        "ACTIVE_COMPARATOR",
+    ]
+
+
+def test_flatten_absent_design_fields_default_to_null_and_false():
+    rows = flatten_study(FIXTURE_STUDY, "run1", "2026-10-02T00:00:00+00:00", TAXONOMY, GEOGRAPHY)
+    trial = rows["silver_trials"][0]
+    assert trial["has_placebo_arm"] is False
+    assert trial["masking"] is None
+    assert trial["intervention_model"] is None
+    assert trial["why_stopped"] is None
+    assert trial["brief_summary"] is None
+    assert trial["primary_outcome_time_frame"] == "52 weeks"
+    assert rows["silver_trial_arms"] == []
+
+
+def test_flatten_tolerates_explicit_null_description_module():
+    study = _study_with_design({"descriptionModule": None})
+    rows = flatten_study(study, "run1", "2026-10-02T00:00:00+00:00", TAXONOMY, GEOGRAPHY)
+    assert rows["silver_trials"][0]["brief_summary"] is None

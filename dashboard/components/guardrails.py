@@ -15,9 +15,11 @@ DISCLAIMER = (
 )
 
 PROXY_NOTE = (
-    "Snapshot-transition metrics stay at zero until this project has "
-    "accrued multiple snapshots over time; where a registry-date proxy is "
-    "used instead, it is labeled as such."
+    "Recruiting-growth figures (snapshot transitions) need 90 days of "
+    'observed snapshot history; before that they show "not enough '
+    'history", never zero. "Newly registered (first posted)" counts '
+    "registry first-post dates and is a registration count, not a "
+    "recruiting transition."
 )
 
 

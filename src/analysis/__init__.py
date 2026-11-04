@@ -1,1 +1,1 @@
-"""Assumption-driven scenario analysis (illustrative only, never observed ROI)."""
+"""Analysis helpers for public registry metrics."""

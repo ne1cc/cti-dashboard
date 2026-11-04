@@ -5,23 +5,33 @@
 -- feasibility review. Potential competition signals from public registry
 -- listings, NOT a recruitment forecast and NOT a measure of patient
 -- availability. Ordered by active_recruiting_trials descending by default.
+-- Growth honesty: new_recruiting_90d is null unless the profile's retained
+-- snapshots cover the 90-day window (see mart_recruiting_competition);
+-- observed_history_days travels with the figure so a reader can tell
+-- "no new trials" (covered window, count 0) from "not enough history"
+-- (null). newly_registered_90d is a registry first-post count, computable
+-- from one snapshot and never a recruiting transition. There is no
+-- proxy fallback: an under-covered window shows unknown, not another
+-- metric under a growth label.
 with latest_snapshot as (
     select indication_profile_id, max(snapshot_date) as snapshot_date
     from {{ ref('fct_trial_snapshot') }}
     group by 1
 ),
 
-history_depth as (
+profile_history as (
     select
         indication_profile_id,
-        count(distinct snapshot_date) > 1 as has_multi_snapshot_history
+        count(distinct snapshot_date) > 1 as has_multi_snapshot_history,
+        datediff('day', min(snapshot_date), max(snapshot_date))
+            as observed_history_days
     from {{ ref('fct_trial_snapshot') }}
     group by 1
 ),
 
 -- Latest successful run *per profile*: mart_data_reliability is one row per
--- ingestion run, and a global `limit 1` would price profile A's data
--- confidence with profile B's location completeness.
+-- ingestion run, and a global `limit 1` would mix profile A's operational
+-- completeness with profile B's location completeness.
 run_reliability as (
     select indication_profile_id, usable_location_share
     from (
@@ -97,13 +107,9 @@ inputs as (
         c.recruiting_trial_count as active_recruiting_trials,
         c.listed_site_count,
         c.new_recruiting_90d,
-        c.newly_posted_90d_proxy,
+        c.newly_registered_90d,
         h.has_multi_snapshot_history,
-        case
-            when h.has_multi_snapshot_history then c.new_recruiting_90d
-            else c.newly_posted_90d_proxy
-        end as recent_growth_input,
-        (not h.has_multi_snapshot_history) as growth_uses_registry_proxy_flag,
+        h.observed_history_days,
         c.sponsor_count,
         c.sponsor_count as distinct_sponsors,
         c.top_sponsor_share,
@@ -114,11 +120,11 @@ inputs as (
         s.record_quality_ok_share,
         0.5 * coalesce(s.record_quality_ok_share, 0)
             + 0.5 * coalesce(r.usable_location_share, 0)
-            as data_confidence_share
+            as operational_completeness_share
     from competition c
     inner join segment_trials s
         using (indication_profile_id, condition_group, state_normalized, phase_normalized)
-    inner join history_depth h using (indication_profile_id)
+    inner join profile_history h using (indication_profile_id)
     left join run_reliability r using (indication_profile_id)
 )
 
@@ -137,10 +143,9 @@ select
     active_recruiting_trials,
     listed_site_count,
     new_recruiting_90d,
-    newly_posted_90d_proxy,
+    newly_registered_90d,
     has_multi_snapshot_history,
-    recent_growth_input,
-    growth_uses_registry_proxy_flag,
+    observed_history_days,
     sponsor_count,
     distinct_sponsors,
     top_sponsor_share,
@@ -149,23 +154,29 @@ select
     site_overlap_share,
     site_overlap_rate,
     record_quality_ok_share,
-    data_confidence_share,
+    operational_completeness_share,
     concat_ws(
         '; ',
         recruiting_trial_count || ' recruiting listing(s) in segment',
         case
-            when growth_uses_registry_proxy_flag then
-                newly_posted_90d_proxy
-                || ' first posted within 90 days (registry-date proxy;'
-                || ' snapshot history not yet accrued)'
-            else new_recruiting_90d
-                || ' newly recruiting in 90 days (snapshot transitions)'
+            when new_recruiting_90d is not null then
+                new_recruiting_90d
+                || ' newly recruiting in 90 days (snapshot transitions;'
+                || ' ' || observed_history_days || ' days of history observed)'
+            when observed_history_days < 90 then
+                'new recruiting: not enough history ('
+                || observed_history_days || ' of 90 days observed)'
+            else
+                'new recruiting: not enough history (gap between snapshots exceeds window)'
         end,
+        newly_registered_90d
+            || ' newly registered within 90 days (registry first-post date,'
+            || ' not a recruiting transition)',
         'sponsor concentration HHI ' || round(sponsor_hhi, 2)
             || ' across ' || sponsor_count || ' sponsor(s)',
         round(coalesce(site_overlap_share, 0) * 100)
             || '% of trials share a multi-trial facility listing',
-        'data confidence ' || round(data_confidence_share * 100) || '%'
+        'operational completeness ' || round(operational_completeness_share * 100) || '%'
     ) as priority_explanation,
     'Potential competition signal from public registry listings.'
         || ' Not a recruitment forecast; requires human feasibility review.'

@@ -29,7 +29,9 @@ ENTITY_COLUMNS: dict[str, list[str]] = {
         "expanded_access_info",
         "start_date",
         "primary_completion_date",
+        "primary_completion_date_type",
         "completion_date",
+        "completion_date_type",
         "study_first_post_date",
         "results_first_post_date",
         "last_update_post_date",
@@ -43,6 +45,12 @@ ENTITY_COLUMNS: dict[str, list[str]] = {
         # on-disk contract.
         "allocation",
         "primary_purpose",
+        "intervention_model",
+        "masking",
+        "has_placebo_arm",
+        "why_stopped",
+        "brief_summary",
+        "primary_outcome_time_frame",
         "lead_sponsor_name",
         "responsible_party_type",
         "healthy_volunteers",
@@ -71,6 +79,21 @@ ENTITY_COLUMNS: dict[str, list[str]] = {
         "condition_group",
         "dementia_relevance_flag",
         "mapping_confidence",
+        "mapping_source",
+    ],
+    "silver_trial_condition_mesh": [
+        "ingestion_run_id",
+        "indication_profile_id",
+        "snapshot_id",
+        "retrieved_at_utc",
+        "raw_page_reference",
+        "raw_study_ordinal",
+        "nct_id",
+        "source_json_hash",
+        "mesh_id",
+        "mesh_term",
+        "is_ancestor",
+        "branch",
     ],
     "silver_trial_interventions": [
         "ingestion_run_id",
@@ -85,6 +108,21 @@ ENTITY_COLUMNS: dict[str, list[str]] = {
         "intervention_type",
         "intervention_description",
         "intervention_normalized",
+    ],
+    "silver_trial_arms": [
+        "ingestion_run_id",
+        "indication_profile_id",
+        "snapshot_id",
+        "retrieved_at_utc",
+        "raw_page_reference",
+        "raw_study_ordinal",
+        "nct_id",
+        "source_json_hash",
+        "arm_ordinal",
+        "arm_label",
+        "arm_type",
+        "arm_description",
+        "intervention_names",
     ],
     "silver_trial_sponsors": [
         "ingestion_run_id",
@@ -139,6 +177,30 @@ ENTITY_COLUMNS: dict[str, list[str]] = {
         "outcome_description",
         "time_frame",
     ],
+    "silver_trial_baseline_demographics": [
+        "ingestion_run_id",
+        "indication_profile_id",
+        "snapshot_id",
+        "retrieved_at_utc",
+        "raw_page_reference",
+        "raw_study_ordinal",
+        "nct_id",
+        "source_json_hash",
+        "measure_index",
+        "measure_title",
+        "param_type",
+        "unit_of_measure",
+        "class_index",
+        "class_title",
+        "category_index",
+        "category_title",
+        "group_id",
+        "group_title",
+        "group_denominator",
+        "participant_count",
+        "value_raw",
+        "value_spread",
+    ],
 }
 
 # Chunked writing needs one fixed schema per entity for the whole run: pandas
@@ -152,14 +214,23 @@ _NON_STRING_ARROW_TYPES: dict[str, pa.DataType] = {
     "latitude": pa.float64(),
     "longitude": pa.float64(),
     "outcome_index": pa.int64(),
+    "measure_index": pa.int64(),
+    "class_index": pa.int64(),
+    "category_index": pa.int64(),
+    "group_denominator": pa.int64(),
+    "participant_count": pa.int64(),
     "raw_study_ordinal": pa.int64(),
     "location_ordinal": pa.int64(),
+    "arm_ordinal": pa.int64(),
     "expanded_access_info": pa.bool_(),
     "healthy_volunteers": pa.bool_(),
     "gender_based": pa.bool_(),
     "std_age_groups": pa.list_(pa.string()),
+    "intervention_names": pa.list_(pa.string()),
+    "has_placebo_arm": pa.bool_(),
     "has_results_flag": pa.bool_(),
     "dementia_relevance_flag": pa.bool_(),
+    "is_ancestor": pa.bool_(),
     "us_location_flag": pa.bool_(),
     "usable_geography_flag": pa.bool_(),
 }
@@ -225,6 +296,18 @@ class SilverRunWriter:
             buffer.extend(rows)
             if len(buffer) >= self.flush_rows:
                 self._flush(entity)
+
+    def add_table(self, entity: str, table: pa.Table) -> None:
+        """Append a pre-built Arrow table (e.g. an incremental run carrying
+        unchanged rows forward from the previous snapshot). Column order and
+        types must be compatible with the entity schema; extra or missing
+        columns are reconciled by cast against it."""
+        schema = ENTITY_ARROW_SCHEMAS[entity]
+        table = table.cast(schema)
+        if table.num_rows == 0:
+            return
+        self._writer(entity).write_table(table)
+        self.row_counts[entity] += table.num_rows
 
     def close(self) -> dict[str, int]:
         if self._closed:
