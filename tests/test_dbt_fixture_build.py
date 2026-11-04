@@ -1582,7 +1582,7 @@ def test_marts_contracts_enforced(fixture_project_root: Path) -> None:
         if node["resource_type"] == "model"
         and node["original_file_path"].startswith("models/marts/")
     }
-    assert len(marts) == 20
+    assert len(marts) == 22
     for name, node in marts.items():
         assert node["contract"]["enforced"] is True, name
         assert {c["name"] for c in node["columns"].values()}, name
@@ -1622,7 +1622,7 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
     # Membership, not just cardinality: a pin on len() alone stays green if a
     # mart is renamed or dim_date's exclusion clause goes stale, because the set
     # keeps its size while iterating something else. Names taken from
-    # _marts.yml's 20 model blocks minus dim_date.
+    # _marts.yml's 22 model blocks minus dim_date.
     assert trial_grain == {
         "bridge_trial_condition",
         "bridge_trial_sponsor",
@@ -1635,14 +1635,16 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
         "mart_baseline_demographics_coverage",
         "mart_condition_geography_trends",
         "mart_data_reliability",
+        "mart_early_stop_transparency",
         "mart_feasibility_priority_queue",
-        "mart_recruiting_competition",
-        "mart_site_overlap",
-        "mart_trial_activity",
-        "mart_trial_similarity",
-        "mart_study_snapshot_audit",
         "mart_location_snapshot_audit",
+        "mart_recruiting_competition",
+        "mart_results_posting_transparency",
+        "mart_site_overlap",
+        "mart_study_snapshot_audit",
+        "mart_trial_activity",
         "mart_trial_change_events",
+        "mart_trial_similarity",
     }
     for model in doc["models"]:
         if model["name"] not in trial_grain:
