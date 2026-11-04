@@ -107,8 +107,15 @@ In strict adherence to **ADR 0065**, facility-level and central investigator nam
 | `condition_normalized` | Derived | `silver_trial_conditions.condition_normalized` | `dim_condition.condition_normalized` | Lowercased, punctuation-stripped matching key. |
 | `condition_group` | Config mapping | `silver_trial_conditions.condition_group` | `dim_condition.condition_group` | Standardized condition cluster via `config/condition_taxonomy.yml`. |
 | `mesh_id` | MeSH heading | External ontology reference | `dim_condition.mesh_id` | Unique Medical Subject Headings descriptor ID (e.g. D000544). |
+| `mesh_tree_code` | MeSH Tree Number | External ontology reference | N/A | Primary MeSH hierarchical tree location code. |
 | `synonyms` | NLM MeSH term list | `config/condition_taxonomy.yml` | `dim_condition.synonyms` | Array of clinical synonyms and common patient search phrases. |
 | `trial_count` | Aggregated | N/A | `dim_condition.trial_count` | Distinct NCT IDs associated with condition within profile scope. |
+| `active_trial_count` | Aggregated | N/A | `bridge_trial_condition` x `dim_trial` | Distinct NCT IDs in recruiting or active status. |
+| `has_children` | MeSH Tree Hierarchy | External ontology reference | N/A | True if sub-branches / narrower conditions exist in MeSH. |
+| `broader` | MeSH Parent Nodes | External ontology reference | N/A | Array of parent MeSH concepts enabling users to widen search. |
+| `narrower` | MeSH Child Nodes | External ontology reference | N/A | Array of child MeSH concepts enabling users to narrow search. |
+
+For ontology provenance, licensing, and terms of use, see `docs/mesh_licensing.md`.
 
 ---
 

@@ -565,3 +565,50 @@ class ReadinessStatus(BaseModel):
     )
     trials_count: int | None = Field(default=None, description="Total trials loaded in warehouse")
     timestamp: str = Field(..., description="ISO UTC timestamp of the readiness check")
+
+
+class ConceptReference(BaseModel):
+    """Reference to a parent or child MeSH concept in the hierarchy."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    mesh_id: str | None = Field(default=None, description="MeSH descriptor identifier")
+    term: str = Field(..., description="Concept preferred name or label")
+    tree_code: str | None = Field(default=None, description="MeSH hierarchical tree code")
+
+
+class ConditionNode(BaseModel):
+    """Condition node in MeSH or taxonomy hierarchy with synonym and study counts."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    condition_name: str = Field(..., description="Condition display name")
+    condition_normalized: str = Field(..., description="Normalized condition search key")
+    condition_group: str | None = Field(default=None, description="Condition group cluster")
+    mesh_id: str | None = Field(default=None, description="MeSH descriptor unique identifier")
+    mesh_tree_code: str | None = Field(default=None, description="Primary MeSH tree number")
+    synonyms: list[str] = Field(
+        default_factory=list, description="Synonyms, entry terms, and consumer search phrases"
+    )
+    trial_count: int = Field(
+        default=0, description="Total registered trials mapping to this condition"
+    )
+    active_trial_count: int = Field(default=0, description="Trials currently recruiting or active")
+    has_children: bool = Field(
+        default=False, description="True if sub-branches exist in the hierarchy"
+    )
+    broader: list[ConceptReference] = Field(
+        default_factory=list, description="Broader parent concepts to widen search"
+    )
+    narrower: list[ConceptReference] = Field(
+        default_factory=list, description="Narrower child concepts to narrow search"
+    )
+
+
+class ConditionsListResponse(BaseModel):
+    """Autocomplete and condition browsing list response."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    items: list[ConditionNode] = Field(default_factory=list, description="Matching condition nodes")
+    total_count: int = Field(..., description="Total matching conditions count")

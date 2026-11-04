@@ -223,6 +223,15 @@ matched_candidates AS (
                     lower(tc.condition_group) LIKE '%' || lower($cond) || '%' ESCAPE '\' OR
                     lower(tc.condition_normalized) LIKE '%' || lower($cond) || '%' ESCAPE '\'
                 )
+          ) OR
+          EXISTS (
+              SELECT 1 FROM stg_trial_condition_mesh tcm
+              WHERE tcm.nct_id = dt.nct_id
+                AND (dt.ingestion_run_id IS NULL OR tcm.ingestion_run_id = dt.ingestion_run_id)
+                AND (
+                    lower(tcm.mesh_term) = lower($cond) OR
+                    lower(tcm.mesh_id) = lower($cond)
+                )
           )
       )
       AND (

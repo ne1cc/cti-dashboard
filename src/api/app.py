@@ -31,6 +31,7 @@ from src.api.cache import (
     canonical_cache_key,
     scrub_contact_pii,
 )
+from src.api.conditions import search_conditions
 from src.api.gazetteer import resolve_postal_code
 from src.api.live import (
     build_upstream_search_params,
@@ -39,6 +40,7 @@ from src.api.live import (
     normalize_study_summary,
 )
 from src.api.models import (
+    ConditionsListResponse,
     InvalidParam,
     PaginationMetadata,
     ProblemDetail,
@@ -504,6 +506,70 @@ def create_app(
             "circuit_breaker": metrics,
             "timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
+
+    @app.get("/v1/conditions", response_model=ConditionsListResponse, tags=["Conditions"])
+    def list_conditions(
+        request: Request,
+        response: Response,
+        deps: ContainerDep,
+        q: str | None = Query(
+            default=None,
+            description="Prefix search string for condition name or synonym autocomplete.",
+        ),
+        mesh_id: str | None = Query(
+            default=None,
+            description="Exact Medical Subject Headings descriptor ID (e.g. D000544).",
+        ),
+        parent_id: str | None = Query(
+            default=None,
+            description="MeSH tree number or parent identifier to retrieve sub-branches.",
+        ),
+        indication_profile_id: str | None = Query(
+            default=None,
+            description="Filter scoped to an active indication profile (e.g. adrd).",
+        ),
+        limit: int = Query(
+            default=20,
+            ge=1,
+            le=100,
+            description="Maximum number of conditions to return.",
+        ),
+    ) -> Any:
+        try:
+            items, total_count = search_conditions(
+                q=q,
+                mesh_id=mesh_id,
+                parent_id=parent_id,
+                indication_profile_id=indication_profile_id,
+                limit=limit,
+                warehouse=deps.warehouse,
+            )
+            result = ConditionsListResponse(items=items, total_count=total_count)
+        except Exception as err:
+            logger.error("Condition search failed", exc_info=err)
+            return create_problem_response(
+                500,
+                "Internal Server Error",
+                "Failed to search or browse conditions.",
+                str(request.url),
+                code="CONDITION_SEARCH_ERROR",
+            )
+
+        snap_id = "local-ontology"
+        snap_ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        if deps.warehouse is not None:
+            try:
+                snap_id, snap_ts = deps.warehouse.get_snapshot_metadata()
+            except Exception:
+                pass
+
+        not_modified_resp = apply_cache_headers_and_check_etag(
+            request, response, result.model_dump(), snap_id, snap_ts
+        )
+        if not_modified_resp is not None:
+            return not_modified_resp
+
+        return result
 
     @app.get("/v1/trials", response_model=TrialsListResponse)
     def search_trials(
