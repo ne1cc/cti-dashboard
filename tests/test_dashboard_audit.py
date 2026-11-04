@@ -125,7 +125,9 @@ def test_panel_filter_rerun(fixture_project_root, monkeypatch, captured_exports)
     assert not at.exception
     after = assert_scope(nc_ids, ["NC"])
     assert before != after
-    assert any(x.label == "Data coverage and caveats" for x in at.expander)
+    popover_labels = [p.proto.popover.label for p in at.get("popover")]
+    assert len(popover_labels) == len(set(popover_labels)) == 3
+    assert all("computed" in label.lower() for label in popover_labels)
     assert any("Download metric audit" in x.proto.label for x in at.get("download_button"))
 
 
@@ -245,7 +247,11 @@ def test_growth_input_window_export_metadata(warehouse):
     box.set_value(mode)
     at.run()
     assert not at.exception
-    metadata = next(json.loads(j.value) for j in at.json if "rule_version" in j.value)
+    metadata = next(
+        json.loads(j.value)
+        for j in at.json
+        if "rule_version" in j.value and json.loads(j.value).get("metric") == "recent_recruiting"
+    )
     assert metadata["metric"] == "recent_recruiting"
     assert metadata["rule_config"]["display_context"]["growth_window_start"]
     assert metadata["rule_config"]["display_context"]["growth_window_end"]
@@ -263,7 +269,7 @@ def test_competition_audit_gating_below_90d_labels_and_clamps(warehouse):
     box.set_value("Recruiting-entry events")
     at.run()
     assert not at.exception
-    metadata = next(json.loads(j.value) for j in at.json if "rule_version" in j.value)
+    metadata = [json.loads(j.value) for j in at.json if "rule_version" in j.value][-1]
     start = metadata["rule_config"]["display_context"]["growth_window_start"]
     # Clamped to the first snapshot date (not latest minus 90 days)
     assert start == "2026-09-01"
@@ -306,7 +312,7 @@ def test_threshold_control_warns_retains_and_exports(warehouse, captured_exports
     ).run()
     assert not at.exception
     before = captured_exports[-1]
-    control = next(w for w in at.number_input if "Project-defined posted-update" in w.label)
+    control = [w for w in at.number_input if "Project-defined posted-update" in w.label][-1]
     assert control.value == 180
     control.set_value(0)
     at.run()
@@ -365,11 +371,28 @@ def test_event_panel_filter_export_evidence(
     after = captured_exports[-1]
     assert after["contributors"] == []
     assert after["metadata"]["filters"]["states"] == [state]
-    shown = next(
+    shown = [
         json.loads(j.value)["contributing_nct_ids"]
         for j in at.json
         if "contributing_nct_ids" in j.value
-    )
+    ][-1]
     assert shown == after["contributors"]
     st.cache_data.clear()
     st.cache_resource.clear()
+
+
+def test_provenance_drawer_study_decisions_tables(warehouse):
+    def page():
+        from components.audit_panel import render_provenance_drawer
+
+        render_provenance_drawer("adrd", as_popover=False, key="test_table")
+
+    at = AppTest.from_function(page).run()
+    assert not at.exception
+    assert any("show study decisions" in w.label.lower() for w in at.checkbox)
+    # When as_popover=False, checkbox defaults to True, so tables are rendered
+    assert len(at.dataframe) >= 2
+    decisions = at.dataframe[0].value
+    assert "brief_title" in decisions.columns
+    assert "included_flag" in decisions.columns
+    assert "exclusion_reason" in decisions.columns

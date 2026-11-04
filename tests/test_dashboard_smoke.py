@@ -223,8 +223,9 @@ def test_overview_reads_as_labels_not_codes(fixture_warehouse):
     assert "sponsor_hhi" in preview.columns
     assert (preview["active_recruiting_trials"] >= 0).all()
     assert not any("00:00:00" in c.value for c in at.caption)
-    audit_labels = [e.label for e in at.expander if e.label.startswith("Audit:")]
-    assert len(audit_labels) == len(set(audit_labels)) == 3
+    audit_drawers = [p.proto.popover.label for p in at.get("popover")]
+    assert len(audit_drawers) == len(set(audit_drawers)) == 5
+    assert all("computed" in label.lower() for label in audit_drawers)
     section_titles = {m.value for m in at.markdown}
     assert {"**Compare**", "**Inspect**", "**Verify**"} <= section_titles
 

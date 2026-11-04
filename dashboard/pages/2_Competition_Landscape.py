@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from components import data
-from components.audit_panel import render_metric_audit
+from components.audit_panel import render_provenance_drawer
 from components.filters import segment_filters
 from components.formatting import format_phase, hhi_status
 from components.guardrails import guarded_footer, page_setup, proxy_caption
@@ -20,31 +20,113 @@ render_page_guide("competition_landscape", profile_id)
 competition = data.recruiting_competition(profile_id)
 filtered = segment_filters(competition, profile_id=profile_id)
 
-col1, col2, col3 = st.columns(3)
-col1.metric(
-    "Segments",
-    len(filtered),
-    help="Number of distinct condition × state × phase segments matching current sidebar filters.",
-)
-col2.metric(
-    "Elevated-signal segments",
-    int((filtered["competition_signal_band"] == "elevated").sum()),
-    help=("Segments falling in the top percentile band for trial counts or sponsor concentration."),
-)
-col3.metric(
-    "Recruiting trials (summed segments)",
-    int(filtered["recruiting_trial_count"].sum()),
-    help=(
-        "Sum of distinct recruiting study counts per segment. "
-        "A study in multiple segments is counted in each."
-    ),
-)
-proxy_caption()
-
 observed_history_days = (
     int(competition["observed_history_days"].max()) if not competition.empty else 0
 )
 growth_window_covered = observed_history_days >= 90
+
+derived_rules_text = (
+    "Counts: distinct confirmed RECRUITING NCT IDs per condition/state/phase/date; "
+    "Listed sites sum counts of distinct normalized facility/city pairs per study/state "
+    "within each segment; duplicates collapse and missing normalized facility names "
+    "contribute no identity. City nulls coalesce to empty text in the identity. "
+    "HHI = sum((distinct study count per normalized lead sponsor / sum of "
+    "sponsor study counts in the segment)^2); top share is the maximum share. "
+    "Bands use percent_rank of recruiting trial count across all segments "
+    "within profile and snapshot: low <0.5, moderate <0.8, elevated otherwise. "
+    + (
+        "New recruiting (90d) sums daily distinct entrants over the inclusive 90-day range; "
+        if growth_window_covered
+        else (
+            "New recruiting sums daily distinct entrants over an inclusive 90-day window "
+            f"(requires 90 days of observed history, currently "
+            f"{observed_history_days} days observed); "
+        )
+    )
+    + "entrant requires previous captured status non-null and not RECRUITING; "
+    "it is null until observed history covers 90 days (earliest in-window snapshot "
+    "within seven days of the boundary and entrant predecessors inside the window) "
+    "and the latest snapshot gap "
+    "does not itself span the window (a transition across a longer gap has unobserved "
+    "timing inside it), so null means "
+    f"not enough history, never zero. Observed history here: {observed_history_days} days. "
+    "Newly registered (first posted) counts recruiting studies whose registry "
+    "first-post date is within 90 days of the snapshot — registrations, not transitions. "
+    "Counts may repeat across segments. This panel audits count inputs; "
+    "derived values remain warehouse calculations."
+)
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric(
+        "Segments",
+        len(filtered),
+        help=(
+            "Number of distinct condition × state × phase segments matching current "
+            "sidebar filters."
+        ),
+    )
+    render_provenance_drawer(
+        profile_id,
+        metric="latest_study",
+        filters=filtered.attrs.get("audit_filters", {}),
+        segments=filtered,
+        context={
+            "displayed_measure": (
+                "Segments: count of distinct condition × state × phase segments "
+                "matching current sidebar filters."
+            ),
+            "derived_rules": derived_rules_text,
+        },
+        key="competition_segments",
+        label="How this number is computed: Segments",
+    )
+with col2:
+    st.metric(
+        "Elevated-signal segments",
+        int((filtered["competition_signal_band"] == "elevated").sum()),
+        help=(
+            "Segments falling in the top percentile band for trial counts or sponsor concentration."
+        ),
+    )
+    elevated_segments = (
+        filtered[filtered["competition_signal_band"] == "elevated"]
+        if not filtered.empty and "competition_signal_band" in filtered.columns
+        else filtered
+    )
+    render_provenance_drawer(
+        profile_id,
+        metric="latest_study",
+        filters=filtered.attrs.get("audit_filters", {}),
+        segments=elevated_segments,
+        context={
+            "displayed_measure": (
+                "Elevated-signal segments: segments in the top percentile band for "
+                "recruiting trial counts or sponsor concentration (HHI)."
+            ),
+            "derived_rules": derived_rules_text,
+        },
+        key="competition_elevated",
+        label="How this number is computed: Elevated-signal segments",
+    )
+with col3:
+    st.metric(
+        "Recruiting trials (summed segments)",
+        int(filtered["recruiting_trial_count"].sum()),
+        help=(
+            "Sum of distinct recruiting study counts per segment. "
+            "A study in multiple segments is counted in each."
+        ),
+    )
+    render_provenance_drawer(
+        profile_id,
+        filters=filtered.attrs.get("audit_filters", {}),
+        segments=filtered,
+        context={"derived_rules": derived_rules_text},
+        key="competition",
+        label="How this number is computed: Recruiting trials",
+    )
+proxy_caption()
 
 st.subheader("Recruiting trial count vs sponsor concentration")
 hhi_chart_data = filtered[filtered["sponsor_hhi"].notna()]
@@ -164,46 +246,6 @@ st.dataframe(
         ),
         "competition_signal_band": st.column_config.TextColumn("Signal Band"),
     },
-)
-
-render_metric_audit(
-    profile_id,
-    filters=filtered.attrs.get("audit_filters", {}),
-    segments=filtered,
-    context={
-        "derived_rules": (
-            "Counts: distinct confirmed RECRUITING NCT IDs per condition/state/phase/date; "
-            "Listed sites sum counts of distinct normalized facility/city pairs per study/state "
-            "within each segment; duplicates collapse and missing normalized facility names "
-            "contribute no identity. City nulls coalesce to empty text in the identity. "
-            "HHI = sum((distinct study count per normalized lead sponsor / sum of "
-            "sponsor study counts in the segment)^2); top share is the maximum share. "
-            "Bands use percent_rank of recruiting trial count across all segments "
-            "within profile and snapshot: low <0.5, moderate <0.8, elevated otherwise. "
-            + (
-                "New recruiting (90d) sums daily distinct entrants over "
-                "the inclusive 90-day range; "
-                if growth_window_covered
-                else (
-                    "New recruiting sums daily distinct entrants over an inclusive 90-day window "
-                    f"(requires 90 days of observed history, currently "
-                    f"{observed_history_days} days observed); "
-                )
-            )
-            + "entrant requires previous captured status non-null and not RECRUITING; "
-            "it is null until observed history covers 90 days (earliest in-window snapshot "
-            "within seven days of the boundary and entrant predecessors inside the window) "
-            "and the latest snapshot gap "
-            "does not itself span the window (a transition across a longer gap has unobserved "
-            "timing inside it), so null means "
-            f"not enough history, never zero. Observed history here: {observed_history_days} days. "
-            "Newly registered (first posted) counts recruiting studies whose registry "
-            "first-post date is within 90 days of the snapshot — registrations, not transitions. "
-            "Counts may repeat across segments. This panel audits count inputs; "
-            "derived values remain warehouse calculations."
-        )
-    },
-    key="competition",
 )
 
 guarded_footer()

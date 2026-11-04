@@ -13,7 +13,7 @@ import streamlit as st
 import yaml
 
 from components import data
-from components.audit import DISCLAIMER, compute_audit, export_audit
+from components.audit import DEFINITIONS, DISCLAIMER, compute_audit, export_audit
 from components.formatting import format_phase
 from src.utils.paths import project_root
 
@@ -137,16 +137,30 @@ def render_metric_audit(
     states: Sequence[str] | None = None,
     context: dict[str, Any] | None = None,
     key: str = "metric",
-    label: str = "Data coverage and caveats",
+    label: str = "How this number is computed",
+    as_popover: bool = True,
+    count_status: str | None = None,
+    show_table: bool | None = None,
 ) -> None:
-    """Audit whole filtered scope or a displayed row, with explicit status/period."""
-    with st.expander(label):
+    """Reusable provenance popover/drawer for displayed registry metrics."""
+    help_text = (
+        "Inspect definition, filters, snapshot provenance, "
+        "rule hashes, contributing NCT IDs, and export JSON"
+    )
+    container = st.popover(label, help=help_text) if as_popover else st.expander(label)
+    with container:
         st.caption(
             "Every count, chart and derived signal above can be inspected here. "
             "Choose a row to inspect its inputs; summary counts use distinct NCT IDs "
             "and must not be summed across overlapping segments."
         )
         st.markdown(DISCLAIMER)
+        defn = DEFINITIONS.get(metric, "Computed from registry snapshot observations.")
+        st.markdown(f"**Definition:** {defn}")
+        if (context or {}).get("displayed_measure"):
+            st.caption(str((context or {})["displayed_measure"]))
+        if (context or {}).get("derived_rules"):
+            st.caption(f"**Derived rules:** {(context or {})['derived_rules']}")
         selected_filters = dict(filters or {})
         display_context = dict(context or {})
         display_context["sidebar_filters"] = dict(filters or {})
@@ -202,14 +216,17 @@ def render_metric_audit(
             selected_filters["states"] = st.multiselect(
                 "Audit state", sorted(set(states)), key=f"{key}_{profile_id}_state"
             )
-        status = st.radio(
-            "Audit count status",
-            ["recruiting", "all"],
-            format_func=lambda value: (
-                "Confirmed RECRUITING" if value == "recruiting" else "All statuses"
-            ),
-            key=f"{key}_{profile_id}_status",
-        )
+        if count_status is not None:
+            status = count_status
+        else:
+            status = st.radio(
+                "Audit count status",
+                ["recruiting", "all"],
+                format_func=lambda value: (
+                    "Confirmed RECRUITING" if value == "recruiting" else "All statuses"
+                ),
+                key=f"{key}_{profile_id}_status",
+            )
         threshold = st.number_input(
             "Project-defined posted-update review warning (days)",
             min_value=0,
@@ -359,145 +376,167 @@ def render_metric_audit(
             "by estimated/actual/missing/type and never summed across repeated observations. "
             "Raw references may no longer resolve after bronze retention pruning."
         )
-        studies = result["studies"].copy()
-        studies["registry_record"] = studies.nct_id.map(
-            lambda nct: f"https://clinicaltrials.gov/study/{nct}"
-        )
-        studies["phase_normalized"] = studies["phase_normalized"].map(format_phase)
-        for column in ["study_type", "overall_status", "exclusion_reason"]:
-            studies[column] = (
-                studies[column].astype("string").str.replace("_", " ").str.capitalize()
+        ids = result["contributors"]
+        st.write({"contributing_nct_ids": ids})
+        if ids:
+            st.caption(f"Contributing trials ({len(ids)}):")
+            st.markdown(
+                " ".join(f"[{nct}](https://clinicaltrials.gov/study/{nct})" for nct in ids[:25])
+                + (" …" if len(ids) > 25 else "")
             )
-        studies["exclusion_reason"] = studies["exclusion_reason"].fillna("Included")
-        st.subheader("Study decisions and contributing NCT IDs")
-        study_display_columns = [
-            "brief_title",
-            "study_type",
-            "phase_normalized",
-            "overall_status",
-            "included_flag",
-            "exclusion_reason",
-            "snapshot_date",
-            "nct_id",
-            "registry_record",
-            "snapshot_id",
-        ]
-        st.dataframe(
-            studies[study_display_columns],
-            hide_index=True,
-            width="content",
-            column_config={
-                "brief_title": st.column_config.TextColumn("Trial", width="large"),
-                "study_type": st.column_config.TextColumn("Study type"),
-                "phase_normalized": st.column_config.TextColumn("Phase"),
-                "overall_status": st.column_config.TextColumn("Status"),
-                "included_flag": st.column_config.CheckboxColumn("Contributes"),
-                "exclusion_reason": st.column_config.TextColumn("Decision detail"),
-                "snapshot_date": st.column_config.DateColumn("Captured on", format="MMM D, YYYY"),
-                "snapshot_id": st.column_config.TextColumn("Capture run ID"),
-                "nct_id": st.column_config.TextColumn("NCT ID"),
-                "registry_record": st.column_config.LinkColumn(
-                    "Registry",
-                    display_text="Open",
-                    help="Opens the public ClinicalTrials.gov record",
+        display_tables = show_table
+        if display_tables is None:
+            display_tables = st.checkbox(
+                "Show study decisions and audit tables",
+                value=not as_popover,
+                key=f"{key}_{profile_id}_show_tables",
+                help=(
+                    "Inspect individual study decisions, exclusion reasons, "
+                    "event evidence, and recorded locations."
                 ),
-            },
-        )
-        if metric in {"recent_recruiting", "first_post_registered"}:
-            st.subheader("Metric-specific contributing events and source evidence")
-            events = result["events"].copy()
-            events["phase_normalized"] = events["phase_normalized"].map(format_phase)
-            event_columns = [
+            )
+        if display_tables:
+            studies = result["studies"].copy()
+            studies["registry_record"] = studies.nct_id.map(
+                lambda nct: f"https://clinicaltrials.gov/study/{nct}"
+            )
+            studies["phase_normalized"] = studies["phase_normalized"].map(format_phase)
+            for column in ["study_type", "overall_status", "exclusion_reason"]:
+                studies[column] = (
+                    studies[column].astype("string").str.replace("_", " ").str.capitalize()
+                )
+            studies["exclusion_reason"] = studies["exclusion_reason"].fillna("Included")
+            st.subheader("Study decisions and contributing NCT IDs")
+            study_display_columns = [
                 "brief_title",
-                "event_date",
+                "study_type",
                 "phase_normalized",
                 "overall_status",
-                *(
-                    ["previous_status", "predecessor_snapshot_date"]
-                    if metric == "recent_recruiting"
-                    else []
-                ),
+                "included_flag",
+                "exclusion_reason",
                 "snapshot_date",
                 "nct_id",
+                "registry_record",
                 "snapshot_id",
             ]
-            for column in ["overall_status", "previous_status"]:
-                if column in events:
-                    events[column] = (
-                        events[column].astype("string").str.replace("_", " ").str.capitalize()
-                    )
             st.dataframe(
-                events[[column for column in event_columns if column in events]],
+                studies[study_display_columns],
                 hide_index=True,
                 width="content",
                 column_config={
                     "brief_title": st.column_config.TextColumn("Trial", width="large"),
+                    "study_type": st.column_config.TextColumn("Study type"),
                     "phase_normalized": st.column_config.TextColumn("Phase"),
-                    "overall_status": st.column_config.TextColumn("Current status"),
-                    "previous_status": st.column_config.TextColumn("Previous status"),
-                    "event_date": st.column_config.DateColumn(
-                        "Recruiting entry date"
-                        if metric == "recent_recruiting"
-                        else "First posted (registered)",
-                        format="MMM D, YYYY",
-                    ),
-                    "predecessor_snapshot_date": st.column_config.DateColumn(
-                        "Previous capture", format="MMM D, YYYY"
-                    ),
+                    "overall_status": st.column_config.TextColumn("Status"),
+                    "included_flag": st.column_config.CheckboxColumn("Contributes"),
+                    "exclusion_reason": st.column_config.TextColumn("Decision detail"),
                     "snapshot_date": st.column_config.DateColumn(
                         "Captured on", format="MMM D, YYYY"
                     ),
-                    "nct_id": st.column_config.TextColumn("NCT ID"),
                     "snapshot_id": st.column_config.TextColumn("Capture run ID"),
+                    "nct_id": st.column_config.TextColumn("NCT ID"),
+                    "registry_record": st.column_config.LinkColumn(
+                        "Registry",
+                        display_text="Open",
+                        help="Opens the public ClinicalTrials.gov record",
+                    ),
                 },
             )
-        ids = result["contributors"]
-        st.write({"contributing_nct_ids": ids})
-        drill_ids = sorted(studies.nct_id.unique().tolist())
-        if drill_ids:
-            nct = st.selectbox(
-                "Recorded locations for study", drill_ids, key=f"{key}_{profile_id}_nct"
-            )
-            locations = result["locations"].loc[result["locations"].nct_id == nct].copy()
-            for column in ["location_status", "geography_category"]:
-                locations[column] = (
-                    locations[column].astype("string").str.replace("_", " ").str.capitalize()
+            if metric in {"recent_recruiting", "first_post_registered"}:
+                st.subheader("Metric-specific contributing events and source evidence")
+                events = result["events"].copy()
+                events["phase_normalized"] = events["phase_normalized"].map(format_phase)
+                event_columns = [
+                    "brief_title",
+                    "event_date",
+                    "phase_normalized",
+                    "overall_status",
+                    *(
+                        ["previous_status", "predecessor_snapshot_date"]
+                        if metric == "recent_recruiting"
+                        else []
+                    ),
+                    "snapshot_date",
+                    "nct_id",
+                    "snapshot_id",
+                ]
+                for column in ["overall_status", "previous_status"]:
+                    if column in events:
+                        events[column] = (
+                            events[column].astype("string").str.replace("_", " ").str.capitalize()
+                        )
+                st.dataframe(
+                    events[[column for column in event_columns if column in events]],
+                    hide_index=True,
+                    width="content",
+                    column_config={
+                        "brief_title": st.column_config.TextColumn("Trial", width="large"),
+                        "phase_normalized": st.column_config.TextColumn("Phase"),
+                        "overall_status": st.column_config.TextColumn("Current status"),
+                        "previous_status": st.column_config.TextColumn("Previous status"),
+                        "event_date": st.column_config.DateColumn(
+                            "Recruiting entry date"
+                            if metric == "recent_recruiting"
+                            else "First posted (registered)",
+                            format="MMM D, YYYY",
+                        ),
+                        "predecessor_snapshot_date": st.column_config.DateColumn(
+                            "Previous capture", format="MMM D, YYYY"
+                        ),
+                        "snapshot_date": st.column_config.DateColumn(
+                            "Captured on", format="MMM D, YYYY"
+                        ),
+                        "nct_id": st.column_config.TextColumn("NCT ID"),
+                        "snapshot_id": st.column_config.TextColumn("Capture run ID"),
+                    },
                 )
-            location_columns = [
-                "facility_name",
-                "city",
-                "state_raw",
-                "country",
-                "zip_code",
-                "location_status",
-                "geography_category",
-                "usable_geography_flag",
-                "location_ordinal",
-                "nct_id",
-                "snapshot_id",
-            ]
-            st.dataframe(
-                locations[location_columns],
-                hide_index=True,
-                width="content",
-                column_config={
-                    "facility_name": st.column_config.TextColumn(
-                        "Recorded facility", width="large"
-                    ),
-                    "city": st.column_config.TextColumn("City"),
-                    "state_raw": st.column_config.TextColumn("Recorded state"),
-                    "country": st.column_config.TextColumn("Country"),
-                    "zip_code": st.column_config.TextColumn("Postal code"),
-                    "location_status": st.column_config.TextColumn("Location status"),
-                    "geography_category": st.column_config.TextColumn("Geography assessment"),
-                    "usable_geography_flag": st.column_config.CheckboxColumn(
-                        "Usable U.S. geography"
-                    ),
-                    "location_ordinal": st.column_config.NumberColumn("Recorded row", format="%d"),
-                    "nct_id": st.column_config.TextColumn("NCT ID"),
-                    "snapshot_id": st.column_config.TextColumn("Capture run ID"),
-                },
-            )
+            drill_ids = sorted(studies.nct_id.unique().tolist())
+            if drill_ids:
+                nct = st.selectbox(
+                    "Recorded locations for study", drill_ids, key=f"{key}_{profile_id}_nct"
+                )
+                locations = result["locations"].loc[result["locations"].nct_id == nct].copy()
+                for column in ["location_status", "geography_category"]:
+                    locations[column] = (
+                        locations[column].astype("string").str.replace("_", " ").str.capitalize()
+                    )
+                location_columns = [
+                    "facility_name",
+                    "city",
+                    "state_raw",
+                    "country",
+                    "zip_code",
+                    "location_status",
+                    "geography_category",
+                    "usable_geography_flag",
+                    "location_ordinal",
+                    "nct_id",
+                    "snapshot_id",
+                ]
+                st.dataframe(
+                    locations[location_columns],
+                    hide_index=True,
+                    width="content",
+                    column_config={
+                        "facility_name": st.column_config.TextColumn(
+                            "Recorded facility", width="large"
+                        ),
+                        "city": st.column_config.TextColumn("City"),
+                        "state_raw": st.column_config.TextColumn("Recorded state"),
+                        "country": st.column_config.TextColumn("Country"),
+                        "zip_code": st.column_config.TextColumn("Postal code"),
+                        "location_status": st.column_config.TextColumn("Location status"),
+                        "geography_category": st.column_config.TextColumn("Geography assessment"),
+                        "usable_geography_flag": st.column_config.CheckboxColumn(
+                            "Usable U.S. geography"
+                        ),
+                        "location_ordinal": st.column_config.NumberColumn(
+                            "Recorded row", format="%d"
+                        ),
+                        "nct_id": st.column_config.TextColumn("NCT ID"),
+                        "snapshot_id": st.column_config.TextColumn("Capture run ID"),
+                    },
+                )
         if not ids:
             st.info(
                 "No studies contribute under the selected rules. Inspect "
@@ -510,3 +549,6 @@ def render_metric_audit(
             mime="application/json",
             key=f"{key}_{profile_id}_export",
         )
+
+
+render_provenance_drawer = render_metric_audit

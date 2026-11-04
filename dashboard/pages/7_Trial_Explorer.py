@@ -4,6 +4,7 @@ from typing import Any
 
 import streamlit as st
 from components import data
+from components.audit_panel import render_provenance_drawer
 from components.formatting import format_phase
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import registry_link_guidance, render_indication_banner, render_page_guide
@@ -19,19 +20,37 @@ render_page_guide("trial_explorer", profile_id)
 trials = data.trial_explorer(profile_id)
 
 col1, col2 = st.columns(3)[:2]
-col1.metric(
-    "Trials in this profile",
-    f"{len(trials):,}",
-    help=(
-        "Total individual clinical study records stored in the analytics "
-        "warehouse for this profile."
-    ),
-)
-col2.metric(
-    "Currently recruiting",
-    f"{int((trials['overall_status'] == 'RECRUITING').sum()):,}",
-    help="Studies marked with overall status RECRUITING in the latest snapshot.",
-)
+with col1:
+    st.metric(
+        "Trials in this profile",
+        f"{len(trials):,}",
+        help=(
+            "Total individual clinical study records stored in the analytics "
+            "warehouse for this profile."
+        ),
+    )
+    render_provenance_drawer(
+        profile_id,
+        metric="latest_study",
+        count_status="all",
+        key="explorer_trials",
+        label="How this number is computed: Trials in this profile",
+        context={"scope": "Total individual clinical study records stored for this profile."},
+    )
+with col2:
+    st.metric(
+        "Currently recruiting",
+        f"{int((trials['overall_status'] == 'RECRUITING').sum()):,}",
+        help="Studies marked with overall status RECRUITING in the latest snapshot.",
+    )
+    render_provenance_drawer(
+        profile_id,
+        metric="latest_study",
+        count_status="recruiting",
+        key="explorer_recruiting",
+        label="How this number is computed: Currently recruiting",
+        context={"scope": "Studies marked RECRUITING in latest snapshot."},
+    )
 
 statuses = sorted(trials["overall_status"].dropna().unique())
 phases = sorted(trials["phase"].dropna().unique())

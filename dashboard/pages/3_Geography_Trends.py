@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from components import data
-from components.audit_panel import render_metric_audit
+from components.audit_panel import render_provenance_drawer
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import format_condition_group, render_page_guide
 from components.profile import render_profile_selector
@@ -29,7 +29,7 @@ if not population_ready:
 condition_options = sorted(trends["condition_group"].dropna().unique())
 if not condition_options:
     st.info("No condition group records available for this profile.")
-    render_metric_audit(profile_id, metric="latest_study", key="geography")
+    render_provenance_drawer(profile_id, metric="latest_study", key="geography")
     guarded_footer()
     st.stop()
 
@@ -44,6 +44,66 @@ scoped = trends[trends["condition_group"] == condition]
 
 latest_month = scoped["activity_month"].max()
 latest = scoped[scoped["activity_month"] == latest_month]
+
+geography_context = {
+    "growth_window": (
+        "Monthly counts are distinct NCT IDs across daily observations per "
+        "profile/condition/state/month; recruiting requires RECRUITING on an "
+        "observation. Sponsor count is distinct normalized lead sponsors. "
+        "Newly registered (first posted) requires first-post month equal to "
+        "snapshot month: registrations, not transitions. "
+        "Growth = (current monthly recruiting count - earliest recruiting count "
+        "in the inclusive preceding three-calendar-month range)/earliest count; "
+        "null with zero baseline or until the window's earliest observed month "
+        "sits at least three months back, the baseline snapshot sits at least 3 "
+        "calendar months back, and observed history spans at least 90 days — "
+        "'not enough history', never zero. State sums may repeat studies. "
+        "This panel audits window counts; deltas remain warehouse calculations."
+    ),
+    "population_normalization": (
+        "Per-100k rates divide recruiting trial listings by U.S. Census resident "
+        "population estimates (Vintage 2024, July 1, 2024 estimates from "
+        "NST-EST2024-ALLDATA.csv SUMLEV 040) multiplied by 100,000. States or "
+        "territories without Vintage 2024 population estimates have null rates. "
+        "Neither raw counts nor population-normalized rates measure patient access "
+        "or clinical need."
+        if population_ready
+        else "Population-adjusted rates are unavailable in this retained warehouse. "
+        "The page shows raw counts until a rebuild adds the population denominators."
+    ),
+}
+
+col1, col2 = st.columns(2)
+with col1:
+    st.metric(
+        "States with listings",
+        int((latest["recruiting_trial_count"] > 0).sum()) if not latest.empty else 0,
+        help="States and territories with at least one actively recruiting study listed.",
+    )
+    render_provenance_drawer(
+        profile_id,
+        metric="latest_study",
+        filters={"conditions": [condition] if condition else []},
+        key="geo_states",
+        label="How this number is computed: States with listings",
+        context={"displayed_measure": "States and territories with active recruiting listings."},
+    )
+with col2:
+    st.metric(
+        "Recruiting trials in condition",
+        int(latest["recruiting_trial_count"].sum()) if not latest.empty else 0,
+        help="Total actively recruiting study listings in the selected condition.",
+    )
+    render_provenance_drawer(
+        profile_id,
+        filters={"conditions": [condition] if condition else []},
+        metric="history",
+        months=scoped["activity_month"],
+        states=scoped["state_normalized"].tolist(),
+        context=geography_context,
+        key="geography",
+        label="How this number is computed: Recruiting trials in condition",
+    )
 
 view_mode = st.radio(
     "Listing metric",
@@ -203,41 +263,5 @@ else:
         f"accrued {months} snapshot month so far. Re-run `make pipeline` "
         "over time to build the series."
     )
-
-render_metric_audit(
-    profile_id,
-    filters={"conditions": [condition] if condition else []},
-    metric="history",
-    months=scoped["activity_month"],
-    states=scoped["state_normalized"].tolist(),
-    context={
-        "growth_window": (
-            "Monthly counts are distinct NCT IDs across daily observations per "
-            "profile/condition/state/month; recruiting requires RECRUITING on an "
-            "observation. Sponsor count is distinct normalized lead sponsors. "
-            "Newly registered (first posted) requires first-post month equal to "
-            "snapshot month: registrations, not transitions. "
-            "Growth = (current monthly recruiting count - earliest recruiting count "
-            "in the inclusive preceding three-calendar-month range)/earliest count; "
-            "null with zero baseline or until the window's earliest observed month "
-            "sits at least three months back, the baseline snapshot sits at least 3 "
-            "calendar months back, and observed history spans at least 90 days — "
-            "'not enough history', never zero. State sums may repeat studies. "
-            "This panel audits window counts; deltas remain warehouse calculations."
-        ),
-        "population_normalization": (
-            "Per-100k rates divide recruiting trial listings by U.S. Census resident "
-            "population estimates (Vintage 2024, July 1, 2024 estimates from "
-            "NST-EST2024-ALLDATA.csv SUMLEV 040) multiplied by 100,000. States or "
-            "territories without Vintage 2024 population estimates have null rates. "
-            "Neither raw counts nor population-normalized rates measure patient access "
-            "or clinical need."
-            if population_ready
-            else "Population-adjusted rates are unavailable in this retained warehouse. "
-            "The page shows raw counts until a rebuild adds the population denominators."
-        ),
-    },
-    key="geography",
-)
 
 guarded_footer()

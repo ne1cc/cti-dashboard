@@ -3,7 +3,7 @@
 import plotly.express as px
 import streamlit as st
 from components import data
-from components.audit_panel import render_metric_audit
+from components.audit_panel import render_provenance_drawer
 from components.formatting import format_phase
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import render_page_guide
@@ -29,19 +29,61 @@ if only_repeated:
     filtered = filtered[filtered["repeated_site_participation_flag"]]
 
 col1, col2 = st.columns(2)
-col1.metric(
-    "Facilities shown",
-    f"{len(filtered):,}",
-    help="Number of clinical facilities matching current state and overlap filters.",
-)
-col2.metric(
-    "Multi-trial facilities (all states)",
-    f"{int(overlap['repeated_site_participation_flag'].sum()):,}",
-    help=(
-        "Total facilities across the U.S. listed as active study sites "
-        "for 2 or more recruiting trials."
-    ),
-)
+with col1:
+    st.metric(
+        "Facilities shown",
+        f"{len(filtered):,}",
+        help="Number of clinical facilities matching current state and overlap filters.",
+    )
+    render_provenance_drawer(
+        profile_id,
+        filters={"states": selected_states},
+        metric="facility",
+        facilities=filtered[["facility_normalized", "city_normalized", "state_normalized"]]
+        .where(filtered.notna(), None)
+        .values.tolist(),
+        context={
+            "only_multi_trial_facilities": only_repeated,
+            "identity": (
+                "Normalized name + city + state; counts distinct NCT IDs at the facility/date. "
+                "Multi-trial requires >1 confirmed recruiting NCT ID within the profile. "
+                "Sponsor count and phase mix include all listed studies. "
+                "Shared listings do not measure workload."
+            ),
+        },
+        key="sites",
+        label="How this number is computed: Facilities shown",
+    )
+with col2:
+    st.metric(
+        "Multi-trial facilities (all states)",
+        f"{int(overlap['repeated_site_participation_flag'].sum()):,}",
+        help=(
+            "Total facilities across the U.S. listed as active study sites "
+            "for 2 or more recruiting trials."
+        ),
+    )
+    render_provenance_drawer(
+        profile_id,
+        metric="facility",
+        facilities=overlap.loc[
+            overlap["repeated_site_participation_flag"],
+            ["facility_normalized", "city_normalized", "state_normalized"],
+        ]
+        .where(overlap.notna(), None)
+        .values.tolist(),
+        context={
+            "displayed_measure": (
+                "All-states multi-trial facility card and chart: count "
+                "facility identities with >1 confirmed recruiting NCT ID at "
+                "the latest profile date. Bar chart shows the top 15 states "
+                "from these identities; audit summary counts distinct study "
+                "inputs."
+            )
+        },
+        key="sites_all_states",
+        label="How this number is computed: Multi-trial facilities",
+    )
 
 st.subheader("Facilities by recruiting-trial listings")
 display_facilities = filtered.copy()
@@ -103,46 +145,6 @@ st.caption(
     "Facility identity is best-effort matching of public listing text "
     "(name + city + state). Overlap indicates shared listings only — it "
     "is not a claim about site workload or performance."
-)
-
-render_metric_audit(
-    profile_id,
-    filters={"states": selected_states},
-    metric="facility",
-    facilities=filtered[["facility_normalized", "city_normalized", "state_normalized"]]
-    .where(filtered.notna(), None)
-    .values.tolist(),
-    context={
-        "only_multi_trial_facilities": only_repeated,
-        "identity": (
-            "Normalized name + city + state; counts distinct NCT IDs at the facility/date. "
-            "Multi-trial requires >1 confirmed recruiting NCT ID within the profile. "
-            "Sponsor count and phase mix include all listed studies. "
-            "Shared listings do not measure workload."
-        ),
-    },
-    key="sites",
-)
-
-render_metric_audit(
-    profile_id,
-    metric="facility",
-    facilities=overlap.loc[
-        overlap["repeated_site_participation_flag"],
-        ["facility_normalized", "city_normalized", "state_normalized"],
-    ]
-    .where(overlap.notna(), None)
-    .values.tolist(),
-    context={
-        "displayed_measure": (
-            "All-states multi-trial facility card and chart: count "
-            "facility identities with >1 confirmed recruiting NCT ID at "
-            "the latest profile date. Bar chart shows the top 15 states "
-            "from these identities; audit summary counts distinct study "
-            "inputs."
-        )
-    },
-    key="sites_all_states",
 )
 
 guarded_footer()

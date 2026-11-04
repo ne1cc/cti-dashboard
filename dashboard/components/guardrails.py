@@ -27,7 +27,6 @@ def page_setup(title: str, icon: str = ":material/monitor_heart:") -> None:
     st.set_page_config(page_title=title, page_icon=icon, layout="wide")
     apply_table_scroll_fix()
     st.title(title)
-    st.info(DISCLAIMER, icon=":material/policy:")
 
 
 def proxy_caption() -> None:
@@ -37,6 +36,7 @@ def proxy_caption() -> None:
 def guarded_footer() -> None:
     st.divider()
     st.caption(
+        f"**Planning signal only:** {DISCLAIMER} "
         "Source: ClinicalTrials.gov API v2 (public registry). "
         "Facility identity is best-effort text matching. "
         "See the Data Reliability page for run-level confidence."

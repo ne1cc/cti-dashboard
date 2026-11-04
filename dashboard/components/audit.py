@@ -30,6 +30,26 @@ DEFINITIONS = {
     "facility": "Distinct NCT IDs with usable U.S. state and normalized facility name; facility "
     "identity matches normalized name, city and state text.",
     "latest_study": "Distinct NCT IDs from each study's current captured observation.",
+    "manifest_reconciled": (
+        "Reconciliation check verifying that raw bronze manifest records match "
+        "normalized silver trial counts in the latest capture run."
+    ),
+    "usable_location_share": (
+        "Proportion of trial sites that resolve to valid 2-letter U.S. postal "
+        "state codes in the latest capture run."
+    ),
+    "low_confidence_condition_share": (
+        "Percentage of studies mapped via fallback or substring rules rather "
+        "than exact taxonomy matches."
+    ),
+    "coordinates_exact_share": (
+        "Trial sites carrying registry geoPoint latitude/longitude (exact "
+        "coordinates) in the latest capture run."
+    ),
+    "coordinates_fallback_eligible_share": (
+        "Trial sites without geoPoint carrying fields usable by offline Census "
+        "Gazetteer fallback (ZIP or city+state)."
+    ),
 }
 OBSERVATION_SOURCES = {
     "recent_recruiting": (
@@ -40,6 +60,11 @@ OBSERVATION_SOURCES = {
     "history": "int_trial_status_history: latest study observation per profile/date",
     "facility": "int_trial_status_history at fct_trial_snapshot latest profile date",
     "latest_study": "int_current_trial_status: latest observation per profile/study",
+    "manifest_reconciled": "fct_ingestion_run at latest successful snapshot",
+    "usable_location_share": "fct_ingestion_run and mart_location_snapshot_audit",
+    "low_confidence_condition_share": "fct_ingestion_run and int_trial_condition_mapping",
+    "coordinates_exact_share": "fct_ingestion_run and mart_location_snapshot_audit",
+    "coordinates_fallback_eligible_share": "fct_ingestion_run and mart_location_snapshot_audit",
 }
 
 
@@ -175,6 +200,37 @@ def compute_audit(
         )
         unresolved_keys = _keys(scoped_locations.loc[unresolved])
     condition_keys = _keys(conditions)
+    exact_keys = (
+        _keys(
+            scoped_locations.loc[
+                scoped_locations.latitude.notna() & scoped_locations.longitude.notna()
+            ]
+        )
+        if not scoped_locations.empty and "latitude" in scoped_locations.columns
+        else set()
+    )
+    fallback_keys = (
+        _keys(
+            scoped_locations.loc[
+                scoped_locations.latitude.isna()
+                & (
+                    scoped_locations.zip_code.notna()
+                    | (scoped_locations.city.notna() & scoped_locations.state_raw.notna())
+                )
+            ]
+        )
+        if not scoped_locations.empty and "zip_code" in scoped_locations.columns
+        else set()
+    )
+    low_conf_keys = (
+        _keys(
+            conditions.loc[
+                conditions.get("mapping_source", pd.Series(dtype="object")) == "text_fallback"
+            ]
+        )
+        if "mapping_source" in conditions.columns
+        else set()
+    )
     decisions = []
     for _, row in frame.iterrows():
         key = tuple(row[col] for col in KEY)
@@ -194,7 +250,19 @@ def compute_audit(
             and key not in condition_keys
         ):
             reason = "missing_condition_mapping"
-        elif metric != "latest_study" or filters.get("states"):
+        elif metric == "coordinates_exact_share" and key not in exact_keys:
+            reason = "missing_exact_coordinates"
+        elif metric == "coordinates_fallback_eligible_share" and key not in fallback_keys:
+            reason = "not_fallback_eligible"
+        elif metric == "low_confidence_condition_share" and key not in low_conf_keys:
+            reason = "exact_taxonomy_match"
+        elif metric not in {
+            "latest_study",
+            "manifest_reconciled",
+            "coordinates_exact_share",
+            "coordinates_fallback_eligible_share",
+            "low_confidence_condition_share",
+        } or filters.get("states"):
             if row.geography_category != "usable":
                 reason = f"{row.geography_category}_geography"
             elif key not in regional_keys:

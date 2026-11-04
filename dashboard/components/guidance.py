@@ -85,7 +85,6 @@ def render_indication_banner(profile_id: str | None = None) -> None:
     diagnostic sub-groups, and data source boundaries.
     """
     display_title = "Clinical Trials"
-    description = "Interventional U.S. clinical trials registered on ClinicalTrials.gov."
 
     if profile_id:
         try:
@@ -95,10 +94,6 @@ def render_indication_banner(profile_id: str | None = None) -> None:
             prof = reg.get(profile_id)
             if prof:
                 display_title = prof.display_name
-                if prof.config and prof.config.scope:
-                    scope_desc = prof.config.scope.get("description")
-                    if scope_desc:
-                        description = scope_desc
         except Exception:
             display_title = profile_id.replace("_", " ").title()
 
@@ -107,18 +102,6 @@ def render_indication_banner(profile_id: str | None = None) -> None:
             f":gray[Active indication profile] &nbsp; **{display_title}** &nbsp; "
             ":blue-badge[Interventional U.S. trials]"
         )
-
-        with st.expander("Indication scope, taxonomy & data boundaries"):
-            st.markdown(
-                f"**Scope & Diagnostic Boundaries ({display_title}):**\n"
-                f"- **Primary Coverage:** {description}\n"
-                "- **Data Source:** Public interventional trial records registered on "
-                "ClinicalTrials.gov with U.S. study sites.\n"
-                "- **Condition Categorization:** Mapped deterministically into diagnostic "
-                "categories via version-controlled taxonomy rules.\n"
-                "- **Boundary Notice:** Listings reflect sponsor-reported public registry "
-                "data; not patient records or validated operational capacity."
-            )
 
 
 # Neutral three-field guidance for each dashboard page
@@ -150,6 +133,7 @@ PAGE_GUIDANCE: dict[str, dict[str, Any]] = {
             "Summarizes trial listings from the latest completed snapshot. Trial counts "
             "and facility listings are grouped by normalized state and condition taxonomy."
         ),
+        "cannot_show": "does not measure patient enrollment or clinical site capacity.",
     },
     "priority_queue": {
         "title": "Registry Segments: Raw Metric Inspection",
@@ -171,6 +155,7 @@ PAGE_GUIDANCE: dict[str, dict[str, Any]] = {
         "how_to_analyze": (
             "Review the underlying values directly and use criteria relevant to the study."
         ),
+        "cannot_show": "does not measure site capacity or provide recruitment forecasts.",
     },
     "competition_landscape": {
         "title": "Competition Landscape: Listing Volume & Sponsor Concentration",
@@ -196,6 +181,7 @@ PAGE_GUIDANCE: dict[str, dict[str, Any]] = {
         "how_to_analyze": (
             "Examines the distribution of trials and sponsor concentration across segments."
         ),
+        "cannot_show": "does not verify investigator exclusivity or patient saturation.",
     },
     "geography_trends": {
         "title": "Geography Trends: Geographic Distribution & Posting Activity",
@@ -219,6 +205,7 @@ PAGE_GUIDANCE: dict[str, dict[str, Any]] = {
         "how_to_analyze": (
             "Analyzes state-level concentrations and historical monthly posting activity."
         ),
+        "cannot_show": "does not measure participant residence, patient access, or clinical need.",
     },
     "site_overlap": {
         "title": "Site Overlap: Multi-Trial Facility Listings",
@@ -237,6 +224,9 @@ PAGE_GUIDANCE: dict[str, dict[str, Any]] = {
         ),
         "what_it_shows": ("Facilities named on multiple actively recruiting protocols."),
         "how_to_analyze": ("Evaluates facility participation across concurrent study protocols."),
+        "cannot_show": (
+            "does not measure institutional workload or clinical coordinator availability."
+        ),
     },
     "sponsor_landscape": {
         "title": "Sponsor Landscape: Lead Sponsor Activity",
@@ -260,6 +250,7 @@ PAGE_GUIDANCE: dict[str, dict[str, Any]] = {
         "how_to_analyze": (
             "Differentiates commercial trial activity from academic and consortium research."
         ),
+        "cannot_show": "does not reflect total R&D expenditure or trial enrollment speed.",
     },
     "data_reliability": {
         "title": "Data Reliability: Ingestion Audit & Data Integrity",
@@ -282,6 +273,9 @@ PAGE_GUIDANCE: dict[str, dict[str, Any]] = {
             "Ingestion run audit trail, data reconciliation status, and pipeline metrics."
         ),
         "how_to_analyze": ("Verifies pipeline ingestion integrity and snapshot validation status."),
+        "cannot_show": (
+            "partial test runs are recorded for transparency but excluded from analytics."
+        ),
     },
     "trial_explorer": {
         "title": "Trial Explorer: Protocol Record Search",
@@ -304,6 +298,7 @@ PAGE_GUIDANCE: dict[str, dict[str, Any]] = {
             "Searchable, filterable registry records for individual clinical trials."
         ),
         "how_to_analyze": ("Transitions from aggregate indicators to specific protocol records."),
+        "cannot_show": "target accrual goals do not represent confirmed enrollment.",
     },
     "trial_similarity": {
         "title": "Trial Similarity: Registry Metadata Comparability",
@@ -324,6 +319,9 @@ PAGE_GUIDANCE: dict[str, dict[str, Any]] = {
         ),
         "what_it_shows": ("Pairwise registry similarity scores across recorded attributes."),
         "how_to_analyze": ("Compares recorded attributes against other trials in the warehouse."),
+        "cannot_show": (
+            "does not evaluate clinical efficacy, biological mechanism, or patient comparability."
+        ),
     },
     "trial_transparency": {
         "title": "Trial Transparency: Early Stops & Results Posting",
@@ -369,12 +367,8 @@ def render_page_guide(page_key: str, profile_id: str) -> None:
     if not guide:
         return
 
-    with st.expander(guide["title"], expanded=False):
-        st.markdown(f"**What This Data Shows:**\n{guide['what']}")
-        st.markdown(f"**How It Is Computed:**\n{guide['why']}")
-        st.markdown(f"**How to Verify & Caveats:**\n{guide['how_to_verify']}")
-        st.caption(
-            "**Guardrail notice:** Signals are computed strictly from public registry listings "
-            "to prioritize human feasibility investigation. They are not automated predictions of "
-            "enrollment velocity, site quality, or clinical efficacy."
-        )
+    shows = guide["what_it_shows"]
+    cannot_show = guide.get(
+        "cannot_show", "does not establish clinical efficacy or operational site capacity."
+    )
+    st.markdown(f"**Scope:** {shows} · *Does not show:* {cannot_show}")
