@@ -143,6 +143,22 @@ def register_patient_routes(app: FastAPI) -> None:
     async def patient_css() -> FileResponse:
         return FileResponse(_ROOT / "static" / "patient.css", media_type="text/css")
 
+    @app.get("/patient.js", include_in_schema=False)
+    async def patient_js() -> FileResponse:
+        return FileResponse(_ROOT / "static" / "patient.js", media_type="application/javascript")
+
+    @app.get("/shortlist", include_in_schema=False)
+    async def patient_shortlist() -> HTMLResponse:
+        freshness = "Data freshness unavailable."
+        warehouse = app.state.container.warehouse
+        if warehouse is not None:
+            try:
+                _, timestamp = warehouse.get_snapshot_metadata()
+                freshness = _freshness({"data-updated": timestamp})
+            except Exception:
+                pass
+        return _page("shortlist.html", freshness=freshness)
+
     @app.get("/", include_in_schema=False)
     async def patient_home() -> HTMLResponse:
         freshness = "Data freshness unavailable."

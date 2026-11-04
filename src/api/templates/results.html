@@ -6,6 +6,16 @@
 {% if error %}<p class="error" role="alert">{{ error }}</p>
 {% elif not items %}<p>No trials found on this page. Try changing your search.</p>
 {% else %}<p>{{ items|length }} trial{{ '' if items|length == 1 else 's' }} on this page</p>
-<ul class="results">{% for item in items %}<li><article><h2><a href="/trials/{{ item.nct_id|urlencode }}">{{ item.brief_title }}</a></h2><p>{{ item.overall_status|replace('_', ' ')|capitalize }} · {{ item.nct_id }}</p></article></li>{% endfor %}</ul>{% endif %}
+<ul class="results">{% for item in items %}<li><article>
+  <h2><a href="/trials/{{ item.nct_id|urlencode }}">{{ item.brief_title }}</a></h2>
+  <p>{{ item.overall_status|replace('_', ' ')|capitalize }} · {{ item.nct_id }}</p>
+  {% if item.nearest_site %}<p class="site-meta">Nearest site: {{ item.nearest_site.facility_name }}{% if item.nearest_site.city %}, {{ item.nearest_site.city }}{% endif %}{% if item.nearest_site.state %}, {{ item.nearest_site.state }}{% endif %}</p>{% endif %}
+  <button type="button" class="shortlist-btn button-secondary"
+    data-nct-id="{{ item.nct_id }}"
+    data-title="{{ item.brief_title }}"
+    data-status="{{ item.overall_status }}"
+    data-site="{% if item.nearest_site %}{{ item.nearest_site.facility_name }}{% if item.nearest_site.city %}, {{ item.nearest_site.city }}{% endif %}{% if item.nearest_site.state %}, {{ item.nearest_site.state }}{% endif %}{% endif %}"
+    data-updated="{{ item.last_update_post_date or '' }}">Save to shortlist</button>
+</article></li>{% endfor %}</ul>{% endif %}
 {% if next_url %}<a class="next" href="{{ next_url }}">Next page</a>{% endif %}
 {% endblock %}

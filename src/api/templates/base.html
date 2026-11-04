@@ -5,11 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Find a clinical trial{% endblock %}</title>
   <link rel="stylesheet" href="/patient.css">
+  <script src="/patient.js" defer></script>
 </head>
 <body>
   <a class="skip" href="#main">Skip to main content</a>
   <header><div class="wrap"><a class="brand" href="/">Clinical Trial Finder</a></div></header>
-  <nav class="wrap" aria-label="Main navigation"><a href="/">Search trials</a></nav>
+  <nav class="wrap" aria-label="Main navigation">
+    <a href="/">Search trials</a>
+    <a href="/shortlist" class="shortlist-nav">Shortlist<span id="shortlist-count" class="count-badge"></span></a>
+  </nav>
   <main id="main" class="wrap" tabindex="-1">{% block content %}{% endblock %}</main>
   <footer><div class="wrap"><p>{{ freshness }}</p><p>This information is not medical advice. Talk with your clinician about any trial.</p></div></footer>
 </body>
