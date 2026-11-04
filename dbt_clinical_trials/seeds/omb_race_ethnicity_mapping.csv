@@ -1,0 +1,21 @@
+source_label_normalized,omb_category,applies_to,mapping_confidence,manually_reviewed,notes
+AMERICAN INDIAN OR ALASKA NATIVE,American Indian or Alaska Native,race,high,true,OMB race category (canonical label)
+ASIAN,Asian,race,high,true,OMB race category (canonical label)
+BLACK OR AFRICAN AMERICAN,Black or African American,race,high,true,OMB race category (canonical label)
+BLACK/AFRICAN AMERICAN,Black or African American,race,high,true,Slash variant seen in customized tables
+BLACK,Black or African American,race,medium,true,Common abbreviated race label
+CAUCASIAN,White,race,medium,true,Common sponsor synonym; terminology is imprecise
+AFRICAN AMERICAN,Black or African American,race,medium,true,Common short form; race wording explicit
+NATIVE HAWAIIAN OR OTHER PACIFIC ISLANDER,Native Hawaiian or Other Pacific Islander,race,high,true,OMB race category (canonical label)
+WHITE,White,race,high,true,OMB race category (canonical label)
+MORE THAN ONE RACE,More than one race,race,high,true,OMB multiple-race wording
+MULTIPLE: AMERICAN INDIAN OR ALASKA NATIVE AND WHITE,More than one race,race,medium,true,Combined-measure label naming race components only; race dimension evident from the label
+HISPANIC OR LATINO,Hispanic or Latino,ethnicity,high,true,OMB ethnicity category (canonical label)
+HISPANIC,Hispanic or Latino,ethnicity,medium,true,Common abbreviated ethnicity label
+HISPANIC/LATINO,Hispanic or Latino,ethnicity,high,true,Slash variant of canonical label
+NON-HISPANIC,Not Hispanic or Latino,ethnicity,medium,true,Common abbreviated ethnicity label
+NOT HISPANIC OR LATINO,Not Hispanic or Latino,ethnicity,high,true,OMB ethnicity category (canonical label)
+UNKNOWN OR NOT REPORTED,Unknown or Not Reported,both,high,true,Dimension-neutral; only mapped when the measure itself is single-dimension (race or ethnicity)
+MISSING OR NOT REPORTED,Unknown or Not Reported,both,medium,true,Variant wording of the OMB unknown/not-reported bucket
+NOT REPORTED,Unknown or Not Reported,both,medium,true,Variant wording of the OMB unknown/not-reported bucket
+MISSING,Unknown or Not Reported,both,medium,true,Variant wording of the OMB unknown/not-reported bucket

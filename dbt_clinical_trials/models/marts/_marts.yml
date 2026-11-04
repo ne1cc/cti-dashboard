@@ -104,13 +104,45 @@ models:
       - name: sex_eligibility_unknown_flag
         data_type: BOOLEAN
         description: True when sex eligibility is unstated, empty, or unknown.
+      - name: has_derived_mesh
+        data_type: BOOLEAN
+        description: >
+          True when the run's MeSH extraction produced at least one usable
+          silver_trial_condition_mesh row for the trial (direct term or
+          ancestor), false when it was extracted but produced none, or null
+          (unknown) when MeSH was never extracted (retained historical runs
+          predating Issue #52).
+      - name: current_intervention_model
+        data_type: VARCHAR
+        description: Registry designInfo.interventionModel (PARALLEL, SINGLE_GROUP, ...); null when unstated.
+      - name: current_masking
+        data_type: VARCHAR
+        description: Registry masking level (NONE, SINGLE, DOUBLE, TRIPLE, QUADRUPLE); null when unstated.
+      - name: has_placebo_arm
+        data_type: BOOLEAN
+        description: >
+          True when any registry arm group declares type PLACEBO_COMPARATOR;
+          null when the trial's current snapshot predates the field (unknown,
+          not asserted false).
+      - name: why_stopped
+        data_type: VARCHAR
+        description: Registry statusModule.whyStopped, verbatim; populated for terminated/withdrawn/suspended trials.
+      - name: brief_summary
+        data_type: VARCHAR
+        description: Registry descriptionModule.briefSummary, stored verbatim (registry-provided text, never generated).
+      - name: primary_outcome_time_frame
+        data_type: VARCHAR
+        description: timeFrame of the first registry primary outcome, verbatim (e.g. "78 weeks"); null when absent.
 
   - name: dim_condition
     description: >
-      Normalized condition per indication profile. Grain: profile x
-      condition_normalized. Counts cover one profile's listings; the key hashes
-      both columns because a per-profile row cannot be addressed by the entity
-      alone.
+      Condition node per indication profile (Issue #52). A node is a taxonomy
+      condition_group (node_id "group:<slug>", the overlay/fallback text
+      mapping) or a registry MeSH browse identity (node_id = mesh id), from
+      each trial's current record in that profile. MeSH nodes include the
+      registry-supplied ancestor closure, so any tree node is selectable with
+      no per-disease configuration. Grain: profile x node_id; counts cover one
+      profile's listings and the key hashes both columns.
     contract:
       enforced: true
     columns:
@@ -121,12 +153,42 @@ models:
         data_type: VARCHAR
         description: Indication profile whose query scope produced this row. Part of the model's grain.
         tests: [not_null]
+      - name: node_id
+        data_type: VARCHAR
+        description: >
+          Namespaced node identity: "group:<slug>" for taxonomy groups, the
+          bare mesh id for MeSH nodes; the two cannot collide.
+        tests: [not_null]
       - name: condition_normalized
         data_type: VARCHAR
+        description: Node label (taxonomy group slug or MeSH term).
       - name: condition_display_name
         data_type: VARCHAR
+        description: >
+          Display exemplar: the profile's lexicographically smallest raw
+          condition text behind the node, or the MeSH term when the node has
+          no text rows.
       - name: condition_group
         data_type: VARCHAR
+        description: Legacy alias of condition_normalized kept for existing consumers.
+      - name: mesh_id
+        data_type: VARCHAR
+        description: MeSH browse id for mesh nodes, null for taxonomy group nodes.
+      - name: is_ancestor
+        data_type: BOOLEAN
+        description: >
+          True when every membership edge of this MeSH node is an
+          ancestor-closure edge (never directly applied in this profile).
+          False for taxonomy group nodes and nodes applied directly at least
+          once.
+      - name: mapping_source
+        data_type: VARCHAR
+        description: >
+          mesh for registry MeSH nodes; yaml_overlay when any condition text
+          behind a group node matched a taxonomy rule; text_fallback otherwise.
+        tests:
+          - accepted_values:
+              values: [mesh, yaml_overlay, text_fallback]
       - name: dementia_relevance_flag
         data_type: BOOLEAN
       - name: mapping_confidence
@@ -337,7 +399,14 @@ models:
         data_type: VARCHAR
 
   - name: bridge_trial_condition
-    description: One row per profile per trial per condition group.
+    description: >
+      One row per profile per trial per condition node (Issue #52 grain): a
+      taxonomy condition_group (node_id "group:<slug>", how every existing
+      group-based view consumes the bridge) or a registry MeSH browse identity
+      (node_id = mesh id). MeSH rows carry the registry's ancestor closure
+      (is_ancestor), so any tree node is selectable; count marts read
+      int_trial_condition_mapping (group-only), and similarity excludes all
+      MeSH rows (mesh_id is null).
     contract:
       enforced: true
     columns:
@@ -351,15 +420,46 @@ models:
           - relationships:
               to: ref('dim_trial')
               field: trial_key
-      - name: condition_group
+      - name: condition_key
         data_type: VARCHAR
-        tests: [not_null]
+        description: Same two inputs as dim_condition.condition_key (node_id x indication_profile_id).
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_condition')
+              field: condition_key
       - name: nct_id
         data_type: VARCHAR
       - name: indication_profile_id
         data_type: VARCHAR
         description: Indication profile whose query scope produced this row. Part of the model's grain.
         tests: [not_null]
+      - name: node_id
+        data_type: VARCHAR
+        description: Namespaced node identity ("group:<slug>" or mesh id); part of the model's grain.
+        tests: [not_null]
+      - name: condition_group
+        data_type: VARCHAR
+        description: >
+          Node label (taxonomy group slug or MeSH term); legacy column name
+          kept for existing consumers, which filter on group slugs that MeSH
+          term labels never collide with.
+        tests: [not_null]
+      - name: mesh_id
+        data_type: VARCHAR
+        description: MeSH browse id for mesh rows, null for taxonomy group rows.
+      - name: is_ancestor
+        data_type: BOOLEAN
+        description: >
+          True for registry ancestor-closure edges (browsing only); false for
+          taxonomy group rows and directly applied MeSH terms.
+        tests: [not_null]
+      - name: mapping_source
+        data_type: VARCHAR
+        description: mesh | yaml_overlay | text_fallback (Issue #52).
+        tests:
+          - accepted_values:
+              values: [mesh, yaml_overlay, text_fallback]
       - name: dementia_relevance_flag
         data_type: BOOLEAN
       - name: mapping_confidence
@@ -483,16 +583,43 @@ models:
         data_type: HUGEINT
       - name: entered_recruiting_count
         data_type: BIGINT
-      - name: newly_posted_90d_proxy
+      - name: observed_history_days
         data_type: BIGINT
+        description: >
+          Days of snapshot history observed as of this snapshot: the span from
+          the profile's earliest retained snapshot up to this row's own date.
+          Carried beside every windowed figure so "not enough history" is
+          quantifiable; 0 on a first snapshot.
+      - name: newly_registered_90d
+        data_type: BIGINT
+        description: >
+          Recruiting listings whose registry study_first_post_date falls
+          within 90 days of the snapshot (inclusive lower bound, no upper
+          bound). A registration count computed from registry dates, not a
+          recruiting transition; it needs no snapshot history.
       - name: new_recruiting_30d
         data_type: HUGEINT
+        description: >
+          Sum of entered_recruiting transitions observed at snapshots inside
+          the trailing 30-day window; null unless observed_history_days >= 30
+          and the latest gap between snapshots is at most 30 days. Null means
+          not enough history, not zero transitions.
       - name: new_recruiting_90d
         data_type: HUGEINT
+        description: >
+          Sum of entered_recruiting transitions observed at snapshots inside
+          the trailing 90-day window; null unless observed_history_days >= 90
+          and the latest gap between snapshots is at most 90 days. Null means
+          not enough history, not zero transitions.
       - name: recruiting_count_90d_baseline
         data_type: BIGINT
+        description: Earliest recruiting count among snapshots inside the trailing 90-day window.
       - name: recruiting_growth_90d
         data_type: DOUBLE
+        description: >
+          (recruiting count − 90d baseline) / baseline; null unless the 90-day
+          window is covered (same guards as new_recruiting_90d, which
+          guarantees the baseline is an earlier snapshot) or the baseline is 0.
       - name: sponsor_count
         data_type: BIGINT
       - name: top_sponsor_share
@@ -565,16 +692,44 @@ models:
         data_type: BIGINT
       - name: recruiting_trial_count
         data_type: BIGINT
-      - name: newly_posted_in_month_proxy
+      - name: newly_registered_in_month
         data_type: BIGINT
+        description: >
+          Trials whose registry study_first_post_date falls in the snapshot
+          month. A registration count, not a recruiting transition.
       - name: sponsor_count
         data_type: BIGINT
       - name: recruiting_trial_count_3m_avg
         data_type: DOUBLE
       - name: recruiting_count_3m_baseline
         data_type: BIGINT
+      - name: observed_history_days
+        data_type: BIGINT
+        description: >
+          Days of snapshot history observed as of this month row (earliest
+          snapshot through the latest snapshot in or before the month);
+          travels with recruiting_growth_3m so "not enough history" is
+          quantifiable.
       - name: recruiting_growth_3m
         data_type: DOUBLE
+        description: >
+          (current monthly recruiting count − earliest count in the trailing
+          3-calendar-month window) / baseline; null unless the window's
+          earliest observed month is at least 3 months back, so the figure
+          never labels a shorter history as 3-month growth. Null means not
+          enough history, not zero change.
+      - name: population
+        data_type: BIGINT
+        description: Resident population estimate from U.S. Census Bureau (Vintage 2024, July 1, 2024). Null for unmatched territories.
+      - name: population_source
+        data_type: VARCHAR
+        description: Denominator source agency (U.S. Census Bureau). Null when population is missing.
+      - name: population_vintage
+        data_type: VARCHAR
+        description: Denominator vintage release (Vintage 2024). Null when population is missing.
+      - name: recruiting_trials_per_100k
+        data_type: DOUBLE
+        description: Monthly recruiting trial listings per 100,000 state residents. Null when population is missing or nonpositive.
 
   - name: mart_data_reliability
     description: >
@@ -711,19 +866,27 @@ models:
         description: Count of attributable clinical trial facility listings in this state for this segment.
       - name: new_recruiting_90d
         data_type: HUGEINT
-        description: Count of trials newly transitioning into recruiting status within the last 90 days.
-      - name: newly_posted_90d_proxy
+        description: >
+          Count of trials observed transitioning into recruiting status within
+          the last 90 days; null unless the profile's retained snapshots cover
+          the 90-day window (see mart_recruiting_competition). Null means not
+          enough history, not zero transitions.
+      - name: newly_registered_90d
         data_type: BIGINT
-        description: Count of trials first posted on the registry within the last 90 days (fallback proxy).
+        description: >
+          Count of trials first posted on the registry within the last 90
+          days. A registration count, not a recruiting transition; computed
+          from registry dates, so it needs no snapshot history.
       - name: has_multi_snapshot_history
         data_type: BOOLEAN
         description: Flag indicating whether multi-snapshot history has accrued for this profile.
-      - name: recent_growth_input
-        data_type: HUGEINT
-        description: 90-day count of newly recruiting trials, or first-posted count when growth_uses_registry_proxy_flag.
-      - name: growth_uses_registry_proxy_flag
-        data_type: BOOLEAN
-        description: Flag indicating whether recent growth uses the first-posted registry date proxy.
+      - name: observed_history_days
+        data_type: BIGINT
+        description: >
+          Days of snapshot history observed as of this queue snapshot
+          (earliest retained snapshot through the latest). Recruiting-growth
+          figures are unknown below 90; this column quantifies "not enough
+          history" instead of a bare null.
       - name: sponsor_count
         data_type: BIGINT
         description: Count of distinct lead sponsors in the segment.
@@ -748,9 +911,9 @@ models:
       - name: record_quality_ok_share
         data_type: DOUBLE
         description: Share of trials in this segment meeting baseline record quality criteria.
-      - name: data_confidence_share
+      - name: operational_completeness_share
         data_type: DOUBLE
-        description: Operational data completeness share (retained pending Issue #78).
+        description: Operational data completeness share (0.5 segment record-quality-ok share + 0.5 latest successful-run usable-location share; the usable-location half is constant across segments of one profile); display-only signal, not scientific confidence.
       - name: priority_explanation
         data_type: VARCHAR
         description: Plain-language summary of raw segment metrics for human review.
@@ -1027,3 +1190,118 @@ models:
         data_type: BOOLEAN
       - name: missing_facility_flag
         data_type: BOOLEAN
+
+  - name: mart_trial_change_events
+    description: >
+      Change Radar. One row per indication profile x NCT ID x observation pair
+      (previous trusted run, current trusted run) x event_type x field. Events
+      describe changes in the public registry record between two observations by
+      this pipeline; they are not clinical conclusions, efficacy signals or
+      recommendations. Run-trust gate (int_trusted_change_runs): only runs whose
+      manifest status is 'success' AND that were newly fetched (latest page
+      retrieved_at_utc not earlier than the run's started_at_utc; a re-used
+      earlier snapshot fails this; runs with no retrieval stamp pass) may be
+      either side of a pair; the previous run is the prior trusted run of the same
+      profile. Status events compare overall_status across that pair (equivalent to
+      int_trial_status_history.previous_status when no untrusted run intervenes).
+      Incremental with full_refresh disabled and unique_key event_id: rows persist
+      in the warehouse after bronze/silver pruning (src/utils/retention.py)
+      removes the source runs. Dropping the table is the only way to rebuild it.
+    contract:
+      enforced: true
+    columns:
+      - name: event_id
+        data_type: VARCHAR
+        description: md5 of profile, NCT ID, both run ids, event_type and field_name.
+        tests: [unique, not_null]
+      - name: indication_profile_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: nct_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: event_type
+        data_type: VARCHAR
+        tests:
+          - not_null
+          - accepted_values:
+              values: [status_change, enrollment_change, completion_date_change, outcome_set_change]
+      - name: field_name
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: before_value
+        data_type: VARCHAR
+      - name: after_value
+        data_type: VARCHAR
+      - name: before_value_type
+        data_type: VARCHAR
+        description: enrollment_type (count events) or registry date type (date events).
+      - name: after_value_type
+        data_type: VARCHAR
+      - name: before_ingestion_run_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: after_ingestion_run_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: before_observed_at_utc
+        data_type: TIMESTAMP
+        tests: [not_null]
+      - name: after_observed_at_utc
+        data_type: TIMESTAMP
+        tests: [not_null]
+      - name: registry_url
+        data_type: VARCHAR
+
+  - name: mart_baseline_demographics_coverage
+    description: >
+      Per indication profile, condition group, and completion year: the share of
+      COMPLETED trials with posted results whose baseline characteristics report
+      sex, age, race, or ethnicity (issue #74). Race/ethnicity coverage counts
+      only rows whose dimension resolved from explicit evidence (measure title,
+      label prefix, or reviewed seed row); trials with ambiguous combined
+      race/ethnicity tables are counted in the denominator and surfaced through
+      ambiguous_combined_trials_count instead of being guessed into a category.
+    contract:
+      enforced: true
+    columns:
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this row. Part of the model's grain.
+        tests: [not_null]
+      - name: condition_group
+        data_type: VARCHAR
+        description: Normalized condition group (taxonomy). Part of the model's grain.
+        tests: [not_null]
+      - name: completion_year
+        data_type: BIGINT
+        description: Year the trial completed; null when the registry date is missing or unparseable.
+      - name: trials_with_results_count
+        data_type: BIGINT
+        description: Denominator — distinct completed trials with posted results in the grain.
+        tests: [not_null]
+      - name: reports_sex_count
+        data_type: BIGINT
+        description: Trials whose baseline characteristics include a sex measure.
+      - name: reports_age_count
+        data_type: BIGINT
+        description: Trials whose baseline characteristics include an age measure.
+      - name: reports_race_count
+        data_type: BIGINT
+        description: Trials with at least one race row whose dimension resolved from explicit evidence.
+      - name: reports_ethnicity_count
+        data_type: BIGINT
+        description: Trials with at least one ethnicity row whose dimension resolved from explicit evidence.
+      - name: ambiguous_combined_trials_count
+        data_type: BIGINT
+        description: Trials carrying an ambiguous combined race/ethnicity row (kept unmapped by design).
+      - name: reports_sex_share
+        data_type: DOUBLE
+      - name: reports_age_share
+        data_type: DOUBLE
+      - name: reports_race_share
+        data_type: DOUBLE
+      - name: reports_ethnicity_share
+        data_type: DOUBLE
+      - name: ambiguous_combined_share
+        data_type: DOUBLE

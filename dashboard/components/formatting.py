@@ -40,16 +40,22 @@ def format_snapshot_date(value: str | pd.Timestamp | datetime | date | None) -> 
 
 
 def format_priority_explanation(row: pd.Series) -> str:
-    """Summarize segment metrics without presenting first-post proxies as recruiting events."""
-    growth = (
-        "First posted (90d proxy)"
-        if row["growth_uses_registry_proxy_flag"]
-        else "Newly recruiting (90d)"
-    )
+    """Summarize segment metrics without presenting first-post counts as recruiting events."""
+    observed = row.get("observed_history_days", 0)
+    if pd.notna(row["new_recruiting_90d"]):
+        growth = (
+            f"Newly recruiting (90d): {row['new_recruiting_90d']:.0f} "
+            f"({observed:.0f} days of history observed)"
+        )
+    elif observed >= 90:
+        growth = "Newly recruiting: not enough history (gap between snapshots exceeds window)"
+    else:
+        growth = f"Newly recruiting: not enough history ({observed:.0f} of 90 days observed)"
     return (
         f"Recruiting trials: {row['recruiting_trial_count']:.0f} · "
-        f"{growth}: {row['recent_growth_input']:.0f} · "
+        f"{growth} · "
+        f"Newly registered (first posted): {row['newly_registered_90d']:.0f} · "
         f"Sponsors: {row['sponsor_count']:.0f} (HHI {row['sponsor_hhi']:.2f}) · "
         f"Trials sharing sites: {row['site_overlap_share']:.0%} · "
-        f"Completeness adjustment: {row['data_confidence_share']:.0%}"
+        f"Operational completeness: {row['operational_completeness_share']:.0%}"
     )

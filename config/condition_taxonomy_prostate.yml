@@ -1,9 +1,11 @@
 version: 1
 default:
   condition_group: other_prostate_conditions
+  display_name: Other Prostate Conditions
   dementia_relevance: false
 groups:
 - condition_group: prostate_cancer_advanced
+  display_name: Advanced Prostate Cancer
   dementia_relevance: false
   exact:
   - metastatic prostate cancer
@@ -11,6 +13,7 @@ groups:
   - metastatic prostate cancer
   - castration resistant prostate
 - condition_group: prostate_cancer
+  display_name: Prostate Cancer
   dementia_relevance: false
   exact:
   - prostate cancer

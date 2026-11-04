@@ -453,7 +453,7 @@ def test_recent_recruiting_event_evidence_and_filter_scope():
         (None, []),
     ],
 )
-def test_first_post_proxy_lower_boundary_and_no_upper_bound(first_post, expected):
+def test_first_post_registered_lower_boundary_and_no_upper_bound(first_post, expected):
     studies, locations, conditions, observations = event_inputs()
     studies = studies.loc[studies.nct_id == "A"].copy()
     studies["study_first_post_date_raw"] = first_post
@@ -465,7 +465,7 @@ def test_first_post_proxy_lower_boundary_and_no_upper_bound(first_post, expected
         profile_id="adrd",
         observations=observations.loc[observations.nct_id == "A"],
         filters={},
-        metric="first_post_proxy",
+        metric="first_post_registered",
         window_start="2026-06-03",
         window_end="2026-09-01",
         evaluation_time="2026-09-02T10:00:00Z",
@@ -531,8 +531,8 @@ def test_real_transition_event_predecessor_is_before_window(event_readers):
     assert event["predecessor_source_json_hash"]
 
 
-def test_real_first_post_proxy_source_boundary(event_readers):
-    observations = event_readers.metric_audit_observations("adrd", "first_post_proxy")
+def test_real_first_post_registered_source_boundary(event_readers):
+    observations = event_readers.metric_audit_observations("adrd", "first_post_registered")
     ids = observations.snapshot_id.unique().tolist()
     result = audit.compute_audit(
         event_readers.audit_studies("adrd", ids),
@@ -541,7 +541,7 @@ def test_real_first_post_proxy_source_boundary(event_readers):
         profile_id="adrd",
         observations=observations,
         filters={},
-        metric="first_post_proxy",
+        metric="first_post_registered",
         window_start="2026-06-03",
         window_end="2026-09-01",
         evaluation_time="2026-09-02T10:00:00Z",

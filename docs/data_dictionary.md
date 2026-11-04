@@ -56,6 +56,13 @@ per repository (see data quality framework).
 | gender_description | text | registry `genderDescription` |
 | std_age_groups | list[text] | registry `stdAges` (`CHILD`, `ADULT`, `OLDER_ADULT`) |
 | eligibility_criteria_text | text | free-text inclusion/exclusion criteria |
+| allocation / primary_purpose | text | registry `designInfo.allocation` / `designInfo.primaryPurpose` |
+| intervention_model | text | registry `designInfo.interventionModel` (`PARALLEL`, `SINGLE_GROUP`, ...) |
+| masking | text | registry `designInfo.maskingInfo.masking` level (`NONE`, `SINGLE`, `DOUBLE`, `TRIPLE`, `QUADRUPLE`); null when unstated |
+| has_placebo_arm | bool | true when any registry arm group declares type `PLACEBO_COMPARATOR`; null for silver written before the field existed (unknown, never read as false) |
+| why_stopped | text | registry `statusModule.whyStopped`, stored verbatim; populated for terminated/withdrawn/suspended trials |
+| brief_summary | text | registry `descriptionModule.briefSummary`, stored verbatim — registry-provided text, never generated |
+| primary_outcome_time_frame | text | `timeFrame` of the first registry primary outcome, verbatim (e.g. "78 weeks") |
 | has_results_flag | bool | registry `hasResults` |
 | record_quality_flag | text | `ok` or first failed check (see quality framework) |
 | source_json_hash | text | SHA-256 of the study JSON |
@@ -66,6 +73,14 @@ taxonomy), `mapping_confidence` (high/medium/low), `dementia_relevance_flag`.
 
 ### `silver_trial_interventions` — grain: NCT × intervention × run
 `intervention_type`, `intervention_name`, `intervention_name_normalized`.
+
+### `silver_trial_arms` — grain: profile × NCT × run × original arm ordinal
+`arm_ordinal` (zero-based registry order), `arm_label`, `arm_type`
+(`EXPERIMENTAL`, `ACTIVE_COMPARATOR`, `PLACEBO_COMPARATOR`, `SHAM_COMPARATOR`,
+`NO_INTERVENTION`, `OTHER`; null when the registry omits it, as on some
+observational arms), `arm_description`, `intervention_names` (registry
+`interventionNames` list, verbatim). All arm text is registry-provided and
+stored verbatim — never generated or paraphrased.
 
 ### `silver_trial_sponsors` — grain: NCT × sponsor × role × run
 `sponsor_name`, `sponsor_normalized`, `sponsor_role`
@@ -82,6 +97,16 @@ exist anywhere in this project (formalized in ADR 0065).
 ### `silver_trial_outcomes` — grain: NCT × outcome × run
 `outcome_type` (primary/secondary), `measure`, `time_frame`. Descriptive
 text only — never interpreted clinically.
+
+### `silver_trial_baseline_demographics` — grain: NCT × measure × class × category × group × run
+One row per `resultsSection.baselineCharacteristicsModule` measurement: who
+actually enrolled, with labels kept exactly as sponsors reported them (combined
+race/ethnicity tables often carry the label in the class title, so
+`class_title` + `category_title` are both preserved and disambiguation is left
+to the dbt layer). `participant_count` parses only when the measure is a
+participant count. `group_denominator` is the most specific denominator the
+registry reports for the group — class, then measure, then module scope —
+taken from the participant-denominated `denoms` entry when one exists.
 
 ---
 
@@ -142,6 +167,18 @@ Python (`src/transform/eligibility.py`) and dbt (`dbt_clinical_trials/macros/par
 - `age_bounds_contradictory_flag` (BOOLEAN): true if both bounds are present and min > max.
 - `has_unspecified_min_age`, `has_unspecified_max_age` (BOOLEAN): explicit unknown bound flags.
 - `healthy_volunteers_unknown_flag`, `sex_eligibility_unknown_flag` (BOOLEAN): explicit unknown flags for patient matching.
+
+### Gold design/participant fields in `dim_trial`
+- `current_intervention_model` (VARCHAR): registry `designInfo.interventionModel` (`PARALLEL`, `SINGLE_GROUP`, ...); null when unstated.
+- `current_masking` (VARCHAR): registry masking level (`NONE`, `SINGLE`, `DOUBLE`, `TRIPLE`, `QUADRUPLE`); null when unstated.
+- `has_placebo_arm` (BOOLEAN): true when any registry arm group declares type `PLACEBO_COMPARATOR`; null when the trial's current snapshot predates the field (unknown, not asserted false).
+- `why_stopped` (VARCHAR): registry `statusModule.whyStopped`, passed through verbatim; populated for terminated/withdrawn/suspended trials.
+- `brief_summary` (VARCHAR): registry `descriptionModule.briefSummary`, stored verbatim — registry-provided text, never generated.
+- `primary_outcome_time_frame` (VARCHAR): `timeFrame` of the first registry primary outcome, verbatim (e.g. "78 weeks"); null when absent.
+
+Arm-level detail (labels, types, descriptions, per-arm intervention names) is
+exposed per arm through the Read API `arms` field, sourced from
+`stg_trial_arms`; see [source field map](api/source-field-map.md).
 
 ## Gold: marts (`main_marts`, tables)
 
@@ -241,5 +278,6 @@ lineage is in [source-field-map.md](api/source-field-map.md).
 | **Run ID** | UTC timestamp plus UUID suffix minted for a new ingestion run; partitions bronze and silver |
 | **Manifest** | Per-run JSON recording endpoint, query parameters/hash, page/record counts, timestamps, profile, and completion status |
 | **HHI** | Herfindahl–Hirschman Index: sum of squared lead-sponsor listing shares within a segment; see [metric definitions](metric_definitions.md) for denominator rules |
-| **Proxy growth** | Registry-first-post-date proxy used when snapshot history is insufficient, identified by `growth_uses_registry_proxy_flag`; not an observed recruiting transition |
+| **Observed history** | Days of snapshot history observed as of a snapshot (`observed_history_days`); windowed recruiting-growth figures are null ("not enough history") until it covers their window, never 0 |
+| **Newly registered (first posted)** | Recruiting studies whose registry first-post date falls in the window (`newly_registered_90d` / `newly_registered_in_month`); a registration count, not an observed recruiting transition |
 | **Quarantine** | Records rejected by ingestion screening, retained with reason codes; transformation skips records without an NCT ID |

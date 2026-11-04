@@ -136,11 +136,14 @@ erDiagram
 - **Phases:** EARLY_PHASE1 – PHASE4 where available.
 - **Cadence:** Weekly snapshots; history accrues from this project's own runs.
 
-### Optional: Full-Catalog Ingestion
+### Registry-Wide Ingestion & Transform
 
-An opt-in, additive ingestion profile snapshots the **entire** ClinicalTrials.gov registry — all conditions, worldwide, no status/type filter (~600k+ studies as of this writing). Run it with `make ingest-full-catalog` (equivalently `python -m src.cli ingest --profile full_catalog`). It writes to a completely separate bronze tree (`data/bronze/full_catalog/`, declared in `config/profiles/full_catalog.yml`) and cannot interfere with the default ADRD/US pipeline above. Combining `--condition` with this profile is rejected: the profile's scope is all conditions by definition.
+The platform supports snapshotting the **entire** ClinicalTrials.gov registry — all conditions, worldwide, no status/type filter (~600k+ studies) — using a minimal API `fields` projection (ADR 0083) that cuts per-study bronze payload size from ~17.3 KB to ~8.30 KB (8,496 B) (~5.18 GB estimated full registry).
 
-**Bronze only.** That profile is marked `ingest_only`, so `python -m src.cli transform --profile full_catalog` refuses with exit code 2: there is no condition taxonomy to group trials by, and a taxonomy-less silver tree would be misleading rather than useful. Its former `make transform-full-catalog` target and the private silver tree it wrote are retired; `python -m src.cli transform --profile <id>` flattens one named profile from its own manifests under `data/bronze/<profile_id>/manifests/` (a bare `make transform` is the legacy `default` alias, i.e. `adrd`), and `make orchestrate` runs every refreshable profile end to end (the migration record is in [`docs/archive/development_log.md`](docs/archive/development_log.md)). The chunked streaming writer that target used (`src/transform/export_parquet.py`: bounded-memory Parquet row groups, no full-run materialization) is the same one every transformable profile writes through. Gold, dbt marts, and the dashboard read the single shared silver root, so full-catalog bronze reaches the warehouse only when a taxonomy exists for it; see [`docs/architecture.md`](docs/architecture.md) for the remaining scaling work (extending the condition/geography rules beyond ADRD/US).
+- **No profile required:** Bare `python -m src.cli ingest` (or `make ingest-registry`) snapshots the entire registry.
+- **Transformable silver:** `python -m src.cli transform` builds full-registry silver Parquet using `REGISTRY_TAXONOMY` (mapping conditions to `uncategorized`).
+- **Weekly incremental refresh:** `python -m src.cli ingest --incremental-refresh` (or `make ingest-registry-incremental`) fetches only studies modified on or after the previous successful run (`AREA[LastUpdatePostDate]RANGE`), which silver upserts by NCT ID onto the prior full snapshot.
+- **Indication profiles:** Specific indications (`adrd`, `oncology_nsclc`, etc.) continue to run with explicit `--profile <id>` (or `make orchestrate`). Combining `--condition` with `full_catalog` is rejected as the profile encompasses all conditions.
 
 ---
 
@@ -247,7 +250,13 @@ processes can share the file, while writes require exclusive access.
 
 ### Metric Definitions
 
-Fully documented in [`docs/metric_definitions.md`](docs/metric_definitions.md). Core rules: trial counts are always `COUNT(DISTINCT nct_id)`; site counts use the documented facility grain and are never presented as investigator capacity; only complete (`success`) snapshots feed metrics.
+Fully documented in [`docs/metric_definitions.md`](docs/metric_definitions.md). Core
+rules: trial counts are always `COUNT(DISTINCT nct_id)`; site counts use the documented
+facility grain and are never presented as investigator capacity; only complete
+(`success`) snapshots feed metrics. The state choropleth defaults to population-adjusted
+listings (per 100k residents from U.S. Census Bureau Vintage 2024 estimates) with a toggle
+for raw counts; population normalization controls for state size without measuring disease
+prevalence or patient access.
 
 ### Registry Segment Metrics Methodology
 
@@ -271,10 +280,6 @@ For complete drill-through specifications, provenance requirements, and analytic
 - Raw recruiting counts are not population-adjusted.
 - Portfolio demonstration only; real decisions require qualified clinical-operations review. See [`docs/assumptions_and_limitations.md`](docs/assumptions_and_limitations.md).
 
-### Scenario-Value Methodology
-
-No fake ROI. A configurable scenario calculator (`config/roi_assumptions.yml`) lets an organization test whether a feasibility-review process could justify its cost using *its own* site-startup and study-burn assumptions, under low/base/high scenarios.
-
 ---
 
 ## Documentation Index
@@ -297,7 +302,7 @@ No fake ROI. A configurable scenario calculator (`config/roi_assumptions.yml`) l
 | [`docs/feasibility_case_study.md`](docs/feasibility_case_study.md) | national descriptive memo, complete state table, and evidence appendix |
 | [`docs/executive_memo_template.md`](docs/executive_memo_template.md) | stakeholder memo template with required scope and evidence references |
 | [`docs/DEPLOY_STREAMLIT.md`](docs/DEPLOY_STREAMLIT.md) | deploy the dashboard to Streamlit Community Cloud |
-| [`docs/DEPLOY_FLY.md`](docs/DEPLOY_FLY.md) | deploy the dashboard to Fly.io with an auto-refreshing pipeline |
+| [`docs/OPERATIONS.md`](docs/OPERATIONS.md) | container refresh loop, retention sizing, and operations history |
 | [`docs/competitive_positioning.md`](docs/competitive_positioning.md) | positioning as an open feasibility workbench vs. commercial platforms |
 | [`docs/archive/development_log.md`](docs/archive/development_log.md) | historical step-by-step build record (Phases 1–7) |
 | [`docs/archive/platform_updates_2026-09-04.md`](docs/archive/platform_updates_2026-09-04.md) | historical architecture and tooling updates |
