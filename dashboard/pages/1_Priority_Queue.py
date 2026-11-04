@@ -35,7 +35,7 @@ if observed_history_days < 90:
     st.warning(
         f"Only {observed_history_days} of the 90 days of snapshot history "
         "needed for recruiting-growth figures have been observed, so "
-        'new_recruiting_90d shows "not enough history" — unknown, not '
+        '"Recent recruiting growth" shows "not enough history" — unknown, not '
         'zero. "Newly registered (first posted)" counts are computed from '
         "registry dates and are available now."
     )
@@ -184,7 +184,7 @@ if selected_rows:
         )
     elif segment_history >= 90:
         growth_label = "Recent recruiting growth"
-        growth_val = "not enough history (gap between snapshots exceeds window) — unknown, not zero"
+        growth_val = "not enough history (snapshots do not cover the window) — unknown, not zero"
     else:
         growth_label = "Recent recruiting growth"
         growth_val = (

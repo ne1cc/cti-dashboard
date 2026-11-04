@@ -2,11 +2,13 @@
 -- Grain: profile x month (snapshot month) x condition_group x state.
 -- Built from this project's snapshots. recruiting_growth_3m is null unless
 -- the trailing window's earliest observed month sits at least three months
--- back: on a shorter window the figure would be labelled "3-month" while
--- covering less than that, and on a single-month window an unguarded
--- (x - x) / x would read "flat" for a quantity that is unknown. Null means
--- "not enough history"; zero is reserved for a covered window with no
--- change. The 3-month mean is a different case: a one-point mean is honest,
+-- back, the baseline snapshot date sits at least 3 calendar months back from
+-- the latest snapshot date (baseline_snapshot_date <= latest_snapshot_date - interval 3 month),
+-- and observed history spans at least 90 days: on a shorter window the figure
+-- would be labelled "3-month" while covering less than that, and on a
+-- single-month window an unguarded (x - x) / x would read "flat" for a quantity
+-- that is unknown. Null means "not enough history"; zero is reserved for a
+-- covered window with no change. The 3-month mean is a different case: a one-point
 -- so recruiting_trial_count_3m_avg keeps its value. observed_history_days
 -- is the profile's retained day span and travels with the growth figure.
 -- newly_registered_in_month counts registry first-post months: a
@@ -61,6 +63,7 @@ monthly as (
         date_trunc('month', snapshot_date) as activity_month,
         condition_group,
         state_normalized,
+        max(snapshot_date) as latest_snapshot_date,
         count(distinct nct_id) as trial_count,
         count(distinct nct_id) filter (overall_status = 'RECRUITING')
             as recruiting_trial_count,
@@ -81,7 +84,8 @@ windowed as (
             as recruiting_trial_count_3m_avg,
         first_value(recruiting_trial_count) over trailing_3m
             as recruiting_count_3m_baseline,
-        min(activity_month) over trailing_3m as window_first_month
+        min(activity_month) over trailing_3m as window_first_month,
+        first_value(latest_snapshot_date) over trailing_3m as baseline_snapshot_date
     from monthly
     window trailing_3m as (
         partition by indication_profile_id, condition_group, state_normalized
@@ -104,6 +108,7 @@ select
     h.observed_history_days,
     case
         when datediff('month', w.window_first_month, w.activity_month) >= 3
+            and w.baseline_snapshot_date <= w.latest_snapshot_date - interval 3 month
             and h.observed_history_days >= 90
             then {{ safe_divide(
                 'w.recruiting_trial_count - w.recruiting_count_3m_baseline',

@@ -57,10 +57,10 @@ closure, study-level); the YAML taxonomies are optional overlays on top. The
 |---|---|
 | recruiting_trial_count | distinct RECRUITING listings in the segment — a raw count, without population adjustment |
 | observed_history_days | days of snapshot history observed as of the snapshot (earliest retained snapshot through the row's own date); 0 on a first snapshot |
-| new_recruiting_30d / 90d | sum of entered_recruiting transitions observed at snapshot dates inside a 30/90-day window (`RANGE BETWEEN INTERVAL n DAYS PRECEDING`); **null unless observed history covers the window** (observed_history_days ≥ n, earliest in-window snapshot and its predecessor sit within 14-day tolerance of the window boundary, and the latest gap between snapshots is at most n days) — a transition observed across an unobserved gap has unknown timing, so it cannot be counted as if observed within the window. Null means not enough history, never zero transitions |
+| new_recruiting_30d / 90d | sum of entered_recruiting transitions observed at snapshot dates inside a 30/90-day window (`RANGE BETWEEN INTERVAL n DAYS PRECEDING`); **null unless observed history covers the window** (observed_history_days ≥ n, the earliest in-window snapshot predecessor predates the window boundary by at most 1 day — the remaining 1-day bound under exact weekly cadence — and every entrant trial's own predecessor snapshot date falls within that 1-day covered window tolerance, with the latest gap between snapshots at most n days) — a transition observed across an unobserved gap has unknown timing, so it cannot be counted as if observed within the window. Null means not enough history, never zero transitions |
 | newly_registered_90d | recruiting trials with `study_first_post_date` ≥ snapshot date minus 90 days (inclusive lower bound, no upper bound) — a **registration count** from registry dates, not a recruiting transition; computable from a single snapshot |
 | recruiting_count_90d_baseline | first recruiting-count value inside the 90-day window |
-| recruiting_growth_90d | (recruiting count − baseline) / baseline; null unless the 90-day window is covered, the segment was observed at the window's earliest snapshot (guaranteeing baseline precedes the row), and baseline count is > 0 (safe_divide). Never manufactured 0.0 for newly appearing segments or unknown history |
+| recruiting_growth_90d | (recruiting count − baseline) / baseline; null unless the 90-day window is covered, the segment was observed at the window's earliest snapshot (guaranteeing baseline was captured at the window start), the baseline predates counted transitions (no transitions at the baseline snapshot itself, preventing manufactured 0.0), and baseline count is > 0 (safe_divide). Never manufactured 0.0 for newly appearing segments or unknown history |
 | top_sponsor_share | max lead-sponsor share of segment recruiting trials |
 | sponsor_hhi | Σ (lead-sponsor share)², 0..1; 1.0 = single sponsor |
 | density_percentile | `percent_rank()` ordered by recruiting count within profile × snapshot date |
@@ -80,12 +80,14 @@ required for overlap); they remain in silver and staging.
 Month grain (snapshot month). `recruiting_trial_count_3m_avg` and
 `recruiting_growth_3m` use a 3-month `RANGE` window over the profile ×
 condition_group × state series. `recruiting_growth_3m` is **null unless the
-window's earliest observed `activity_month` sits at least three months back**:
-on a shorter window the figure would be labelled "3-month" while covering less
-than that, and on a single-month window the baseline `first_value` is the row
-itself, so `(x − x) / x` would read 0.0 — "recruiting is flat" — for a quantity
-that is genuinely unknown. Null means not enough history; zero is reserved for
-a covered window with no change (pinned by
+window's earliest observed `activity_month` sits at least three months back,
+the baseline snapshot date sits at least 3 calendar months back
+(`baseline_snapshot_date <= latest_snapshot_date - interval 3 month`), and
+observed history spans at least 90 days**: on a shorter window the figure would be labelled
+"3-month" while covering less than that, and on a single-month window the baseline
+`first_value` is the row itself, so `(x − x) / x` would read 0.0 — "recruiting
+is flat" — for a quantity that is genuinely unknown. Null means not enough
+history; zero is reserved for a covered window with no change (pinned by
 `dbt_clinical_trials/tests/assert_trends_growth_needs_full_window.sql`, with
 the superseded two-month guard kept in
 `assert_trends_growth_needs_two_months.sql`). `observed_history_days` is the

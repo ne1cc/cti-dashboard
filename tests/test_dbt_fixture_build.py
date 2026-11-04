@@ -17,7 +17,8 @@ import json
 import os
 import re
 import sys
-from datetime import date
+from dataclasses import replace
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import duckdb
@@ -31,11 +32,13 @@ import pytest
 # describing a warehouse that no longer exists. Same pattern as
 # tests/test_orchestration_assets.py:10.
 from tests.conftest import (
+    DIVERGENT_ADRD_RUN2,
     DIVERGENT_ADRD_RUN2_ID,
     FIXTURE_RUN_ID,
     NSCLC_FIXTURE_RUN_ID,
     UNSTAMPED_MANIFEST_PROFILE,
     UNSTAMPED_NSCLC_RUN_ID,
+    _base_adrd_run,
 )
 
 STAGING_WITH_PROFILE = [
@@ -1690,6 +1693,374 @@ def test_similarity_top_25_cap_trims_a_busy_profile(similarity_equivalence_root:
     max_candidates = {p: hi for p, hi, _ in rows}
     assert max_candidates["adrd"] > 25, "the cap never binds on the dense profile"
     assert max_candidates["oncology_nsclc"] < 25, "NSCLC must stay under the cap"
+
+
+def test_covered_90d_window_emits_transitions_and_real_zeros(
+    dense_history_fixture_root: Path,
+) -> None:
+    """Exercising a covered 90-day window on dense history (Finding 4).
+
+    Root has ADRD runs: 09-08, 09-15 then bi-weekly to 11-24, then 12-08.
+    On 12-08:
+      - observed_history_days is 91 (>= 90).
+      - window opens 09-09; earliest in-window snapshot is 09-15
+        (6 days <= 7-day cadence tolerance); predecessor is 09-08 (1 day <= 1-day cadence tol).
+      - all 9 segments emit new_recruiting_90d.
+      - 6 of 9 segments were present at baseline (09-15) and emit non-null recruiting_growth_90d
+        (5 real zeros and 1 positive growth = 1.0 on NC Phase 3).
+      - 3 segments first appeared inside the window after baseline (ME on 12-08, NC Phase 2
+        and MA Phase 2 on 09-29) and emit null growth via the segment baseline gate.
+      - The growth baseline predates counted transitions.
+    """
+    summary = _rows(
+        dense_history_fixture_root,
+        "select count(*), count(new_recruiting_90d), count(recruiting_growth_90d)"
+        " from main_marts.mart_recruiting_competition"
+        " where snapshot_date = '2026-12-08'",
+    )
+    assert summary == [(9, 9, 6)]
+
+    # Real zeros: segments present at baseline with no entrants emit 0.0
+    zero_growth = _rows(
+        dense_history_fixture_root,
+        "select count(*)"
+        " from main_marts.mart_recruiting_competition"
+        " where snapshot_date = '2026-12-08' and recruiting_growth_90d = 0.0",
+    )
+    assert zero_growth == [(5,)]
+
+    # Positive growth: NC Phase 3 went from 1 recruiting trial to 2 (100% growth)
+    nc_growth = _rows(
+        dense_history_fixture_root,
+        "select recruiting_growth_90d"
+        " from main_marts.mart_recruiting_competition"
+        " where snapshot_date = '2026-12-08' and state_normalized = 'NC'"
+        " and phase_normalized = 'PHASE3'",
+    )
+    assert nc_growth == [(1.0,)]
+
+    # ME segment first appears on 12-08: new_recruiting_90d is emitted (0), growth is null
+    me_row = _rows(
+        dense_history_fixture_root,
+        "select new_recruiting_90d, recruiting_growth_90d"
+        " from main_marts.mart_recruiting_competition"
+        " where snapshot_date = '2026-12-08' and state_normalized = 'ME'",
+    )
+    assert me_row == [(0, None)]
+
+
+def test_monthly_growth_guard_pins_three_calendar_months_boundary(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    """Finding 1 & 6: recruiting_growth_3m requires baseline <= latest - interval 3 month.
+
+    - Negative side: Root 08-31, 09-28, 12-21 has 84 days between baseline (09-28)
+      and latest (12-21). 12-21 - 3 months = 09-21 < 09-28 (7 days short of 3 calendar months).
+      Must emit null recruiting_growth_3m for all rows.
+    - Positive side: Root 08-31, 09-28, 12-28 has exactly 3 calendar months between baseline (09-28)
+      and latest (12-28). Must emit non-null recruiting_growth_3m.
+    """
+    from tests.fixture_warehouse import build_fixture_warehouse
+
+    # Negative side: 84 days (sub-3-calendar-month span)
+    root_84d = tmp_path_factory.mktemp("span_84d_neg")
+    runs_84d = [
+        replace(
+            _base_adrd_run(),
+            run_id="20260831T100000Z_s1",
+            started_at=datetime(2026, 8, 31, 10, tzinfo=UTC),
+        ),
+        replace(
+            DIVERGENT_ADRD_RUN2,
+            run_id="20260928T100000Z_s2",
+            started_at=datetime(2026, 9, 28, 10, tzinfo=UTC),
+        ),
+        replace(
+            DIVERGENT_ADRD_RUN2,
+            run_id="20261221T100000Z_s3",
+            started_at=datetime(2026, 12, 21, 10, tzinfo=UTC),
+        ),
+    ]
+    build_fixture_warehouse(root_84d, runs=runs_84d)
+    rows_84d = _rows(
+        root_84d,
+        "select count(*), count(recruiting_growth_3m)"
+        " from main_marts.mart_condition_geography_trends"
+        " where activity_month = '2026-12-01'",
+    )
+    assert rows_84d[0][0] > 0
+    assert rows_84d[0][1] == 0, (
+        f"Expected 0 non-null recruiting_growth_3m at 84d, got {rows_84d[0][1]}"
+    )
+
+    # Positive side: 91 days (full 3 calendar months from 09-28 to 12-28)
+    root_3m = tmp_path_factory.mktemp("span_3m_pos")
+    runs_3m = [
+        replace(
+            _base_adrd_run(),
+            run_id="20260831T100000Z_p1",
+            started_at=datetime(2026, 8, 31, 10, tzinfo=UTC),
+        ),
+        replace(
+            DIVERGENT_ADRD_RUN2,
+            run_id="20260928T100000Z_p2",
+            started_at=datetime(2026, 9, 28, 10, tzinfo=UTC),
+        ),
+        replace(
+            DIVERGENT_ADRD_RUN2,
+            run_id="20261228T100000Z_p3",
+            started_at=datetime(2026, 12, 28, 10, tzinfo=UTC),
+        ),
+    ]
+    build_fixture_warehouse(root_3m, runs=runs_3m)
+    rows_3m = _rows(
+        root_3m,
+        "select count(*), count(recruiting_growth_3m)"
+        " from main_marts.mart_condition_geography_trends"
+        " where activity_month = '2026-12-01'",
+    )
+    assert rows_3m[0][0] > 0
+    assert rows_3m[0][1] > 0, (
+        f"Expected non-null recruiting_growth_3m at full 3m, got {rows_3m[0][1]}"
+    )
+
+
+def test_trial_level_gap_across_unobserved_snapshots_pinned_limit(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    """Finding 2 & 3: Trial-level status transition across absent snapshots.
+
+    Root 08-01, 09-05, 09-15, 12-08, with NCT00000099 NOT_YET_RECRUITING on 08-01,
+    absent on 09-05 and 09-15, and RECRUITING on 12-08.
+    Because NCT00000099's predecessor date is 08-01 (predating 12-08 - 90d - 1d = 09-08),
+    its transition timing relative to the 90-day window is unknown.
+    The ME / PHASE3 segment must emit null (unknown, never false 1 or manufactured 0).
+    """
+    from tests.fixture_warehouse import AddedStudy, build_fixture_warehouse
+
+    study_0801 = AddedStudy(
+        nct_id="NCT00000099",
+        clone_of="NCT00000001",
+        overall_status="NOT_YET_RECRUITING",
+        phase="PHASE3",
+        condition="Alzheimer Disease",
+        sponsor="NeuroPharm Inc",
+        location=("Maine Medical Center", "Portland", "Maine"),
+    )
+    study_1208 = replace(study_0801, overall_status="RECRUITING")
+    runs = [
+        replace(
+            _base_adrd_run(),
+            run_id="20260801T100000Z_f2_1",
+            started_at=datetime(2026, 8, 1, 10, tzinfo=UTC),
+            added=(study_0801,),
+        ),
+        replace(
+            _base_adrd_run(),
+            run_id="20260905T100000Z_f2_2",
+            started_at=datetime(2026, 9, 5, 10, tzinfo=UTC),
+        ),
+        replace(
+            _base_adrd_run(),
+            run_id="20260915T100000Z_f2_3",
+            started_at=datetime(2026, 9, 15, 10, tzinfo=UTC),
+        ),
+        replace(
+            _base_adrd_run(),
+            run_id="20261208T100000Z_f2_4",
+            started_at=datetime(2026, 12, 8, 10, tzinfo=UTC),
+            added=(study_1208,),
+        ),
+    ]
+    root = tmp_path_factory.mktemp("repro_finding_2")
+    build_fixture_warehouse(root, runs=runs)
+
+    # fct_trial_snapshot sets entered_recruiting_flag=true via per-trial lag
+    flag_rows = _rows(
+        root,
+        "select entered_recruiting_flag from main_marts.fct_trial_snapshot"
+        " where nct_id = 'NCT00000099' and snapshot_date = '2026-12-08'",
+    )
+    assert flag_rows == [(True,)]
+
+    # ME segment in competition mart reports new_recruiting_90d = NULL (unknown timing)
+    comp_rows = _rows(
+        root,
+        "select new_recruiting_90d from main_marts.mart_recruiting_competition"
+        " where snapshot_date = '2026-12-08' and state_normalized = 'ME'",
+    )
+    assert comp_rows == [(None,)]
+
+    # Priority queue explanation describes that snapshots do not cover the window
+    queue_rows = _rows(
+        root,
+        "select priority_explanation from main_marts.mart_feasibility_priority_queue"
+        " where state_normalized = 'ME'",
+    )
+    assert "snapshots do not cover the window" in queue_rows[0][0]
+
+
+def test_cadence_tolerance_boundary_conditions(tmp_path_factory: pytest.TempPathFactory) -> None:
+    """Finding 4 & 6: 1-day cadence tolerance on window boundary predecessor.
+
+    - 30-day window:
+      - Negative side: root 09-01, 09-29, 10-15 has window opening 09-15.
+        Earliest in-window snapshot is 09-29 (14 days past window opening > 1-day tolerance).
+        Must emit null new_recruiting_30d.
+    - 90-day window:
+      - Negative side: root 09-02, 09-15, 12-08. Window opens 09-09. Earliest in-window
+        snapshot is 09-15, predecessor is 09-02 (7 days before 09-09 > 1-day tolerance).
+        Must emit null new_recruiting_90d and null recruiting_growth_90d.
+      - Positive side: root 09-08, 09-15, 12-08. Window opens 09-09. Earliest in-window
+        snapshot is 09-15, predecessor is 09-08 (exactly 1 day before 09-09 <= 1-day tolerance).
+        Must emit non-null new_recruiting_90d on covered segments.
+    """
+    from tests.fixture_warehouse import build_fixture_warehouse
+
+    # 30-day window case (negative)
+    root_30d = tmp_path_factory.mktemp("tolerance_30d")
+    runs_30d = [
+        replace(
+            _base_adrd_run(),
+            run_id="20260901T100000Z_t30_1",
+            started_at=datetime(2026, 9, 1, 10, tzinfo=UTC),
+        ),
+        replace(
+            DIVERGENT_ADRD_RUN2,
+            run_id="20260929T100000Z_t30_2",
+            started_at=datetime(2026, 9, 29, 10, tzinfo=UTC),
+        ),
+        replace(
+            DIVERGENT_ADRD_RUN2,
+            run_id="20261015T100000Z_t30_3",
+            started_at=datetime(2026, 10, 15, 10, tzinfo=UTC),
+        ),
+    ]
+    build_fixture_warehouse(root_30d, runs=runs_30d)
+    rows_30d = _rows(
+        root_30d,
+        "select count(new_recruiting_30d) from main_marts.mart_recruiting_competition"
+        " where snapshot_date = '2026-10-15'",
+    )
+    assert rows_30d == [(0,)], "30d window with 14-day gap past boundary must emit null"
+
+    # 90-day window negative side: predecessor is 09-02 (7 days before 09-09 > 1-day tolerance)
+    root_90d_neg = tmp_path_factory.mktemp("tolerance_90d_neg")
+    runs_90d_neg = [
+        replace(
+            _base_adrd_run(),
+            run_id="20260902T100000Z_t90_neg1",
+            started_at=datetime(2026, 9, 2, 10, tzinfo=UTC),
+        ),
+        replace(
+            DIVERGENT_ADRD_RUN2,
+            run_id="20260915T100000Z_t90_neg2",
+            started_at=datetime(2026, 9, 15, 10, tzinfo=UTC),
+        ),
+        replace(
+            DIVERGENT_ADRD_RUN2,
+            run_id="20261208T100000Z_t90_neg3",
+            started_at=datetime(2026, 12, 8, 10, tzinfo=UTC),
+        ),
+    ]
+    build_fixture_warehouse(root_90d_neg, runs=runs_90d_neg)
+    rows_90d_neg = _rows(
+        root_90d_neg,
+        "select count(new_recruiting_90d), count(recruiting_growth_90d)"
+        " from main_marts.mart_recruiting_competition"
+        " where snapshot_date = '2026-12-08'",
+    )
+    assert rows_90d_neg == [(0, 0)], "90d window with 7-day predecessor gap must emit null"
+
+    # 90-day window positive side: predecessor is 09-08 (1 day before 09-09 <= 1-day tolerance)
+    root_90d_pos = tmp_path_factory.mktemp("tolerance_90d_pos")
+    runs_90d_pos = [
+        replace(
+            _base_adrd_run(),
+            run_id="20260908T100000Z_t90_pos1",
+            started_at=datetime(2026, 9, 8, 10, tzinfo=UTC),
+        ),
+        replace(
+            DIVERGENT_ADRD_RUN2,
+            run_id="20260915T100000Z_t90_pos2",
+            started_at=datetime(2026, 9, 15, 10, tzinfo=UTC),
+        ),
+        replace(
+            DIVERGENT_ADRD_RUN2,
+            run_id="20261208T100000Z_t90_pos3",
+            started_at=datetime(2026, 12, 8, 10, tzinfo=UTC),
+        ),
+    ]
+    build_fixture_warehouse(root_90d_pos, runs=runs_90d_pos)
+    rows_90d_pos = _rows(
+        root_90d_pos,
+        "select count(new_recruiting_90d)"
+        " from main_marts.mart_recruiting_competition"
+        " where snapshot_date = '2026-12-08'",
+    )
+    assert rows_90d_pos[0][0] > 0, (
+        "90d window with exact 1-day predecessor tolerance must emit non-null"
+    )
+
+
+def test_competition_growth_null_when_entrant_at_baseline(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    """Finding 6: recruiting_growth_90d must be null when an entrant occurs at baseline snapshot.
+
+    Root 09-08, 09-15, 12-08 with study NCT00000077 added as NOT_YET_RECRUITING on 09-08,
+    flipping to RECRUITING on 09-15 (the baseline snapshot).
+    On 12-08, new_recruiting_90d counts the entrant (1), but recruiting_growth_90d
+    must be NULL because the entrant is in the baseline count.
+    """
+    from tests.fixture_warehouse import AddedStudy, build_fixture_warehouse
+
+    study_base = AddedStudy(
+        nct_id="NCT00000077",
+        clone_of="NCT00000001",
+        overall_status="NOT_YET_RECRUITING",
+        phase="PHASE2",
+        condition="Alzheimer Disease",
+        sponsor="NeuroPharm Inc",
+        location=("Maine Medical Center", "Portland", "Maine"),
+    )
+    study_recruiting = replace(study_base, overall_status="RECRUITING")
+    runs = [
+        replace(
+            _base_adrd_run(),
+            run_id="20260908T100000Z_b1",
+            started_at=datetime(2026, 9, 8, 10, tzinfo=UTC),
+            added=(study_base,),
+        ),
+        replace(
+            DIVERGENT_ADRD_RUN2,
+            run_id="20260915T100000Z_b2",
+            started_at=datetime(2026, 9, 15, 10, tzinfo=UTC),
+            added=(study_recruiting,),
+        ),
+        replace(
+            DIVERGENT_ADRD_RUN2,
+            run_id="20261208T100000Z_b3",
+            started_at=datetime(2026, 12, 8, 10, tzinfo=UTC),
+            added=(study_recruiting,),
+        ),
+    ]
+    root = tmp_path_factory.mktemp("baseline_entrant_test")
+    build_fixture_warehouse(root, runs=runs)
+
+    me_rows = _rows(
+        root,
+        "select new_recruiting_90d, recruiting_growth_90d"
+        " from main_marts.mart_recruiting_competition"
+        " where snapshot_date = '2026-12-08' and state_normalized = 'ME'"
+        " and phase_normalized = 'PHASE2'",
+    )
+    assert len(me_rows) == 1
+    new_rec, growth = me_rows[0]
+    assert new_rec == 1, f"Expected 1 new_recruiting_90d from baseline transition, got {new_rec}"
+    assert growth is None, (
+        f"Expected null recruiting_growth_90d when entrant is at baseline, got {growth}"
+    )
 
 
 def test_participant_design_fields_reach_gold_and_staging(

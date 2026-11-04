@@ -37,6 +37,7 @@ select
     study_first_post_date,
     record_quality_flag,
     source_json_hash,
+    lag(snapshot_date) over trial_window as previous_snapshot_date,
     lag(overall_status) over trial_window as previous_status,
     (
         lag(overall_status) over trial_window is not null

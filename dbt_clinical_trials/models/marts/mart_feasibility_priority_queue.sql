@@ -167,7 +167,7 @@ select
                 'new recruiting: not enough history ('
                 || observed_history_days || ' of 90 days observed)'
             else
-                'new recruiting: not enough history (gap between snapshots exceeds window)'
+                'new recruiting: not enough history (snapshots do not cover the window)'
         end,
         newly_registered_90d
             || ' newly registered within 90 days (registry first-post date,'

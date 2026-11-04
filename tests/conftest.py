@@ -375,6 +375,64 @@ def _growth_history_nsclc_run3() -> FixtureRun:
     )
 
 
+DENSE_ME_STUDY = AddedStudy(
+    nct_id="NCT00000099",
+    clone_of="NCT00000001",
+    overall_status="RECRUITING",
+    phase="PHASE3",
+    condition="Alzheimer Disease",
+    sponsor="NeuroPharm Inc",
+    location=("Maine Medical Center", "Portland", "Maine"),
+)
+
+DENSE_ADRD_RUNS = [
+    replace(
+        _base_adrd_run(),
+        run_id="20260908T100000Z_fixture20",
+        started_at=datetime(2026, 9, 8, 10, tzinfo=UTC),
+    ),
+    replace(
+        _base_adrd_run(),
+        run_id="20260915T100000Z_fixture21",
+        started_at=datetime(2026, 9, 15, 10, tzinfo=UTC),
+    ),
+    replace(
+        DIVERGENT_ADRD_RUN2,
+        run_id="20260929T100000Z_fixture22",
+        started_at=datetime(2026, 9, 29, 10, tzinfo=UTC),
+    ),
+    replace(
+        DIVERGENT_ADRD_RUN2,
+        run_id="20261013T100000Z_fixture23",
+        started_at=datetime(2026, 10, 13, 10, tzinfo=UTC),
+    ),
+    replace(
+        DIVERGENT_ADRD_RUN2,
+        run_id="20261027T100000Z_fixture24",
+        started_at=datetime(2026, 10, 27, 10, tzinfo=UTC),
+    ),
+    replace(
+        DIVERGENT_ADRD_RUN2,
+        run_id="20261110T100000Z_fixture25",
+        started_at=datetime(2026, 11, 10, 10, tzinfo=UTC),
+    ),
+    replace(
+        DIVERGENT_ADRD_RUN2,
+        run_id="20261124T100000Z_fixture26",
+        started_at=datetime(2026, 11, 24, 10, tzinfo=UTC),
+    ),
+    replace(
+        DIVERGENT_ADRD_RUN2,
+        run_id="20261208T100000Z_fixture27",
+        started_at=datetime(2026, 12, 8, 10, tzinfo=UTC),
+        added=(
+            *DIVERGENT_ADRD_RUN2.added,
+            DENSE_ME_STUDY,
+        ),
+    ),
+]
+
+
 # Same bronze, manifest left at the pre-stamping default. Silver still says
 # oncology_nsclc, because src/transform stamps from the resolved profile.
 UNSTAMPED_NSCLC_RUN = FixtureRun(
@@ -620,6 +678,23 @@ def growth_history_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Pat
             _growth_history_nsclc_run2(),
             _growth_history_nsclc_run3(),
         ],
+    )
+
+
+@pytest.fixture(scope="session")
+def dense_history_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Dense snapshot history covering the 90-day window (09-02 through 12-08).
+
+    On 12-08 history is 97 days, window opens 09-09, earliest in-window snapshot is
+    09-15 (6 days <= 7-day cadence tolerance), predecessor is 09-02 (7 days <= 7-day
+    tolerance), and all intervening gaps are 14 days (<= 90 days).
+    Emits 9 of 9 new_recruiting_90d and non-null recruiting_growth_90d with real zeros,
+    while the newly appearing ME segment on 12-08 emits null growth.
+    """
+    return _build_fixture_root(
+        tmp_path_factory,
+        "fixture_dense_history",
+        DENSE_ADRD_RUNS,
     )
 
 

@@ -35,13 +35,16 @@ def test_snapshot_date_drops_the_midnight_time():
     assert format_snapshot_date(pd.NaT) == "not yet captured"
 
 
-@pytest.mark.parametrize("mode", ["covered", "short", "gap"])
+@pytest.mark.parametrize("mode", ["covered", "short", "uncovered_long", "gap"])
 def test_priority_summary_labels_growth_and_registrations_distinctly(mode: str) -> None:
     if mode == "covered":
         observed_days = 90
         new_recruiting = 2
     elif mode == "short":
         observed_days = 14
+        new_recruiting = pd.NA
+    elif mode == "uncovered_long":
+        observed_days = 122
         new_recruiting = pd.NA
     else:  # gap
         observed_days = 105
@@ -74,8 +77,8 @@ def test_priority_summary_labels_growth_and_registrations_distinctly(mode: str) 
         assert "Newly recruiting: not enough history (14 of 90 days observed)" in text
         assert "(90d)" not in text
     else:
-        assert "Newly recruiting: not enough history (gap between snapshots exceeds window)" in text
+        assert "Newly recruiting: not enough history (snapshots do not cover the window)" in text
         assert "(90d)" not in text
-        assert "105 of 90 days observed" not in text
+        assert f"{observed_days} of 90 days observed" not in text
 
     pd.testing.assert_series_equal(row, before)
