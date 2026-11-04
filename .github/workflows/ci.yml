@@ -83,22 +83,3 @@ jobs:
           path: |
             ${{ runner.temp }}/dbt_target
             ${{ runner.temp }}/dbt_logs
-
-  deploy:
-    needs: lint-and-test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    environment: production
-    concurrency:
-      group: deploy-production
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup flyctl
-        uses: superfly/flyctl-actions/setup-flyctl@master
-
-      - name: Deploy to Fly.io with smoke check and rollback
-        run: .github/scripts/deploy_fly.sh
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

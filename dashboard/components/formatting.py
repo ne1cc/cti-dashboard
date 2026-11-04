@@ -57,7 +57,7 @@ def format_priority_explanation(row: pd.Series) -> str:
             f"({observed:.0f} days of history observed)"
         )
     elif observed >= 90:
-        growth = "Newly recruiting: not enough history (gap between snapshots exceeds window)"
+        growth = "Newly recruiting: not enough history (snapshots do not cover the window)"
     else:
         growth = f"Newly recruiting: not enough history ({observed:.0f} of 90 days observed)"
     hhi = (
@@ -71,5 +71,5 @@ def format_priority_explanation(row: pd.Series) -> str:
         f"Newly registered (first posted): {row['newly_registered_90d']:.0f} · "
         f"Sponsors: {row['sponsor_count']:.0f} ({hhi}) · "
         f"Trials sharing sites: {row['site_overlap_share']:.0%} · "
-        f"Completeness adjustment: {row['data_confidence_share']:.0%}"
+        f"Operational completeness: {row['operational_completeness_share']:.0%}"
     )

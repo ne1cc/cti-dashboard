@@ -1,3 +1,4 @@
+import os
 import shutil
 import subprocess
 from dataclasses import replace
@@ -9,7 +10,10 @@ import pytest
 from tests.fixture_warehouse import (
     AddedStudy,
     FixtureRun,
+    _clear_caches,
+    build_dbt_fixture,
     build_fixture_warehouse,
+    prepare_fixture_root,
     variant_page,
 )
 
@@ -371,6 +375,64 @@ def _growth_history_nsclc_run3() -> FixtureRun:
     )
 
 
+DENSE_ME_STUDY = AddedStudy(
+    nct_id="NCT00000099",
+    clone_of="NCT00000001",
+    overall_status="RECRUITING",
+    phase="PHASE3",
+    condition="Alzheimer Disease",
+    sponsor="NeuroPharm Inc",
+    location=("Maine Medical Center", "Portland", "Maine"),
+)
+
+DENSE_ADRD_RUNS = [
+    replace(
+        _base_adrd_run(),
+        run_id="20260908T100000Z_fixture20",
+        started_at=datetime(2026, 9, 8, 10, tzinfo=UTC),
+    ),
+    replace(
+        _base_adrd_run(),
+        run_id="20260915T100000Z_fixture21",
+        started_at=datetime(2026, 9, 15, 10, tzinfo=UTC),
+    ),
+    replace(
+        DIVERGENT_ADRD_RUN2,
+        run_id="20260929T100000Z_fixture22",
+        started_at=datetime(2026, 9, 29, 10, tzinfo=UTC),
+    ),
+    replace(
+        DIVERGENT_ADRD_RUN2,
+        run_id="20261013T100000Z_fixture23",
+        started_at=datetime(2026, 10, 13, 10, tzinfo=UTC),
+    ),
+    replace(
+        DIVERGENT_ADRD_RUN2,
+        run_id="20261027T100000Z_fixture24",
+        started_at=datetime(2026, 10, 27, 10, tzinfo=UTC),
+    ),
+    replace(
+        DIVERGENT_ADRD_RUN2,
+        run_id="20261110T100000Z_fixture25",
+        started_at=datetime(2026, 11, 10, 10, tzinfo=UTC),
+    ),
+    replace(
+        DIVERGENT_ADRD_RUN2,
+        run_id="20261124T100000Z_fixture26",
+        started_at=datetime(2026, 11, 24, 10, tzinfo=UTC),
+    ),
+    replace(
+        DIVERGENT_ADRD_RUN2,
+        run_id="20261208T100000Z_fixture27",
+        started_at=datetime(2026, 12, 8, 10, tzinfo=UTC),
+        added=(
+            *DIVERGENT_ADRD_RUN2.added,
+            DENSE_ME_STUDY,
+        ),
+    ),
+]
+
+
 # Same bronze, manifest left at the pre-stamping default. Silver still says
 # oncology_nsclc, because src/transform stamps from the resolved profile.
 UNSTAMPED_NSCLC_RUN = FixtureRun(
@@ -616,6 +678,23 @@ def growth_history_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Pat
             _growth_history_nsclc_run2(),
             _growth_history_nsclc_run3(),
         ],
+    )
+
+
+@pytest.fixture(scope="session")
+def dense_history_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Dense snapshot history covering the 90-day window (09-02 through 12-08).
+
+    On 12-08 history is 97 days, window opens 09-09, earliest in-window snapshot is
+    09-15 (6 days <= 7-day cadence tolerance), predecessor is 09-02 (7 days <= 7-day
+    tolerance), and all intervening gaps are 14 days (<= 90 days).
+    Emits 9 of 9 new_recruiting_90d and non-null recruiting_growth_90d with real zeros,
+    while the newly appearing ME segment on 12-08 emits null growth.
+    """
+    return _build_fixture_root(
+        tmp_path_factory,
+        "fixture_dense_history",
+        DENSE_ADRD_RUNS,
     )
 
 
@@ -868,6 +947,83 @@ def audit_event_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
         ],
         session_timezone="America/Los_Angeles",
     )
+
+
+# --- legacy-silver upgrade fixture (issue #64 round-1 finding 1) --------------
+# The six trial columns the participant-design change added to silver_trials.
+# Dropped from a retained run's file to reproduce its pre-feature shape.
+PRE_PARTICIPANT_DESIGN_TRIAL_COLUMNS = (
+    "intervention_model",
+    "masking",
+    "has_placebo_arm",
+    "why_stopped",
+    "brief_summary",
+    "primary_outcome_time_frame",
+)
+
+
+def _degrade_adrd_run_to_pre_participant_design_shape(root: Path, run_id: str) -> None:
+    """Rewinds run `run_id` to the state an upgrade meets on a real volume.
+
+    Production keeps silver and manifests for several runs while
+    `bronze_runs_to_keep: 1` prunes all but the latest bronze, so upgrading the
+    code leaves retained pre-feature silver (no arms entity, no new trial
+    columns) whose source pages are gone. Silver files are edited in place;
+    nothing is deleted except the already-pruned bronze pages.
+    """
+    import pyarrow.parquet as pq
+
+    silver = root / "data" / "silver"
+    (silver / "silver_trial_arms" / f"run_id={run_id}.parquet").unlink()
+    trials = silver / "silver_trials" / f"run_id={run_id}.parquet"
+    table = pq.read_table(trials)
+    pq.write_table(
+        table.select(
+            [c for c in table.column_names if c not in PRE_PARTICIPANT_DESIGN_TRIAL_COLUMNS]
+        ),
+        trials,
+    )
+    shutil.rmtree(root / "data" / "bronze" / "adrd" / "api_responses" / f"run_id={run_id}")
+
+
+@pytest.fixture(scope="session")
+def legacy_silver_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A volume upgraded across the participant-design change: ADRD run
+    fixture01 keeps pre-feature silver while its bronze is pruned; NSCLC run
+    fixture02 stays current.
+
+    Built lazily and session-scoped like the other roots: only the
+    legacy-upgrade regression tests request it, so the rest of the suite pays
+    no extra `dbt build`. The transform step inside the build is itself part
+    of the regression: it must skip the pruned-bronze run instead of failing
+    the upgrade on its missing bronze.
+    """
+    root = tmp_path_factory.mktemp("fixture_legacy_silver")
+    prepare_fixture_root(root, [_base_adrd_run(), _base_nsclc_run()])
+    _degrade_adrd_run_to_pre_participant_design_shape(root, FIXTURE_RUN_ID)
+
+    prev_cti_root = os.environ.get("CTI_PROJECT_ROOT")
+    os.environ["CTI_PROJECT_ROOT"] = str(root)
+    _clear_caches()
+    try:
+        from src.profiles import load_profile, load_shared_paths
+        from src.transform.build_silver_entities import run_transform
+
+        shared = load_shared_paths(root / "config" / "shared_paths.yml")
+        adrd = load_profile(root / "config/profiles/adrd.yml", shared=shared)
+        processed = run_transform(profile=adrd)
+        assert processed == [], (
+            "a retained run whose bronze was pruned must be skipped, not rebuilt"
+        )
+    finally:
+        if prev_cti_root is not None:
+            os.environ["CTI_PROJECT_ROOT"] = prev_cti_root
+        else:
+            os.environ.pop("CTI_PROJECT_ROOT", None)
+        _clear_caches()
+
+    build_dbt_fixture(root)
+    return root
 
 
 # --- Change Radar fixture ------------------------------------------------------

@@ -33,6 +33,7 @@ from src.api.models import (
     SponsorDetail,
     StructuredEligibility,
     StructuredEligibilitySummary,
+    StudyArm,
     StudyCondition,
     StudyDates,
     StudyDesign,
@@ -60,7 +61,13 @@ REQUIRED_TABLES = (
     "stg_trial_sponsors",
     "stg_trial_conditions",
     "stg_trial_interventions",
+    "stg_trial_arms",
 )
+
+
+def _escape_like(text: str) -> str:
+    """Make LIKE wildcards literal; the SQL declares ESCAPE '\'."""
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 class WarehouseNotReadyError(Exception):
@@ -372,7 +379,7 @@ class DuckDBWarehouseManager:
             cursor_id = cursor_id_val
 
         params: dict[str, Any] = {
-            "cond": cond.strip() if cond else None,
+            "cond": _escape_like(cond.strip()) if cond else None,
             "status": status.strip() if status else None,
             "phase": phase.strip() if phase else None,
             "min_age": float(min_age) if min_age is not None else None,
@@ -518,6 +525,8 @@ class DuckDBWarehouseManager:
             phase_normalized=phase_normalized,
             allocation=r.get("allocation"),
             primary_purpose=r.get("primary_purpose"),
+            intervention_model=r.get("intervention_model"),
+            masking=r.get("masking"),
         )
 
         enrollment = EnrollmentInfo(
@@ -579,6 +588,21 @@ class DuckDBWarehouseManager:
                         description=item.get("description"),
                     )
                 )
+
+        # Arm groups (registry text passed through verbatim)
+        arms: list[StudyArm] = []
+        raw_arms = r.get("arms") or []
+        for arm in raw_arms:
+            if not isinstance(arm, dict):
+                continue
+            arms.append(
+                StudyArm(
+                    label=arm.get("label"),
+                    arm_type=arm.get("arm_type"),
+                    description=arm.get("description"),
+                    intervention_names=arm.get("intervention_names") or [],
+                )
+            )
 
         # Eligibility (Issue #62)
         criteria_text = r.get("criteria_text")
@@ -664,6 +688,11 @@ class DuckDBWarehouseManager:
             sponsors=sponsors,
             conditions=conditions,
             interventions=interventions,
+            arms=arms,
+            has_placebo_arm=r.get("has_placebo_arm"),
+            why_stopped=r.get("why_stopped"),
+            brief_summary=r.get("brief_summary"),
+            primary_outcome_time_frame=r.get("primary_outcome_time_frame"),
             eligibility=eligibility,
             sites=sites,
             registry_url=f"https://clinicaltrials.gov/study/{canonical_nct}",

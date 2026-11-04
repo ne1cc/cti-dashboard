@@ -116,7 +116,7 @@ def _format_competition_new_recruiting(value: float | None) -> str:
     if pd.notna(value):
         return f"{value:.0f}"
     if observed_history_days >= 90:
-        return "not enough history (gap between snapshots exceeds window)"
+        return "not enough history (snapshots do not cover the window)"
     return f"not enough history ({observed_history_days} of 90 days observed)"
 
 
@@ -180,17 +180,26 @@ render_metric_audit(
             "sponsor study counts in the segment)^2); top share is the maximum share. "
             "Bands use percent_rank of recruiting trial count across all segments "
             "within profile and snapshot: low <0.5, moderate <0.8, elevated otherwise. "
-            "New recruiting (90d) sums daily distinct entrants over the inclusive "
-            "90-day range; entrant requires previous captured status non-null and "
-            "not RECRUITING; it is null until observed history covers 90 days and "
-            "the latest snapshot gap does not itself span the window (a transition "
-            "across a longer gap has unobserved timing inside it), so null means "
-            f"not enough history, never zero. Observed history here: "
-            f"{observed_history_days} days. Newly registered (first posted) counts "
-            "recruiting studies whose registry first-post date is within 90 days of "
-            "the snapshot — registrations, not transitions. Counts may repeat across "
-            "segments. "
-            "This panel audits count inputs; derived values remain warehouse calculations."
+            + (
+                "New recruiting (90d) sums daily distinct entrants over "
+                "the inclusive 90-day range; "
+                if growth_window_covered
+                else (
+                    "New recruiting sums daily distinct entrants over an inclusive 90-day window "
+                    f"(requires 90 days of observed history, currently "
+                    f"{observed_history_days} days observed); "
+                )
+            )
+            + "entrant requires previous captured status non-null and not RECRUITING; "
+            "it is null until observed history covers 90 days (earliest in-window snapshot "
+            "and predecessor within 7-day cadence tolerance) and the latest snapshot gap "
+            "does not itself span the window (a transition across a longer gap has unobserved "
+            "timing inside it), so null means "
+            f"not enough history, never zero. Observed history here: {observed_history_days} days. "
+            "Newly registered (first posted) counts recruiting studies whose registry "
+            "first-post date is within 90 days of the snapshot — registrations, not transitions. "
+            "Counts may repeat across segments. This panel audits count inputs; "
+            "derived values remain warehouse calculations."
         )
     },
     key="competition",

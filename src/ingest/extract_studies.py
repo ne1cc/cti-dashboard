@@ -9,6 +9,8 @@ a unique ingestion_run_id, and downstream models compare snapshots.
 from __future__ import annotations
 
 import json
+from datetime import timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from src.config import ProjectConfig, get_config
@@ -17,6 +19,7 @@ from src.ingest.pagination import iter_pages
 from src.ingest.snapshot_manifest import (
     IngestionManifest,
     find_reusable_run,
+    load_manifests,
     new_run_id,
     write_manifest,
     write_summary,
@@ -35,6 +38,45 @@ from src.utils.paths import ensure_dir
 if TYPE_CHECKING:
     from src.profiles import IndicationProfile
 
+# Re-fetch margin for incremental refresh: updates posted between the previous
+# run's start instant and its first page fetch would otherwise fall between two
+# runs. One day of overlap re-downloads a few unchanged studies, which the
+# upsert replaces by NCT ID — cheaper than a missed study.
+INCREMENTAL_OVERLAP_DAYS = 1
+
+
+def latest_snapshot_date(manifests_dir: Path, silver_dir: Path | None = None) -> str | None:
+    """YYYY-MM-DD lower bound for a refresh: the newest successful run's start
+    minus the overlap, from any manifest in this profile's tree. When silver_dir
+    is provided, only runs whose silver_trials exists are considered valid bases.
+    """
+
+    def _has_silver(run_id: str) -> bool:
+        if silver_dir is None:
+            return True
+        return (silver_dir / "silver_trials" / f"run_id={run_id}.parquet").exists()
+
+    successes = [
+        m
+        for m in load_manifests(manifests_dir)
+        if m.status == "success" and _has_silver(m.ingestion_run_id)
+    ]
+    if not successes:
+        return None
+    newest = max(m.started_at_utc for m in successes)
+    bound = newest - timedelta(days=INCREMENTAL_OVERLAP_DAYS)
+    return bound.date().isoformat()
+
+
+def merge_essie_since(existing: str | None, since: str) -> str:
+    """AND the LastUpdatePostDate range into an Essie expression.
+
+    Verified live 2026-10-30 against GET /api/v2/studies:
+    `(AREA[StudyType]INTERVENTIONAL) AND (AREA[LastUpdatePostDate]RANGE[2026-10-20,MAX])`.
+    """
+    date_filter = f"AREA[LastUpdatePostDate]RANGE[{since},MAX]"
+    return f"({existing}) AND ({date_filter})" if existing else date_filter
+
 
 def run_ingestion(
     condition: str | None = None,
@@ -42,6 +84,7 @@ def run_ingestion(
     max_pages: int | None = None,
     profile: str = "default",
     config: ProjectConfig | IndicationProfile | None = None,
+    incremental_refresh: bool = False,
 ) -> IngestionManifest:
     """Run a bronze ingestion snapshot.
 
@@ -49,6 +92,11 @@ def run_ingestion(
         config: Either a raw ProjectConfig (legacy callers) or an IndicationProfile.
                 When an IndicationProfile is passed, the profile string arg is
                 ignored — the profile's id is used instead.
+        incremental_refresh: Fetch only studies whose LastUpdatePostDate falls on
+                or after the previous successful run's start (minus a 1-day
+                overlap). The run's bronze holds changed studies only; silver
+                upserts them onto the previous full snapshot. Requires a prior
+                successful full snapshot.
     """
     log = setup_logging()
 
@@ -88,6 +136,17 @@ def run_ingestion(
 
     with CTGClient(cfg.api) as client:
         params = client.build_params(condition=condition)
+        updated_since: str | None = None
+        if incremental_refresh:
+            updated_since = latest_snapshot_date(manifests_dir, cfg.paths.silver)
+            if updated_since is None:
+                raise ValueError(
+                    "Incremental refresh needs a previous successful snapshot to "
+                    "diff against; run a full ingestion first."
+                )
+            params["filter.advanced"] = merge_essie_since(
+                params.get("filter.advanced"), updated_since
+            )
         query_hash = sha256_json({"endpoint": cfg.api.studies_url, "params": params})
 
         if not full_refresh:
@@ -117,6 +176,7 @@ def run_ingestion(
             profile=profile,
             status="running",
             started_at_utc=utc_now(),
+            updated_since_utc=updated_since,
         )
         write_manifest(manifests_dir, manifest)
         log.info("Starting ingestion run {} against {}", run_id, cfg.api.studies_url)
@@ -151,6 +211,22 @@ def run_ingestion(
                     "Run stopped by --max-pages before the API was exhausted; "
                     "marked 'partial' and excluded from reuse and downstream metrics."
                 )
+            if (
+                manifest.status == "success"
+                and manifest.total_count_reported is not None
+                and manifest.record_count != manifest.total_count_reported
+            ):
+                msg = (
+                    f"Run {run_id}: record_count {manifest.record_count} != "
+                    f"countTotal {manifest.total_count_reported}; the API result "
+                    "changed under pagination or fetch was incomplete."
+                )
+                if incremental_refresh:
+                    manifest.status = "failed"
+                    manifest.error = msg
+                    log.error(msg)
+                    raise RuntimeError(msg)
+                log.warning(msg)
         except Exception as exc:
             manifest.status = "failed"
             manifest.error = f"{type(exc).__name__}: {exc}"

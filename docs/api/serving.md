@@ -42,6 +42,10 @@ The service can also be invoked via `entrypoint.sh api`:
 ./entrypoint.sh api --host 0.0.0.0 --port 8000
 ```
 
+### Serving the API with the dashboard
+
+DuckDB allows one writer or many readers, never both across processes, and a Fly volume attaches to one machine, so a separate API machine cannot read the data. Set `CTI_SERVE_API=1` on the supervised (no-argument) entrypoint to run the API next to Streamlit on `${CTI_API_PORT:-8000}`. The weekly refresh stops both, runs the pipeline, then restarts both. Default is off; `fly.toml` does not expose the API port.
+
 ---
 
 ## 2. Serving Architecture & Concurrency

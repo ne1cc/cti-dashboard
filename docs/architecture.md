@@ -200,20 +200,20 @@ own profile and working directory; `CTI_PROJECT_ROOT` does not redirect dbt.
 The sample `CTI_DATA_DIR`, `CTI_BRONZE_DIR`, `CTI_SILVER_DIR`, `CTI_GOLD_DIR`, and
 `CTI_DUCKDB_PATH` entries are not read by the current Python loaders; change YAML
 paths (and dbt connection settings) instead. Container refresh-loop settings are
-documented in the [Fly deployment runbook](DEPLOY_FLY.md).
+documented in the [operations guide](OPERATIONS.md).
 
 ## 6. Scaling path (implemented extensions, and the roadmap beyond them)
 
-- **Full-catalog bronze ingestion (implemented, opt-in).** `config/profiles/full_catalog.yml`
+- **Full-registry slim ingestion and transform (implemented).** `config/profiles/full_catalog.yml`
   drops the `query.cond`/`filter.*` params entirely and runs against a parallel
-  `data/bronze/full_catalog/` tree (`make ingest-full-catalog`), snapshotting the
-  entire ClinicalTrials.gov registry (~600k+ studies, estimated) instead of just
-  ADRD/US. It shares every ingestion primitive with the default profile
-  (`iter_pages`, `CTGClient`, manifest/reuse logic) — only the config differs —
-  and is invisible to `make transform`/`dbt-run`/dashboard: the profile is marked
-  `ingest_only`, so `transform --profile full_catalog` is refused with exit code 2
-  rather than writing a taxonomy-less silver tree, and the default transform reads
-  only `data/bronze/adrd/manifests/`.
+  `data/bronze/full_catalog/` tree (`make ingest-registry` / `make ingest-full-catalog`),
+  snapshotting the entire ClinicalTrials.gov registry (~610k studies) using minimal
+  field projection. The profile is transformable (`ingest_only: false`, mapping
+  conditions to `uncategorized` via `REGISTRY_TAXONOMY`) with `make transform-registry`
+  or bare `python -m src.cli transform`. It is excluded from the multi-profile loop
+  (`orchestrate: false`), so `make orchestrate` and dashboard scopes remain
+  indication-level while registry-wide silver builds on its own cadence. `make transform`
+  continues to process ADRD bronze (`--profile adrd`).
 - **Multi-indication (implemented).** An indication profile is one YAML file in
   `config/profiles/`, the registry loads all of them, and `make orchestrate`
   refreshes every profile that is not `ingest_only` into the *same* warehouse. The

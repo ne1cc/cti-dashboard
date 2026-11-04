@@ -14,6 +14,34 @@ Global rules:
 - Every metric is a *registry-listing signal*. None measures patients,
   enrollment performance, or site capacity.
 
+## Condition identity (Issue #52)
+A trial's condition identity comes from the registry's MeSH browse module
+(`silver_trial_condition_mesh`: direct terms plus the supplied ancestor
+closure, study-level); the YAML taxonomies are optional overlays on top. The
+`mapping_source` column says how a condition row's group was assigned:
+
+| mapping_source | meaning |
+|---|---|
+| `mesh` | registry MeSH browse identity (bridge/dim mesh nodes) |
+| `yaml_overlay` | a profile taxonomy rule matched the condition text |
+| `text_fallback` | no taxonomy match (or no taxonomy); the profile's catch-all group, or `unmapped` when the profile has no taxonomy |
+
+- `dim_condition` grain: profile × condition node — `group:<slug>` (taxonomy)
+  or a MeSH id. MeSH nodes include ancestor-closure edges, so any tree node is
+  selectable; `is_ancestor` is true only where every membership edge is a
+  closure edge.
+- `bridge_trial_condition` grain: profile × trial × node, with the same node
+  namespace. Existing group-based segments read only the `group:` rows; count
+  marts read `int_trial_condition_mapping` (which contains only taxonomy condition
+  groups), and similarity excludes all MeSH rows (`mesh_id is null`) so closure
+  adds browsing reach without multiplying counts or shifting similarity.
+- `same_condition` in `mart_trial_similarity` = two trials share ≥1 taxonomy
+  condition group (`mesh_id is null`); MeSH rows are excluded so candidate pair
+  discovery, similarity scores, and factor weights are unchanged from the
+  taxonomy-only definitions.
+- Coverage/disagreement review: `docs/condition_mesh_coverage.md`
+  (fixture-limited).
+
 ## Activity metrics (`mart_trial_activity`)
 | Metric | Definition |
 |---|---|
@@ -29,10 +57,10 @@ Global rules:
 |---|---|
 | recruiting_trial_count | distinct RECRUITING listings in the segment — a raw count, without population adjustment |
 | observed_history_days | days of snapshot history observed as of the snapshot (earliest retained snapshot through the row's own date); 0 on a first snapshot |
-| new_recruiting_30d / 90d | sum of entered_recruiting transitions observed at snapshot dates inside a 30/90-day window (`RANGE BETWEEN INTERVAL n DAYS PRECEDING`); **null unless observed history covers the window** (observed_history_days ≥ n, earliest in-window snapshot and its predecessor sit within 14-day tolerance of the window boundary, and the latest gap between snapshots is at most n days) — a transition observed across an unobserved gap has unknown timing, so it cannot be counted as if observed within the window. Null means not enough history, never zero transitions |
+| new_recruiting_30d / 90d | sum of entered_recruiting transitions observed at snapshot dates inside a 30/90-day window (`RANGE BETWEEN INTERVAL n DAYS PRECEDING`); **null unless observed history covers the window** (observed_history_days ≥ n, the earliest in-window snapshot predecessor predates the window boundary by at most 1 day — the remaining 1-day bound under exact weekly cadence — and every entrant trial's own predecessor snapshot date falls within that 1-day covered window tolerance, with the latest gap between snapshots at most n days) — a transition observed across an unobserved gap has unknown timing, so it cannot be counted as if observed within the window. Null means not enough history, never zero transitions |
 | newly_registered_90d | recruiting trials with `study_first_post_date` ≥ snapshot date minus 90 days (inclusive lower bound, no upper bound) — a **registration count** from registry dates, not a recruiting transition; computable from a single snapshot |
 | recruiting_count_90d_baseline | first recruiting-count value inside the 90-day window |
-| recruiting_growth_90d | (recruiting count − baseline) / baseline; null unless the 90-day window is covered, the segment was observed at the window's earliest snapshot (guaranteeing baseline precedes the row), and baseline count is > 0 (safe_divide). Never manufactured 0.0 for newly appearing segments or unknown history |
+| recruiting_growth_90d | (recruiting count − baseline) / baseline; null unless the 90-day window is covered, the segment was observed at the window's earliest snapshot (guaranteeing baseline was captured at the window start), the baseline predates counted transitions (no transitions at the baseline snapshot itself, preventing manufactured 0.0), and baseline count is > 0 (safe_divide). Never manufactured 0.0 for newly appearing segments or unknown history |
 | top_sponsor_share | max lead-sponsor share of segment recruiting trials |
 | sponsor_hhi | Σ (lead-sponsor share)², 0..1; null below `min_sponsors_for_hhi` distinct named sponsors (default 3) |
 | density_percentile | `percent_rank()` ordered by recruiting count within profile × snapshot date |
@@ -52,12 +80,14 @@ required for overlap); they remain in silver and staging.
 Month grain (snapshot month). `recruiting_trial_count_3m_avg` and
 `recruiting_growth_3m` use a 3-month `RANGE` window over the profile ×
 condition_group × state series. `recruiting_growth_3m` is **null unless the
-window's earliest observed `activity_month` sits at least three months back**:
-on a shorter window the figure would be labelled "3-month" while covering less
-than that, and on a single-month window the baseline `first_value` is the row
-itself, so `(x − x) / x` would read 0.0 — "recruiting is flat" — for a quantity
-that is genuinely unknown. Null means not enough history; zero is reserved for
-a covered window with no change (pinned by
+window's earliest observed `activity_month` sits at least three months back,
+the baseline snapshot date sits at least 3 calendar months back
+(`baseline_snapshot_date <= latest_snapshot_date - interval 3 month`), and
+observed history spans at least 90 days**: on a shorter window the figure would be labelled
+"3-month" while covering less than that, and on a single-month window the baseline
+`first_value` is the row itself, so `(x − x) / x` would read 0.0 — "recruiting
+is flat" — for a quantity that is genuinely unknown. Null means not enough
+history; zero is reserved for a covered window with no change (pinned by
 `dbt_clinical_trials/tests/assert_trends_growth_needs_full_window.sql`, with
 the superseded two-month guard kept in
 `assert_trends_growth_needs_two_months.sql`). `observed_history_days` is the
@@ -117,7 +147,7 @@ Per ADR 0077, the composite priority score and categorical priority bands were r
 2. **Recent Growth (`new_recruiting_90d`):** sum of recruiting transitions inside the 90-day window; **null until the profile's observed history covers 90 days** (`observed_history_days` quantifies how short the history is). Shown as "not enough history" — unknown, never zero. `newly_registered_90d` is reported beside it as a separately-labelled registration count.
 3. **Sponsor Concentration (`sponsor_hhi`):** Herfindahl-Hirschman Index (Σ s_i²), bounded in [0, 1.0]; null when fewer than `min_sponsors_for_hhi` distinct named sponsors are present (default 3).
 4. **Site Overlap Rate (`site_overlap_rate`, `site_overlap_share`):** Share of segment trials listing ≥1 facility that hosts multiple recruiting trials in this indication profile.
-5. **Operational Completeness Adjustment (`data_confidence_share`):** 0.5 × segment record-quality-ok share + 0.5 × run-level usable-location share. Reflects reporting and location usability; not scientific confidence.
+5. **Operational Completeness (`operational_completeness_share`):** 0.5 × segment record-quality-ok share + 0.5 × run-level usable-location share. The usable-location half is a run-level value from the profile's latest successful ingestion run, so it is constant across all segments of one profile. Reflects reporting and location usability; not scientific confidence.
 6. `priority_explanation` is assembled from fixed component phrases — the same inputs always yield the same sentence. Every row carries an `interpretation_note`.
 
 ## Audit definitions and scope
@@ -221,9 +251,10 @@ counts recruiting listings whose first-post date is ≥ snapshot minus 90 days �
 registrations, not transitions, computable from a single captured date. Site
 overlap share is distinct recruiting segment
 trials listing any facility with >1 recruiting trial in the profile / distinct
-recruiting segment trials. The legacy operational completeness input is 0.5 ×
-segment record-quality-ok share + 0.5 × latest successful-run usable-location share;
-missing shares coalesce to zero. It is not scientific confidence.
+recruiting segment trials. The operational completeness input (`operational_completeness_share`)
+is 0.5 × segment record-quality-ok share + 0.5 × latest successful-run usable-location share;
+missing shares coalesce to zero. The usable-location half is a run-level value, constant
+across segments of one profile. It is not scientific confidence.
 
 Monthly counts use distinct NCT IDs across captured observations in the month.
 The three-calendar-month `RANGE` includes the current month and its three prior
