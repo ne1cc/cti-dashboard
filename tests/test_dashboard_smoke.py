@@ -494,3 +494,33 @@ def test_segment_drilldown_uses_selected_profile_label(
     headings = [heading.value for heading in at.subheader]
     assert any("Segment details — NSCLC Fixture Label" in text for text in headings)
     assert any("Constituent Clinical Trials — NSCLC Fixture Label" in text for text in headings)
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        "dashboard/overview.py",
+        "dashboard/pages/1_Priority_Queue.py",
+        "dashboard/pages/2_Competition_Landscape.py",
+    ],
+)
+def test_hhi_suppression_keeps_numeric_table_and_explains_missing_values(
+    script: str, fixture_warehouse: Path
+) -> None:
+    """Each HHI table retains numeric sorting and shows the row's suppression reason."""
+    import pandas as pd
+    from streamlit.testing.v1 import AppTest
+
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    at = AppTest.from_file(str(ROOT / script), default_timeout=60).run()
+    assert not at.exception, at.exception
+    table = at.dataframe[0].value
+    assert pd.api.types.is_numeric_dtype(table["sponsor_hhi"])
+    suppressed = table[table["sponsor_hhi"].isna()]
+    assert not suppressed.empty
+    assert suppressed["hhi_status"].str.startswith("insufficient data (").all()
+    if script.endswith("2_Competition_Landscape.py"):
+        assert any(
+            f"Excluded {len(suppressed)} segments" in caption.value for caption in at.caption
+        )

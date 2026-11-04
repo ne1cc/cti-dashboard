@@ -18,6 +18,8 @@ TICK_SECONDS=5
 STREAMLIT_BIN="$APP_DIR/.venv/bin/streamlit"
 
 DASHBOARD_PID=""
+API_PID=""
+SERVE_API="${CTI_SERVE_API:-0}"
 SHUTDOWN=0
 SINCE_CHECK=0
 
@@ -67,6 +69,20 @@ stop_dashboard() {
         wait "$DASHBOARD_PID" 2>/dev/null || true
     fi
     DASHBOARD_PID=""
+}
+
+start_api() {
+    "$APP_DIR/.venv/bin/uvicorn" src.api.app:create_app --factory \
+        --host 0.0.0.0 --port "${CTI_API_PORT:-8000}" &
+    API_PID=$!
+}
+
+stop_api() {
+    if [ -n "$API_PID" ] && kill -0 "$API_PID" 2>/dev/null; then
+        kill "$API_PID"
+        wait "$API_PID" 2>/dev/null || true
+    fi
+    API_PID=""
 }
 
 request_shutdown() { SHUTDOWN=1; }
@@ -145,15 +161,18 @@ refresh_if_due() {
             || log "failed to persist disk rejection; inspect stdout"
         return 0
     fi
-    # DuckDB allows one read-write connection or read-only ones, never both, and
-    # the dashboard caches its read-only connection for the life of the process
-    # (dashboard/components/data.py). The pipeline can only take the writer lock
-    # while nothing is serving.
-    log "refresh due; pausing dashboard to release the warehouse lock"
+    # DuckDB allows one writer or readers, never both across processes. The
+    # dashboard cache and API pool both hold read-only connections to this file.
+    log "refresh due; pausing dashboard and API (if enabled) to release the warehouse lock"
     stop_dashboard
+    [ "$SERVE_API" = 1 ] && stop_api
     run_pipeline || true
     start_dashboard
     log "dashboard serving again (pid=$DASHBOARD_PID)"
+    if [ "$SERVE_API" = 1 ]; then
+        start_api
+        log "api serving again (pid=$API_PID)"
+    fi
 }
 
 # First-boot bootstrap: block startup until the warehouse exists at least once,
@@ -172,14 +191,22 @@ fi
 
 start_dashboard
 log "dashboard serving (pid=$DASHBOARD_PID)"
+if [ "$SERVE_API" = 1 ]; then
+    start_api
+    log "api serving (pid=$API_PID)"
+fi
 
 while :; do
     if [ "$SHUTDOWN" -eq 1 ]; then
-        log "shutdown requested; stopping dashboard"
+        log "shutdown requested; stopping dashboard and API"
         break
     fi
     if ! kill -0 "$DASHBOARD_PID" 2>/dev/null; then
         log "dashboard exited; exiting so the host restarts the container"
+        exit 1
+    fi
+    if [ "$SERVE_API" = 1 ] && ! kill -0 "$API_PID" 2>/dev/null; then
+        log "api exited; exiting so Fly restarts the machine"
         exit 1
     fi
     # Background sleep + wait: bash returns from `wait` when a signal is
@@ -195,3 +222,4 @@ while :; do
 done
 
 stop_dashboard
+stop_api

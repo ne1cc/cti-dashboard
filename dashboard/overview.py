@@ -7,6 +7,7 @@ from components.formatting import (
     format_phase,
     format_priority_explanation,
     format_snapshot_date,
+    hhi_status,
 )
 from components.guardrails import guarded_footer, page_setup, proxy_caption
 from components.guidance import (
@@ -99,6 +100,16 @@ preview_df["condition_group"] = preview_df["condition_group"].apply(
     lambda g: format_condition_group(g, profile_id)
 )
 preview_df["phase_normalized"] = preview_df["phase_normalized"].map(format_phase)
+preview_df.insert(
+    list(preview_df.columns).index("sponsor_hhi") + 1,
+    "hhi_status",
+    [
+        hhi_status(value, count)
+        for value, count in zip(
+            preview_df["sponsor_hhi"], preview_df["distinct_sponsors"], strict=True
+        )
+    ],
+)
 preview_df["priority_explanation"] = [
     format_priority_explanation(row) for _, row in queue.head(10).iterrows()
 ]
@@ -119,6 +130,7 @@ st.dataframe(
             width=135,
             help="Actively recruiting trials in this segment",
         ),
+        "hhi_status": st.column_config.TextColumn("HHI status"),
         "sponsor_hhi": st.column_config.NumberColumn(
             "Sponsor HHI",
             format="%.3f",

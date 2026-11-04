@@ -221,23 +221,53 @@ def test_every_metric_page_exposes_profile_audit(script, warehouse):
                 assert set(frame.indication_profile_id) <= {profile}
                 assert "snapshot_id" in frame.columns
         if "Priority_Queue" in script:
-            assert "Data Confidence" not in str(at.dataframe[0].proto)
-            assert "data confidence" not in str(at.dataframe[0].value).lower()
+            queue_table = at.dataframe[0]
+            assert "Operational completeness" in str(queue_table.proto)
+            assert "operational_completeness_share" in queue_table.value.columns
+            assert (
+                queue_table.value["priority_explanation"]
+                .str.contains("operational completeness", case=False, regex=False)
+                .all()
+            )
 
 
 def test_growth_input_window_export_metadata(warehouse):
     at = AppTest.from_file(
         str(ROOT / "dashboard/pages/2_Competition_Landscape.py"), default_timeout=60
     ).run()
-    next(w for w in at.selectbox if w.label == "Audit metric inputs").set_value(
-        "90-day growth observations"
+    box = next(w for w in at.selectbox if w.label == "Audit metric inputs")
+    mode = (
+        "Recruiting-entry events"
+        if "Recruiting-entry events" in box.options
+        else "90-day growth observations"
     )
+    box.set_value(mode)
     at.run()
     assert not at.exception
     metadata = next(json.loads(j.value) for j in at.json if "rule_version" in j.value)
     assert metadata["metric"] == "recent_recruiting"
     assert metadata["rule_config"]["display_context"]["growth_window_start"]
     assert metadata["rule_config"]["display_context"]["growth_window_end"]
+
+
+def test_competition_audit_gating_below_90d_labels_and_clamps(warehouse):
+    """Finding 5: Below 90d, mode is 'Recruiting-entry events' and window is clamped."""
+    at = AppTest.from_file(
+        str(ROOT / "dashboard/pages/2_Competition_Landscape.py"), default_timeout=60
+    ).run()
+    box = next(w for w in at.selectbox if w.label == "Audit metric inputs")
+    assert "Recruiting-entry events" in box.options
+    assert "90-day growth observations" not in box.options
+
+    box.set_value("Recruiting-entry events")
+    at.run()
+    assert not at.exception
+    metadata = next(json.loads(j.value) for j in at.json if "rule_version" in j.value)
+    start = metadata["rule_config"]["display_context"]["growth_window_start"]
+    # Clamped to the first snapshot date (not latest minus 90 days)
+    assert start == "2026-09-01"
+    # Caption includes observed day count
+    assert any("observed window" in c.value for c in at.caption)
 
 
 def test_empty_facility_export_keeps_snapshot_scope(warehouse):

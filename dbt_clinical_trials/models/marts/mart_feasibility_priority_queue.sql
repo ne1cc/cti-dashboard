@@ -30,8 +30,8 @@ profile_history as (
 ),
 
 -- Latest successful run *per profile*: mart_data_reliability is one row per
--- ingestion run, and a global `limit 1` would price profile A's data
--- confidence with profile B's location completeness.
+-- ingestion run, and a global `limit 1` would mix profile A's operational
+-- completeness with profile B's location completeness.
 run_reliability as (
     select indication_profile_id, usable_location_share
     from (
@@ -120,7 +120,7 @@ inputs as (
         s.record_quality_ok_share,
         0.5 * coalesce(s.record_quality_ok_share, 0)
             + 0.5 * coalesce(r.usable_location_share, 0)
-            as data_confidence_share
+            as operational_completeness_share
     from competition c
     inner join segment_trials s
         using (indication_profile_id, condition_group, state_normalized, phase_normalized)
@@ -154,7 +154,7 @@ select
     site_overlap_share,
     site_overlap_rate,
     record_quality_ok_share,
-    data_confidence_share,
+    operational_completeness_share,
     concat_ws(
         '; ',
         recruiting_trial_count || ' recruiting listing(s) in segment',
@@ -167,16 +167,20 @@ select
                 'new recruiting: not enough history ('
                 || observed_history_days || ' of 90 days observed)'
             else
-                'new recruiting: not enough history (gap between snapshots exceeds window)'
+                'new recruiting: not enough history (snapshots do not cover the window)'
         end,
         newly_registered_90d
             || ' newly registered within 90 days (registry first-post date,'
             || ' not a recruiting transition)',
-        'sponsor concentration HHI ' || round(sponsor_hhi, 2)
-            || ' across ' || sponsor_count || ' sponsor(s)',
+        case when sponsor_hhi is null then
+            'sponsor concentration: insufficient data (' || sponsor_count || ' sponsors)'
+        else
+            'sponsor concentration HHI ' || round(sponsor_hhi, 2)
+                || ' across ' || sponsor_count || ' sponsor(s)'
+        end,
         round(coalesce(site_overlap_share, 0) * 100)
             || '% of trials share a multi-trial facility listing',
-        'data confidence ' || round(data_confidence_share * 100) || '%'
+        'operational completeness ' || round(operational_completeness_share * 100) || '%'
     ) as priority_explanation,
     'Potential competition signal from public registry listings.'
         || ' Not a recruitment forecast; requires human feasibility review.'

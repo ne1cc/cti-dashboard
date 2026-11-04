@@ -6,7 +6,7 @@ import streamlit as st
 from components import data
 from components.audit_panel import PRIORITY_DERIVED_RULES, render_metric_audit
 from components.filters import segment_filters
-from components.formatting import format_phase, format_priority_explanation
+from components.formatting import format_phase, format_priority_explanation, hhi_status
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import (
     clinicaltrials_gov_search_url,
@@ -35,7 +35,7 @@ if observed_history_days < 90:
     st.warning(
         f"Only {observed_history_days} of the 90 days of snapshot history "
         "needed for recruiting-growth figures have been observed, so "
-        'new_recruiting_90d shows "not enough history" — unknown, not '
+        '"Recent recruiting growth" shows "not enough history" — unknown, not '
         'zero. "Newly registered (first posted)" counts are computed from '
         "registry dates and are available now."
     )
@@ -62,7 +62,7 @@ queue_columns = [
     "site_overlap_rate",
     "distinct_sponsors",
     "listed_site_count",
-    "data_confidence_share",
+    "operational_completeness_share",
     "registry_search_url",
     "priority_explanation",
 ]
@@ -71,6 +71,16 @@ display_df["condition_group"] = display_df["condition_group"].apply(
     lambda g: format_condition_group(g, profile_id)
 )
 display_df["phase_normalized"] = display_df["phase_normalized"].map(format_phase)
+display_df.insert(
+    list(display_df.columns).index("sponsor_hhi") + 1,
+    "hhi_status",
+    [
+        hhi_status(value, count)
+        for value, count in zip(
+            display_df["sponsor_hhi"], display_df["distinct_sponsors"], strict=True
+        )
+    ],
+)
 display_df["priority_explanation"] = [
     format_priority_explanation(row) for _, row in filtered.iterrows()
 ]
@@ -93,6 +103,7 @@ queue_event = st.dataframe(
             width=135,
             help="Actively recruiting trials in this segment (status RECRUITING)",
         ),
+        "hhi_status": st.column_config.TextColumn("HHI status"),
         "sponsor_hhi": st.column_config.NumberColumn(
             "Sponsor concentration",
             format="%.3f",
@@ -120,8 +131,8 @@ queue_event = st.dataframe(
             width=100,
             help="Attributable clinical facility listings in this state for this segment",
         ),
-        "data_confidence_share": st.column_config.NumberColumn(
-            "Completeness adjustment",
+        "operational_completeness_share": st.column_config.NumberColumn(
+            "Operational completeness",
             format="percent",
             width=160,
             help="0.5 record-quality-ok share + 0.5 latest usable-location share",
@@ -151,7 +162,7 @@ export_columns = [
     "new_recruiting_90d",
     "newly_registered_90d",
     "observed_history_days",
-    "data_confidence_share",
+    "operational_completeness_share",
     "registry_search_url",
     "priority_explanation",
     "interpretation_note",
@@ -159,14 +170,7 @@ export_columns = [
 ]
 st.download_button(
     "Download filtered segments as CSV",
-    filtered[export_columns]
-    .rename(
-        columns={
-            "data_confidence_share": "legacy_operational_completeness_adjustment",
-        }
-    )
-    .to_csv(index=False)
-    .encode("utf-8"),
+    filtered[export_columns].to_csv(index=False).encode("utf-8"),
     file_name="registry_segments.csv",
     mime="text/csv",
     help="Exports exactly the rows and filters currently shown above, "
@@ -191,7 +195,7 @@ if selected_rows:
         )
     elif segment_history >= 90:
         growth_label = "Recent recruiting growth"
-        growth_val = "not enough history (gap between snapshots exceeds window) — unknown, not zero"
+        growth_val = "not enough history (snapshots do not cover the window) — unknown, not zero"
     else:
         growth_label = "Recent recruiting growth"
         growth_val = (
@@ -206,11 +210,16 @@ if selected_rows:
             "(registration count, not a recruiting transition)",
         ),
         ("Sponsor count", f"{int(segment['distinct_sponsors'])} distinct sponsor(s)"),
-        ("Sponsor concentration HHI", f"{segment['sponsor_hhi']:.3f}"),
+        (
+            "Sponsor concentration HHI",
+            f"{segment['sponsor_hhi']:.3f}"
+            if pd.notna(segment["sponsor_hhi"])
+            else hhi_status(segment["sponsor_hhi"], segment["sponsor_count"]),
+        ),
         ("Top sponsor share", f"{segment['top_sponsor_share'] * 100:.1f}%"),
         ("Site overlap rate", f"{segment['site_overlap_rate'] * 100:.1f}% of trials"),
         ("Listed site affiliations", f"{int(segment['listed_site_count'])} sites"),
-        ("Operational completeness", f"{segment['data_confidence_share'] * 100:.1f}%"),
+        ("Operational completeness", f"{segment['operational_completeness_share'] * 100:.1f}%"),
     ]
     details_df = pd.DataFrame(details_rows, columns=["Metric", "Observed Value"])
     st.dataframe(

@@ -24,19 +24,21 @@ PRIORITY_DERIVED_RULES = (
     "actively recruiting interventional trials within the condition, state, and phase segment. "
     "distinct_sponsors (alias sponsor_count) counts unique lead sponsors active in the segment. "
     "sponsor_hhi calculates the Herfindahl-Hirschman Index of lead sponsor concentration, "
-    "summing squared sponsor shares of segment trials (bounded [0, 1]). "
+    "summing squared sponsor shares of segment trials (bounded [0, 1]); it is null "
+    "below min_sponsors_for_hhi (default 3) distinct named lead sponsors. "
     "site_overlap_rate (alias site_overlap_share) measures the share of recruiting trials in the "
     "segment that share at least one facility with another competing trial in the same "
     "indication profile, divided by distinct recruiting segment trials (bounded [0, 1]). "
     "new_recruiting_90d sums daily recruiting entrants over the inclusive 90-day window "
     "(entrant requires a previous non-null non-recruiting status) and is null until "
-    "observed snapshot history covers the window and the latest snapshot gap does not "
-    "itself span it — null means not enough history, never zero. newly_registered_90d "
+    "observed snapshot history covers the window (at least 90 observed days, earliest "
+    "in-window snapshot and predecessor within 7-day cadence tolerance, and latest snapshot gap "
+    "does not exceed the window) — null means not enough history, never zero. newly_registered_90d "
     "counts recruiting studies whose registry first-post date falls within 90 days: a "
     "registration count, not a recruiting transition. "
-    "data_confidence_share retains operational data completeness (0.5 segment "
+    "operational_completeness_share is operational data completeness (0.5 segment "
     "record-quality-ok share + 0.5 latest successful-run usable-location share; "
-    "missing shares coalesce to zero) as a quality signal pending Issue #78. "
+    "missing shares coalesce to zero). "
     "This panel audits count inputs and underlying study records; derived metric values "
     "remain warehouse calculations."
 )
@@ -174,11 +176,7 @@ def render_metric_audit(
                     & (segments.state_normalized == chosen_segment[1])
                     & (segments.phase_normalized == chosen_segment[2])
                 ]
-            display_context["displayed_metric_values"] = values.rename(
-                columns=lambda name: name.replace(
-                    "data_confidence", "legacy_operational_completeness"
-                )
-            ).to_dict("records")
+            display_context["displayed_metric_values"] = values.to_dict("records")
         if sponsors is not None:
             sponsor = st.selectbox(
                 "Audit sponsor",
@@ -224,28 +222,61 @@ def render_metric_audit(
         display_context["observation_selection"] = observation_metric or metric
         observations = data.metric_audit_observations(profile_id, observation_metric or metric)
         if metric == "competition" and not observations.empty:
+            end = pd.Timestamp(pd.to_datetime(observations.snapshot_date).max()).date()
+            if (
+                segments is not None
+                and "observed_history_days" in segments.columns
+                and not segments.empty
+            ):
+                observed_days = int(segments["observed_history_days"].iloc[0])
+            else:
+                hist_bounds = data.query(
+                    "select min(snapshot_date) as min_date, max(snapshot_date) as max_date "
+                    "from main_intermediate.int_trial_status_history "
+                    "where indication_profile_id = ?",
+                    [profile_id],
+                )
+                if not hist_bounds.empty and pd.notna(hist_bounds["min_date"].iloc[0]):
+                    min_d = pd.to_datetime(hist_bounds["min_date"].iloc[0]).date()
+                    max_d = pd.to_datetime(hist_bounds["max_date"].iloc[0]).date()
+                    observed_days = (max_d - min_d).days
+                else:
+                    observed_days = 0
+            first_date = end - timedelta(days=observed_days)
+            growth_mode_label = (
+                "90-day growth observations" if observed_days >= 90 else "Recruiting-entry events"
+            )
             mode = st.selectbox(
                 "Audit metric inputs",
-                ["Current count", "90-day growth observations", "Newly registered (first posted)"],
+                ["Current count", growth_mode_label, "Newly registered (first posted)"],
                 key=f"{key}_{profile_id}_window",
             )
-            if mode == "90-day growth observations":
-                end = pd.Timestamp(pd.to_datetime(observations.snapshot_date).max()).date()
+            if mode in ("90-day growth observations", "Recruiting-entry events"):
                 observations = data.metric_audit_observations(profile_id, "recent_recruiting")
                 dates = pd.to_datetime(observations.snapshot_date).dt.date
-                observations = observations[(dates >= end - timedelta(days=90)) & (dates <= end)]
+                clamped_start = max(end - timedelta(days=90), first_date)
+                observations = observations[(dates >= clamped_start) & (dates <= end)]
                 metric = "recent_recruiting"
-                display_context["growth_window_start"] = str(end - timedelta(days=90))
+                display_context["growth_window_start"] = str(clamped_start)
                 display_context["growth_window_end"] = str(end)
-                st.caption(
-                    "Contributors are captured recruiting-entry events in this inclusive "
-                    "90-day window. Predecessor evidence is retained even before the window. "
-                    "The displayed mart figure stays null until observed history covers the "
-                    "window; this audit lists the raw events regardless. "
-                    "Eligible coverage and count-input contributors remain separate."
-                )
+                if observed_days >= 90:
+                    st.caption(
+                        "Contributors are captured recruiting-entry events in this inclusive "
+                        "90-day window. Predecessor evidence is retained even before the window. "
+                        "The displayed mart figure stays null until observed history covers the "
+                        "window; this audit lists the raw events regardless. "
+                        "Eligible coverage and count-input contributors remain separate."
+                    )
+                else:
+                    st.caption(
+                        "Contributors are captured recruiting-entry events in this inclusive "
+                        f"{observed_days}-day observed window. Predecessor evidence is retained "
+                        "even before the window. The displayed mart figure stays null until "
+                        "observed history covers the window; this audit lists the raw events "
+                        "regardless. Eligible coverage and count-input contributors remain "
+                        "separate."
+                    )
             elif mode == "Newly registered (first posted)":
-                end = pd.Timestamp(pd.to_datetime(observations.snapshot_date).max()).date()
                 metric = "first_post_registered"
                 display_context["growth_window_start"] = str(end - timedelta(days=90))
                 display_context["growth_window_end"] = str(end)

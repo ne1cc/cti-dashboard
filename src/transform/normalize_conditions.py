@@ -1,7 +1,12 @@
-"""Config-driven condition taxonomy mapping.
+"""Config-driven condition taxonomy overlay mapping.
 
 Deterministic, version-controlled YAML rules (config/condition_taxonomy*.yml).
 No runtime LLM classification. Groups are evaluated in order; first match wins.
+
+Since Issue #52 the YAML taxonomies are optional overlays on top of the
+registry's MeSH browse terms (silver_trial_condition_mesh): rows matched by a
+taxonomy rule carry mapping_source yaml_overlay, everything else falls back
+(text_fallback) and MeSH identity carries the browsable condition grouping.
 """
 
 from dataclasses import dataclass
@@ -101,6 +106,17 @@ def load_taxonomy(path: str | Path | None = None) -> ConditionTaxonomy:
         default_dementia_relevance=bool(default_entry["dementia_relevance"]),
         default_display_name=default_entry.get("display_name") or default_entry.get("label"),
     )
+
+
+# The registry-wide profile (full_catalog) has no indication taxonomy: every
+# condition maps to "uncategorized" with no dementia flag. Keeping this as a
+# taxonomy — not a special case in flatten — is what lets one silver path serve
+# both indication profiles and the whole registry (issue #53).
+REGISTRY_TAXONOMY = ConditionTaxonomy(
+    groups=(),
+    default_group="uncategorized",
+    default_dementia_relevance=False,
+)
 
 
 @lru_cache(maxsize=1)

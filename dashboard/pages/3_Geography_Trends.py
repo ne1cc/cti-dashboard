@@ -220,9 +220,10 @@ render_metric_audit(
             "Growth = (current monthly recruiting count - earliest recruiting count "
             "in the inclusive preceding three-calendar-month range)/earliest count; "
             "null with zero baseline or until the window's earliest observed month "
-            "sits at least three months back — 'not enough history', never zero. "
-            "State sums may repeat studies. This panel audits window counts; deltas "
-            "remain warehouse calculations."
+            "sits at least three months back, the baseline snapshot sits at least 3 "
+            "calendar months back, and observed history spans at least 90 days — "
+            "'not enough history', never zero. State sums may repeat studies. "
+            "This panel audits window counts; deltas remain warehouse calculations."
         ),
         "population_normalization": (
             "Per-100k rates divide recruiting trial listings by U.S. Census resident "

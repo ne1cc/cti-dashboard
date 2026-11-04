@@ -375,6 +375,64 @@ def _growth_history_nsclc_run3() -> FixtureRun:
     )
 
 
+DENSE_ME_STUDY = AddedStudy(
+    nct_id="NCT00000099",
+    clone_of="NCT00000001",
+    overall_status="RECRUITING",
+    phase="PHASE3",
+    condition="Alzheimer Disease",
+    sponsor="NeuroPharm Inc",
+    location=("Maine Medical Center", "Portland", "Maine"),
+)
+
+DENSE_ADRD_RUNS = [
+    replace(
+        _base_adrd_run(),
+        run_id="20260908T100000Z_fixture20",
+        started_at=datetime(2026, 9, 8, 10, tzinfo=UTC),
+    ),
+    replace(
+        _base_adrd_run(),
+        run_id="20260915T100000Z_fixture21",
+        started_at=datetime(2026, 9, 15, 10, tzinfo=UTC),
+    ),
+    replace(
+        DIVERGENT_ADRD_RUN2,
+        run_id="20260929T100000Z_fixture22",
+        started_at=datetime(2026, 9, 29, 10, tzinfo=UTC),
+    ),
+    replace(
+        DIVERGENT_ADRD_RUN2,
+        run_id="20261013T100000Z_fixture23",
+        started_at=datetime(2026, 10, 13, 10, tzinfo=UTC),
+    ),
+    replace(
+        DIVERGENT_ADRD_RUN2,
+        run_id="20261027T100000Z_fixture24",
+        started_at=datetime(2026, 10, 27, 10, tzinfo=UTC),
+    ),
+    replace(
+        DIVERGENT_ADRD_RUN2,
+        run_id="20261110T100000Z_fixture25",
+        started_at=datetime(2026, 11, 10, 10, tzinfo=UTC),
+    ),
+    replace(
+        DIVERGENT_ADRD_RUN2,
+        run_id="20261124T100000Z_fixture26",
+        started_at=datetime(2026, 11, 24, 10, tzinfo=UTC),
+    ),
+    replace(
+        DIVERGENT_ADRD_RUN2,
+        run_id="20261208T100000Z_fixture27",
+        started_at=datetime(2026, 12, 8, 10, tzinfo=UTC),
+        added=(
+            *DIVERGENT_ADRD_RUN2.added,
+            DENSE_ME_STUDY,
+        ),
+    ),
+]
+
+
 # Same bronze, manifest left at the pre-stamping default. Silver still says
 # oncology_nsclc, because src/transform stamps from the resolved profile.
 UNSTAMPED_NSCLC_RUN = FixtureRun(
@@ -624,6 +682,23 @@ def growth_history_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Pat
 
 
 @pytest.fixture(scope="session")
+def dense_history_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Dense snapshot history covering the 90-day window (09-02 through 12-08).
+
+    On 12-08 history is 97 days, window opens 09-09, earliest in-window snapshot is
+    09-15 (6 days <= 7-day cadence tolerance), predecessor is 09-02 (7 days <= 7-day
+    tolerance), and all intervening gaps are 14 days (<= 90 days).
+    Emits 9 of 9 new_recruiting_90d and non-null recruiting_growth_90d with real zeros,
+    while the newly appearing ME segment on 12-08 emits null growth.
+    """
+    return _build_fixture_root(
+        tmp_path_factory,
+        "fixture_dense_history",
+        DENSE_ADRD_RUNS,
+    )
+
+
+@pytest.fixture(scope="session")
 def solo_fixture_roots(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
     """One warehouse per profile, each holding that profile's runs and nothing else.
 
@@ -651,6 +726,85 @@ def solo_fixture_roots(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Pa
         ),
         "oncology_nsclc": _build_fixture_root(
             tmp_path_factory, "fixture_solo_nsclc", [_base_nsclc_run()]
+        ),
+    }
+
+
+# --- Issue #79 fixture: sponsor_hhi suppression thresholds -------------------
+# One ADRD run whose recruiting segments carry 0, 1, 2 and 3 distinct sponsors:
+#   (alzheimers_disease, NC, PHASE2)  4 trials, 3 sponsors {1/4, 1/4, 2/4} -> HHI 0.375
+#   (alzheimers_disease, NC, PHASE3)  2 trials, 2 sponsors -> HHI 0.5
+#   (alzheimers_disease, CA, PHASE3)  1 trial, 1 sponsor  -> HHI 1.0
+#   the sole NCT00000009 segment      1 trial, 0 named sponsors
+# Built twice (project defaults, and min_sponsors_for_hhi=2) so the suppression
+# edge is observable moving with the var: the two-sponsor segment is null at 3
+# and 0.5 at 2; the three-sponsor one is 0.375 at both.
+def _hhi_threshold_run() -> FixtureRun:
+    return replace(
+        _base_adrd_run(),
+        run_id="20260901T120000Z_fixture08",
+        added=(
+            AddedStudy(
+                nct_id="NCT00000021",
+                clone_of="NCT00000001",
+                overall_status="RECRUITING",
+                sponsor="Threshold Sponsor Two",
+                location=("Duke Memory Center", "Durham", "North Carolina"),
+            ),
+            AddedStudy(
+                nct_id="NCT00000022",
+                clone_of="NCT00000001",
+                overall_status="RECRUITING",
+                phase="PHASE2",
+                sponsor="Threshold Sponsor Three",
+                location=("Duke Memory Center", "Durham", "North Carolina"),
+            ),
+            AddedStudy(
+                nct_id="NCT00000023",
+                clone_of="NCT00000001",
+                overall_status="RECRUITING",
+                phase="PHASE2",
+                sponsor="Threshold Sponsor Four",
+                location=("Duke Memory Center", "Durham", "North Carolina"),
+            ),
+            AddedStudy(
+                nct_id="NCT00000024",
+                clone_of="NCT00000001",
+                overall_status="RECRUITING",
+                phase="PHASE2",
+                sponsor="Threshold Sponsor Five",
+                location=("Duke Memory Center", "Durham", "North Carolina"),
+            ),
+            AddedStudy(
+                nct_id="NCT00000025",
+                clone_of="NCT00000001",
+                overall_status="RECRUITING",
+                phase="PHASE2",
+                sponsor="Threshold Sponsor Five",
+                location=("Duke Memory Center", "Durham", "North Carolina"),
+            ),
+        ),
+        study_overrides={
+            # Zero named sponsors: a null lead-sponsor group counts no distinct
+            # sponsor, so sponsor_count is 0 and HHI must stay null.
+            "NCT00000009": {
+                "sponsorCollaboratorsModule": {"leadSponsor": {"name": None, "class": "OTHER"}}
+            },
+        },
+    )
+
+
+@pytest.fixture(scope="session")
+def hhi_threshold_roots(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
+    """The Issue #79 warehouse at the default threshold and at min_sponsors_for_hhi=2."""
+    run = _hhi_threshold_run()
+    return {
+        "default": _build_fixture_root(tmp_path_factory, "fixture_hhi_default", [run]),
+        "min_two": _build_fixture_root(
+            tmp_path_factory,
+            "fixture_hhi_min_two",
+            [run],
+            dbt_vars={"min_sponsors_for_hhi": 2},
         ),
     }
 

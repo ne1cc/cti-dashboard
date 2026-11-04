@@ -2,6 +2,19 @@
 -- that profile's latest snapshot). trial_key hashes the full grain: the same
 -- registry record observed through two query scopes is two dimension rows, and
 -- collapsing them would attribute one profile's status to the other.
+with mesh_extracted_runs as (
+    -- Runs where silver_trial_condition_mesh exists on disk (even with 0 rows).
+    -- Distinguishes runs where MeSH was extracted from historical legacy runs
+    -- where MeSH extraction was never performed (Issue #52 round 3, finding 2).
+    select distinct regexp_extract(file, 'run_id=([^.]+)\.parquet', 1) as ingestion_run_id
+    from glob('data/silver/silver_trial_condition_mesh/*.parquet')
+),
+
+current_mesh as (
+    select distinct ingestion_run_id, indication_profile_id, nct_id
+    from {{ ref('stg_trial_condition_mesh') }}
+)
+
 select
     {{ generate_surrogate_key(['c.nct_id', 'c.indication_profile_id']) }} as trial_key,
     c.nct_id,
@@ -52,9 +65,19 @@ select
     case when t.minimum_age_years is null then true else false end as has_unspecified_min_age,
     case when t.maximum_age_years is null then true else false end as has_unspecified_max_age,
     case when t.healthy_volunteers is null then true else false end as healthy_volunteers_unknown_flag,
-    case when t.sex is null or upper(trim(t.sex)) in ('', 'UNKNOWN') then true else false end as sex_eligibility_unknown_flag
+    case when t.sex is null or upper(trim(t.sex)) in ('', 'UNKNOWN') then true else false end as sex_eligibility_unknown_flag,
+    case
+        when er.ingestion_run_id is not null then case when m.nct_id is not null then true else false end
+        else cast(null as boolean)
+    end as has_derived_mesh
 from {{ ref('int_current_trial_status') }} c
 inner join {{ ref('stg_trials') }} t
     on c.ingestion_run_id = t.ingestion_run_id
     and c.nct_id = t.nct_id
     and c.indication_profile_id = t.indication_profile_id
+left join mesh_extracted_runs er
+    on c.ingestion_run_id = er.ingestion_run_id
+left join current_mesh m
+    on c.ingestion_run_id = m.ingestion_run_id
+    and c.nct_id = m.nct_id
+    and c.indication_profile_id = m.indication_profile_id

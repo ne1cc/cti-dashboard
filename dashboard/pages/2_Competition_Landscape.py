@@ -6,7 +6,7 @@ import streamlit as st
 from components import data
 from components.audit_panel import render_metric_audit
 from components.filters import segment_filters
-from components.formatting import format_phase
+from components.formatting import format_phase, hhi_status
 from components.guardrails import guarded_footer, page_setup, proxy_caption
 from components.guidance import format_condition_group, render_page_guide
 from components.profile import render_profile_selector
@@ -47,8 +47,9 @@ observed_history_days = (
 growth_window_covered = observed_history_days >= 90
 
 st.subheader("Recruiting trial count vs sponsor concentration")
+hhi_chart_data = filtered[filtered["sponsor_hhi"].notna()]
 fig = px.scatter(
-    filtered,
+    hhi_chart_data,
     x="recruiting_trial_count",
     y="sponsor_hhi",
     size="listed_site_count",
@@ -62,6 +63,9 @@ fig = px.scatter(
     },
 )
 st.plotly_chart(fig, width="stretch")
+st.caption(
+    f"Excluded {len(filtered) - len(hhi_chart_data)} segments with insufficient sponsor data."
+)
 st.caption(
     "Each point is a condition × state × phase segment at the latest "
     "snapshot. Bubble size = listed sites. Bands are relative percentile "
@@ -91,6 +95,14 @@ table_df["condition_group"] = table_df["condition_group"].apply(
     lambda g: format_condition_group(g, profile_id)
 )
 table_df["phase_normalized"] = table_df["phase_normalized"].map(format_phase)
+table_df.insert(
+    list(table_df.columns).index("sponsor_hhi") + 1,
+    "hhi_status",
+    [
+        hhi_status(value, count)
+        for value, count in zip(table_df["sponsor_hhi"], table_df["sponsor_count"], strict=True)
+    ],
+)
 table_df["competition_signal_band"] = table_df["competition_signal_band"].str.capitalize()
 # The "(90d)" label is only honest once 90 days were actually observed and covered;
 # below that or across unobserved gaps the column carries "not enough history".
@@ -104,7 +116,7 @@ def _format_competition_new_recruiting(value: float | None) -> str:
     if pd.notna(value):
         return f"{value:.0f}"
     if observed_history_days >= 90:
-        return "not enough history (gap between snapshots exceeds window)"
+        return "not enough history (snapshots do not cover the window)"
     return f"not enough history ({observed_history_days} of 90 days observed)"
 
 
@@ -144,6 +156,7 @@ st.dataframe(
         ),
         "sponsor_count": st.column_config.NumberColumn("Sponsors", format="%d"),
         "top_sponsor_share": st.column_config.NumberColumn("Top Sponsor Share", format="percent"),
+        "hhi_status": st.column_config.TextColumn("HHI status"),
         "sponsor_hhi": st.column_config.NumberColumn(
             "Sponsor concentration",
             format="%.3f",
@@ -167,17 +180,26 @@ render_metric_audit(
             "sponsor study counts in the segment)^2); top share is the maximum share. "
             "Bands use percent_rank of recruiting trial count across all segments "
             "within profile and snapshot: low <0.5, moderate <0.8, elevated otherwise. "
-            "New recruiting (90d) sums daily distinct entrants over the inclusive "
-            "90-day range; entrant requires previous captured status non-null and "
-            "not RECRUITING; it is null until observed history covers 90 days and "
-            "the latest snapshot gap does not itself span the window (a transition "
-            "across a longer gap has unobserved timing inside it), so null means "
-            f"not enough history, never zero. Observed history here: "
-            f"{observed_history_days} days. Newly registered (first posted) counts "
-            "recruiting studies whose registry first-post date is within 90 days of "
-            "the snapshot — registrations, not transitions. Counts may repeat across "
-            "segments. "
-            "This panel audits count inputs; derived values remain warehouse calculations."
+            + (
+                "New recruiting (90d) sums daily distinct entrants over "
+                "the inclusive 90-day range; "
+                if growth_window_covered
+                else (
+                    "New recruiting sums daily distinct entrants over an inclusive 90-day window "
+                    f"(requires 90 days of observed history, currently "
+                    f"{observed_history_days} days observed); "
+                )
+            )
+            + "entrant requires previous captured status non-null and not RECRUITING; "
+            "it is null until observed history covers 90 days (earliest in-window snapshot "
+            "and predecessor within 7-day cadence tolerance) and the latest snapshot gap "
+            "does not itself span the window (a transition across a longer gap has unobserved "
+            "timing inside it), so null means "
+            f"not enough history, never zero. Observed history here: {observed_history_days} days. "
+            "Newly registered (first posted) counts recruiting studies whose registry "
+            "first-post date is within 90 days of the snapshot — registrations, not transitions. "
+            "Counts may repeat across segments. This panel audits count inputs; "
+            "derived values remain warehouse calculations."
         )
     },
     key="competition",

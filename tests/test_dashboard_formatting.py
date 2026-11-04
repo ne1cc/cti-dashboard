@@ -13,6 +13,7 @@ from components.formatting import (  # noqa: E402
     format_phase,
     format_priority_explanation,
     format_snapshot_date,
+    hhi_status,
 )
 
 
@@ -35,13 +36,16 @@ def test_snapshot_date_drops_the_midnight_time():
     assert format_snapshot_date(pd.NaT) == "not yet captured"
 
 
-@pytest.mark.parametrize("mode", ["covered", "short", "gap"])
+@pytest.mark.parametrize("mode", ["covered", "short", "uncovered_long", "gap"])
 def test_priority_summary_labels_growth_and_registrations_distinctly(mode: str) -> None:
     if mode == "covered":
         observed_days = 90
         new_recruiting = 2
     elif mode == "short":
         observed_days = 14
+        new_recruiting = pd.NA
+    elif mode == "uncovered_long":
+        observed_days = 122
         new_recruiting = pd.NA
     else:  # gap
         observed_days = 105
@@ -56,7 +60,7 @@ def test_priority_summary_labels_growth_and_registrations_distinctly(mode: str) 
             "sponsor_count": 6,
             "sponsor_hhi": 0.26,
             "site_overlap_share": 0.93,
-            "data_confidence_share": 0.74,
+            "operational_completeness_share": 0.74,
         }
     )
     before = row.copy()
@@ -74,8 +78,27 @@ def test_priority_summary_labels_growth_and_registrations_distinctly(mode: str) 
         assert "Newly recruiting: not enough history (14 of 90 days observed)" in text
         assert "(90d)" not in text
     else:
-        assert "Newly recruiting: not enough history (gap between snapshots exceeds window)" in text
+        assert "Newly recruiting: not enough history (snapshots do not cover the window)" in text
         assert "(90d)" not in text
-        assert "105 of 90 days observed" not in text
+        assert f"{observed_days} of 90 days observed" not in text
 
     pd.testing.assert_series_equal(row, before)
+
+
+def test_hhi_status_for_missing_and_present_values():
+    """Suppressed values carry their sponsor count; available values need no label."""
+    assert hhi_status(None, 2) == "insufficient data (2 sponsors)"
+    assert hhi_status(float("nan"), 0) == "insufficient data (0 sponsors)"
+    assert hhi_status(None, None) == "insufficient data (sponsor count unavailable)"
+    assert hhi_status(0.375, 3) == ""
+
+
+def test_hhi_status_does_not_change_numeric_sorting():
+    """The label stays in a separate column from sortable numeric HHI."""
+    df = pd.DataFrame({"sponsor_hhi": [0.9, None, 0.2], "sponsor_count": [3, 1, 4]})
+    df["hhi_status"] = [
+        hhi_status(v, n) for v, n in zip(df.sponsor_hhi, df.sponsor_count, strict=True)
+    ]
+    sorted_df = df.sort_values("sponsor_hhi")
+    assert sorted_df.sponsor_hhi.iloc[:2].tolist() == [0.2, 0.9]
+    assert sorted_df.hhi_status.iloc[-1] == "insufficient data (1 sponsors)"
