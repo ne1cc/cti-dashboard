@@ -6,8 +6,8 @@
 -- Windowed recruiting-transition figures (new_recruiting_30d/90d,
 -- recruiting_growth_90d) are unknown until the profile's retained snapshots
 -- actually cover the window: they are null unless observed_history_days
--- reaches the window length, the earliest in-window snapshot predecessor
--- predates the window boundary by at most 1 day (exact weekly cadence tolerance),
+-- reaches the window length, the earliest in-window snapshot is within seven days
+-- of the boundary,
 -- each entrant trial's own predecessor snapshot date falls within the covered window,
 -- and the latest gap between snapshots does not exceed the window. A transition observed across
 -- an unobserved gap has unknown timing, so summing it into the window would
@@ -133,8 +133,8 @@ windowed as (
 -- Coverage guards (applied here so the raw window sums and helper dates
 -- never reach the mart's contract): the sums are emitted only when the window
 -- is covered (profile history reaches the window, earliest in-window snapshot
--- predecessor predates the window by at most 1 day, every entrant's predecessor
--- falls within the window tolerance, and the latest snapshot gap does not exceed the window).
+-- is within seven days of the boundary, every entrant's predecessor
+-- falls within the window, and the latest snapshot gap does not exceed the window).
 -- Growth additionally requires its baseline to be an earlier snapshot at the
 -- start of the window that predates counted transitions, with non-zero recruiting
 -- trial count; segments that first appear in the window, have transitions at the
@@ -152,42 +152,30 @@ with_concentration as (
         case
             when w.observed_history_days >= 30
                 and w.window_30d_earliest_date <= w.snapshot_date - interval 30 day + interval 7 day
-                and (
-                    w.window_30d_earliest_pred_date is null
-                    or w.window_30d_earliest_pred_date >= w.snapshot_date - interval 30 day - interval 1 day
-                )
                 and w.previous_snapshot_date >= w.snapshot_date - interval 30 day
                 and (
                     w.window_30d_earliest_entrant_pred_date is null
-                    or w.window_30d_earliest_entrant_pred_date >= w.snapshot_date - interval 30 day - interval 1 day
+                    or w.window_30d_earliest_entrant_pred_date >= w.snapshot_date - interval 30 day
                 )
             then w.new_recruiting_30d_raw
         end as new_recruiting_30d,
         case
             when w.observed_history_days >= 90
                 and w.window_90d_earliest_date <= w.snapshot_date - interval 90 day + interval 7 day
-                and (
-                    w.window_90d_earliest_pred_date is null
-                    or w.window_90d_earliest_pred_date >= w.snapshot_date - interval 90 day - interval 1 day
-                )
                 and w.previous_snapshot_date >= w.snapshot_date - interval 90 day
                 and (
                     w.window_90d_earliest_entrant_pred_date is null
-                    or w.window_90d_earliest_entrant_pred_date >= w.snapshot_date - interval 90 day - interval 1 day
+                    or w.window_90d_earliest_entrant_pred_date >= w.snapshot_date - interval 90 day
                 )
             then w.new_recruiting_90d_raw
         end as new_recruiting_90d,
         case
             when w.observed_history_days >= 90
                 and w.window_90d_earliest_date <= w.snapshot_date - interval 90 day + interval 7 day
-                and (
-                    w.window_90d_earliest_pred_date is null
-                    or w.window_90d_earliest_pred_date >= w.snapshot_date - interval 90 day - interval 1 day
-                )
                 and w.previous_snapshot_date >= w.snapshot_date - interval 90 day
                 and (
                     w.window_90d_earliest_entrant_pred_date is null
-                    or w.window_90d_earliest_entrant_pred_date >= w.snapshot_date - interval 90 day - interval 1 day
+                    or w.window_90d_earliest_entrant_pred_date >= w.snapshot_date - interval 90 day
                 )
                 and w.segment_90d_first_snapshot_date = w.window_90d_earliest_date
                 and (

@@ -683,11 +683,11 @@ def growth_history_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Pat
 
 @pytest.fixture(scope="session")
 def dense_history_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Dense snapshot history covering the 90-day window (09-02 through 12-08).
+    """Dense snapshot history covering the 90-day window (09-08 through 12-08).
 
-    On 12-08 history is 97 days, window opens 09-09, earliest in-window snapshot is
-    09-15 (6 days <= 7-day cadence tolerance), predecessor is 09-02 (7 days <= 7-day
-    tolerance), and all intervening gaps are 14 days (<= 90 days).
+    On 12-08 history is 91 days, window opens 09-09, earliest in-window snapshot is
+    09-15 (6 days <= 7-day cap), predecessor is 09-08 (1 day before 09-09),
+    and all intervening gaps are 14 days (<= 90 days).
     Emits 9 of 9 new_recruiting_90d and non-null recruiting_growth_90d with real zeros,
     while the newly appearing ME segment on 12-08 emits null growth.
     """
