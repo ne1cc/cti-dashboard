@@ -1,0 +1,53 @@
+fips_code,state_name,cancer_site,period,age_adjusted_rate_per_100k,rate_ci_low,rate_ci_high,average_annual_count
+21,Kentucky,Lung & Bronchus,2019-2023,83.6,82.5,84.7,5032
+54,West Virginia,Lung & Bronchus,2019-2023,75.4,73.9,76.9,2079
+05,Arkansas,Lung & Bronchus,2019-2023,68.7,67.5,69.9,2791
+29,Missouri,Lung & Bronchus,2019-2023,67.4,66.6,68.2,5655
+18,Indiana,Lung & Bronchus,2019-2023,66.9,66.2,67.7,5847
+28,Mississippi,Lung & Bronchus,2019-2023,66.6,65.4,67.8,2577
+47,Tennessee,Lung & Bronchus,2019-2023,65.7,65,66.5,6054
+23,Maine,Lung & Bronchus,2019-2023,64.7,63.2,66.3,1461
+39,Ohio,Lung & Bronchus,2019-2023,63,62.4,63.5,10244
+40,Oklahoma,Lung & Bronchus,2019-2023,61.5,60.6,62.5,3075
+37,North Carolina,Lung & Bronchus,2019-2023,61,60.4,61.6,8498
+22,Louisiana,Lung & Bronchus,2019-2023,60.6,59.6,61.5,3582
+19,Iowa,Lung & Bronchus,2019-2023,59.6,58.6,60.7,2582
+26,Michigan,Lung & Bronchus,2019-2023,59.1,58.5,59.7,8338
+44,Rhode Island,Lung & Bronchus,2019-2023,58.8,57,60.5,904
+33,New Hampshire,Lung & Bronchus,2019-2023,58.3,56.9,59.9,1226
+25,Massachusetts,Lung & Bronchus,2019-2023,57.1,56.4,57.8,5420
+01,Alabama,Lung & Bronchus,2019-2023,57,56.2,57.8,3924
+17,Illinois,Lung & Bronchus,2019-2023,57,56.4,57.5,9328
+45,South Carolina,Lung & Bronchus,2019-2023,56.6,55.8,57.4,4161
+10,Delaware,Lung & Bronchus,2019-2023,56.1,54.4,57.8,851
+42,Pennsylvania,Lung & Bronchus,2019-2023,55.6,55.1,56.1,10495
+55,Wisconsin,Lung & Bronchus,2019-2023,54.6,53.9,55.3,4478
+13,Georgia,Lung & Bronchus,2019-2023,54.4,53.8,55,6916
+50,Vermont,Lung & Bronchus,2019-2023,53.2,51.1,55.3,539
+09,Connecticut,Lung & Bronchus,2019-2023,53.2,52.3,54.1,2682
+46,South Dakota,Lung & Bronchus,2019-2023,53.1,51.2,55.1,632
+27,Minnesota,Lung & Bronchus,2019-2023,52.9,52.2,53.7,3949
+20,Kansas,Lung & Bronchus,2019-2023,52.7,51.6,53.8,1981
+12,Florida,Lung & Bronchus,2019-2023,52.1,51.7,52.4,18054
+36,New York,Lung & Bronchus,2019-2023,51.7,51.3,52.1,13865
+38,North Dakota,Lung & Bronchus,2019-2023,51.4,49.3,53.5,494
+31,Nebraska,Lung & Bronchus,2019-2023,51.1,49.9,52.4,1269
+02,Alaska,Lung & Bronchus,2019-2023,51,48.6,53.4,395
+51,Virginia,Lung & Bronchus,2019-2023,49.9,49.3,50.5,5537
+24,Maryland,Lung & Bronchus,2019-2023,48.7,48,49.4,3864
+34,New Jersey,Lung & Bronchus,2019-2023,48,47.4,48.5,5844
+53,Washington,Lung & Bronchus,2019-2023,46.7,46.1,47.3,4500
+11,District of Columbia,Lung & Bronchus,2019-2023,46.1,43.8,48.4,314
+41,Oregon,Lung & Bronchus,2019-2023,44.8,44.1,45.6,2648
+30,Montana,Lung & Bronchus,2019-2023,44.4,42.9,45.9,716
+48,Texas,Lung & Bronchus,2019-2023,44.3,43.9,44.6,13737
+32,Nevada,Lung & Bronchus,2019-2023,43.5,42.5,44.4,1727
+16,Idaho,Lung & Bronchus,2019-2023,43.2,42,44.4,1027
+04,Arizona,Lung & Bronchus,2019-2023,38.7,38.2,39.3,3947
+56,Wyoming,Lung & Bronchus,2019-2023,38.4,36.5,40.5,303
+15,Hawaii,Lung & Bronchus,2019-2023,37.9,36.7,39.1,807
+08,Colorado,Lung & Bronchus,2019-2023,36.2,35.6,36.9,2444
+06,California,Lung & Bronchus,2019-2023,36,35.8,36.3,16646
+35,New Mexico,Lung & Bronchus,2019-2023,31,30.1,31.9,916
+49,Utah,Lung & Bronchus,2019-2023,24.4,23.6,25.2,739
+72,Puerto Rico,Lung & Bronchus,2019-2023,14.4,14,14.9,773

@@ -37,3 +37,69 @@ seeds:
         description: Official U.S. Census Bureau dataset download URL.
         tests:
           - not_null
+
+  - name: acs_population_extract
+    description: >
+      Census ACS 2020-2024 5-year population counts in long format (Issue #71):
+      every state, DC and Puerto Rico, plus a pinned subset of counties and ZCTAs.
+      Built by `python -m src.ingest.census_acs`; tables B01001 (sex by age) and
+      B03002 (Hispanic origin by race). Read through `dim_population`, not directly.
+    columns:
+      - name: geo_level
+        tests:
+          - not_null
+          - accepted_values:
+              values: [state, county, zcta]
+      - name: geo_id
+        description: State or county FIPS, or 5-digit ZCTA, as text.
+        tests: [not_null]
+      - name: dimension
+        tests:
+          - not_null
+          - accepted_values:
+              values: [total, age_sex, race_ethnicity]
+      - name: population
+        tests: [not_null]
+      - name: table_id
+        tests: [not_null]
+      - name: vintage
+        tests: [not_null]
+
+  - name: burden_seer_lung_state
+    description: >
+      Lung and bronchus cancer incidence by state from SEER and CDC NPCR State
+      Cancer Profiles (2019-2023), obtained with `python -m src.ingest.burden_extracts seer`.
+    columns:
+      - name: fips_code
+        tests: [not_null, unique]
+      - name: average_annual_count
+        tests: [not_null]
+
+  - name: burden_places_county
+    description: >
+      CDC PLACES county crude prevalence (2025 release, BRFSS 2023) for diagnosed
+      diabetes and cognitive disability, for a pinned subset of states. Obtained
+      with `python -m src.ingest.burden_extracts places`. Blank prevalence means
+      CDC suppressed the estimate.
+    columns:
+      - name: county_fips
+        tests: [not_null]
+      - name: measure_id
+        tests:
+          - not_null
+          - accepted_values:
+              values: [DIABETES, COGNITION]
+
+  - name: condition_burden_map
+    description: >
+      MeSH node to burden source (Issue #71). `denominator_available` is true only
+      when the source measures the condition itself; the dashboard must say
+      "no burden denominator available" otherwise. Conditions not listed here have
+      no burden source (docs/burden_sources.md).
+    columns:
+      - name: mesh_id
+        tests: [not_null, unique]
+      - name: denominator_available
+        tests: [not_null]
+      - name: source_vintage
+        tests: [not_null]

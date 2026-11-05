@@ -54,6 +54,27 @@ seeds:
         population: bigint
         fips_code: varchar
         state_code: varchar
+    acs_population_extract:
+      +column_types:
+        geo_id: varchar
+        state_fips: varchar
+        age_band: varchar
+        sex: varchar
+        race_ethnicity: varchar
+        population: bigint
+    burden_seer_lung_state:
+      +column_types:
+        fips_code: varchar
+        average_annual_count: bigint
+    burden_places_county:
+      +column_types:
+        county_fips: varchar
+        population_18plus: bigint
+        brfss_year: integer
+    condition_burden_map:
+      +column_types:
+        mesh_id: varchar
+        denominator_available: boolean
     omb_race_ethnicity_mapping:
       +column_types:
         manually_reviewed: boolean

@@ -1,0 +1,9 @@
+FILEID|STUSAB|SUMLEVEL|COMPONENT|US|REGION|DIVISION|STATE|COUNTY|COUSUB|PLACE|TRACT|BLKGRP|CONCIT|AIANHH|AIANHHFP|AIHHTLI|AITS|AITSFP|ANRC|CBSA|CSA|METDIV|MACC|MEMI|NECTA|CNECTA|NECTADIV|UA|CDCURR|SLDU|SLDL|ZCTA5|SUBMCD|SDELM|SDSEC|SDUNI|UR|PCI|PUMA5|GEO_ID|NAME|BTTR|BTBG|TL_GEO_ID
+ACSSF|MA|040|00||||25|||||||||||||||||||||||||||||||||0400000US25|Massachusetts|||25
+ACSSF|RI|040|00||||44|||||||||||||||||||||||||||||||||0400000US44|Rhode Island|||44
+ACSSF|PR|040|00||||72|||||||||||||||||||||||||||||||||0400000US72|Puerto Rico|||72
+ACSSF|MA|040|A0||||25|||||||||||||||||||||||||||||||||04000A0US25|Massachusetts -- In metropolitan or micropolitan statistical area|||
+ACSSF|MA|050|00||||25|001||||||||||||||||||||||||||||||||0500000US25001|Barnstable County, Massachusetts|||25001
+ACSSF|MA|050|00||||25|025||||||||||||||||||||||||||||||||0500000US25025|Suffolk County, Massachusetts|||25025
+ACSSF|RI|050|00||||44|007||||||||||||||||||||||||||||||||0500000US44007|Providence County, Rhode Island|||44007
+ACSSF|US|860|00|||||||||||||||||||||||||||||02115||||||||860Z200US02115|ZCTA5 02115|||02115

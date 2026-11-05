@@ -1,0 +1,1854 @@
+geo_level,geo_id,geo_name,state_fips,dimension,age_band,sex,race_ethnicity,population,table_id,vintage
+state,01,Alabama,01,total,,,,5086768,B01001,ACS 2020-2024 5-year
+state,01,Alabama,01,age_sex,0-17,male,,577479,B01001,ACS 2020-2024 5-year
+state,01,Alabama,01,age_sex,18-44,male,,872022,B01001,ACS 2020-2024 5-year
+state,01,Alabama,01,age_sex,45-64,male,,621474,B01001,ACS 2020-2024 5-year
+state,01,Alabama,01,age_sex,65+,male,,398957,B01001,ACS 2020-2024 5-year
+state,01,Alabama,01,age_sex,0-17,female,,553246,B01001,ACS 2020-2024 5-year
+state,01,Alabama,01,age_sex,18-44,female,,897784,B01001,ACS 2020-2024 5-year
+state,01,Alabama,01,age_sex,45-64,female,,660504,B01001,ACS 2020-2024 5-year
+state,01,Alabama,01,age_sex,65+,female,,505302,B01001,ACS 2020-2024 5-year
+state,01,Alabama,01,race_ethnicity,,,Non-Hispanic White,3224860,B03002,ACS 2020-2024 5-year
+state,01,Alabama,01,race_ethnicity,,,Non-Hispanic Black,1302911,B03002,ACS 2020-2024 5-year
+state,01,Alabama,01,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,13274,B03002,ACS 2020-2024 5-year
+state,01,Alabama,01,race_ethnicity,,,Non-Hispanic Asian,73353,B03002,ACS 2020-2024 5-year
+state,01,Alabama,01,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,2249,B03002,ACS 2020-2024 5-year
+state,01,Alabama,01,race_ethnicity,,,Non-Hispanic Some other race,17853,B03002,ACS 2020-2024 5-year
+state,01,Alabama,01,race_ethnicity,,,Non-Hispanic Two or more races,168133,B03002,ACS 2020-2024 5-year
+state,01,Alabama,01,race_ethnicity,,,Hispanic or Latino,284135,B03002,ACS 2020-2024 5-year
+state,02,Alaska,02,total,,,,735706,B01001,ACS 2020-2024 5-year
+state,02,Alaska,02,age_sex,0-17,male,,91084,B01001,ACS 2020-2024 5-year
+state,02,Alaska,02,age_sex,18-44,male,,154764,B01001,ACS 2020-2024 5-year
+state,02,Alaska,02,age_sex,45-64,male,,89740,B01001,ACS 2020-2024 5-year
+state,02,Alaska,02,age_sex,65+,male,,50792,B01001,ACS 2020-2024 5-year
+state,02,Alaska,02,age_sex,0-17,female,,86095,B01001,ACS 2020-2024 5-year
+state,02,Alaska,02,age_sex,18-44,female,,131255,B01001,ACS 2020-2024 5-year
+state,02,Alaska,02,age_sex,45-64,female,,81074,B01001,ACS 2020-2024 5-year
+state,02,Alaska,02,age_sex,65+,female,,50902,B01001,ACS 2020-2024 5-year
+state,02,Alaska,02,race_ethnicity,,,Non-Hispanic White,424584,B03002,ACS 2020-2024 5-year
+state,02,Alaska,02,race_ethnicity,,,Non-Hispanic Black,21172,B03002,ACS 2020-2024 5-year
+state,02,Alaska,02,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,97047,B03002,ACS 2020-2024 5-year
+state,02,Alaska,02,race_ethnicity,,,Non-Hispanic Asian,46719,B03002,ACS 2020-2024 5-year
+state,02,Alaska,02,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,11283,B03002,ACS 2020-2024 5-year
+state,02,Alaska,02,race_ethnicity,,,Non-Hispanic Some other race,5439,B03002,ACS 2020-2024 5-year
+state,02,Alaska,02,race_ethnicity,,,Non-Hispanic Two or more races,75659,B03002,ACS 2020-2024 5-year
+state,02,Alaska,02,race_ethnicity,,,Hispanic or Latino,53803,B03002,ACS 2020-2024 5-year
+state,04,Arizona,04,total,,,,7378838,B01001,ACS 2020-2024 5-year
+state,04,Arizona,04,age_sex,0-17,male,,814607,B01001,ACS 2020-2024 5-year
+state,04,Arizona,04,age_sex,18-44,male,,1364889,B01001,ACS 2020-2024 5-year
+state,04,Arizona,04,age_sex,45-64,male,,857378,B01001,ACS 2020-2024 5-year
+state,04,Arizona,04,age_sex,65+,male,,646599,B01001,ACS 2020-2024 5-year
+state,04,Arizona,04,age_sex,0-17,female,,779769,B01001,ACS 2020-2024 5-year
+state,04,Arizona,04,age_sex,18-44,female,,1283409,B01001,ACS 2020-2024 5-year
+state,04,Arizona,04,age_sex,45-64,female,,881235,B01001,ACS 2020-2024 5-year
+state,04,Arizona,04,age_sex,65+,female,,750952,B01001,ACS 2020-2024 5-year
+state,04,Arizona,04,race_ethnicity,,,Non-Hispanic White,3879594,B03002,ACS 2020-2024 5-year
+state,04,Arizona,04,race_ethnicity,,,Non-Hispanic Black,322321,B03002,ACS 2020-2024 5-year
+state,04,Arizona,04,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,237195,B03002,ACS 2020-2024 5-year
+state,04,Arizona,04,race_ethnicity,,,Non-Hispanic Asian,256161,B03002,ACS 2020-2024 5-year
+state,04,Arizona,04,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,12507,B03002,ACS 2020-2024 5-year
+state,04,Arizona,04,race_ethnicity,,,Non-Hispanic Some other race,33946,B03002,ACS 2020-2024 5-year
+state,04,Arizona,04,race_ethnicity,,,Non-Hispanic Two or more races,323308,B03002,ACS 2020-2024 5-year
+state,04,Arizona,04,race_ethnicity,,,Hispanic or Latino,2313806,B03002,ACS 2020-2024 5-year
+state,05,Arkansas,05,total,,,,3049391,B01001,ACS 2020-2024 5-year
+state,05,Arkansas,05,age_sex,0-17,male,,361825,B01001,ACS 2020-2024 5-year
+state,05,Arkansas,05,age_sex,18-44,male,,537494,B01001,ACS 2020-2024 5-year
+state,05,Arkansas,05,age_sex,45-64,male,,364989,B01001,ACS 2020-2024 5-year
+state,05,Arkansas,05,age_sex,65+,male,,240756,B01001,ACS 2020-2024 5-year
+state,05,Arkansas,05,age_sex,0-17,female,,343185,B01001,ACS 2020-2024 5-year
+state,05,Arkansas,05,age_sex,18-44,female,,530881,B01001,ACS 2020-2024 5-year
+state,05,Arkansas,05,age_sex,45-64,female,,375040,B01001,ACS 2020-2024 5-year
+state,05,Arkansas,05,age_sex,65+,female,,295221,B01001,ACS 2020-2024 5-year
+state,05,Arkansas,05,race_ethnicity,,,Non-Hispanic White,2055048,B03002,ACS 2020-2024 5-year
+state,05,Arkansas,05,race_ethnicity,,,Non-Hispanic Black,446603,B03002,ACS 2020-2024 5-year
+state,05,Arkansas,05,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,10473,B03002,ACS 2020-2024 5-year
+state,05,Arkansas,05,race_ethnicity,,,Non-Hispanic Asian,48748,B03002,ACS 2020-2024 5-year
+state,05,Arkansas,05,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,12184,B03002,ACS 2020-2024 5-year
+state,05,Arkansas,05,race_ethnicity,,,Non-Hispanic Some other race,9042,B03002,ACS 2020-2024 5-year
+state,05,Arkansas,05,race_ethnicity,,,Non-Hispanic Two or more races,191722,B03002,ACS 2020-2024 5-year
+state,05,Arkansas,05,race_ethnicity,,,Hispanic or Latino,275571,B03002,ACS 2020-2024 5-year
+state,06,California,06,total,,,,39287377,B01001,ACS 2020-2024 5-year
+state,06,California,06,age_sex,0-17,male,,4421019,B01001,ACS 2020-2024 5-year
+state,06,California,06,age_sex,18-44,male,,7602460,B01001,ACS 2020-2024 5-year
+state,06,California,06,age_sex,45-64,male,,4818243,B01001,ACS 2020-2024 5-year
+state,06,California,06,age_sex,65+,male,,2781629,B01001,ACS 2020-2024 5-year
+state,06,California,06,age_sex,0-17,female,,4211777,B01001,ACS 2020-2024 5-year
+state,06,California,06,age_sex,18-44,female,,7242613,B01001,ACS 2020-2024 5-year
+state,06,California,06,age_sex,45-64,female,,4832894,B01001,ACS 2020-2024 5-year
+state,06,California,06,age_sex,65+,female,,3376742,B01001,ACS 2020-2024 5-year
+state,06,California,06,race_ethnicity,,,Non-Hispanic White,13267442,B03002,ACS 2020-2024 5-year
+state,06,California,06,race_ethnicity,,,Non-Hispanic Black,2040095,B03002,ACS 2020-2024 5-year
+state,06,California,06,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,102530,B03002,ACS 2020-2024 5-year
+state,06,California,06,race_ethnicity,,,Non-Hispanic Asian,6007197,B03002,ACS 2020-2024 5-year
+state,06,California,06,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,131885,B03002,ACS 2020-2024 5-year
+state,06,California,06,race_ethnicity,,,Non-Hispanic Some other race,241084,B03002,ACS 2020-2024 5-year
+state,06,California,06,race_ethnicity,,,Non-Hispanic Two or more races,1718181,B03002,ACS 2020-2024 5-year
+state,06,California,06,race_ethnicity,,,Hispanic or Latino,15778963,B03002,ACS 2020-2024 5-year
+state,08,Colorado,08,total,,,,5862189,B01001,ACS 2020-2024 5-year
+state,08,Colorado,08,age_sex,0-17,male,,630669,B01001,ACS 2020-2024 5-year
+state,08,Colorado,08,age_sex,18-44,male,,1206460,B01001,ACS 2020-2024 5-year
+state,08,Colorado,08,age_sex,45-64,male,,708957,B01001,ACS 2020-2024 5-year
+state,08,Colorado,08,age_sex,65+,male,,423314,B01001,ACS 2020-2024 5-year
+state,08,Colorado,08,age_sex,0-17,female,,600858,B01001,ACS 2020-2024 5-year
+state,08,Colorado,08,age_sex,18-44,female,,1106524,B01001,ACS 2020-2024 5-year
+state,08,Colorado,08,age_sex,45-64,female,,694719,B01001,ACS 2020-2024 5-year
+state,08,Colorado,08,age_sex,65+,female,,490688,B01001,ACS 2020-2024 5-year
+state,08,Colorado,08,race_ethnicity,,,Non-Hispanic White,3797912,B03002,ACS 2020-2024 5-year
+state,08,Colorado,08,race_ethnicity,,,Non-Hispanic Black,224141,B03002,ACS 2020-2024 5-year
+state,08,Colorado,08,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,21296,B03002,ACS 2020-2024 5-year
+state,08,Colorado,08,race_ethnicity,,,Non-Hispanic Asian,188583,B03002,ACS 2020-2024 5-year
+state,08,Colorado,08,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,7705,B03002,ACS 2020-2024 5-year
+state,08,Colorado,08,race_ethnicity,,,Non-Hispanic Some other race,31477,B03002,ACS 2020-2024 5-year
+state,08,Colorado,08,race_ethnicity,,,Non-Hispanic Two or more races,270138,B03002,ACS 2020-2024 5-year
+state,08,Colorado,08,race_ethnicity,,,Hispanic or Latino,1320937,B03002,ACS 2020-2024 5-year
+state,09,Connecticut,09,total,,,,3624508,B01001,ACS 2020-2024 5-year
+state,09,Connecticut,09,age_sex,0-17,male,,373806,B01001,ACS 2020-2024 5-year
+state,09,Connecticut,09,age_sex,18-44,male,,632410,B01001,ACS 2020-2024 5-year
+state,09,Connecticut,09,age_sex,45-64,male,,472282,B01001,ACS 2020-2024 5-year
+state,09,Connecticut,09,age_sex,65+,male,,299771,B01001,ACS 2020-2024 5-year
+state,09,Connecticut,09,age_sex,0-17,female,,357780,B01001,ACS 2020-2024 5-year
+state,09,Connecticut,09,age_sex,18-44,female,,621736,B01001,ACS 2020-2024 5-year
+state,09,Connecticut,09,age_sex,45-64,female,,495937,B01001,ACS 2020-2024 5-year
+state,09,Connecticut,09,age_sex,65+,female,,370786,B01001,ACS 2020-2024 5-year
+state,09,Connecticut,09,race_ethnicity,,,Non-Hispanic White,2242719,B03002,ACS 2020-2024 5-year
+state,09,Connecticut,09,race_ethnicity,,,Non-Hispanic Black,356149,B03002,ACS 2020-2024 5-year
+state,09,Connecticut,09,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,3158,B03002,ACS 2020-2024 5-year
+state,09,Connecticut,09,race_ethnicity,,,Non-Hispanic Asian,172094,B03002,ACS 2020-2024 5-year
+state,09,Connecticut,09,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,932,B03002,ACS 2020-2024 5-year
+state,09,Connecticut,09,race_ethnicity,,,Non-Hispanic Some other race,31193,B03002,ACS 2020-2024 5-year
+state,09,Connecticut,09,race_ethnicity,,,Non-Hispanic Two or more races,155752,B03002,ACS 2020-2024 5-year
+state,09,Connecticut,09,race_ethnicity,,,Hispanic or Latino,662511,B03002,ACS 2020-2024 5-year
+state,10,Delaware,10,total,,,,1021191,B01001,ACS 2020-2024 5-year
+state,10,Delaware,10,age_sex,0-17,male,,107502,B01001,ACS 2020-2024 5-year
+state,10,Delaware,10,age_sex,18-44,male,,168412,B01001,ACS 2020-2024 5-year
+state,10,Delaware,10,age_sex,45-64,male,,123753,B01001,ACS 2020-2024 5-year
+state,10,Delaware,10,age_sex,65+,male,,94985,B01001,ACS 2020-2024 5-year
+state,10,Delaware,10,age_sex,0-17,female,,104170,B01001,ACS 2020-2024 5-year
+state,10,Delaware,10,age_sex,18-44,female,,171347,B01001,ACS 2020-2024 5-year
+state,10,Delaware,10,age_sex,45-64,female,,135906,B01001,ACS 2020-2024 5-year
+state,10,Delaware,10,age_sex,65+,female,,115116,B01001,ACS 2020-2024 5-year
+state,10,Delaware,10,race_ethnicity,,,Non-Hispanic White,593492,B03002,ACS 2020-2024 5-year
+state,10,Delaware,10,race_ethnicity,,,Non-Hispanic Black,218269,B03002,ACS 2020-2024 5-year
+state,10,Delaware,10,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,1237,B03002,ACS 2020-2024 5-year
+state,10,Delaware,10,race_ethnicity,,,Non-Hispanic Asian,43639,B03002,ACS 2020-2024 5-year
+state,10,Delaware,10,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,217,B03002,ACS 2020-2024 5-year
+state,10,Delaware,10,race_ethnicity,,,Non-Hispanic Some other race,5164,B03002,ACS 2020-2024 5-year
+state,10,Delaware,10,race_ethnicity,,,Non-Hispanic Two or more races,46338,B03002,ACS 2020-2024 5-year
+state,10,Delaware,10,race_ethnicity,,,Hispanic or Latino,112835,B03002,ACS 2020-2024 5-year
+state,11,District of Columbia,11,total,,,,681294,B01001,ACS 2020-2024 5-year
+state,11,District of Columbia,11,age_sex,0-17,male,,64535,B01001,ACS 2020-2024 5-year
+state,11,District of Columbia,11,age_sex,18-44,male,,154712,B01001,ACS 2020-2024 5-year
+state,11,District of Columbia,11,age_sex,45-64,male,,68263,B01001,ACS 2020-2024 5-year
+state,11,District of Columbia,11,age_sex,65+,male,,36312,B01001,ACS 2020-2024 5-year
+state,11,District of Columbia,11,age_sex,0-17,female,,62779,B01001,ACS 2020-2024 5-year
+state,11,District of Columbia,11,age_sex,18-44,female,,174295,B01001,ACS 2020-2024 5-year
+state,11,District of Columbia,11,age_sex,45-64,female,,69551,B01001,ACS 2020-2024 5-year
+state,11,District of Columbia,11,age_sex,65+,female,,50847,B01001,ACS 2020-2024 5-year
+state,11,District of Columbia,11,race_ethnicity,,,Non-Hispanic White,248392,B03002,ACS 2020-2024 5-year
+state,11,District of Columbia,11,race_ethnicity,,,Non-Hispanic Black,283502,B03002,ACS 2020-2024 5-year
+state,11,District of Columbia,11,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,677,B03002,ACS 2020-2024 5-year
+state,11,District of Columbia,11,race_ethnicity,,,Non-Hispanic Asian,29294,B03002,ACS 2020-2024 5-year
+state,11,District of Columbia,11,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,261,B03002,ACS 2020-2024 5-year
+state,11,District of Columbia,11,race_ethnicity,,,Non-Hispanic Some other race,4743,B03002,ACS 2020-2024 5-year
+state,11,District of Columbia,11,race_ethnicity,,,Non-Hispanic Two or more races,33273,B03002,ACS 2020-2024 5-year
+state,11,District of Columbia,11,race_ethnicity,,,Hispanic or Latino,81152,B03002,ACS 2020-2024 5-year
+state,12,Florida,12,total,,,,22416077,B01001,ACS 2020-2024 5-year
+state,12,Florida,12,age_sex,0-17,male,,2237347,B01001,ACS 2020-2024 5-year
+state,12,Florida,12,age_sex,18-44,male,,3786124,B01001,ACS 2020-2024 5-year
+state,12,Florida,12,age_sex,45-64,male,,2821337,B01001,ACS 2020-2024 5-year
+state,12,Florida,12,age_sex,65+,male,,2171272,B01001,ACS 2020-2024 5-year
+state,12,Florida,12,age_sex,0-17,female,,2137483,B01001,ACS 2020-2024 5-year
+state,12,Florida,12,age_sex,18-44,female,,3705180,B01001,ACS 2020-2024 5-year
+state,12,Florida,12,age_sex,45-64,female,,2946628,B01001,ACS 2020-2024 5-year
+state,12,Florida,12,age_sex,65+,female,,2610706,B01001,ACS 2020-2024 5-year
+state,12,Florida,12,race_ethnicity,,,Non-Hispanic White,11302092,B03002,ACS 2020-2024 5-year
+state,12,Florida,12,race_ethnicity,,,Non-Hispanic Black,3279677,B03002,ACS 2020-2024 5-year
+state,12,Florida,12,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,21329,B03002,ACS 2020-2024 5-year
+state,12,Florida,12,race_ethnicity,,,Non-Hispanic Asian,642245,B03002,ACS 2020-2024 5-year
+state,12,Florida,12,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,11294,B03002,ACS 2020-2024 5-year
+state,12,Florida,12,race_ethnicity,,,Non-Hispanic Some other race,155591,B03002,ACS 2020-2024 5-year
+state,12,Florida,12,race_ethnicity,,,Non-Hispanic Two or more races,857688,B03002,ACS 2020-2024 5-year
+state,12,Florida,12,race_ethnicity,,,Hispanic or Latino,6146161,B03002,ACS 2020-2024 5-year
+state,13,Georgia,13,total,,,,10940407,B01001,ACS 2020-2024 5-year
+state,13,Georgia,13,age_sex,0-17,male,,1299074,B01001,ACS 2020-2024 5-year
+state,13,Georgia,13,age_sex,18-44,male,,1985585,B01001,ACS 2020-2024 5-year
+state,13,Georgia,13,age_sex,45-64,male,,1330335,B01001,ACS 2020-2024 5-year
+state,13,Georgia,13,age_sex,65+,male,,721430,B01001,ACS 2020-2024 5-year
+state,13,Georgia,13,age_sex,0-17,female,,1242424,B01001,ACS 2020-2024 5-year
+state,13,Georgia,13,age_sex,18-44,female,,2029078,B01001,ACS 2020-2024 5-year
+state,13,Georgia,13,age_sex,45-64,female,,1417102,B01001,ACS 2020-2024 5-year
+state,13,Georgia,13,age_sex,65+,female,,915379,B01001,ACS 2020-2024 5-year
+state,13,Georgia,13,race_ethnicity,,,Non-Hispanic White,5373950,B03002,ACS 2020-2024 5-year
+state,13,Georgia,13,race_ethnicity,,,Non-Hispanic Black,3362270,B03002,ACS 2020-2024 5-year
+state,13,Georgia,13,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,9940,B03002,ACS 2020-2024 5-year
+state,13,Georgia,13,race_ethnicity,,,Non-Hispanic Asian,491422,B03002,ACS 2020-2024 5-year
+state,13,Georgia,13,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,5904,B03002,ACS 2020-2024 5-year
+state,13,Georgia,13,race_ethnicity,,,Non-Hispanic Some other race,63369,B03002,ACS 2020-2024 5-year
+state,13,Georgia,13,race_ethnicity,,,Non-Hispanic Two or more races,428936,B03002,ACS 2020-2024 5-year
+state,13,Georgia,13,race_ethnicity,,,Hispanic or Latino,1204616,B03002,ACS 2020-2024 5-year
+state,15,Hawaii,15,total,,,,1445235,B01001,ACS 2020-2024 5-year
+state,15,Hawaii,15,age_sex,0-17,male,,153794,B01001,ACS 2020-2024 5-year
+state,15,Hawaii,15,age_sex,18-44,male,,261364,B01001,ACS 2020-2024 5-year
+state,15,Hawaii,15,age_sex,45-64,male,,174869,B01001,ACS 2020-2024 5-year
+state,15,Hawaii,15,age_sex,65+,male,,135972,B01001,ACS 2020-2024 5-year
+state,15,Hawaii,15,age_sex,0-17,female,,144815,B01001,ACS 2020-2024 5-year
+state,15,Hawaii,15,age_sex,18-44,female,,239527,B01001,ACS 2020-2024 5-year
+state,15,Hawaii,15,age_sex,45-64,female,,175314,B01001,ACS 2020-2024 5-year
+state,15,Hawaii,15,age_sex,65+,female,,159580,B01001,ACS 2020-2024 5-year
+state,15,Hawaii,15,race_ethnicity,,,Non-Hispanic White,302359,B03002,ACS 2020-2024 5-year
+state,15,Hawaii,15,race_ethnicity,,,Non-Hispanic Black,25507,B03002,ACS 2020-2024 5-year
+state,15,Hawaii,15,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,1532,B03002,ACS 2020-2024 5-year
+state,15,Hawaii,15,race_ethnicity,,,Non-Hispanic Asian,525952,B03002,ACS 2020-2024 5-year
+state,15,Hawaii,15,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,137592,B03002,ACS 2020-2024 5-year
+state,15,Hawaii,15,race_ethnicity,,,Non-Hispanic Some other race,5454,B03002,ACS 2020-2024 5-year
+state,15,Hawaii,15,race_ethnicity,,,Non-Hispanic Two or more races,303248,B03002,ACS 2020-2024 5-year
+state,15,Hawaii,15,race_ethnicity,,,Hispanic or Latino,143591,B03002,ACS 2020-2024 5-year
+state,16,Idaho,16,total,,,,1934262,B01001,ACS 2020-2024 5-year
+state,16,Idaho,16,age_sex,0-17,male,,239237,B01001,ACS 2020-2024 5-year
+state,16,Idaho,16,age_sex,18-44,male,,353014,B01001,ACS 2020-2024 5-year
+state,16,Idaho,16,age_sex,45-64,male,,224217,B01001,ACS 2020-2024 5-year
+state,16,Idaho,16,age_sex,65+,male,,156694,B01001,ACS 2020-2024 5-year
+state,16,Idaho,16,age_sex,0-17,female,,226946,B01001,ACS 2020-2024 5-year
+state,16,Idaho,16,age_sex,18-44,female,,341687,B01001,ACS 2020-2024 5-year
+state,16,Idaho,16,age_sex,45-64,female,,220525,B01001,ACS 2020-2024 5-year
+state,16,Idaho,16,age_sex,65+,female,,171942,B01001,ACS 2020-2024 5-year
+state,16,Idaho,16,race_ethnicity,,,Non-Hispanic White,1519424,B03002,ACS 2020-2024 5-year
+state,16,Idaho,16,race_ethnicity,,,Non-Hispanic Black,13888,B03002,ACS 2020-2024 5-year
+state,16,Idaho,16,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,13715,B03002,ACS 2020-2024 5-year
+state,16,Idaho,16,race_ethnicity,,,Non-Hispanic Asian,25914,B03002,ACS 2020-2024 5-year
+state,16,Idaho,16,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,2883,B03002,ACS 2020-2024 5-year
+state,16,Idaho,16,race_ethnicity,,,Non-Hispanic Some other race,12443,B03002,ACS 2020-2024 5-year
+state,16,Idaho,16,race_ethnicity,,,Non-Hispanic Two or more races,82060,B03002,ACS 2020-2024 5-year
+state,16,Idaho,16,race_ethnicity,,,Hispanic or Latino,263935,B03002,ACS 2020-2024 5-year
+state,17,Illinois,17,total,,,,12694798,B01001,ACS 2020-2024 5-year
+state,17,Illinois,17,age_sex,0-17,male,,1417051,B01001,ACS 2020-2024 5-year
+state,17,Illinois,17,age_sex,18-44,male,,2308117,B01001,ACS 2020-2024 5-year
+state,17,Illinois,17,age_sex,45-64,male,,1585746,B01001,ACS 2020-2024 5-year
+state,17,Illinois,17,age_sex,65+,male,,961566,B01001,ACS 2020-2024 5-year
+state,17,Illinois,17,age_sex,0-17,female,,1356288,B01001,ACS 2020-2024 5-year
+state,17,Illinois,17,age_sex,18-44,female,,2260597,B01001,ACS 2020-2024 5-year
+state,17,Illinois,17,age_sex,45-64,female,,1610785,B01001,ACS 2020-2024 5-year
+state,17,Illinois,17,age_sex,65+,female,,1194648,B01001,ACS 2020-2024 5-year
+state,17,Illinois,17,race_ethnicity,,,Non-Hispanic White,7370665,B03002,ACS 2020-2024 5-year
+state,17,Illinois,17,race_ethnicity,,,Non-Hispanic Black,1693169,B03002,ACS 2020-2024 5-year
+state,17,Illinois,17,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,9555,B03002,ACS 2020-2024 5-year
+state,17,Illinois,17,race_ethnicity,,,Non-Hispanic Asian,754004,B03002,ACS 2020-2024 5-year
+state,17,Illinois,17,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,2963,B03002,ACS 2020-2024 5-year
+state,17,Illinois,17,race_ethnicity,,,Non-Hispanic Some other race,47368,B03002,ACS 2020-2024 5-year
+state,17,Illinois,17,race_ethnicity,,,Non-Hispanic Two or more races,430025,B03002,ACS 2020-2024 5-year
+state,17,Illinois,17,race_ethnicity,,,Hispanic or Latino,2387049,B03002,ACS 2020-2024 5-year
+state,18,Indiana,18,total,,,,6851073,B01001,ACS 2020-2024 5-year
+state,18,Indiana,18,age_sex,0-17,male,,818051,B01001,ACS 2020-2024 5-year
+state,18,Indiana,18,age_sex,18-44,male,,1230449,B01001,ACS 2020-2024 5-year
+state,18,Indiana,18,age_sex,45-64,male,,834305,B01001,ACS 2020-2024 5-year
+state,18,Indiana,18,age_sex,65+,male,,515461,B01001,ACS 2020-2024 5-year
+state,18,Indiana,18,age_sex,0-17,female,,776370,B01001,ACS 2020-2024 5-year
+state,18,Indiana,18,age_sex,18-44,female,,1200170,B01001,ACS 2020-2024 5-year
+state,18,Indiana,18,age_sex,45-64,female,,844101,B01001,ACS 2020-2024 5-year
+state,18,Indiana,18,age_sex,65+,female,,632166,B01001,ACS 2020-2024 5-year
+state,18,Indiana,18,race_ethnicity,,,Non-Hispanic White,5164183,B03002,ACS 2020-2024 5-year
+state,18,Indiana,18,race_ethnicity,,,Non-Hispanic Black,622085,B03002,ACS 2020-2024 5-year
+state,18,Indiana,18,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,4317,B03002,ACS 2020-2024 5-year
+state,18,Indiana,18,race_ethnicity,,,Non-Hispanic Asian,178579,B03002,ACS 2020-2024 5-year
+state,18,Indiana,18,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,2171,B03002,ACS 2020-2024 5-year
+state,18,Indiana,18,race_ethnicity,,,Non-Hispanic Some other race,29827,B03002,ACS 2020-2024 5-year
+state,18,Indiana,18,race_ethnicity,,,Non-Hispanic Two or more races,259563,B03002,ACS 2020-2024 5-year
+state,18,Indiana,18,race_ethnicity,,,Hispanic or Latino,590348,B03002,ACS 2020-2024 5-year
+state,19,Iowa,19,total,,,,3210507,B01001,ACS 2020-2024 5-year
+state,19,Iowa,19,age_sex,0-17,male,,377038,B01001,ACS 2020-2024 5-year
+state,19,Iowa,19,age_sex,18-44,male,,579698,B01001,ACS 2020-2024 5-year
+state,19,Iowa,19,age_sex,45-64,male,,386825,B01001,ACS 2020-2024 5-year
+state,19,Iowa,19,age_sex,65+,male,,266705,B01001,ACS 2020-2024 5-year
+state,19,Iowa,19,age_sex,0-17,female,,357977,B01001,ACS 2020-2024 5-year
+state,19,Iowa,19,age_sex,18-44,female,,547180,B01001,ACS 2020-2024 5-year
+state,19,Iowa,19,age_sex,45-64,female,,379633,B01001,ACS 2020-2024 5-year
+state,19,Iowa,19,age_sex,65+,female,,315451,B01001,ACS 2020-2024 5-year
+state,19,Iowa,19,race_ethnicity,,,Non-Hispanic White,2642646,B03002,ACS 2020-2024 5-year
+state,19,Iowa,19,race_ethnicity,,,Non-Hispanic Black,121705,B03002,ACS 2020-2024 5-year
+state,19,Iowa,19,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,5239,B03002,ACS 2020-2024 5-year
+state,19,Iowa,19,race_ethnicity,,,Non-Hispanic Asian,79174,B03002,ACS 2020-2024 5-year
+state,19,Iowa,19,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,5703,B03002,ACS 2020-2024 5-year
+state,19,Iowa,19,race_ethnicity,,,Non-Hispanic Some other race,9294,B03002,ACS 2020-2024 5-year
+state,19,Iowa,19,race_ethnicity,,,Non-Hispanic Two or more races,113040,B03002,ACS 2020-2024 5-year
+state,19,Iowa,19,race_ethnicity,,,Hispanic or Latino,233706,B03002,ACS 2020-2024 5-year
+state,20,Kansas,20,total,,,,2947197,B01001,ACS 2020-2024 5-year
+state,20,Kansas,20,age_sex,0-17,male,,359422,B01001,ACS 2020-2024 5-year
+state,20,Kansas,20,age_sex,18-44,male,,546529,B01001,ACS 2020-2024 5-year
+state,20,Kansas,20,age_sex,45-64,male,,344485,B01001,ACS 2020-2024 5-year
+state,20,Kansas,20,age_sex,65+,male,,228110,B01001,ACS 2020-2024 5-year
+state,20,Kansas,20,age_sex,0-17,female,,340807,B01001,ACS 2020-2024 5-year
+state,20,Kansas,20,age_sex,18-44,female,,513184,B01001,ACS 2020-2024 5-year
+state,20,Kansas,20,age_sex,45-64,female,,342936,B01001,ACS 2020-2024 5-year
+state,20,Kansas,20,age_sex,65+,female,,271724,B01001,ACS 2020-2024 5-year
+state,20,Kansas,20,race_ethnicity,,,Non-Hispanic White,2143334,B03002,ACS 2020-2024 5-year
+state,20,Kansas,20,race_ethnicity,,,Non-Hispanic Black,151797,B03002,ACS 2020-2024 5-year
+state,20,Kansas,20,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,11797,B03002,ACS 2020-2024 5-year
+state,20,Kansas,20,race_ethnicity,,,Non-Hispanic Asian,85432,B03002,ACS 2020-2024 5-year
+state,20,Kansas,20,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,2506,B03002,ACS 2020-2024 5-year
+state,20,Kansas,20,race_ethnicity,,,Non-Hispanic Some other race,11992,B03002,ACS 2020-2024 5-year
+state,20,Kansas,20,race_ethnicity,,,Non-Hispanic Two or more races,140321,B03002,ACS 2020-2024 5-year
+state,20,Kansas,20,race_ethnicity,,,Hispanic or Latino,400018,B03002,ACS 2020-2024 5-year
+state,21,Kentucky,21,total,,,,4534824,B01001,ACS 2020-2024 5-year
+state,21,Kentucky,21,age_sex,0-17,male,,525237,B01001,ACS 2020-2024 5-year
+state,21,Kentucky,21,age_sex,18-44,male,,801444,B01001,ACS 2020-2024 5-year
+state,21,Kentucky,21,age_sex,45-64,male,,567122,B01001,ACS 2020-2024 5-year
+state,21,Kentucky,21,age_sex,65+,male,,352966,B01001,ACS 2020-2024 5-year
+state,21,Kentucky,21,age_sex,0-17,female,,499739,B01001,ACS 2020-2024 5-year
+state,21,Kentucky,21,age_sex,18-44,female,,775898,B01001,ACS 2020-2024 5-year
+state,21,Kentucky,21,age_sex,45-64,female,,580708,B01001,ACS 2020-2024 5-year
+state,21,Kentucky,21,age_sex,65+,female,,431710,B01001,ACS 2020-2024 5-year
+state,21,Kentucky,21,race_ethnicity,,,Non-Hispanic White,3698087,B03002,ACS 2020-2024 5-year
+state,21,Kentucky,21,race_ethnicity,,,Non-Hispanic Black,342570,B03002,ACS 2020-2024 5-year
+state,21,Kentucky,21,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,3746,B03002,ACS 2020-2024 5-year
+state,21,Kentucky,21,race_ethnicity,,,Non-Hispanic Asian,72372,B03002,ACS 2020-2024 5-year
+state,21,Kentucky,21,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,3225,B03002,ACS 2020-2024 5-year
+state,21,Kentucky,21,race_ethnicity,,,Non-Hispanic Some other race,13394,B03002,ACS 2020-2024 5-year
+state,21,Kentucky,21,race_ethnicity,,,Non-Hispanic Two or more races,174686,B03002,ACS 2020-2024 5-year
+state,21,Kentucky,21,race_ethnicity,,,Hispanic or Latino,226744,B03002,ACS 2020-2024 5-year
+state,22,Louisiana,22,total,,,,4611961,B01001,ACS 2020-2024 5-year
+state,22,Louisiana,22,age_sex,0-17,male,,553306,B01001,ACS 2020-2024 5-year
+state,22,Louisiana,22,age_sex,18-44,male,,819174,B01001,ACS 2020-2024 5-year
+state,22,Louisiana,22,age_sex,45-64,male,,539617,B01001,ACS 2020-2024 5-year
+state,22,Louisiana,22,age_sex,65+,male,,344476,B01001,ACS 2020-2024 5-year
+state,22,Louisiana,22,age_sex,0-17,female,,529544,B01001,ACS 2020-2024 5-year
+state,22,Louisiana,22,age_sex,18-44,female,,827727,B01001,ACS 2020-2024 5-year
+state,22,Louisiana,22,age_sex,45-64,female,,570189,B01001,ACS 2020-2024 5-year
+state,22,Louisiana,22,age_sex,65+,female,,427928,B01001,ACS 2020-2024 5-year
+state,22,Louisiana,22,race_ethnicity,,,Non-Hispanic White,2570539,B03002,ACS 2020-2024 5-year
+state,22,Louisiana,22,race_ethnicity,,,Non-Hispanic Black,1407844,B03002,ACS 2020-2024 5-year
+state,22,Louisiana,22,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,18291,B03002,ACS 2020-2024 5-year
+state,22,Louisiana,22,race_ethnicity,,,Non-Hispanic Asian,78910,B03002,ACS 2020-2024 5-year
+state,22,Louisiana,22,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,2763,B03002,ACS 2020-2024 5-year
+state,22,Louisiana,22,race_ethnicity,,,Non-Hispanic Some other race,23463,B03002,ACS 2020-2024 5-year
+state,22,Louisiana,22,race_ethnicity,,,Non-Hispanic Two or more races,177435,B03002,ACS 2020-2024 5-year
+state,22,Louisiana,22,race_ethnicity,,,Hispanic or Latino,332716,B03002,ACS 2020-2024 5-year
+state,23,Maine,23,total,,,,1387817,B01001,ACS 2020-2024 5-year
+state,23,Maine,23,age_sex,0-17,male,,129375,B01001,ACS 2020-2024 5-year
+state,23,Maine,23,age_sex,18-44,male,,224853,B01001,ACS 2020-2024 5-year
+state,23,Maine,23,age_sex,45-64,male,,186436,B01001,ACS 2020-2024 5-year
+state,23,Maine,23,age_sex,65+,male,,143219,B01001,ACS 2020-2024 5-year
+state,23,Maine,23,age_sex,0-17,female,,121165,B01001,ACS 2020-2024 5-year
+state,23,Maine,23,age_sex,18-44,female,,222342,B01001,ACS 2020-2024 5-year
+state,23,Maine,23,age_sex,45-64,female,,193226,B01001,ACS 2020-2024 5-year
+state,23,Maine,23,age_sex,65+,female,,167201,B01001,ACS 2020-2024 5-year
+state,23,Maine,23,race_ethnicity,,,Non-Hispanic White,1247805,B03002,ACS 2020-2024 5-year
+state,23,Maine,23,race_ethnicity,,,Non-Hispanic Black,24846,B03002,ACS 2020-2024 5-year
+state,23,Maine,23,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,4746,B03002,ACS 2020-2024 5-year
+state,23,Maine,23,race_ethnicity,,,Non-Hispanic Asian,15854,B03002,ACS 2020-2024 5-year
+state,23,Maine,23,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,355,B03002,ACS 2020-2024 5-year
+state,23,Maine,23,race_ethnicity,,,Non-Hispanic Some other race,5054,B03002,ACS 2020-2024 5-year
+state,23,Maine,23,race_ethnicity,,,Non-Hispanic Two or more races,58891,B03002,ACS 2020-2024 5-year
+state,23,Maine,23,race_ethnicity,,,Hispanic or Latino,30266,B03002,ACS 2020-2024 5-year
+state,24,Maryland,24,total,,,,6206011,B01001,ACS 2020-2024 5-year
+state,24,Maryland,24,age_sex,0-17,male,,703261,B01001,ACS 2020-2024 5-year
+state,24,Maryland,24,age_sex,18-44,male,,1086437,B01001,ACS 2020-2024 5-year
+state,24,Maryland,24,age_sex,45-64,male,,777379,B01001,ACS 2020-2024 5-year
+state,24,Maryland,24,age_sex,65+,male,,452799,B01001,ACS 2020-2024 5-year
+state,24,Maryland,24,age_sex,0-17,female,,673239,B01001,ACS 2020-2024 5-year
+state,24,Maryland,24,age_sex,18-44,female,,1101951,B01001,ACS 2020-2024 5-year
+state,24,Maryland,24,age_sex,45-64,female,,830003,B01001,ACS 2020-2024 5-year
+state,24,Maryland,24,age_sex,65+,female,,580942,B01001,ACS 2020-2024 5-year
+state,24,Maryland,24,race_ethnicity,,,Non-Hispanic White,2890956,B03002,ACS 2020-2024 5-year
+state,24,Maryland,24,race_ethnicity,,,Non-Hispanic Black,1796433,B03002,ACS 2020-2024 5-year
+state,24,Maryland,24,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,6943,B03002,ACS 2020-2024 5-year
+state,24,Maryland,24,race_ethnicity,,,Non-Hispanic Asian,406030,B03002,ACS 2020-2024 5-year
+state,24,Maryland,24,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,2074,B03002,ACS 2020-2024 5-year
+state,24,Maryland,24,race_ethnicity,,,Non-Hispanic Some other race,41380,B03002,ACS 2020-2024 5-year
+state,24,Maryland,24,race_ethnicity,,,Non-Hispanic Two or more races,287249,B03002,ACS 2020-2024 5-year
+state,24,Maryland,24,race_ethnicity,,,Hispanic or Latino,774946,B03002,ACS 2020-2024 5-year
+state,25,Massachusetts,25,total,,,,7044056,B01001,ACS 2020-2024 5-year
+state,25,Massachusetts,25,age_sex,0-17,male,,698855,B01001,ACS 2020-2024 5-year
+state,25,Massachusetts,25,age_sex,18-44,male,,1294832,B01001,ACS 2020-2024 5-year
+state,25,Massachusetts,25,age_sex,45-64,male,,890331,B01001,ACS 2020-2024 5-year
+state,25,Massachusetts,25,age_sex,65+,male,,558313,B01001,ACS 2020-2024 5-year
+state,25,Massachusetts,25,age_sex,0-17,female,,665326,B01001,ACS 2020-2024 5-year
+state,25,Massachusetts,25,age_sex,18-44,female,,1305198,B01001,ACS 2020-2024 5-year
+state,25,Massachusetts,25,age_sex,45-64,female,,931241,B01001,ACS 2020-2024 5-year
+state,25,Massachusetts,25,age_sex,65+,female,,699960,B01001,ACS 2020-2024 5-year
+state,25,Massachusetts,25,race_ethnicity,,,Non-Hispanic White,4691391,B03002,ACS 2020-2024 5-year
+state,25,Massachusetts,25,race_ethnicity,,,Non-Hispanic Black,450251,B03002,ACS 2020-2024 5-year
+state,25,Massachusetts,25,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,5405,B03002,ACS 2020-2024 5-year
+state,25,Massachusetts,25,race_ethnicity,,,Non-Hispanic Asian,510868,B03002,ACS 2020-2024 5-year
+state,25,Massachusetts,25,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,1666,B03002,ACS 2020-2024 5-year
+state,25,Massachusetts,25,race_ethnicity,,,Non-Hispanic Some other race,87676,B03002,ACS 2020-2024 5-year
+state,25,Massachusetts,25,race_ethnicity,,,Non-Hispanic Two or more races,359946,B03002,ACS 2020-2024 5-year
+state,25,Massachusetts,25,race_ethnicity,,,Hispanic or Latino,936853,B03002,ACS 2020-2024 5-year
+state,26,Michigan,26,total,,,,10077761,B01001,ACS 2020-2024 5-year
+state,26,Michigan,26,age_sex,0-17,male,,1097148,B01001,ACS 2020-2024 5-year
+state,26,Michigan,26,age_sex,18-44,male,,1764233,B01001,ACS 2020-2024 5-year
+state,26,Michigan,26,age_sex,45-64,male,,1278345,B01001,ACS 2020-2024 5-year
+state,26,Michigan,26,age_sex,65+,male,,853993,B01001,ACS 2020-2024 5-year
+state,26,Michigan,26,age_sex,0-17,female,,1043336,B01001,ACS 2020-2024 5-year
+state,26,Michigan,26,age_sex,18-44,female,,1715344,B01001,ACS 2020-2024 5-year
+state,26,Michigan,26,age_sex,45-64,female,,1303089,B01001,ACS 2020-2024 5-year
+state,26,Michigan,26,age_sex,65+,female,,1022273,B01001,ACS 2020-2024 5-year
+state,26,Michigan,26,race_ethnicity,,,Non-Hispanic White,7291631,B03002,ACS 2020-2024 5-year
+state,26,Michigan,26,race_ethnicity,,,Non-Hispanic Black,1321347,B03002,ACS 2020-2024 5-year
+state,26,Michigan,26,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,30921,B03002,ACS 2020-2024 5-year
+state,26,Michigan,26,race_ethnicity,,,Non-Hispanic Asian,343096,B03002,ACS 2020-2024 5-year
+state,26,Michigan,26,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,2554,B03002,ACS 2020-2024 5-year
+state,26,Michigan,26,race_ethnicity,,,Non-Hispanic Some other race,45693,B03002,ACS 2020-2024 5-year
+state,26,Michigan,26,race_ethnicity,,,Non-Hispanic Two or more races,450474,B03002,ACS 2020-2024 5-year
+state,26,Michigan,26,race_ethnicity,,,Hispanic or Latino,592045,B03002,ACS 2020-2024 5-year
+state,27,Minnesota,27,total,,,,5739445,B01001,ACS 2020-2024 5-year
+state,27,Minnesota,27,age_sex,0-17,male,,670594,B01001,ACS 2020-2024 5-year
+state,27,Minnesota,27,age_sex,18-44,male,,1035290,B01001,ACS 2020-2024 5-year
+state,27,Minnesota,27,age_sex,45-64,male,,710138,B01001,ACS 2020-2024 5-year
+state,27,Minnesota,27,age_sex,65+,male,,459365,B01001,ACS 2020-2024 5-year
+state,27,Minnesota,27,age_sex,0-17,female,,641596,B01001,ACS 2020-2024 5-year
+state,27,Minnesota,27,age_sex,18-44,female,,993569,B01001,ACS 2020-2024 5-year
+state,27,Minnesota,27,age_sex,45-64,female,,695873,B01001,ACS 2020-2024 5-year
+state,27,Minnesota,27,age_sex,65+,female,,533020,B01001,ACS 2020-2024 5-year
+state,27,Minnesota,27,race_ethnicity,,,Non-Hispanic White,4355373,B03002,ACS 2020-2024 5-year
+state,27,Minnesota,27,race_ethnicity,,,Non-Hispanic Black,398881,B03002,ACS 2020-2024 5-year
+state,27,Minnesota,27,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,40904,B03002,ACS 2020-2024 5-year
+state,27,Minnesota,27,race_ethnicity,,,Non-Hispanic Asian,292015,B03002,ACS 2020-2024 5-year
+state,27,Minnesota,27,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,2184,B03002,ACS 2020-2024 5-year
+state,27,Minnesota,27,race_ethnicity,,,Non-Hispanic Some other race,27918,B03002,ACS 2020-2024 5-year
+state,27,Minnesota,27,race_ethnicity,,,Non-Hispanic Two or more races,256339,B03002,ACS 2020-2024 5-year
+state,27,Minnesota,27,race_ethnicity,,,Hispanic or Latino,365831,B03002,ACS 2020-2024 5-year
+state,28,Mississippi,28,total,,,,2946779,B01001,ACS 2020-2024 5-year
+state,28,Mississippi,28,age_sex,0-17,male,,351231,B01001,ACS 2020-2024 5-year
+state,28,Mississippi,28,age_sex,18-44,male,,506513,B01001,ACS 2020-2024 5-year
+state,28,Mississippi,28,age_sex,45-64,male,,349148,B01001,ACS 2020-2024 5-year
+state,28,Mississippi,28,age_sex,65+,male,,222370,B01001,ACS 2020-2024 5-year
+state,28,Mississippi,28,age_sex,0-17,female,,335574,B01001,ACS 2020-2024 5-year
+state,28,Mississippi,28,age_sex,18-44,female,,522270,B01001,ACS 2020-2024 5-year
+state,28,Mississippi,28,age_sex,45-64,female,,376204,B01001,ACS 2020-2024 5-year
+state,28,Mississippi,28,age_sex,65+,female,,283469,B01001,ACS 2020-2024 5-year
+state,28,Mississippi,28,race_ethnicity,,,Non-Hispanic White,1626438,B03002,ACS 2020-2024 5-year
+state,28,Mississippi,28,race_ethnicity,,,Non-Hispanic Black,1070561,B03002,ACS 2020-2024 5-year
+state,28,Mississippi,28,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,11402,B03002,ACS 2020-2024 5-year
+state,28,Mississippi,28,race_ethnicity,,,Non-Hispanic Asian,29512,B03002,ACS 2020-2024 5-year
+state,28,Mississippi,28,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,1110,B03002,ACS 2020-2024 5-year
+state,28,Mississippi,28,race_ethnicity,,,Non-Hispanic Some other race,10300,B03002,ACS 2020-2024 5-year
+state,28,Mississippi,28,race_ethnicity,,,Non-Hispanic Two or more races,87500,B03002,ACS 2020-2024 5-year
+state,28,Mississippi,28,race_ethnicity,,,Hispanic or Latino,109956,B03002,ACS 2020-2024 5-year
+state,29,Missouri,29,total,,,,6191814,B01001,ACS 2020-2024 5-year
+state,29,Missouri,29,age_sex,0-17,male,,708403,B01001,ACS 2020-2024 5-year
+state,29,Missouri,29,age_sex,18-44,male,,1094278,B01001,ACS 2020-2024 5-year
+state,29,Missouri,29,age_sex,45-64,male,,752547,B01001,ACS 2020-2024 5-year
+state,29,Missouri,29,age_sex,65+,male,,497216,B01001,ACS 2020-2024 5-year
+state,29,Missouri,29,age_sex,0-17,female,,674276,B01001,ACS 2020-2024 5-year
+state,29,Missouri,29,age_sex,18-44,female,,1080855,B01001,ACS 2020-2024 5-year
+state,29,Missouri,29,age_sex,45-64,female,,773712,B01001,ACS 2020-2024 5-year
+state,29,Missouri,29,age_sex,65+,female,,610527,B01001,ACS 2020-2024 5-year
+state,29,Missouri,29,race_ethnicity,,,Non-Hispanic White,4723665,B03002,ACS 2020-2024 5-year
+state,29,Missouri,29,race_ethnicity,,,Non-Hispanic Black,673780,B03002,ACS 2020-2024 5-year
+state,29,Missouri,29,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,10568,B03002,ACS 2020-2024 5-year
+state,29,Missouri,29,race_ethnicity,,,Non-Hispanic Asian,130842,B03002,ACS 2020-2024 5-year
+state,29,Missouri,29,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,8422,B03002,ACS 2020-2024 5-year
+state,29,Missouri,29,race_ethnicity,,,Non-Hispanic Some other race,24938,B03002,ACS 2020-2024 5-year
+state,29,Missouri,29,race_ethnicity,,,Non-Hispanic Two or more races,295220,B03002,ACS 2020-2024 5-year
+state,29,Missouri,29,race_ethnicity,,,Hispanic or Latino,324379,B03002,ACS 2020-2024 5-year
+state,30,Montana,30,total,,,,1116875,B01001,ACS 2020-2024 5-year
+state,30,Montana,30,age_sex,0-17,male,,120850,B01001,ACS 2020-2024 5-year
+state,30,Montana,30,age_sex,18-44,male,,201466,B01001,ACS 2020-2024 5-year
+state,30,Montana,30,age_sex,45-64,male,,135525,B01001,ACS 2020-2024 5-year
+state,30,Montana,30,age_sex,65+,male,,108075,B01001,ACS 2020-2024 5-year
+state,30,Montana,30,age_sex,0-17,female,,113857,B01001,ACS 2020-2024 5-year
+state,30,Montana,30,age_sex,18-44,female,,187355,B01001,ACS 2020-2024 5-year
+state,30,Montana,30,age_sex,45-64,female,,133149,B01001,ACS 2020-2024 5-year
+state,30,Montana,30,age_sex,65+,female,,116598,B01001,ACS 2020-2024 5-year
+state,30,Montana,30,race_ethnicity,,,Non-Hispanic White,933610,B03002,ACS 2020-2024 5-year
+state,30,Montana,30,race_ethnicity,,,Non-Hispanic Black,4532,B03002,ACS 2020-2024 5-year
+state,30,Montana,30,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,59723,B03002,ACS 2020-2024 5-year
+state,30,Montana,30,race_ethnicity,,,Non-Hispanic Asian,8812,B03002,ACS 2020-2024 5-year
+state,30,Montana,30,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,453,B03002,ACS 2020-2024 5-year
+state,30,Montana,30,race_ethnicity,,,Non-Hispanic Some other race,5913,B03002,ACS 2020-2024 5-year
+state,30,Montana,30,race_ethnicity,,,Non-Hispanic Two or more races,52900,B03002,ACS 2020-2024 5-year
+state,30,Montana,30,race_ethnicity,,,Hispanic or Latino,50932,B03002,ACS 2020-2024 5-year
+state,31,Nebraska,31,total,,,,1978707,B01001,ACS 2020-2024 5-year
+state,31,Nebraska,31,age_sex,0-17,male,,249160,B01001,ACS 2020-2024 5-year
+state,31,Nebraska,31,age_sex,18-44,male,,361794,B01001,ACS 2020-2024 5-year
+state,31,Nebraska,31,age_sex,45-64,male,,231496,B01001,ACS 2020-2024 5-year
+state,31,Nebraska,31,age_sex,65+,male,,151906,B01001,ACS 2020-2024 5-year
+state,31,Nebraska,31,age_sex,0-17,female,,235589,B01001,ACS 2020-2024 5-year
+state,31,Nebraska,31,age_sex,18-44,female,,344984,B01001,ACS 2020-2024 5-year
+state,31,Nebraska,31,age_sex,45-64,female,,224879,B01001,ACS 2020-2024 5-year
+state,31,Nebraska,31,age_sex,65+,female,,178899,B01001,ACS 2020-2024 5-year
+state,31,Nebraska,31,race_ethnicity,,,Non-Hispanic White,1489928,B03002,ACS 2020-2024 5-year
+state,31,Nebraska,31,race_ethnicity,,,Non-Hispanic Black,90861,B03002,ACS 2020-2024 5-year
+state,31,Nebraska,31,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,11301,B03002,ACS 2020-2024 5-year
+state,31,Nebraska,31,race_ethnicity,,,Non-Hispanic Asian,50564,B03002,ACS 2020-2024 5-year
+state,31,Nebraska,31,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,878,B03002,ACS 2020-2024 5-year
+state,31,Nebraska,31,race_ethnicity,,,Non-Hispanic Some other race,7093,B03002,ACS 2020-2024 5-year
+state,31,Nebraska,31,race_ethnicity,,,Non-Hispanic Two or more races,76059,B03002,ACS 2020-2024 5-year
+state,31,Nebraska,31,race_ethnicity,,,Hispanic or Latino,252023,B03002,ACS 2020-2024 5-year
+state,32,Nevada,32,total,,,,3184612,B01001,ACS 2020-2024 5-year
+state,32,Nevada,32,age_sex,0-17,male,,354443,B01001,ACS 2020-2024 5-year
+state,32,Nevada,32,age_sex,18-44,male,,591805,B01001,ACS 2020-2024 5-year
+state,32,Nevada,32,age_sex,45-64,male,,402404,B01001,ACS 2020-2024 5-year
+state,32,Nevada,32,age_sex,65+,male,,255765,B01001,ACS 2020-2024 5-year
+state,32,Nevada,32,age_sex,0-17,female,,338016,B01001,ACS 2020-2024 5-year
+state,32,Nevada,32,age_sex,18-44,female,,562972,B01001,ACS 2020-2024 5-year
+state,32,Nevada,32,age_sex,45-64,female,,394186,B01001,ACS 2020-2024 5-year
+state,32,Nevada,32,age_sex,65+,female,,285021,B01001,ACS 2020-2024 5-year
+state,32,Nevada,32,race_ethnicity,,,Non-Hispanic White,1426245,B03002,ACS 2020-2024 5-year
+state,32,Nevada,32,race_ethnicity,,,Non-Hispanic Black,285857,B03002,ACS 2020-2024 5-year
+state,32,Nevada,32,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,18446,B03002,ACS 2020-2024 5-year
+state,32,Nevada,32,race_ethnicity,,,Non-Hispanic Asian,278694,B03002,ACS 2020-2024 5-year
+state,32,Nevada,32,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,21438,B03002,ACS 2020-2024 5-year
+state,32,Nevada,32,race_ethnicity,,,Non-Hispanic Some other race,20449,B03002,ACS 2020-2024 5-year
+state,32,Nevada,32,race_ethnicity,,,Non-Hispanic Two or more races,189914,B03002,ACS 2020-2024 5-year
+state,32,Nevada,32,race_ethnicity,,,Hispanic or Latino,943569,B03002,ACS 2020-2024 5-year
+state,33,New Hampshire,33,total,,,,1394868,B01001,ACS 2020-2024 5-year
+state,33,New Hampshire,33,age_sex,0-17,male,,130473,B01001,ACS 2020-2024 5-year
+state,33,New Hampshire,33,age_sex,18-44,male,,241373,B01001,ACS 2020-2024 5-year
+state,33,New Hampshire,33,age_sex,45-64,male,,193814,B01001,ACS 2020-2024 5-year
+state,33,New Hampshire,33,age_sex,65+,male,,130837,B01001,ACS 2020-2024 5-year
+state,33,New Hampshire,33,age_sex,0-17,female,,124007,B01001,ACS 2020-2024 5-year
+state,33,New Hampshire,33,age_sex,18-44,female,,229101,B01001,ACS 2020-2024 5-year
+state,33,New Hampshire,33,age_sex,45-64,female,,195167,B01001,ACS 2020-2024 5-year
+state,33,New Hampshire,33,age_sex,65+,female,,150096,B01001,ACS 2020-2024 5-year
+state,33,New Hampshire,33,race_ethnicity,,,Non-Hispanic White,1212424,B03002,ACS 2020-2024 5-year
+state,33,New Hampshire,33,race_ethnicity,,,Non-Hispanic Black,18704,B03002,ACS 2020-2024 5-year
+state,33,New Hampshire,33,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,951,B03002,ACS 2020-2024 5-year
+state,33,New Hampshire,33,race_ethnicity,,,Non-Hispanic Asian,35738,B03002,ACS 2020-2024 5-year
+state,33,New Hampshire,33,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,276,B03002,ACS 2020-2024 5-year
+state,33,New Hampshire,33,race_ethnicity,,,Non-Hispanic Some other race,6089,B03002,ACS 2020-2024 5-year
+state,33,New Hampshire,33,race_ethnicity,,,Non-Hispanic Two or more races,55303,B03002,ACS 2020-2024 5-year
+state,33,New Hampshire,33,race_ethnicity,,,Hispanic or Latino,65383,B03002,ACS 2020-2024 5-year
+state,34,New Jersey,34,total,,,,9343809,B01001,ACS 2020-2024 5-year
+state,34,New Jersey,34,age_sex,0-17,male,,1042747,B01001,ACS 2020-2024 5-year
+state,34,New Jersey,34,age_sex,18-44,male,,1630047,B01001,ACS 2020-2024 5-year
+state,34,New Jersey,34,age_sex,45-64,male,,1216366,B01001,ACS 2020-2024 5-year
+state,34,New Jersey,34,age_sex,65+,male,,709233,B01001,ACS 2020-2024 5-year
+state,34,New Jersey,34,age_sex,0-17,female,,994898,B01001,ACS 2020-2024 5-year
+state,34,New Jersey,34,age_sex,18-44,female,,1596549,B01001,ACS 2020-2024 5-year
+state,34,New Jersey,34,age_sex,45-64,female,,1257444,B01001,ACS 2020-2024 5-year
+state,34,New Jersey,34,age_sex,65+,female,,896525,B01001,ACS 2020-2024 5-year
+state,34,New Jersey,34,race_ethnicity,,,Non-Hispanic White,4759979,B03002,ACS 2020-2024 5-year
+state,34,New Jersey,34,race_ethnicity,,,Non-Hispanic Black,1136658,B03002,ACS 2020-2024 5-year
+state,34,New Jersey,34,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,6569,B03002,ACS 2020-2024 5-year
+state,34,New Jersey,34,race_ethnicity,,,Non-Hispanic Asian,938728,B03002,ACS 2020-2024 5-year
+state,34,New Jersey,34,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,1939,B03002,ACS 2020-2024 5-year
+state,34,New Jersey,34,race_ethnicity,,,Non-Hispanic Some other race,74315,B03002,ACS 2020-2024 5-year
+state,34,New Jersey,34,race_ethnicity,,,Non-Hispanic Two or more races,326661,B03002,ACS 2020-2024 5-year
+state,34,New Jersey,34,race_ethnicity,,,Hispanic or Latino,2098960,B03002,ACS 2020-2024 5-year
+state,35,New Mexico,35,total,,,,2120246,B01001,ACS 2020-2024 5-year
+state,35,New Mexico,35,age_sex,0-17,male,,234664,B01001,ACS 2020-2024 5-year
+state,35,New Mexico,35,age_sex,18-44,male,,385279,B01001,ACS 2020-2024 5-year
+state,35,New Mexico,35,age_sex,45-64,male,,245866,B01001,ACS 2020-2024 5-year
+state,35,New Mexico,35,age_sex,65+,male,,187826,B01001,ACS 2020-2024 5-year
+state,35,New Mexico,35,age_sex,0-17,female,,226477,B01001,ACS 2020-2024 5-year
+state,35,New Mexico,35,age_sex,18-44,female,,362845,B01001,ACS 2020-2024 5-year
+state,35,New Mexico,35,age_sex,45-64,female,,256851,B01001,ACS 2020-2024 5-year
+state,35,New Mexico,35,age_sex,65+,female,,220438,B01001,ACS 2020-2024 5-year
+state,35,New Mexico,35,race_ethnicity,,,Non-Hispanic White,762421,B03002,ACS 2020-2024 5-year
+state,35,New Mexico,35,race_ethnicity,,,Non-Hispanic Black,38573,B03002,ACS 2020-2024 5-year
+state,35,New Mexico,35,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,179996,B03002,ACS 2020-2024 5-year
+state,35,New Mexico,35,race_ethnicity,,,Non-Hispanic Asian,34610,B03002,ACS 2020-2024 5-year
+state,35,New Mexico,35,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,1241,B03002,ACS 2020-2024 5-year
+state,35,New Mexico,35,race_ethnicity,,,Non-Hispanic Some other race,10434,B03002,ACS 2020-2024 5-year
+state,35,New Mexico,35,race_ethnicity,,,Non-Hispanic Two or more races,66357,B03002,ACS 2020-2024 5-year
+state,35,New Mexico,35,race_ethnicity,,,Hispanic or Latino,1026614,B03002,ACS 2020-2024 5-year
+state,36,New York,36,total,,,,19852366,B01001,ACS 2020-2024 5-year
+state,36,New York,36,age_sex,0-17,male,,2080933,B01001,ACS 2020-2024 5-year
+state,36,New York,36,age_sex,18-44,male,,3570271,B01001,ACS 2020-2024 5-year
+state,36,New York,36,age_sex,45-64,male,,2479021,B01001,ACS 2020-2024 5-year
+state,36,New York,36,age_sex,65+,male,,1564989,B01001,ACS 2020-2024 5-year
+state,36,New York,36,age_sex,0-17,female,,1984379,B01001,ACS 2020-2024 5-year
+state,36,New York,36,age_sex,18-44,female,,3587617,B01001,ACS 2020-2024 5-year
+state,36,New York,36,age_sex,45-64,female,,2596117,B01001,ACS 2020-2024 5-year
+state,36,New York,36,age_sex,65+,female,,1989039,B01001,ACS 2020-2024 5-year
+state,36,New York,36,race_ethnicity,,,Non-Hispanic White,10473790,B03002,ACS 2020-2024 5-year
+state,36,New York,36,race_ethnicity,,,Non-Hispanic Black,2661771,B03002,ACS 2020-2024 5-year
+state,36,New York,36,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,35846,B03002,ACS 2020-2024 5-year
+state,36,New York,36,race_ethnicity,,,Non-Hispanic Asian,1782460,B03002,ACS 2020-2024 5-year
+state,36,New York,36,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,6454,B03002,ACS 2020-2024 5-year
+state,36,New York,36,race_ethnicity,,,Non-Hispanic Some other race,198104,B03002,ACS 2020-2024 5-year
+state,36,New York,36,race_ethnicity,,,Non-Hispanic Two or more races,757856,B03002,ACS 2020-2024 5-year
+state,36,New York,36,race_ethnicity,,,Hispanic or Latino,3936085,B03002,ACS 2020-2024 5-year
+state,37,North Carolina,37,total,,,,10730404,B01001,ACS 2020-2024 5-year
+state,37,North Carolina,37,age_sex,0-17,male,,1192793,B01001,ACS 2020-2024 5-year
+state,37,North Carolina,37,age_sex,18-44,male,,1910666,B01001,ACS 2020-2024 5-year
+state,37,North Carolina,37,age_sex,45-64,male,,1322908,B01001,ACS 2020-2024 5-year
+state,37,North Carolina,37,age_sex,65+,male,,818669,B01001,ACS 2020-2024 5-year
+state,37,North Carolina,37,age_sex,0-17,female,,1142127,B01001,ACS 2020-2024 5-year
+state,37,North Carolina,37,age_sex,18-44,female,,1917158,B01001,ACS 2020-2024 5-year
+state,37,North Carolina,37,age_sex,45-64,female,,1399189,B01001,ACS 2020-2024 5-year
+state,37,North Carolina,37,age_sex,65+,female,,1026894,B01001,ACS 2020-2024 5-year
+state,37,North Carolina,37,race_ethnicity,,,Non-Hispanic White,6438593,B03002,ACS 2020-2024 5-year
+state,37,North Carolina,37,race_ethnicity,,,Non-Hispanic Black,2146633,B03002,ACS 2020-2024 5-year
+state,37,North Carolina,37,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,86572,B03002,ACS 2020-2024 5-year
+state,37,North Carolina,37,race_ethnicity,,,Non-Hispanic Asian,351050,B03002,ACS 2020-2024 5-year
+state,37,North Carolina,37,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,5696,B03002,ACS 2020-2024 5-year
+state,37,North Carolina,37,race_ethnicity,,,Non-Hispanic Some other race,53089,B03002,ACS 2020-2024 5-year
+state,37,North Carolina,37,race_ethnicity,,,Non-Hispanic Two or more races,434921,B03002,ACS 2020-2024 5-year
+state,37,North Carolina,37,race_ethnicity,,,Hispanic or Latino,1213850,B03002,ACS 2020-2024 5-year
+state,38,North Dakota,38,total,,,,784841,B01001,ACS 2020-2024 5-year
+state,38,North Dakota,38,age_sex,0-17,male,,94411,B01001,ACS 2020-2024 5-year
+state,38,North Dakota,38,age_sex,18-44,male,,160023,B01001,ACS 2020-2024 5-year
+state,38,North Dakota,38,age_sex,45-64,male,,87088,B01001,ACS 2020-2024 5-year
+state,38,North Dakota,38,age_sex,65+,male,,60600,B01001,ACS 2020-2024 5-year
+state,38,North Dakota,38,age_sex,0-17,female,,90050,B01001,ACS 2020-2024 5-year
+state,38,North Dakota,38,age_sex,18-44,female,,141766,B01001,ACS 2020-2024 5-year
+state,38,North Dakota,38,age_sex,45-64,female,,81649,B01001,ACS 2020-2024 5-year
+state,38,North Dakota,38,age_sex,65+,female,,69254,B01001,ACS 2020-2024 5-year
+state,38,North Dakota,38,race_ethnicity,,,Non-Hispanic White,641520,B03002,ACS 2020-2024 5-year
+state,38,North Dakota,38,race_ethnicity,,,Non-Hispanic Black,25923,B03002,ACS 2020-2024 5-year
+state,38,North Dakota,38,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,33204,B03002,ACS 2020-2024 5-year
+state,38,North Dakota,38,race_ethnicity,,,Non-Hispanic Asian,12854,B03002,ACS 2020-2024 5-year
+state,38,North Dakota,38,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,951,B03002,ACS 2020-2024 5-year
+state,38,North Dakota,38,race_ethnicity,,,Non-Hispanic Some other race,2643,B03002,ACS 2020-2024 5-year
+state,38,North Dakota,38,race_ethnicity,,,Non-Hispanic Two or more races,31171,B03002,ACS 2020-2024 5-year
+state,38,North Dakota,38,race_ethnicity,,,Hispanic or Latino,36575,B03002,ACS 2020-2024 5-year
+state,39,Ohio,39,total,,,,11810293,B01001,ACS 2020-2024 5-year
+state,39,Ohio,39,age_sex,0-17,male,,1329603,B01001,ACS 2020-2024 5-year
+state,39,Ohio,39,age_sex,18-44,male,,2061825,B01001,ACS 2020-2024 5-year
+state,39,Ohio,39,age_sex,45-64,male,,1467877,B01001,ACS 2020-2024 5-year
+state,39,Ohio,39,age_sex,65+,male,,965322,B01001,ACS 2020-2024 5-year
+state,39,Ohio,39,age_sex,0-17,female,,1270547,B01001,ACS 2020-2024 5-year
+state,39,Ohio,39,age_sex,18-44,female,,2023509,B01001,ACS 2020-2024 5-year
+state,39,Ohio,39,age_sex,45-64,female,,1501355,B01001,ACS 2020-2024 5-year
+state,39,Ohio,39,age_sex,65+,female,,1190255,B01001,ACS 2020-2024 5-year
+state,39,Ohio,39,race_ethnicity,,,Non-Hispanic White,8955914,B03002,ACS 2020-2024 5-year
+state,39,Ohio,39,race_ethnicity,,,Non-Hispanic Black,1420878,B03002,ACS 2020-2024 5-year
+state,39,Ohio,39,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,7993,B03002,ACS 2020-2024 5-year
+state,39,Ohio,39,race_ethnicity,,,Non-Hispanic Asian,300274,B03002,ACS 2020-2024 5-year
+state,39,Ohio,39,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,3605,B03002,ACS 2020-2024 5-year
+state,39,Ohio,39,race_ethnicity,,,Non-Hispanic Some other race,51309,B03002,ACS 2020-2024 5-year
+state,39,Ohio,39,race_ethnicity,,,Non-Hispanic Two or more races,507580,B03002,ACS 2020-2024 5-year
+state,39,Ohio,39,race_ethnicity,,,Hispanic or Latino,562740,B03002,ACS 2020-2024 5-year
+state,40,Oklahoma,40,total,,,,4028634,B01001,ACS 2020-2024 5-year
+state,40,Oklahoma,40,age_sex,0-17,male,,493673,B01001,ACS 2020-2024 5-year
+state,40,Oklahoma,40,age_sex,18-44,male,,749062,B01001,ACS 2020-2024 5-year
+state,40,Oklahoma,40,age_sex,45-64,male,,465652,B01001,ACS 2020-2024 5-year
+state,40,Oklahoma,40,age_sex,65+,male,,297085,B01001,ACS 2020-2024 5-year
+state,40,Oklahoma,40,age_sex,0-17,female,,471208,B01001,ACS 2020-2024 5-year
+state,40,Oklahoma,40,age_sex,18-44,female,,719245,B01001,ACS 2020-2024 5-year
+state,40,Oklahoma,40,age_sex,45-64,female,,472048,B01001,ACS 2020-2024 5-year
+state,40,Oklahoma,40,age_sex,65+,female,,360661,B01001,ACS 2020-2024 5-year
+state,40,Oklahoma,40,race_ethnicity,,,Non-Hispanic White,2502660,B03002,ACS 2020-2024 5-year
+state,40,Oklahoma,40,race_ethnicity,,,Non-Hispanic Black,272436,B03002,ACS 2020-2024 5-year
+state,40,Oklahoma,40,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,266888,B03002,ACS 2020-2024 5-year
+state,40,Oklahoma,40,race_ethnicity,,,Non-Hispanic Asian,95183,B03002,ACS 2020-2024 5-year
+state,40,Oklahoma,40,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,6984,B03002,ACS 2020-2024 5-year
+state,40,Oklahoma,40,race_ethnicity,,,Non-Hispanic Some other race,13142,B03002,ACS 2020-2024 5-year
+state,40,Oklahoma,40,race_ethnicity,,,Non-Hispanic Two or more races,360537,B03002,ACS 2020-2024 5-year
+state,40,Oklahoma,40,race_ethnicity,,,Hispanic or Latino,510804,B03002,ACS 2020-2024 5-year
+state,41,Oregon,41,total,,,,4254293,B01001,ACS 2020-2024 5-year
+state,41,Oregon,41,age_sex,0-17,male,,435262,B01001,ACS 2020-2024 5-year
+state,41,Oregon,41,age_sex,18-44,male,,792247,B01001,ACS 2020-2024 5-year
+state,41,Oregon,41,age_sex,45-64,male,,520018,B01001,ACS 2020-2024 5-year
+state,41,Oregon,41,age_sex,65+,male,,373672,B01001,ACS 2020-2024 5-year
+state,41,Oregon,41,age_sex,0-17,female,,411760,B01001,ACS 2020-2024 5-year
+state,41,Oregon,41,age_sex,18-44,female,,763412,B01001,ACS 2020-2024 5-year
+state,41,Oregon,41,age_sex,45-64,female,,520742,B01001,ACS 2020-2024 5-year
+state,41,Oregon,41,age_sex,65+,female,,437180,B01001,ACS 2020-2024 5-year
+state,41,Oregon,41,race_ethnicity,,,Non-Hispanic White,3035984,B03002,ACS 2020-2024 5-year
+state,41,Oregon,41,race_ethnicity,,,Non-Hispanic Black,77886,B03002,ACS 2020-2024 5-year
+state,41,Oregon,41,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,26490,B03002,ACS 2020-2024 5-year
+state,41,Oregon,41,race_ethnicity,,,Non-Hispanic Asian,188665,B03002,ACS 2020-2024 5-year
+state,41,Oregon,41,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,16168,B03002,ACS 2020-2024 5-year
+state,41,Oregon,41,race_ethnicity,,,Non-Hispanic Some other race,23528,B03002,ACS 2020-2024 5-year
+state,41,Oregon,41,race_ethnicity,,,Non-Hispanic Two or more races,260974,B03002,ACS 2020-2024 5-year
+state,41,Oregon,41,race_ethnicity,,,Hispanic or Latino,624598,B03002,ACS 2020-2024 5-year
+state,42,Pennsylvania,42,total,,,,13018639,B01001,ACS 2020-2024 5-year
+state,42,Pennsylvania,42,age_sex,0-17,male,,1363849,B01001,ACS 2020-2024 5-year
+state,42,Pennsylvania,42,age_sex,18-44,male,,2270751,B01001,ACS 2020-2024 5-year
+state,42,Pennsylvania,42,age_sex,45-64,male,,1648515,B01001,ACS 2020-2024 5-year
+state,42,Pennsylvania,42,age_sex,65+,male,,1135385,B01001,ACS 2020-2024 5-year
+state,42,Pennsylvania,42,age_sex,0-17,female,,1297491,B01001,ACS 2020-2024 5-year
+state,42,Pennsylvania,42,age_sex,18-44,female,,2221998,B01001,ACS 2020-2024 5-year
+state,42,Pennsylvania,42,age_sex,45-64,female,,1680532,B01001,ACS 2020-2024 5-year
+state,42,Pennsylvania,42,age_sex,65+,female,,1400118,B01001,ACS 2020-2024 5-year
+state,42,Pennsylvania,42,race_ethnicity,,,Non-Hispanic White,9505369,B03002,ACS 2020-2024 5-year
+state,42,Pennsylvania,42,race_ethnicity,,,Non-Hispanic Black,1336493,B03002,ACS 2020-2024 5-year
+state,42,Pennsylvania,42,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,6510,B03002,ACS 2020-2024 5-year
+state,42,Pennsylvania,42,race_ethnicity,,,Non-Hispanic Asian,495420,B03002,ACS 2020-2024 5-year
+state,42,Pennsylvania,42,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,2186,B03002,ACS 2020-2024 5-year
+state,42,Pennsylvania,42,race_ethnicity,,,Non-Hispanic Some other race,66903,B03002,ACS 2020-2024 5-year
+state,42,Pennsylvania,42,race_ethnicity,,,Non-Hispanic Two or more races,470477,B03002,ACS 2020-2024 5-year
+state,42,Pennsylvania,42,race_ethnicity,,,Hispanic or Latino,1135281,B03002,ACS 2020-2024 5-year
+state,44,Rhode Island,44,total,,,,1101801,B01001,ACS 2020-2024 5-year
+state,44,Rhode Island,44,age_sex,0-17,male,,106506,B01001,ACS 2020-2024 5-year
+state,44,Rhode Island,44,age_sex,18-44,male,,203687,B01001,ACS 2020-2024 5-year
+state,44,Rhode Island,44,age_sex,45-64,male,,138901,B01001,ACS 2020-2024 5-year
+state,44,Rhode Island,44,age_sex,65+,male,,91543,B01001,ACS 2020-2024 5-year
+state,44,Rhode Island,44,age_sex,0-17,female,,100919,B01001,ACS 2020-2024 5-year
+state,44,Rhode Island,44,age_sex,18-44,female,,199518,B01001,ACS 2020-2024 5-year
+state,44,Rhode Island,44,age_sex,45-64,female,,146039,B01001,ACS 2020-2024 5-year
+state,44,Rhode Island,44,age_sex,65+,female,,114688,B01001,ACS 2020-2024 5-year
+state,44,Rhode Island,44,race_ethnicity,,,Non-Hispanic White,749439,B03002,ACS 2020-2024 5-year
+state,44,Rhode Island,44,race_ethnicity,,,Non-Hispanic Black,54225,B03002,ACS 2020-2024 5-year
+state,44,Rhode Island,44,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,1621,B03002,ACS 2020-2024 5-year
+state,44,Rhode Island,44,race_ethnicity,,,Non-Hispanic Asian,38127,B03002,ACS 2020-2024 5-year
+state,44,Rhode Island,44,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,643,B03002,ACS 2020-2024 5-year
+state,44,Rhode Island,44,race_ethnicity,,,Non-Hispanic Some other race,9165,B03002,ACS 2020-2024 5-year
+state,44,Rhode Island,44,race_ethnicity,,,Non-Hispanic Two or more races,53666,B03002,ACS 2020-2024 5-year
+state,44,Rhode Island,44,race_ethnicity,,,Hispanic or Latino,194915,B03002,ACS 2020-2024 5-year
+state,45,South Carolina,45,total,,,,5296225,B01001,ACS 2020-2024 5-year
+state,45,South Carolina,45,age_sex,0-17,male,,580291,B01001,ACS 2020-2024 5-year
+state,45,South Carolina,45,age_sex,18-44,male,,907312,B01001,ACS 2020-2024 5-year
+state,45,South Carolina,45,age_sex,45-64,male,,642078,B01001,ACS 2020-2024 5-year
+state,45,South Carolina,45,age_sex,65+,male,,448044,B01001,ACS 2020-2024 5-year
+state,45,South Carolina,45,age_sex,0-17,female,,555130,B01001,ACS 2020-2024 5-year
+state,45,South Carolina,45,age_sex,18-44,female,,918798,B01001,ACS 2020-2024 5-year
+state,45,South Carolina,45,age_sex,45-64,female,,693215,B01001,ACS 2020-2024 5-year
+state,45,South Carolina,45,age_sex,65+,female,,551357,B01001,ACS 2020-2024 5-year
+state,45,South Carolina,45,race_ethnicity,,,Non-Hispanic White,3277983,B03002,ACS 2020-2024 5-year
+state,45,South Carolina,45,race_ethnicity,,,Non-Hispanic Black,1302215,B03002,ACS 2020-2024 5-year
+state,45,South Carolina,45,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,9905,B03002,ACS 2020-2024 5-year
+state,45,South Carolina,45,race_ethnicity,,,Non-Hispanic Asian,92552,B03002,ACS 2020-2024 5-year
+state,45,South Carolina,45,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,2005,B03002,ACS 2020-2024 5-year
+state,45,South Carolina,45,race_ethnicity,,,Non-Hispanic Some other race,25525,B03002,ACS 2020-2024 5-year
+state,45,South Carolina,45,race_ethnicity,,,Non-Hispanic Two or more races,195664,B03002,ACS 2020-2024 5-year
+state,45,South Carolina,45,race_ethnicity,,,Hispanic or Latino,390376,B03002,ACS 2020-2024 5-year
+state,46,South Dakota,46,total,,,,907428,B01001,ACS 2020-2024 5-year
+state,46,South Dakota,46,age_sex,0-17,male,,112402,B01001,ACS 2020-2024 5-year
+state,46,South Dakota,46,age_sex,18-44,male,,163416,B01001,ACS 2020-2024 5-year
+state,46,South Dakota,46,age_sex,45-64,male,,107587,B01001,ACS 2020-2024 5-year
+state,46,South Dakota,46,age_sex,65+,male,,77288,B01001,ACS 2020-2024 5-year
+state,46,South Dakota,46,age_sex,0-17,female,,107341,B01001,ACS 2020-2024 5-year
+state,46,South Dakota,46,age_sex,18-44,female,,149230,B01001,ACS 2020-2024 5-year
+state,46,South Dakota,46,age_sex,45-64,female,,104141,B01001,ACS 2020-2024 5-year
+state,46,South Dakota,46,age_sex,65+,female,,86023,B01001,ACS 2020-2024 5-year
+state,46,South Dakota,46,race_ethnicity,,,Non-Hispanic White,723729,B03002,ACS 2020-2024 5-year
+state,46,South Dakota,46,race_ethnicity,,,Non-Hispanic Black,19404,B03002,ACS 2020-2024 5-year
+state,46,South Dakota,46,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,64713,B03002,ACS 2020-2024 5-year
+state,46,South Dakota,46,race_ethnicity,,,Non-Hispanic Asian,12663,B03002,ACS 2020-2024 5-year
+state,46,South Dakota,46,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,329,B03002,ACS 2020-2024 5-year
+state,46,South Dakota,46,race_ethnicity,,,Non-Hispanic Some other race,3075,B03002,ACS 2020-2024 5-year
+state,46,South Dakota,46,race_ethnicity,,,Non-Hispanic Two or more races,39738,B03002,ACS 2020-2024 5-year
+state,46,South Dakota,46,race_ethnicity,,,Hispanic or Latino,43777,B03002,ACS 2020-2024 5-year
+state,47,Tennessee,47,total,,,,7066383,B01001,ACS 2020-2024 5-year
+state,47,Tennessee,47,age_sex,0-17,male,,802929,B01001,ACS 2020-2024 5-year
+state,47,Tennessee,47,age_sex,18-44,male,,1253144,B01001,ACS 2020-2024 5-year
+state,47,Tennessee,47,age_sex,45-64,male,,870974,B01001,ACS 2020-2024 5-year
+state,47,Tennessee,47,age_sex,65+,male,,540687,B01001,ACS 2020-2024 5-year
+state,47,Tennessee,47,age_sex,0-17,female,,764040,B01001,ACS 2020-2024 5-year
+state,47,Tennessee,47,age_sex,18-44,female,,1259844,B01001,ACS 2020-2024 5-year
+state,47,Tennessee,47,age_sex,45-64,female,,909505,B01001,ACS 2020-2024 5-year
+state,47,Tennessee,47,age_sex,65+,female,,665260,B01001,ACS 2020-2024 5-year
+state,47,Tennessee,47,race_ethnicity,,,Non-Hispanic White,5018980,B03002,ACS 2020-2024 5-year
+state,47,Tennessee,47,race_ethnicity,,,Non-Hispanic Black,1090494,B03002,ACS 2020-2024 5-year
+state,47,Tennessee,47,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,6335,B03002,ACS 2020-2024 5-year
+state,47,Tennessee,47,race_ethnicity,,,Non-Hispanic Asian,133337,B03002,ACS 2020-2024 5-year
+state,47,Tennessee,47,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,3967,B03002,ACS 2020-2024 5-year
+state,47,Tennessee,47,race_ethnicity,,,Non-Hispanic Some other race,28599,B03002,ACS 2020-2024 5-year
+state,47,Tennessee,47,race_ethnicity,,,Non-Hispanic Two or more races,261143,B03002,ACS 2020-2024 5-year
+state,47,Tennessee,47,race_ethnicity,,,Hispanic or Latino,523528,B03002,ACS 2020-2024 5-year
+state,48,Texas,48,total,,,,30188424,B01001,ACS 2020-2024 5-year
+state,48,Texas,48,age_sex,0-17,male,,3855554,B01001,ACS 2020-2024 5-year
+state,48,Texas,48,age_sex,18-44,male,,5875915,B01001,ACS 2020-2024 5-year
+state,48,Texas,48,age_sex,45-64,male,,3501612,B01001,ACS 2020-2024 5-year
+state,48,Texas,48,age_sex,65+,male,,1832876,B01001,ACS 2020-2024 5-year
+state,48,Texas,48,age_sex,0-17,female,,3689094,B01001,ACS 2020-2024 5-year
+state,48,Texas,48,age_sex,18-44,female,,5668064,B01001,ACS 2020-2024 5-year
+state,48,Texas,48,age_sex,45-64,female,,3541933,B01001,ACS 2020-2024 5-year
+state,48,Texas,48,age_sex,65+,female,,2223376,B01001,ACS 2020-2024 5-year
+state,48,Texas,48,race_ethnicity,,,Non-Hispanic White,11809426,B03002,ACS 2020-2024 5-year
+state,48,Texas,48,race_ethnicity,,,Non-Hispanic Black,3595595,B03002,ACS 2020-2024 5-year
+state,48,Texas,48,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,42886,B03002,ACS 2020-2024 5-year
+state,48,Texas,48,race_ethnicity,,,Non-Hispanic Asian,1657423,B03002,ACS 2020-2024 5-year
+state,48,Texas,48,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,24129,B03002,ACS 2020-2024 5-year
+state,48,Texas,48,race_ethnicity,,,Non-Hispanic Some other race,124065,B03002,ACS 2020-2024 5-year
+state,48,Texas,48,race_ethnicity,,,Non-Hispanic Two or more races,943433,B03002,ACS 2020-2024 5-year
+state,48,Texas,48,race_ethnicity,,,Hispanic or Latino,11991467,B03002,ACS 2020-2024 5-year
+state,49,Utah,49,total,,,,3392331,B01001,ACS 2020-2024 5-year
+state,49,Utah,49,age_sex,0-17,male,,484961,B01001,ACS 2020-2024 5-year
+state,49,Utah,49,age_sex,18-44,male,,697329,B01001,ACS 2020-2024 5-year
+state,49,Utah,49,age_sex,45-64,male,,345966,B01001,ACS 2020-2024 5-year
+state,49,Utah,49,age_sex,65+,male,,190226,B01001,ACS 2020-2024 5-year
+state,49,Utah,49,age_sex,0-17,female,,458028,B01001,ACS 2020-2024 5-year
+state,49,Utah,49,age_sex,18-44,female,,666643,B01001,ACS 2020-2024 5-year
+state,49,Utah,49,age_sex,45-64,female,,337088,B01001,ACS 2020-2024 5-year
+state,49,Utah,49,age_sex,65+,female,,212090,B01001,ACS 2020-2024 5-year
+state,49,Utah,49,race_ethnicity,,,Non-Hispanic White,2535062,B03002,ACS 2020-2024 5-year
+state,49,Utah,49,race_ethnicity,,,Non-Hispanic Black,36249,B03002,ACS 2020-2024 5-year
+state,49,Utah,49,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,20975,B03002,ACS 2020-2024 5-year
+state,49,Utah,49,race_ethnicity,,,Non-Hispanic Asian,81061,B03002,ACS 2020-2024 5-year
+state,49,Utah,49,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,30493,B03002,ACS 2020-2024 5-year
+state,49,Utah,49,race_ethnicity,,,Non-Hispanic Some other race,14245,B03002,ACS 2020-2024 5-year
+state,49,Utah,49,race_ethnicity,,,Non-Hispanic Two or more races,134626,B03002,ACS 2020-2024 5-year
+state,49,Utah,49,race_ethnicity,,,Hispanic or Latino,539620,B03002,ACS 2020-2024 5-year
+state,50,Vermont,50,total,,,,647106,B01001,ACS 2020-2024 5-year
+state,50,Vermont,50,age_sex,0-17,male,,59757,B01001,ACS 2020-2024 5-year
+state,50,Vermont,50,age_sex,18-44,male,,111442,B01001,ACS 2020-2024 5-year
+state,50,Vermont,50,age_sex,45-64,male,,85026,B01001,ACS 2020-2024 5-year
+state,50,Vermont,50,age_sex,65+,male,,64930,B01001,ACS 2020-2024 5-year
+state,50,Vermont,50,age_sex,0-17,female,,56229,B01001,ACS 2020-2024 5-year
+state,50,Vermont,50,age_sex,18-44,female,,109565,B01001,ACS 2020-2024 5-year
+state,50,Vermont,50,age_sex,45-64,female,,86408,B01001,ACS 2020-2024 5-year
+state,50,Vermont,50,age_sex,65+,female,,73749,B01001,ACS 2020-2024 5-year
+state,50,Vermont,50,race_ethnicity,,,Non-Hispanic White,582031,B03002,ACS 2020-2024 5-year
+state,50,Vermont,50,race_ethnicity,,,Non-Hispanic Black,7118,B03002,ACS 2020-2024 5-year
+state,50,Vermont,50,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,785,B03002,ACS 2020-2024 5-year
+state,50,Vermont,50,race_ethnicity,,,Non-Hispanic Asian,11520,B03002,ACS 2020-2024 5-year
+state,50,Vermont,50,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,69,B03002,ACS 2020-2024 5-year
+state,50,Vermont,50,race_ethnicity,,,Non-Hispanic Some other race,2532,B03002,ACS 2020-2024 5-year
+state,50,Vermont,50,race_ethnicity,,,Non-Hispanic Two or more races,26506,B03002,ACS 2020-2024 5-year
+state,50,Vermont,50,race_ethnicity,,,Hispanic or Latino,16545,B03002,ACS 2020-2024 5-year
+state,51,Virginia,51,total,,,,8705170,B01001,ACS 2020-2024 5-year
+state,51,Virginia,51,age_sex,0-17,male,,969555,B01001,ACS 2020-2024 5-year
+state,51,Virginia,51,age_sex,18-44,male,,1597235,B01001,ACS 2020-2024 5-year
+state,51,Virginia,51,age_sex,45-64,male,,1082248,B01001,ACS 2020-2024 5-year
+state,51,Virginia,51,age_sex,65+,male,,651697,B01001,ACS 2020-2024 5-year
+state,51,Virginia,51,age_sex,0-17,female,,921278,B01001,ACS 2020-2024 5-year
+state,51,Virginia,51,age_sex,18-44,female,,1564628,B01001,ACS 2020-2024 5-year
+state,51,Virginia,51,age_sex,45-64,female,,1116483,B01001,ACS 2020-2024 5-year
+state,51,Virginia,51,age_sex,65+,female,,802046,B01001,ACS 2020-2024 5-year
+state,51,Virginia,51,race_ethnicity,,,Non-Hispanic White,5079778,B03002,ACS 2020-2024 5-year
+state,51,Virginia,51,race_ethnicity,,,Non-Hispanic Black,1589523,B03002,ACS 2020-2024 5-year
+state,51,Virginia,51,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,9936,B03002,ACS 2020-2024 5-year
+state,51,Virginia,51,race_ethnicity,,,Non-Hispanic Asian,599863,B03002,ACS 2020-2024 5-year
+state,51,Virginia,51,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,4960,B03002,ACS 2020-2024 5-year
+state,51,Virginia,51,race_ethnicity,,,Non-Hispanic Some other race,54752,B03002,ACS 2020-2024 5-year
+state,51,Virginia,51,race_ethnicity,,,Non-Hispanic Two or more races,407269,B03002,ACS 2020-2024 5-year
+state,51,Virginia,51,race_ethnicity,,,Hispanic or Latino,959089,B03002,ACS 2020-2024 5-year
+state,53,Washington,53,total,,,,7816116,B01001,ACS 2020-2024 5-year
+state,53,Washington,53,age_sex,0-17,male,,856374,B01001,ACS 2020-2024 5-year
+state,53,Washington,53,age_sex,18-44,male,,1536392,B01001,ACS 2020-2024 5-year
+state,53,Washington,53,age_sex,45-64,male,,944308,B01001,ACS 2020-2024 5-year
+state,53,Washington,53,age_sex,65+,male,,598400,B01001,ACS 2020-2024 5-year
+state,53,Washington,53,age_sex,0-17,female,,814853,B01001,ACS 2020-2024 5-year
+state,53,Washington,53,age_sex,18-44,female,,1432694,B01001,ACS 2020-2024 5-year
+state,53,Washington,53,age_sex,45-64,female,,932310,B01001,ACS 2020-2024 5-year
+state,53,Washington,53,age_sex,65+,female,,700785,B01001,ACS 2020-2024 5-year
+state,53,Washington,53,race_ethnicity,,,Non-Hispanic White,4935558,B03002,ACS 2020-2024 5-year
+state,53,Washington,53,race_ethnicity,,,Non-Hispanic Black,300646,B03002,ACS 2020-2024 5-year
+state,53,Washington,53,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,60588,B03002,ACS 2020-2024 5-year
+state,53,Washington,53,race_ethnicity,,,Non-Hispanic Asian,759625,B03002,ACS 2020-2024 5-year
+state,53,Washington,53,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,54679,B03002,ACS 2020-2024 5-year
+state,53,Washington,53,race_ethnicity,,,Non-Hispanic Some other race,48379,B03002,ACS 2020-2024 5-year
+state,53,Washington,53,race_ethnicity,,,Non-Hispanic Two or more races,533027,B03002,ACS 2020-2024 5-year
+state,53,Washington,53,race_ethnicity,,,Hispanic or Latino,1123614,B03002,ACS 2020-2024 5-year
+state,54,West Virginia,54,total,,,,1778373,B01001,ACS 2020-2024 5-year
+state,54,West Virginia,54,age_sex,0-17,male,,183093,B01001,ACS 2020-2024 5-year
+state,54,West Virginia,54,age_sex,18-44,male,,299731,B01001,ACS 2020-2024 5-year
+state,54,West Virginia,54,age_sex,45-64,male,,233014,B01001,ACS 2020-2024 5-year
+state,54,West Virginia,54,age_sex,65+,male,,172451,B01001,ACS 2020-2024 5-year
+state,54,West Virginia,54,age_sex,0-17,female,,172906,B01001,ACS 2020-2024 5-year
+state,54,West Virginia,54,age_sex,18-44,female,,282016,B01001,ACS 2020-2024 5-year
+state,54,West Virginia,54,age_sex,45-64,female,,233521,B01001,ACS 2020-2024 5-year
+state,54,West Virginia,54,age_sex,65+,female,,201641,B01001,ACS 2020-2024 5-year
+state,54,West Virginia,54,race_ethnicity,,,Non-Hispanic White,1594845,B03002,ACS 2020-2024 5-year
+state,54,West Virginia,54,race_ethnicity,,,Non-Hispanic Black,54933,B03002,ACS 2020-2024 5-year
+state,54,West Virginia,54,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,1277,B03002,ACS 2020-2024 5-year
+state,54,West Virginia,54,race_ethnicity,,,Non-Hispanic Asian,13343,B03002,ACS 2020-2024 5-year
+state,54,West Virginia,54,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,563,B03002,ACS 2020-2024 5-year
+state,54,West Virginia,54,race_ethnicity,,,Non-Hispanic Some other race,5693,B03002,ACS 2020-2024 5-year
+state,54,West Virginia,54,race_ethnicity,,,Non-Hispanic Two or more races,69544,B03002,ACS 2020-2024 5-year
+state,54,West Virginia,54,race_ethnicity,,,Hispanic or Latino,38175,B03002,ACS 2020-2024 5-year
+state,55,Wisconsin,55,total,,,,5914872,B01001,ACS 2020-2024 5-year
+state,55,Wisconsin,55,age_sex,0-17,male,,649190,B01001,ACS 2020-2024 5-year
+state,55,Wisconsin,55,age_sex,18-44,male,,1041163,B01001,ACS 2020-2024 5-year
+state,55,Wisconsin,55,age_sex,45-64,male,,761302,B01001,ACS 2020-2024 5-year
+state,55,Wisconsin,55,age_sex,65+,male,,510727,B01001,ACS 2020-2024 5-year
+state,55,Wisconsin,55,age_sex,0-17,female,,615356,B01001,ACS 2020-2024 5-year
+state,55,Wisconsin,55,age_sex,18-44,female,,1000755,B01001,ACS 2020-2024 5-year
+state,55,Wisconsin,55,age_sex,45-64,female,,751063,B01001,ACS 2020-2024 5-year
+state,55,Wisconsin,55,age_sex,65+,female,,585316,B01001,ACS 2020-2024 5-year
+state,55,Wisconsin,55,race_ethnicity,,,Non-Hispanic White,4646738,B03002,ACS 2020-2024 5-year
+state,55,Wisconsin,55,race_ethnicity,,,Non-Hispanic Black,351851,B03002,ACS 2020-2024 5-year
+state,55,Wisconsin,55,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,32464,B03002,ACS 2020-2024 5-year
+state,55,Wisconsin,55,race_ethnicity,,,Non-Hispanic Asian,173674,B03002,ACS 2020-2024 5-year
+state,55,Wisconsin,55,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,1424,B03002,ACS 2020-2024 5-year
+state,55,Wisconsin,55,race_ethnicity,,,Non-Hispanic Some other race,20508,B03002,ACS 2020-2024 5-year
+state,55,Wisconsin,55,race_ethnicity,,,Non-Hispanic Two or more races,216283,B03002,ACS 2020-2024 5-year
+state,55,Wisconsin,55,race_ethnicity,,,Hispanic or Latino,471930,B03002,ACS 2020-2024 5-year
+state,56,Wyoming,56,total,,,,582397,B01001,ACS 2020-2024 5-year
+state,56,Wyoming,56,age_sex,0-17,male,,67449,B01001,ACS 2020-2024 5-year
+state,56,Wyoming,56,age_sex,18-44,male,,106693,B01001,ACS 2020-2024 5-year
+state,56,Wyoming,56,age_sex,45-64,male,,70904,B01001,ACS 2020-2024 5-year
+state,56,Wyoming,56,age_sex,65+,male,,52515,B01001,ACS 2020-2024 5-year
+state,56,Wyoming,56,age_sex,0-17,female,,63818,B01001,ACS 2020-2024 5-year
+state,56,Wyoming,56,age_sex,18-44,female,,97702,B01001,ACS 2020-2024 5-year
+state,56,Wyoming,56,age_sex,45-64,female,,67969,B01001,ACS 2020-2024 5-year
+state,56,Wyoming,56,age_sex,65+,female,,55347,B01001,ACS 2020-2024 5-year
+state,56,Wyoming,56,race_ethnicity,,,Non-Hispanic White,473791,B03002,ACS 2020-2024 5-year
+state,56,Wyoming,56,race_ethnicity,,,Non-Hispanic Black,4895,B03002,ACS 2020-2024 5-year
+state,56,Wyoming,56,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,9221,B03002,ACS 2020-2024 5-year
+state,56,Wyoming,56,race_ethnicity,,,Non-Hispanic Asian,4565,B03002,ACS 2020-2024 5-year
+state,56,Wyoming,56,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,328,B03002,ACS 2020-2024 5-year
+state,56,Wyoming,56,race_ethnicity,,,Non-Hispanic Some other race,4266,B03002,ACS 2020-2024 5-year
+state,56,Wyoming,56,race_ethnicity,,,Non-Hispanic Two or more races,23284,B03002,ACS 2020-2024 5-year
+state,56,Wyoming,56,race_ethnicity,,,Hispanic or Latino,62047,B03002,ACS 2020-2024 5-year
+state,72,Puerto Rico,72,total,,,,3234309,B01001,ACS 2020-2024 5-year
+state,72,Puerto Rico,72,age_sex,0-17,male,,265572,B01001,ACS 2020-2024 5-year
+state,72,Puerto Rico,72,age_sex,18-44,male,,543966,B01001,ACS 2020-2024 5-year
+state,72,Puerto Rico,72,age_sex,45-64,male,,393262,B01001,ACS 2020-2024 5-year
+state,72,Puerto Rico,72,age_sex,65+,male,,326469,B01001,ACS 2020-2024 5-year
+state,72,Puerto Rico,72,age_sex,0-17,female,,255817,B01001,ACS 2020-2024 5-year
+state,72,Puerto Rico,72,age_sex,18-44,female,,562050,B01001,ACS 2020-2024 5-year
+state,72,Puerto Rico,72,age_sex,45-64,female,,455556,B01001,ACS 2020-2024 5-year
+state,72,Puerto Rico,72,age_sex,65+,female,,431617,B01001,ACS 2020-2024 5-year
+state,72,Puerto Rico,72,race_ethnicity,,,Non-Hispanic White,20116,B03002,ACS 2020-2024 5-year
+state,72,Puerto Rico,72,race_ethnicity,,,Non-Hispanic Black,3706,B03002,ACS 2020-2024 5-year
+state,72,Puerto Rico,72,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,24,B03002,ACS 2020-2024 5-year
+state,72,Puerto Rico,72,race_ethnicity,,,Non-Hispanic Asian,2441,B03002,ACS 2020-2024 5-year
+state,72,Puerto Rico,72,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,111,B03002,ACS 2020-2024 5-year
+state,72,Puerto Rico,72,race_ethnicity,,,Non-Hispanic Some other race,3497,B03002,ACS 2020-2024 5-year
+state,72,Puerto Rico,72,race_ethnicity,,,Non-Hispanic Two or more races,3541,B03002,ACS 2020-2024 5-year
+state,72,Puerto Rico,72,race_ethnicity,,,Hispanic or Latino,3200873,B03002,ACS 2020-2024 5-year
+county,10001,"Kent County, Delaware",10,total,,,,187604,B01001,ACS 2020-2024 5-year
+county,10001,"Kent County, Delaware",10,age_sex,0-17,male,,21792,B01001,ACS 2020-2024 5-year
+county,10001,"Kent County, Delaware",10,age_sex,18-44,male,,32089,B01001,ACS 2020-2024 5-year
+county,10001,"Kent County, Delaware",10,age_sex,45-64,male,,20975,B01001,ACS 2020-2024 5-year
+county,10001,"Kent County, Delaware",10,age_sex,65+,male,,15354,B01001,ACS 2020-2024 5-year
+county,10001,"Kent County, Delaware",10,age_sex,0-17,female,,20929,B01001,ACS 2020-2024 5-year
+county,10001,"Kent County, Delaware",10,age_sex,18-44,female,,33856,B01001,ACS 2020-2024 5-year
+county,10001,"Kent County, Delaware",10,age_sex,45-64,female,,23669,B01001,ACS 2020-2024 5-year
+county,10001,"Kent County, Delaware",10,age_sex,65+,female,,18940,B01001,ACS 2020-2024 5-year
+county,10001,"Kent County, Delaware",10,race_ethnicity,,,Non-Hispanic White,106078,B03002,ACS 2020-2024 5-year
+county,10001,"Kent County, Delaware",10,race_ethnicity,,,Non-Hispanic Black,49530,B03002,ACS 2020-2024 5-year
+county,10001,"Kent County, Delaware",10,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,480,B03002,ACS 2020-2024 5-year
+county,10001,"Kent County, Delaware",10,race_ethnicity,,,Non-Hispanic Asian,4680,B03002,ACS 2020-2024 5-year
+county,10001,"Kent County, Delaware",10,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,55,B03002,ACS 2020-2024 5-year
+county,10001,"Kent County, Delaware",10,race_ethnicity,,,Non-Hispanic Some other race,980,B03002,ACS 2020-2024 5-year
+county,10001,"Kent County, Delaware",10,race_ethnicity,,,Non-Hispanic Two or more races,10585,B03002,ACS 2020-2024 5-year
+county,10001,"Kent County, Delaware",10,race_ethnicity,,,Hispanic or Latino,15216,B03002,ACS 2020-2024 5-year
+county,10003,"New Castle County, Delaware",10,total,,,,577961,B01001,ACS 2020-2024 5-year
+county,10003,"New Castle County, Delaware",10,age_sex,0-17,male,,62134,B01001,ACS 2020-2024 5-year
+county,10003,"New Castle County, Delaware",10,age_sex,18-44,male,,103717,B01001,ACS 2020-2024 5-year
+county,10003,"New Castle County, Delaware",10,age_sex,45-64,male,,70966,B01001,ACS 2020-2024 5-year
+county,10003,"New Castle County, Delaware",10,age_sex,65+,male,,43607,B01001,ACS 2020-2024 5-year
+county,10003,"New Castle County, Delaware",10,age_sex,0-17,female,,60561,B01001,ACS 2020-2024 5-year
+county,10003,"New Castle County, Delaware",10,age_sex,18-44,female,,105431,B01001,ACS 2020-2024 5-year
+county,10003,"New Castle County, Delaware",10,age_sex,45-64,female,,76594,B01001,ACS 2020-2024 5-year
+county,10003,"New Castle County, Delaware",10,age_sex,65+,female,,54951,B01001,ACS 2020-2024 5-year
+county,10003,"New Castle County, Delaware",10,race_ethnicity,,,Non-Hispanic White,302505,B03002,ACS 2020-2024 5-year
+county,10003,"New Castle County, Delaware",10,race_ethnicity,,,Non-Hispanic Black,143725,B03002,ACS 2020-2024 5-year
+county,10003,"New Castle County, Delaware",10,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,257,B03002,ACS 2020-2024 5-year
+county,10003,"New Castle County, Delaware",10,race_ethnicity,,,Non-Hispanic Asian,35717,B03002,ACS 2020-2024 5-year
+county,10003,"New Castle County, Delaware",10,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,162,B03002,ACS 2020-2024 5-year
+county,10003,"New Castle County, Delaware",10,race_ethnicity,,,Non-Hispanic Some other race,2853,B03002,ACS 2020-2024 5-year
+county,10003,"New Castle County, Delaware",10,race_ethnicity,,,Non-Hispanic Two or more races,24561,B03002,ACS 2020-2024 5-year
+county,10003,"New Castle County, Delaware",10,race_ethnicity,,,Hispanic or Latino,68181,B03002,ACS 2020-2024 5-year
+county,10005,"Sussex County, Delaware",10,total,,,,255626,B01001,ACS 2020-2024 5-year
+county,10005,"Sussex County, Delaware",10,age_sex,0-17,male,,23576,B01001,ACS 2020-2024 5-year
+county,10005,"Sussex County, Delaware",10,age_sex,18-44,male,,32606,B01001,ACS 2020-2024 5-year
+county,10005,"Sussex County, Delaware",10,age_sex,45-64,male,,31812,B01001,ACS 2020-2024 5-year
+county,10005,"Sussex County, Delaware",10,age_sex,65+,male,,36024,B01001,ACS 2020-2024 5-year
+county,10005,"Sussex County, Delaware",10,age_sex,0-17,female,,22680,B01001,ACS 2020-2024 5-year
+county,10005,"Sussex County, Delaware",10,age_sex,18-44,female,,32060,B01001,ACS 2020-2024 5-year
+county,10005,"Sussex County, Delaware",10,age_sex,45-64,female,,35643,B01001,ACS 2020-2024 5-year
+county,10005,"Sussex County, Delaware",10,age_sex,65+,female,,41225,B01001,ACS 2020-2024 5-year
+county,10005,"Sussex County, Delaware",10,race_ethnicity,,,Non-Hispanic White,184909,B03002,ACS 2020-2024 5-year
+county,10005,"Sussex County, Delaware",10,race_ethnicity,,,Non-Hispanic Black,25014,B03002,ACS 2020-2024 5-year
+county,10005,"Sussex County, Delaware",10,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,500,B03002,ACS 2020-2024 5-year
+county,10005,"Sussex County, Delaware",10,race_ethnicity,,,Non-Hispanic Asian,3242,B03002,ACS 2020-2024 5-year
+county,10005,"Sussex County, Delaware",10,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,0,B03002,ACS 2020-2024 5-year
+county,10005,"Sussex County, Delaware",10,race_ethnicity,,,Non-Hispanic Some other race,1331,B03002,ACS 2020-2024 5-year
+county,10005,"Sussex County, Delaware",10,race_ethnicity,,,Non-Hispanic Two or more races,11192,B03002,ACS 2020-2024 5-year
+county,10005,"Sussex County, Delaware",10,race_ethnicity,,,Hispanic or Latino,29438,B03002,ACS 2020-2024 5-year
+county,15001,"Hawaii County, Hawaii",15,total,,,,205769,B01001,ACS 2020-2024 5-year
+county,15001,"Hawaii County, Hawaii",15,age_sex,0-17,male,,21866,B01001,ACS 2020-2024 5-year
+county,15001,"Hawaii County, Hawaii",15,age_sex,18-44,male,,31034,B01001,ACS 2020-2024 5-year
+county,15001,"Hawaii County, Hawaii",15,age_sex,45-64,male,,25418,B01001,ACS 2020-2024 5-year
+county,15001,"Hawaii County, Hawaii",15,age_sex,65+,male,,23847,B01001,ACS 2020-2024 5-year
+county,15001,"Hawaii County, Hawaii",15,age_sex,0-17,female,,20572,B01001,ACS 2020-2024 5-year
+county,15001,"Hawaii County, Hawaii",15,age_sex,18-44,female,,31637,B01001,ACS 2020-2024 5-year
+county,15001,"Hawaii County, Hawaii",15,age_sex,45-64,female,,26241,B01001,ACS 2020-2024 5-year
+county,15001,"Hawaii County, Hawaii",15,age_sex,65+,female,,25154,B01001,ACS 2020-2024 5-year
+county,15001,"Hawaii County, Hawaii",15,race_ethnicity,,,Non-Hispanic White,61616,B03002,ACS 2020-2024 5-year
+county,15001,"Hawaii County, Hawaii",15,race_ethnicity,,,Non-Hispanic Black,1590,B03002,ACS 2020-2024 5-year
+county,15001,"Hawaii County, Hawaii",15,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,336,B03002,ACS 2020-2024 5-year
+county,15001,"Hawaii County, Hawaii",15,race_ethnicity,,,Non-Hispanic Asian,41595,B03002,ACS 2020-2024 5-year
+county,15001,"Hawaii County, Hawaii",15,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,24128,B03002,ACS 2020-2024 5-year
+county,15001,"Hawaii County, Hawaii",15,race_ethnicity,,,Non-Hispanic Some other race,1322,B03002,ACS 2020-2024 5-year
+county,15001,"Hawaii County, Hawaii",15,race_ethnicity,,,Non-Hispanic Two or more races,51179,B03002,ACS 2020-2024 5-year
+county,15001,"Hawaii County, Hawaii",15,race_ethnicity,,,Hispanic or Latino,24003,B03002,ACS 2020-2024 5-year
+county,15003,"Honolulu County, Hawaii",15,total,,,,1001146,B01001,ACS 2020-2024 5-year
+county,15003,"Honolulu County, Hawaii",15,age_sex,0-17,male,,106030,B01001,ACS 2020-2024 5-year
+county,15003,"Honolulu County, Hawaii",15,age_sex,18-44,male,,192872,B01001,ACS 2020-2024 5-year
+county,15003,"Honolulu County, Hawaii",15,age_sex,45-64,male,,118323,B01001,ACS 2020-2024 5-year
+county,15003,"Honolulu County, Hawaii",15,age_sex,65+,male,,88068,B01001,ACS 2020-2024 5-year
+county,15003,"Honolulu County, Hawaii",15,age_sex,0-17,female,,99998,B01001,ACS 2020-2024 5-year
+county,15003,"Honolulu County, Hawaii",15,age_sex,18-44,female,,170238,B01001,ACS 2020-2024 5-year
+county,15003,"Honolulu County, Hawaii",15,age_sex,45-64,female,,117807,B01001,ACS 2020-2024 5-year
+county,15003,"Honolulu County, Hawaii",15,age_sex,65+,female,,107810,B01001,ACS 2020-2024 5-year
+county,15003,"Honolulu County, Hawaii",15,race_ethnicity,,,Non-Hispanic White,171807,B03002,ACS 2020-2024 5-year
+county,15003,"Honolulu County, Hawaii",15,race_ethnicity,,,Non-Hispanic Black,21973,B03002,ACS 2020-2024 5-year
+county,15003,"Honolulu County, Hawaii",15,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,948,B03002,ACS 2020-2024 5-year
+county,15003,"Honolulu County, Hawaii",15,race_ethnicity,,,Non-Hispanic Asian,416584,B03002,ACS 2020-2024 5-year
+county,15003,"Honolulu County, Hawaii",15,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,90659,B03002,ACS 2020-2024 5-year
+county,15003,"Honolulu County, Hawaii",15,race_ethnicity,,,Non-Hispanic Some other race,3261,B03002,ACS 2020-2024 5-year
+county,15003,"Honolulu County, Hawaii",15,race_ethnicity,,,Non-Hispanic Two or more races,201574,B03002,ACS 2020-2024 5-year
+county,15003,"Honolulu County, Hawaii",15,race_ethnicity,,,Hispanic or Latino,94340,B03002,ACS 2020-2024 5-year
+county,15005,"Kalawao County, Hawaii",15,total,,,,67,B01001,ACS 2020-2024 5-year
+county,15005,"Kalawao County, Hawaii",15,age_sex,0-17,male,,0,B01001,ACS 2020-2024 5-year
+county,15005,"Kalawao County, Hawaii",15,age_sex,18-44,male,,33,B01001,ACS 2020-2024 5-year
+county,15005,"Kalawao County, Hawaii",15,age_sex,45-64,male,,8,B01001,ACS 2020-2024 5-year
+county,15005,"Kalawao County, Hawaii",15,age_sex,65+,male,,4,B01001,ACS 2020-2024 5-year
+county,15005,"Kalawao County, Hawaii",15,age_sex,0-17,female,,0,B01001,ACS 2020-2024 5-year
+county,15005,"Kalawao County, Hawaii",15,age_sex,18-44,female,,7,B01001,ACS 2020-2024 5-year
+county,15005,"Kalawao County, Hawaii",15,age_sex,45-64,female,,5,B01001,ACS 2020-2024 5-year
+county,15005,"Kalawao County, Hawaii",15,age_sex,65+,female,,10,B01001,ACS 2020-2024 5-year
+county,15005,"Kalawao County, Hawaii",15,race_ethnicity,,,Non-Hispanic White,13,B03002,ACS 2020-2024 5-year
+county,15005,"Kalawao County, Hawaii",15,race_ethnicity,,,Non-Hispanic Black,0,B03002,ACS 2020-2024 5-year
+county,15005,"Kalawao County, Hawaii",15,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,12,B03002,ACS 2020-2024 5-year
+county,15005,"Kalawao County, Hawaii",15,race_ethnicity,,,Non-Hispanic Asian,12,B03002,ACS 2020-2024 5-year
+county,15005,"Kalawao County, Hawaii",15,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,10,B03002,ACS 2020-2024 5-year
+county,15005,"Kalawao County, Hawaii",15,race_ethnicity,,,Non-Hispanic Some other race,0,B03002,ACS 2020-2024 5-year
+county,15005,"Kalawao County, Hawaii",15,race_ethnicity,,,Non-Hispanic Two or more races,11,B03002,ACS 2020-2024 5-year
+county,15005,"Kalawao County, Hawaii",15,race_ethnicity,,,Hispanic or Latino,9,B03002,ACS 2020-2024 5-year
+county,15007,"Kauai County, Hawaii",15,total,,,,73731,B01001,ACS 2020-2024 5-year
+county,15007,"Kauai County, Hawaii",15,age_sex,0-17,male,,7976,B01001,ACS 2020-2024 5-year
+county,15007,"Kauai County, Hawaii",15,age_sex,18-44,male,,11618,B01001,ACS 2020-2024 5-year
+county,15007,"Kauai County, Hawaii",15,age_sex,45-64,male,,9163,B01001,ACS 2020-2024 5-year
+county,15007,"Kauai County, Hawaii",15,age_sex,65+,male,,7793,B01001,ACS 2020-2024 5-year
+county,15007,"Kauai County, Hawaii",15,age_sex,0-17,female,,7660,B01001,ACS 2020-2024 5-year
+county,15007,"Kauai County, Hawaii",15,age_sex,18-44,female,,11342,B01001,ACS 2020-2024 5-year
+county,15007,"Kauai County, Hawaii",15,age_sex,45-64,female,,9442,B01001,ACS 2020-2024 5-year
+county,15007,"Kauai County, Hawaii",15,age_sex,65+,female,,8737,B01001,ACS 2020-2024 5-year
+county,15007,"Kauai County, Hawaii",15,race_ethnicity,,,Non-Hispanic White,21155,B03002,ACS 2020-2024 5-year
+county,15007,"Kauai County, Hawaii",15,race_ethnicity,,,Non-Hispanic Black,576,B03002,ACS 2020-2024 5-year
+county,15007,"Kauai County, Hawaii",15,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,64,B03002,ACS 2020-2024 5-year
+county,15007,"Kauai County, Hawaii",15,race_ethnicity,,,Non-Hispanic Asian,22131,B03002,ACS 2020-2024 5-year
+county,15007,"Kauai County, Hawaii",15,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,6985,B03002,ACS 2020-2024 5-year
+county,15007,"Kauai County, Hawaii",15,race_ethnicity,,,Non-Hispanic Some other race,311,B03002,ACS 2020-2024 5-year
+county,15007,"Kauai County, Hawaii",15,race_ethnicity,,,Non-Hispanic Two or more races,14705,B03002,ACS 2020-2024 5-year
+county,15007,"Kauai County, Hawaii",15,race_ethnicity,,,Hispanic or Latino,7804,B03002,ACS 2020-2024 5-year
+county,15009,"Maui County, Hawaii",15,total,,,,164522,B01001,ACS 2020-2024 5-year
+county,15009,"Maui County, Hawaii",15,age_sex,0-17,male,,17922,B01001,ACS 2020-2024 5-year
+county,15009,"Maui County, Hawaii",15,age_sex,18-44,male,,25807,B01001,ACS 2020-2024 5-year
+county,15009,"Maui County, Hawaii",15,age_sex,45-64,male,,21957,B01001,ACS 2020-2024 5-year
+county,15009,"Maui County, Hawaii",15,age_sex,65+,male,,16260,B01001,ACS 2020-2024 5-year
+county,15009,"Maui County, Hawaii",15,age_sex,0-17,female,,16585,B01001,ACS 2020-2024 5-year
+county,15009,"Maui County, Hawaii",15,age_sex,18-44,female,,26303,B01001,ACS 2020-2024 5-year
+county,15009,"Maui County, Hawaii",15,age_sex,45-64,female,,21819,B01001,ACS 2020-2024 5-year
+county,15009,"Maui County, Hawaii",15,age_sex,65+,female,,17869,B01001,ACS 2020-2024 5-year
+county,15009,"Maui County, Hawaii",15,race_ethnicity,,,Non-Hispanic White,47768,B03002,ACS 2020-2024 5-year
+county,15009,"Maui County, Hawaii",15,race_ethnicity,,,Non-Hispanic Black,1368,B03002,ACS 2020-2024 5-year
+county,15009,"Maui County, Hawaii",15,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,172,B03002,ACS 2020-2024 5-year
+county,15009,"Maui County, Hawaii",15,race_ethnicity,,,Non-Hispanic Asian,45630,B03002,ACS 2020-2024 5-year
+county,15009,"Maui County, Hawaii",15,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,15810,B03002,ACS 2020-2024 5-year
+county,15009,"Maui County, Hawaii",15,race_ethnicity,,,Non-Hispanic Some other race,560,B03002,ACS 2020-2024 5-year
+county,15009,"Maui County, Hawaii",15,race_ethnicity,,,Non-Hispanic Two or more races,35779,B03002,ACS 2020-2024 5-year
+county,15009,"Maui County, Hawaii",15,race_ethnicity,,,Hispanic or Latino,17435,B03002,ACS 2020-2024 5-year
+county,25001,"Barnstable County, Massachusetts",25,total,,,,231668,B01001,ACS 2020-2024 5-year
+county,25001,"Barnstable County, Massachusetts",25,age_sex,0-17,male,,16756,B01001,ACS 2020-2024 5-year
+county,25001,"Barnstable County, Massachusetts",25,age_sex,18-44,male,,29834,B01001,ACS 2020-2024 5-year
+county,25001,"Barnstable County, Massachusetts",25,age_sex,45-64,male,,30358,B01001,ACS 2020-2024 5-year
+county,25001,"Barnstable County, Massachusetts",25,age_sex,65+,male,,34591,B01001,ACS 2020-2024 5-year
+county,25001,"Barnstable County, Massachusetts",25,age_sex,0-17,female,,15948,B01001,ACS 2020-2024 5-year
+county,25001,"Barnstable County, Massachusetts",25,age_sex,18-44,female,,27838,B01001,ACS 2020-2024 5-year
+county,25001,"Barnstable County, Massachusetts",25,age_sex,45-64,female,,34179,B01001,ACS 2020-2024 5-year
+county,25001,"Barnstable County, Massachusetts",25,age_sex,65+,female,,42164,B01001,ACS 2020-2024 5-year
+county,25001,"Barnstable County, Massachusetts",25,race_ethnicity,,,Non-Hispanic White,197297,B03002,ACS 2020-2024 5-year
+county,25001,"Barnstable County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Black,6441,B03002,ACS 2020-2024 5-year
+county,25001,"Barnstable County, Massachusetts",25,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,770,B03002,ACS 2020-2024 5-year
+county,25001,"Barnstable County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Asian,3402,B03002,ACS 2020-2024 5-year
+county,25001,"Barnstable County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,0,B03002,ACS 2020-2024 5-year
+county,25001,"Barnstable County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Some other race,3083,B03002,ACS 2020-2024 5-year
+county,25001,"Barnstable County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Two or more races,12114,B03002,ACS 2020-2024 5-year
+county,25001,"Barnstable County, Massachusetts",25,race_ethnicity,,,Hispanic or Latino,8561,B03002,ACS 2020-2024 5-year
+county,25003,"Berkshire County, Massachusetts",25,total,,,,129430,B01001,ACS 2020-2024 5-year
+county,25003,"Berkshire County, Massachusetts",25,age_sex,0-17,male,,10723,B01001,ACS 2020-2024 5-year
+county,25003,"Berkshire County, Massachusetts",25,age_sex,18-44,male,,20541,B01001,ACS 2020-2024 5-year
+county,25003,"Berkshire County, Massachusetts",25,age_sex,45-64,male,,17370,B01001,ACS 2020-2024 5-year
+county,25003,"Berkshire County, Massachusetts",25,age_sex,65+,male,,14747,B01001,ACS 2020-2024 5-year
+county,25003,"Berkshire County, Massachusetts",25,age_sex,0-17,female,,9939,B01001,ACS 2020-2024 5-year
+county,25003,"Berkshire County, Massachusetts",25,age_sex,18-44,female,,20564,B01001,ACS 2020-2024 5-year
+county,25003,"Berkshire County, Massachusetts",25,age_sex,45-64,female,,17876,B01001,ACS 2020-2024 5-year
+county,25003,"Berkshire County, Massachusetts",25,age_sex,65+,female,,17670,B01001,ACS 2020-2024 5-year
+county,25003,"Berkshire County, Massachusetts",25,race_ethnicity,,,Non-Hispanic White,109712,B03002,ACS 2020-2024 5-year
+county,25003,"Berkshire County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Black,3310,B03002,ACS 2020-2024 5-year
+county,25003,"Berkshire County, Massachusetts",25,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,151,B03002,ACS 2020-2024 5-year
+county,25003,"Berkshire County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Asian,2458,B03002,ACS 2020-2024 5-year
+county,25003,"Berkshire County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,13,B03002,ACS 2020-2024 5-year
+county,25003,"Berkshire County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Some other race,574,B03002,ACS 2020-2024 5-year
+county,25003,"Berkshire County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Two or more races,5621,B03002,ACS 2020-2024 5-year
+county,25003,"Berkshire County, Massachusetts",25,race_ethnicity,,,Hispanic or Latino,7591,B03002,ACS 2020-2024 5-year
+county,25005,"Bristol County, Massachusetts",25,total,,,,582270,B01001,ACS 2020-2024 5-year
+county,25005,"Bristol County, Massachusetts",25,age_sex,0-17,male,,60976,B01001,ACS 2020-2024 5-year
+county,25005,"Bristol County, Massachusetts",25,age_sex,18-44,male,,100238,B01001,ACS 2020-2024 5-year
+county,25005,"Bristol County, Massachusetts",25,age_sex,45-64,male,,77501,B01001,ACS 2020-2024 5-year
+county,25005,"Bristol County, Massachusetts",25,age_sex,65+,male,,45942,B01001,ACS 2020-2024 5-year
+county,25005,"Bristol County, Massachusetts",25,age_sex,0-17,female,,58513,B01001,ACS 2020-2024 5-year
+county,25005,"Bristol County, Massachusetts",25,age_sex,18-44,female,,100712,B01001,ACS 2020-2024 5-year
+county,25005,"Bristol County, Massachusetts",25,age_sex,45-64,female,,80862,B01001,ACS 2020-2024 5-year
+county,25005,"Bristol County, Massachusetts",25,age_sex,65+,female,,57526,B01001,ACS 2020-2024 5-year
+county,25005,"Bristol County, Massachusetts",25,race_ethnicity,,,Non-Hispanic White,438495,B03002,ACS 2020-2024 5-year
+county,25005,"Bristol County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Black,23490,B03002,ACS 2020-2024 5-year
+county,25005,"Bristol County, Massachusetts",25,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,423,B03002,ACS 2020-2024 5-year
+county,25005,"Bristol County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Asian,14126,B03002,ACS 2020-2024 5-year
+county,25005,"Bristol County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,31,B03002,ACS 2020-2024 5-year
+county,25005,"Bristol County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Some other race,10162,B03002,ACS 2020-2024 5-year
+county,25005,"Bristol County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Two or more races,36154,B03002,ACS 2020-2024 5-year
+county,25005,"Bristol County, Massachusetts",25,race_ethnicity,,,Hispanic or Latino,59389,B03002,ACS 2020-2024 5-year
+county,25007,"Dukes County, Massachusetts",25,total,,,,20933,B01001,ACS 2020-2024 5-year
+county,25007,"Dukes County, Massachusetts",25,age_sex,0-17,male,,1655,B01001,ACS 2020-2024 5-year
+county,25007,"Dukes County, Massachusetts",25,age_sex,18-44,male,,2945,B01001,ACS 2020-2024 5-year
+county,25007,"Dukes County, Massachusetts",25,age_sex,45-64,male,,3021,B01001,ACS 2020-2024 5-year
+county,25007,"Dukes County, Massachusetts",25,age_sex,65+,male,,2504,B01001,ACS 2020-2024 5-year
+county,25007,"Dukes County, Massachusetts",25,age_sex,0-17,female,,1858,B01001,ACS 2020-2024 5-year
+county,25007,"Dukes County, Massachusetts",25,age_sex,18-44,female,,2891,B01001,ACS 2020-2024 5-year
+county,25007,"Dukes County, Massachusetts",25,age_sex,45-64,female,,3025,B01001,ACS 2020-2024 5-year
+county,25007,"Dukes County, Massachusetts",25,age_sex,65+,female,,3034,B01001,ACS 2020-2024 5-year
+county,25007,"Dukes County, Massachusetts",25,race_ethnicity,,,Non-Hispanic White,16741,B03002,ACS 2020-2024 5-year
+county,25007,"Dukes County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Black,574,B03002,ACS 2020-2024 5-year
+county,25007,"Dukes County, Massachusetts",25,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,217,B03002,ACS 2020-2024 5-year
+county,25007,"Dukes County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Asian,309,B03002,ACS 2020-2024 5-year
+county,25007,"Dukes County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,0,B03002,ACS 2020-2024 5-year
+county,25007,"Dukes County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Some other race,600,B03002,ACS 2020-2024 5-year
+county,25007,"Dukes County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Two or more races,1810,B03002,ACS 2020-2024 5-year
+county,25007,"Dukes County, Massachusetts",25,race_ethnicity,,,Hispanic or Latino,682,B03002,ACS 2020-2024 5-year
+county,25009,"Essex County, Massachusetts",25,total,,,,813054,B01001,ACS 2020-2024 5-year
+county,25009,"Essex County, Massachusetts",25,age_sex,0-17,male,,86875,B01001,ACS 2020-2024 5-year
+county,25009,"Essex County, Massachusetts",25,age_sex,18-44,male,,137903,B01001,ACS 2020-2024 5-year
+county,25009,"Essex County, Massachusetts",25,age_sex,45-64,male,,104273,B01001,ACS 2020-2024 5-year
+county,25009,"Essex County, Massachusetts",25,age_sex,65+,male,,65979,B01001,ACS 2020-2024 5-year
+county,25009,"Essex County, Massachusetts",25,age_sex,0-17,female,,82610,B01001,ACS 2020-2024 5-year
+county,25009,"Essex County, Massachusetts",25,age_sex,18-44,female,,139135,B01001,ACS 2020-2024 5-year
+county,25009,"Essex County, Massachusetts",25,age_sex,45-64,female,,112152,B01001,ACS 2020-2024 5-year
+county,25009,"Essex County, Massachusetts",25,age_sex,65+,female,,84127,B01001,ACS 2020-2024 5-year
+county,25009,"Essex County, Massachusetts",25,race_ethnicity,,,Non-Hispanic White,524651,B03002,ACS 2020-2024 5-year
+county,25009,"Essex County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Black,28297,B03002,ACS 2020-2024 5-year
+county,25009,"Essex County, Massachusetts",25,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,292,B03002,ACS 2020-2024 5-year
+county,25009,"Essex County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Asian,28724,B03002,ACS 2020-2024 5-year
+county,25009,"Essex County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,174,B03002,ACS 2020-2024 5-year
+county,25009,"Essex County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Some other race,6542,B03002,ACS 2020-2024 5-year
+county,25009,"Essex County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Two or more races,28781,B03002,ACS 2020-2024 5-year
+county,25009,"Essex County, Massachusetts",25,race_ethnicity,,,Hispanic or Latino,195593,B03002,ACS 2020-2024 5-year
+county,25011,"Franklin County, Massachusetts",25,total,,,,70944,B01001,ACS 2020-2024 5-year
+county,25011,"Franklin County, Massachusetts",25,age_sex,0-17,male,,6091,B01001,ACS 2020-2024 5-year
+county,25011,"Franklin County, Massachusetts",25,age_sex,18-44,male,,11222,B01001,ACS 2020-2024 5-year
+county,25011,"Franklin County, Massachusetts",25,age_sex,45-64,male,,9536,B01001,ACS 2020-2024 5-year
+county,25011,"Franklin County, Massachusetts",25,age_sex,65+,male,,8058,B01001,ACS 2020-2024 5-year
+county,25011,"Franklin County, Massachusetts",25,age_sex,0-17,female,,5712,B01001,ACS 2020-2024 5-year
+county,25011,"Franklin County, Massachusetts",25,age_sex,18-44,female,,10814,B01001,ACS 2020-2024 5-year
+county,25011,"Franklin County, Massachusetts",25,age_sex,45-64,female,,10109,B01001,ACS 2020-2024 5-year
+county,25011,"Franklin County, Massachusetts",25,age_sex,65+,female,,9402,B01001,ACS 2020-2024 5-year
+county,25011,"Franklin County, Massachusetts",25,race_ethnicity,,,Non-Hispanic White,62047,B03002,ACS 2020-2024 5-year
+county,25011,"Franklin County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Black,897,B03002,ACS 2020-2024 5-year
+county,25011,"Franklin County, Massachusetts",25,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,23,B03002,ACS 2020-2024 5-year
+county,25011,"Franklin County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Asian,1436,B03002,ACS 2020-2024 5-year
+county,25011,"Franklin County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,21,B03002,ACS 2020-2024 5-year
+county,25011,"Franklin County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Some other race,388,B03002,ACS 2020-2024 5-year
+county,25011,"Franklin County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Two or more races,2293,B03002,ACS 2020-2024 5-year
+county,25011,"Franklin County, Massachusetts",25,race_ethnicity,,,Hispanic or Latino,3839,B03002,ACS 2020-2024 5-year
+county,25013,"Hampden County, Massachusetts",25,total,,,,462815,B01001,ACS 2020-2024 5-year
+county,25013,"Hampden County, Massachusetts",25,age_sex,0-17,male,,49822,B01001,ACS 2020-2024 5-year
+county,25013,"Hampden County, Massachusetts",25,age_sex,18-44,male,,81704,B01001,ACS 2020-2024 5-year
+county,25013,"Hampden County, Massachusetts",25,age_sex,45-64,male,,56191,B01001,ACS 2020-2024 5-year
+county,25013,"Hampden County, Massachusetts",25,age_sex,65+,male,,37409,B01001,ACS 2020-2024 5-year
+county,25013,"Hampden County, Massachusetts",25,age_sex,0-17,female,,46939,B01001,ACS 2020-2024 5-year
+county,25013,"Hampden County, Massachusetts",25,age_sex,18-44,female,,82456,B01001,ACS 2020-2024 5-year
+county,25013,"Hampden County, Massachusetts",25,age_sex,45-64,female,,61180,B01001,ACS 2020-2024 5-year
+county,25013,"Hampden County, Massachusetts",25,age_sex,65+,female,,47114,B01001,ACS 2020-2024 5-year
+county,25013,"Hampden County, Massachusetts",25,race_ethnicity,,,Non-Hispanic White,274463,B03002,ACS 2020-2024 5-year
+county,25013,"Hampden County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Black,35228,B03002,ACS 2020-2024 5-year
+county,25013,"Hampden County, Massachusetts",25,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,205,B03002,ACS 2020-2024 5-year
+county,25013,"Hampden County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Asian,11580,B03002,ACS 2020-2024 5-year
+county,25013,"Hampden County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,23,B03002,ACS 2020-2024 5-year
+county,25013,"Hampden County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Some other race,1788,B03002,ACS 2020-2024 5-year
+county,25013,"Hampden County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Two or more races,14340,B03002,ACS 2020-2024 5-year
+county,25013,"Hampden County, Massachusetts",25,race_ethnicity,,,Hispanic or Latino,125188,B03002,ACS 2020-2024 5-year
+county,25015,"Hampshire County, Massachusetts",25,total,,,,162028,B01001,ACS 2020-2024 5-year
+county,25015,"Hampshire County, Massachusetts",25,age_sex,0-17,male,,11897,B01001,ACS 2020-2024 5-year
+county,25015,"Hampshire County, Massachusetts",25,age_sex,18-44,male,,32078,B01001,ACS 2020-2024 5-year
+county,25015,"Hampshire County, Massachusetts",25,age_sex,45-64,male,,17550,B01001,ACS 2020-2024 5-year
+county,25015,"Hampshire County, Massachusetts",25,age_sex,65+,male,,13888,B01001,ACS 2020-2024 5-year
+county,25015,"Hampshire County, Massachusetts",25,age_sex,0-17,female,,11145,B01001,ACS 2020-2024 5-year
+county,25015,"Hampshire County, Massachusetts",25,age_sex,18-44,female,,38562,B01001,ACS 2020-2024 5-year
+county,25015,"Hampshire County, Massachusetts",25,age_sex,45-64,female,,19358,B01001,ACS 2020-2024 5-year
+county,25015,"Hampshire County, Massachusetts",25,age_sex,65+,female,,17550,B01001,ACS 2020-2024 5-year
+county,25015,"Hampshire County, Massachusetts",25,race_ethnicity,,,Non-Hispanic White,130171,B03002,ACS 2020-2024 5-year
+county,25015,"Hampshire County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Black,4019,B03002,ACS 2020-2024 5-year
+county,25015,"Hampshire County, Massachusetts",25,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,94,B03002,ACS 2020-2024 5-year
+county,25015,"Hampshire County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Asian,8547,B03002,ACS 2020-2024 5-year
+county,25015,"Hampshire County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,16,B03002,ACS 2020-2024 5-year
+county,25015,"Hampshire County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Some other race,636,B03002,ACS 2020-2024 5-year
+county,25015,"Hampshire County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Two or more races,6581,B03002,ACS 2020-2024 5-year
+county,25015,"Hampshire County, Massachusetts",25,race_ethnicity,,,Hispanic or Latino,11964,B03002,ACS 2020-2024 5-year
+county,25017,"Middlesex County, Massachusetts",25,total,,,,1638365,B01001,ACS 2020-2024 5-year
+county,25017,"Middlesex County, Massachusetts",25,age_sex,0-17,male,,163417,B01001,ACS 2020-2024 5-year
+county,25017,"Middlesex County, Massachusetts",25,age_sex,18-44,male,,320955,B01001,ACS 2020-2024 5-year
+county,25017,"Middlesex County, Massachusetts",25,age_sex,45-64,male,,206395,B01001,ACS 2020-2024 5-year
+county,25017,"Middlesex County, Massachusetts",25,age_sex,65+,male,,118332,B01001,ACS 2020-2024 5-year
+county,25017,"Middlesex County, Massachusetts",25,age_sex,0-17,female,,155448,B01001,ACS 2020-2024 5-year
+county,25017,"Middlesex County, Massachusetts",25,age_sex,18-44,female,,314621,B01001,ACS 2020-2024 5-year
+county,25017,"Middlesex County, Massachusetts",25,age_sex,45-64,female,,210522,B01001,ACS 2020-2024 5-year
+county,25017,"Middlesex County, Massachusetts",25,age_sex,65+,female,,148675,B01001,ACS 2020-2024 5-year
+county,25017,"Middlesex County, Massachusetts",25,race_ethnicity,,,Non-Hispanic White,1066504,B03002,ACS 2020-2024 5-year
+county,25017,"Middlesex County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Black,77245,B03002,ACS 2020-2024 5-year
+county,25017,"Middlesex County, Massachusetts",25,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,878,B03002,ACS 2020-2024 5-year
+county,25017,"Middlesex County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Asian,222642,B03002,ACS 2020-2024 5-year
+county,25017,"Middlesex County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,553,B03002,ACS 2020-2024 5-year
+county,25017,"Middlesex County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Some other race,23283,B03002,ACS 2020-2024 5-year
+county,25017,"Middlesex County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Two or more races,95499,B03002,ACS 2020-2024 5-year
+county,25017,"Middlesex County, Massachusetts",25,race_ethnicity,,,Hispanic or Latino,151761,B03002,ACS 2020-2024 5-year
+county,25019,"Nantucket County, Massachusetts",25,total,,,,14483,B01001,ACS 2020-2024 5-year
+county,25019,"Nantucket County, Massachusetts",25,age_sex,0-17,male,,1743,B01001,ACS 2020-2024 5-year
+county,25019,"Nantucket County, Massachusetts",25,age_sex,18-44,male,,2447,B01001,ACS 2020-2024 5-year
+county,25019,"Nantucket County, Massachusetts",25,age_sex,45-64,male,,2221,B01001,ACS 2020-2024 5-year
+county,25019,"Nantucket County, Massachusetts",25,age_sex,65+,male,,1139,B01001,ACS 2020-2024 5-year
+county,25019,"Nantucket County, Massachusetts",25,age_sex,0-17,female,,1232,B01001,ACS 2020-2024 5-year
+county,25019,"Nantucket County, Massachusetts",25,age_sex,18-44,female,,2481,B01001,ACS 2020-2024 5-year
+county,25019,"Nantucket County, Massachusetts",25,age_sex,45-64,female,,2032,B01001,ACS 2020-2024 5-year
+county,25019,"Nantucket County, Massachusetts",25,age_sex,65+,female,,1188,B01001,ACS 2020-2024 5-year
+county,25019,"Nantucket County, Massachusetts",25,race_ethnicity,,,Non-Hispanic White,9879,B03002,ACS 2020-2024 5-year
+county,25019,"Nantucket County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Black,1361,B03002,ACS 2020-2024 5-year
+county,25019,"Nantucket County, Massachusetts",25,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,8,B03002,ACS 2020-2024 5-year
+county,25019,"Nantucket County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Asian,251,B03002,ACS 2020-2024 5-year
+county,25019,"Nantucket County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,0,B03002,ACS 2020-2024 5-year
+county,25019,"Nantucket County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Some other race,127,B03002,ACS 2020-2024 5-year
+county,25019,"Nantucket County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Two or more races,390,B03002,ACS 2020-2024 5-year
+county,25019,"Nantucket County, Massachusetts",25,race_ethnicity,,,Hispanic or Latino,2467,B03002,ACS 2020-2024 5-year
+county,25021,"Norfolk County, Massachusetts",25,total,,,,730082,B01001,ACS 2020-2024 5-year
+county,25021,"Norfolk County, Massachusetts",25,age_sex,0-17,male,,76216,B01001,ACS 2020-2024 5-year
+county,25021,"Norfolk County, Massachusetts",25,age_sex,18-44,male,,125309,B01001,ACS 2020-2024 5-year
+county,25021,"Norfolk County, Massachusetts",25,age_sex,45-64,male,,95755,B01001,ACS 2020-2024 5-year
+county,25021,"Norfolk County, Massachusetts",25,age_sex,65+,male,,56660,B01001,ACS 2020-2024 5-year
+county,25021,"Norfolk County, Massachusetts",25,age_sex,0-17,female,,73097,B01001,ACS 2020-2024 5-year
+county,25021,"Norfolk County, Massachusetts",25,age_sex,18-44,female,,129689,B01001,ACS 2020-2024 5-year
+county,25021,"Norfolk County, Massachusetts",25,age_sex,45-64,female,,100371,B01001,ACS 2020-2024 5-year
+county,25021,"Norfolk County, Massachusetts",25,age_sex,65+,female,,72985,B01001,ACS 2020-2024 5-year
+county,25021,"Norfolk County, Massachusetts",25,race_ethnicity,,,Non-Hispanic White,501825,B03002,ACS 2020-2024 5-year
+county,25021,"Norfolk County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Black,51987,B03002,ACS 2020-2024 5-year
+county,25021,"Norfolk County, Massachusetts",25,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,412,B03002,ACS 2020-2024 5-year
+county,25021,"Norfolk County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Asian,90340,B03002,ACS 2020-2024 5-year
+county,25021,"Norfolk County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,132,B03002,ACS 2020-2024 5-year
+county,25021,"Norfolk County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Some other race,8098,B03002,ACS 2020-2024 5-year
+county,25021,"Norfolk County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Two or more races,34905,B03002,ACS 2020-2024 5-year
+county,25021,"Norfolk County, Massachusetts",25,race_ethnicity,,,Hispanic or Latino,42383,B03002,ACS 2020-2024 5-year
+county,25023,"Plymouth County, Massachusetts",25,total,,,,535075,B01001,ACS 2020-2024 5-year
+county,25023,"Plymouth County, Massachusetts",25,age_sex,0-17,male,,57113,B01001,ACS 2020-2024 5-year
+county,25023,"Plymouth County, Massachusetts",25,age_sex,18-44,male,,84761,B01001,ACS 2020-2024 5-year
+county,25023,"Plymouth County, Massachusetts",25,age_sex,45-64,male,,72770,B01001,ACS 2020-2024 5-year
+county,25023,"Plymouth County, Massachusetts",25,age_sex,65+,male,,47143,B01001,ACS 2020-2024 5-year
+county,25023,"Plymouth County, Massachusetts",25,age_sex,0-17,female,,53723,B01001,ACS 2020-2024 5-year
+county,25023,"Plymouth County, Massachusetts",25,age_sex,18-44,female,,84474,B01001,ACS 2020-2024 5-year
+county,25023,"Plymouth County, Massachusetts",25,age_sex,45-64,female,,76494,B01001,ACS 2020-2024 5-year
+county,25023,"Plymouth County, Massachusetts",25,age_sex,65+,female,,58597,B01001,ACS 2020-2024 5-year
+county,25023,"Plymouth County, Massachusetts",25,race_ethnicity,,,Non-Hispanic White,407191,B03002,ACS 2020-2024 5-year
+county,25023,"Plymouth County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Black,41606,B03002,ACS 2020-2024 5-year
+county,25023,"Plymouth County, Massachusetts",25,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,353,B03002,ACS 2020-2024 5-year
+county,25023,"Plymouth County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Asian,8959,B03002,ACS 2020-2024 5-year
+county,25023,"Plymouth County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,206,B03002,ACS 2020-2024 5-year
+county,25023,"Plymouth County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Some other race,14453,B03002,ACS 2020-2024 5-year
+county,25023,"Plymouth County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Two or more races,36123,B03002,ACS 2020-2024 5-year
+county,25023,"Plymouth County, Massachusetts",25,race_ethnicity,,,Hispanic or Latino,26184,B03002,ACS 2020-2024 5-year
+county,25025,"Suffolk County, Massachusetts",25,total,,,,785121,B01001,ACS 2020-2024 5-year
+county,25025,"Suffolk County, Massachusetts",25,age_sex,0-17,male,,63655,B01001,ACS 2020-2024 5-year
+county,25025,"Suffolk County, Massachusetts",25,age_sex,18-44,male,,189976,B01001,ACS 2020-2024 5-year
+county,25025,"Suffolk County, Massachusetts",25,age_sex,45-64,male,,80500,B01001,ACS 2020-2024 5-year
+county,25025,"Suffolk County, Massachusetts",25,age_sex,65+,male,,44629,B01001,ACS 2020-2024 5-year
+county,25025,"Suffolk County, Massachusetts",25,age_sex,0-17,female,,62157,B01001,ACS 2020-2024 5-year
+county,25025,"Suffolk County, Massachusetts",25,age_sex,18-44,female,,199925,B01001,ACS 2020-2024 5-year
+county,25025,"Suffolk County, Massachusetts",25,age_sex,45-64,female,,84749,B01001,ACS 2020-2024 5-year
+county,25025,"Suffolk County, Massachusetts",25,age_sex,65+,female,,59530,B01001,ACS 2020-2024 5-year
+county,25025,"Suffolk County, Massachusetts",25,race_ethnicity,,,Non-Hispanic White,342378,B03002,ACS 2020-2024 5-year
+county,25025,"Suffolk County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Black,134542,B03002,ACS 2020-2024 5-year
+county,25025,"Suffolk County, Massachusetts",25,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,979,B03002,ACS 2020-2024 5-year
+county,25025,"Suffolk County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Asian,71965,B03002,ACS 2020-2024 5-year
+county,25025,"Suffolk County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,317,B03002,ACS 2020-2024 5-year
+county,25025,"Suffolk County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Some other race,8387,B03002,ACS 2020-2024 5-year
+county,25025,"Suffolk County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Two or more races,44270,B03002,ACS 2020-2024 5-year
+county,25025,"Suffolk County, Massachusetts",25,race_ethnicity,,,Hispanic or Latino,182283,B03002,ACS 2020-2024 5-year
+county,25027,"Worcester County, Massachusetts",25,total,,,,867788,B01001,ACS 2020-2024 5-year
+county,25027,"Worcester County, Massachusetts",25,age_sex,0-17,male,,91916,B01001,ACS 2020-2024 5-year
+county,25027,"Worcester County, Massachusetts",25,age_sex,18-44,male,,154919,B01001,ACS 2020-2024 5-year
+county,25027,"Worcester County, Massachusetts",25,age_sex,45-64,male,,116890,B01001,ACS 2020-2024 5-year
+county,25027,"Worcester County, Massachusetts",25,age_sex,65+,male,,67292,B01001,ACS 2020-2024 5-year
+county,25027,"Worcester County, Massachusetts",25,age_sex,0-17,female,,87005,B01001,ACS 2020-2024 5-year
+county,25027,"Worcester County, Massachusetts",25,age_sex,18-44,female,,151036,B01001,ACS 2020-2024 5-year
+county,25027,"Worcester County, Massachusetts",25,age_sex,45-64,female,,118332,B01001,ACS 2020-2024 5-year
+county,25027,"Worcester County, Massachusetts",25,age_sex,65+,female,,80398,B01001,ACS 2020-2024 5-year
+county,25027,"Worcester County, Massachusetts",25,race_ethnicity,,,Non-Hispanic White,610037,B03002,ACS 2020-2024 5-year
+county,25027,"Worcester County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Black,41254,B03002,ACS 2020-2024 5-year
+county,25027,"Worcester County, Massachusetts",25,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,600,B03002,ACS 2020-2024 5-year
+county,25027,"Worcester County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Asian,46129,B03002,ACS 2020-2024 5-year
+county,25027,"Worcester County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,180,B03002,ACS 2020-2024 5-year
+county,25027,"Worcester County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Some other race,9555,B03002,ACS 2020-2024 5-year
+county,25027,"Worcester County, Massachusetts",25,race_ethnicity,,,Non-Hispanic Two or more races,41065,B03002,ACS 2020-2024 5-year
+county,25027,"Worcester County, Massachusetts",25,race_ethnicity,,,Hispanic or Latino,118968,B03002,ACS 2020-2024 5-year
+county,33001,"Belknap County, New Hampshire",33,total,,,,64659,B01001,ACS 2020-2024 5-year
+county,33001,"Belknap County, New Hampshire",33,age_sex,0-17,male,,5529,B01001,ACS 2020-2024 5-year
+county,33001,"Belknap County, New Hampshire",33,age_sex,18-44,male,,9558,B01001,ACS 2020-2024 5-year
+county,33001,"Belknap County, New Hampshire",33,age_sex,45-64,male,,9587,B01001,ACS 2020-2024 5-year
+county,33001,"Belknap County, New Hampshire",33,age_sex,65+,male,,7468,B01001,ACS 2020-2024 5-year
+county,33001,"Belknap County, New Hampshire",33,age_sex,0-17,female,,5660,B01001,ACS 2020-2024 5-year
+county,33001,"Belknap County, New Hampshire",33,age_sex,18-44,female,,9123,B01001,ACS 2020-2024 5-year
+county,33001,"Belknap County, New Hampshire",33,age_sex,45-64,female,,9710,B01001,ACS 2020-2024 5-year
+county,33001,"Belknap County, New Hampshire",33,age_sex,65+,female,,8024,B01001,ACS 2020-2024 5-year
+county,33001,"Belknap County, New Hampshire",33,race_ethnicity,,,Non-Hispanic White,59943,B03002,ACS 2020-2024 5-year
+county,33001,"Belknap County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Black,294,B03002,ACS 2020-2024 5-year
+county,33001,"Belknap County, New Hampshire",33,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,20,B03002,ACS 2020-2024 5-year
+county,33001,"Belknap County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Asian,744,B03002,ACS 2020-2024 5-year
+county,33001,"Belknap County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,18,B03002,ACS 2020-2024 5-year
+county,33001,"Belknap County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Some other race,346,B03002,ACS 2020-2024 5-year
+county,33001,"Belknap County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Two or more races,1827,B03002,ACS 2020-2024 5-year
+county,33001,"Belknap County, New Hampshire",33,race_ethnicity,,,Hispanic or Latino,1467,B03002,ACS 2020-2024 5-year
+county,33003,"Carroll County, New Hampshire",33,total,,,,51804,B01001,ACS 2020-2024 5-year
+county,33003,"Carroll County, New Hampshire",33,age_sex,0-17,male,,4108,B01001,ACS 2020-2024 5-year
+county,33003,"Carroll County, New Hampshire",33,age_sex,18-44,male,,6498,B01001,ACS 2020-2024 5-year
+county,33003,"Carroll County, New Hampshire",33,age_sex,45-64,male,,7651,B01001,ACS 2020-2024 5-year
+county,33003,"Carroll County, New Hampshire",33,age_sex,65+,male,,7973,B01001,ACS 2020-2024 5-year
+county,33003,"Carroll County, New Hampshire",33,age_sex,0-17,female,,3523,B01001,ACS 2020-2024 5-year
+county,33003,"Carroll County, New Hampshire",33,age_sex,18-44,female,,6157,B01001,ACS 2020-2024 5-year
+county,33003,"Carroll County, New Hampshire",33,age_sex,45-64,female,,7865,B01001,ACS 2020-2024 5-year
+county,33003,"Carroll County, New Hampshire",33,age_sex,65+,female,,8029,B01001,ACS 2020-2024 5-year
+county,33003,"Carroll County, New Hampshire",33,race_ethnicity,,,Non-Hispanic White,48671,B03002,ACS 2020-2024 5-year
+county,33003,"Carroll County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Black,310,B03002,ACS 2020-2024 5-year
+county,33003,"Carroll County, New Hampshire",33,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,143,B03002,ACS 2020-2024 5-year
+county,33003,"Carroll County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Asian,427,B03002,ACS 2020-2024 5-year
+county,33003,"Carroll County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,0,B03002,ACS 2020-2024 5-year
+county,33003,"Carroll County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Some other race,82,B03002,ACS 2020-2024 5-year
+county,33003,"Carroll County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Two or more races,1262,B03002,ACS 2020-2024 5-year
+county,33003,"Carroll County, New Hampshire",33,race_ethnicity,,,Hispanic or Latino,909,B03002,ACS 2020-2024 5-year
+county,33005,"Cheshire County, New Hampshire",33,total,,,,77297,B01001,ACS 2020-2024 5-year
+county,33005,"Cheshire County, New Hampshire",33,age_sex,0-17,male,,7095,B01001,ACS 2020-2024 5-year
+county,33005,"Cheshire County, New Hampshire",33,age_sex,18-44,male,,12992,B01001,ACS 2020-2024 5-year
+county,33005,"Cheshire County, New Hampshire",33,age_sex,45-64,male,,10052,B01001,ACS 2020-2024 5-year
+county,33005,"Cheshire County, New Hampshire",33,age_sex,65+,male,,8007,B01001,ACS 2020-2024 5-year
+county,33005,"Cheshire County, New Hampshire",33,age_sex,0-17,female,,6665,B01001,ACS 2020-2024 5-year
+county,33005,"Cheshire County, New Hampshire",33,age_sex,18-44,female,,12899,B01001,ACS 2020-2024 5-year
+county,33005,"Cheshire County, New Hampshire",33,age_sex,45-64,female,,10296,B01001,ACS 2020-2024 5-year
+county,33005,"Cheshire County, New Hampshire",33,age_sex,65+,female,,9291,B01001,ACS 2020-2024 5-year
+county,33005,"Cheshire County, New Hampshire",33,race_ethnicity,,,Non-Hispanic White,70665,B03002,ACS 2020-2024 5-year
+county,33005,"Cheshire County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Black,528,B03002,ACS 2020-2024 5-year
+county,33005,"Cheshire County, New Hampshire",33,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,65,B03002,ACS 2020-2024 5-year
+county,33005,"Cheshire County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Asian,672,B03002,ACS 2020-2024 5-year
+county,33005,"Cheshire County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,0,B03002,ACS 2020-2024 5-year
+county,33005,"Cheshire County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Some other race,185,B03002,ACS 2020-2024 5-year
+county,33005,"Cheshire County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Two or more races,3172,B03002,ACS 2020-2024 5-year
+county,33005,"Cheshire County, New Hampshire",33,race_ethnicity,,,Hispanic or Latino,2010,B03002,ACS 2020-2024 5-year
+county,33007,"Coos County, New Hampshire",33,total,,,,31271,B01001,ACS 2020-2024 5-year
+county,33007,"Coos County, New Hampshire",33,age_sex,0-17,male,,2624,B01001,ACS 2020-2024 5-year
+county,33007,"Coos County, New Hampshire",33,age_sex,18-44,male,,4850,B01001,ACS 2020-2024 5-year
+county,33007,"Coos County, New Hampshire",33,age_sex,45-64,male,,4858,B01001,ACS 2020-2024 5-year
+county,33007,"Coos County, New Hampshire",33,age_sex,65+,male,,4002,B01001,ACS 2020-2024 5-year
+county,33007,"Coos County, New Hampshire",33,age_sex,0-17,female,,2390,B01001,ACS 2020-2024 5-year
+county,33007,"Coos County, New Hampshire",33,age_sex,18-44,female,,3895,B01001,ACS 2020-2024 5-year
+county,33007,"Coos County, New Hampshire",33,age_sex,45-64,female,,4502,B01001,ACS 2020-2024 5-year
+county,33007,"Coos County, New Hampshire",33,age_sex,65+,female,,4150,B01001,ACS 2020-2024 5-year
+county,33007,"Coos County, New Hampshire",33,race_ethnicity,,,Non-Hispanic White,28750,B03002,ACS 2020-2024 5-year
+county,33007,"Coos County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Black,631,B03002,ACS 2020-2024 5-year
+county,33007,"Coos County, New Hampshire",33,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,46,B03002,ACS 2020-2024 5-year
+county,33007,"Coos County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Asian,45,B03002,ACS 2020-2024 5-year
+county,33007,"Coos County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,1,B03002,ACS 2020-2024 5-year
+county,33007,"Coos County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Some other race,151,B03002,ACS 2020-2024 5-year
+county,33007,"Coos County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Two or more races,906,B03002,ACS 2020-2024 5-year
+county,33007,"Coos County, New Hampshire",33,race_ethnicity,,,Hispanic or Latino,741,B03002,ACS 2020-2024 5-year
+county,33009,"Grafton County, New Hampshire",33,total,,,,92120,B01001,ACS 2020-2024 5-year
+county,33009,"Grafton County, New Hampshire",33,age_sex,0-17,male,,7369,B01001,ACS 2020-2024 5-year
+county,33009,"Grafton County, New Hampshire",33,age_sex,18-44,male,,16636,B01001,ACS 2020-2024 5-year
+county,33009,"Grafton County, New Hampshire",33,age_sex,45-64,male,,11614,B01001,ACS 2020-2024 5-year
+county,33009,"Grafton County, New Hampshire",33,age_sex,65+,male,,10061,B01001,ACS 2020-2024 5-year
+county,33009,"Grafton County, New Hampshire",33,age_sex,0-17,female,,7045,B01001,ACS 2020-2024 5-year
+county,33009,"Grafton County, New Hampshire",33,age_sex,18-44,female,,15963,B01001,ACS 2020-2024 5-year
+county,33009,"Grafton County, New Hampshire",33,age_sex,45-64,female,,12349,B01001,ACS 2020-2024 5-year
+county,33009,"Grafton County, New Hampshire",33,age_sex,65+,female,,11083,B01001,ACS 2020-2024 5-year
+county,33009,"Grafton County, New Hampshire",33,race_ethnicity,,,Non-Hispanic White,80633,B03002,ACS 2020-2024 5-year
+county,33009,"Grafton County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Black,996,B03002,ACS 2020-2024 5-year
+county,33009,"Grafton County, New Hampshire",33,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,96,B03002,ACS 2020-2024 5-year
+county,33009,"Grafton County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Asian,3225,B03002,ACS 2020-2024 5-year
+county,33009,"Grafton County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,18,B03002,ACS 2020-2024 5-year
+county,33009,"Grafton County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Some other race,416,B03002,ACS 2020-2024 5-year
+county,33009,"Grafton County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Two or more races,4057,B03002,ACS 2020-2024 5-year
+county,33009,"Grafton County, New Hampshire",33,race_ethnicity,,,Hispanic or Latino,2679,B03002,ACS 2020-2024 5-year
+county,33011,"Hillsborough County, New Hampshire",33,total,,,,426378,B01001,ACS 2020-2024 5-year
+county,33011,"Hillsborough County, New Hampshire",33,age_sex,0-17,male,,42884,B01001,ACS 2020-2024 5-year
+county,33011,"Hillsborough County, New Hampshire",33,age_sex,18-44,male,,77931,B01001,ACS 2020-2024 5-year
+county,33011,"Hillsborough County, New Hampshire",33,age_sex,45-64,male,,59245,B01001,ACS 2020-2024 5-year
+county,33011,"Hillsborough County, New Hampshire",33,age_sex,65+,male,,33915,B01001,ACS 2020-2024 5-year
+county,33011,"Hillsborough County, New Hampshire",33,age_sex,0-17,female,,40812,B01001,ACS 2020-2024 5-year
+county,33011,"Hillsborough County, New Hampshire",33,age_sex,18-44,female,,73133,B01001,ACS 2020-2024 5-year
+county,33011,"Hillsborough County, New Hampshire",33,age_sex,45-64,female,,58555,B01001,ACS 2020-2024 5-year
+county,33011,"Hillsborough County, New Hampshire",33,age_sex,65+,female,,39903,B01001,ACS 2020-2024 5-year
+county,33011,"Hillsborough County, New Hampshire",33,race_ethnicity,,,Non-Hispanic White,341341,B03002,ACS 2020-2024 5-year
+county,33011,"Hillsborough County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Black,9550,B03002,ACS 2020-2024 5-year
+county,33011,"Hillsborough County, New Hampshire",33,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,242,B03002,ACS 2020-2024 5-year
+county,33011,"Hillsborough County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Asian,18338,B03002,ACS 2020-2024 5-year
+county,33011,"Hillsborough County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,38,B03002,ACS 2020-2024 5-year
+county,33011,"Hillsborough County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Some other race,2039,B03002,ACS 2020-2024 5-year
+county,33011,"Hillsborough County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Two or more races,18416,B03002,ACS 2020-2024 5-year
+county,33011,"Hillsborough County, New Hampshire",33,race_ethnicity,,,Hispanic or Latino,36414,B03002,ACS 2020-2024 5-year
+county,33013,"Merrimack County, New Hampshire",33,total,,,,155967,B01001,ACS 2020-2024 5-year
+county,33013,"Merrimack County, New Hampshire",33,age_sex,0-17,male,,14603,B01001,ACS 2020-2024 5-year
+county,33013,"Merrimack County, New Hampshire",33,age_sex,18-44,male,,27691,B01001,ACS 2020-2024 5-year
+county,33013,"Merrimack County, New Hampshire",33,age_sex,45-64,male,,21273,B01001,ACS 2020-2024 5-year
+county,33013,"Merrimack County, New Hampshire",33,age_sex,65+,male,,14160,B01001,ACS 2020-2024 5-year
+county,33013,"Merrimack County, New Hampshire",33,age_sex,0-17,female,,14054,B01001,ACS 2020-2024 5-year
+county,33013,"Merrimack County, New Hampshire",33,age_sex,18-44,female,,26070,B01001,ACS 2020-2024 5-year
+county,33013,"Merrimack County, New Hampshire",33,age_sex,45-64,female,,21215,B01001,ACS 2020-2024 5-year
+county,33013,"Merrimack County, New Hampshire",33,age_sex,65+,female,,16901,B01001,ACS 2020-2024 5-year
+county,33013,"Merrimack County, New Hampshire",33,race_ethnicity,,,Non-Hispanic White,140561,B03002,ACS 2020-2024 5-year
+county,33013,"Merrimack County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Black,2471,B03002,ACS 2020-2024 5-year
+county,33013,"Merrimack County, New Hampshire",33,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,78,B03002,ACS 2020-2024 5-year
+county,33013,"Merrimack County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Asian,2358,B03002,ACS 2020-2024 5-year
+county,33013,"Merrimack County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,79,B03002,ACS 2020-2024 5-year
+county,33013,"Merrimack County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Some other race,585,B03002,ACS 2020-2024 5-year
+county,33013,"Merrimack County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Two or more races,5558,B03002,ACS 2020-2024 5-year
+county,33013,"Merrimack County, New Hampshire",33,race_ethnicity,,,Hispanic or Latino,4277,B03002,ACS 2020-2024 5-year
+county,33015,"Rockingham County, New Hampshire",33,total,,,,319082,B01001,ACS 2020-2024 5-year
+county,33015,"Rockingham County, New Hampshire",33,age_sex,0-17,male,,30124,B01001,ACS 2020-2024 5-year
+county,33015,"Rockingham County, New Hampshire",33,age_sex,18-44,male,,51686,B01001,ACS 2020-2024 5-year
+county,33015,"Rockingham County, New Hampshire",33,age_sex,45-64,male,,46714,B01001,ACS 2020-2024 5-year
+county,33015,"Rockingham County, New Hampshire",33,age_sex,65+,male,,30185,B01001,ACS 2020-2024 5-year
+county,33015,"Rockingham County, New Hampshire",33,age_sex,0-17,female,,28839,B01001,ACS 2020-2024 5-year
+county,33015,"Rockingham County, New Hampshire",33,age_sex,18-44,female,,49028,B01001,ACS 2020-2024 5-year
+county,33015,"Rockingham County, New Hampshire",33,age_sex,45-64,female,,47665,B01001,ACS 2020-2024 5-year
+county,33015,"Rockingham County, New Hampshire",33,age_sex,65+,female,,34841,B01001,ACS 2020-2024 5-year
+county,33015,"Rockingham County, New Hampshire",33,race_ethnicity,,,Non-Hispanic White,285708,B03002,ACS 2020-2024 5-year
+county,33015,"Rockingham County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Black,2095,B03002,ACS 2020-2024 5-year
+county,33015,"Rockingham County, New Hampshire",33,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,221,B03002,ACS 2020-2024 5-year
+county,33015,"Rockingham County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Asian,6206,B03002,ACS 2020-2024 5-year
+county,33015,"Rockingham County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,114,B03002,ACS 2020-2024 5-year
+county,33015,"Rockingham County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Some other race,1510,B03002,ACS 2020-2024 5-year
+county,33015,"Rockingham County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Two or more races,11501,B03002,ACS 2020-2024 5-year
+county,33015,"Rockingham County, New Hampshire",33,race_ethnicity,,,Hispanic or Latino,11727,B03002,ACS 2020-2024 5-year
+county,33017,"Strafford County, New Hampshire",33,total,,,,132575,B01001,ACS 2020-2024 5-year
+county,33017,"Strafford County, New Hampshire",33,age_sex,0-17,male,,12204,B01001,ACS 2020-2024 5-year
+county,33017,"Strafford County, New Hampshire",33,age_sex,18-44,male,,26707,B01001,ACS 2020-2024 5-year
+county,33017,"Strafford County, New Hampshire",33,age_sex,45-64,male,,16423,B01001,ACS 2020-2024 5-year
+county,33017,"Strafford County, New Hampshire",33,age_sex,65+,male,,10185,B01001,ACS 2020-2024 5-year
+county,33017,"Strafford County, New Hampshire",33,age_sex,0-17,female,,11195,B01001,ACS 2020-2024 5-year
+county,33017,"Strafford County, New Hampshire",33,age_sex,18-44,female,,26616,B01001,ACS 2020-2024 5-year
+county,33017,"Strafford County, New Hampshire",33,age_sex,45-64,female,,16778,B01001,ACS 2020-2024 5-year
+county,33017,"Strafford County, New Hampshire",33,age_sex,65+,female,,12467,B01001,ACS 2020-2024 5-year
+county,33017,"Strafford County, New Hampshire",33,race_ethnicity,,,Non-Hispanic White,116178,B03002,ACS 2020-2024 5-year
+county,33017,"Strafford County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Black,1520,B03002,ACS 2020-2024 5-year
+county,33017,"Strafford County, New Hampshire",33,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,19,B03002,ACS 2020-2024 5-year
+county,33017,"Strafford County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Asian,3598,B03002,ACS 2020-2024 5-year
+county,33017,"Strafford County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,0,B03002,ACS 2020-2024 5-year
+county,33017,"Strafford County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Some other race,625,B03002,ACS 2020-2024 5-year
+county,33017,"Strafford County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Two or more races,6387,B03002,ACS 2020-2024 5-year
+county,33017,"Strafford County, New Hampshire",33,race_ethnicity,,,Hispanic or Latino,4248,B03002,ACS 2020-2024 5-year
+county,33019,"Sullivan County, New Hampshire",33,total,,,,43715,B01001,ACS 2020-2024 5-year
+county,33019,"Sullivan County, New Hampshire",33,age_sex,0-17,male,,3933,B01001,ACS 2020-2024 5-year
+county,33019,"Sullivan County, New Hampshire",33,age_sex,18-44,male,,6824,B01001,ACS 2020-2024 5-year
+county,33019,"Sullivan County, New Hampshire",33,age_sex,45-64,male,,6397,B01001,ACS 2020-2024 5-year
+county,33019,"Sullivan County, New Hampshire",33,age_sex,65+,male,,4881,B01001,ACS 2020-2024 5-year
+county,33019,"Sullivan County, New Hampshire",33,age_sex,0-17,female,,3824,B01001,ACS 2020-2024 5-year
+county,33019,"Sullivan County, New Hampshire",33,age_sex,18-44,female,,6217,B01001,ACS 2020-2024 5-year
+county,33019,"Sullivan County, New Hampshire",33,age_sex,45-64,female,,6232,B01001,ACS 2020-2024 5-year
+county,33019,"Sullivan County, New Hampshire",33,age_sex,65+,female,,5407,B01001,ACS 2020-2024 5-year
+county,33019,"Sullivan County, New Hampshire",33,race_ethnicity,,,Non-Hispanic White,39974,B03002,ACS 2020-2024 5-year
+county,33019,"Sullivan County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Black,309,B03002,ACS 2020-2024 5-year
+county,33019,"Sullivan County, New Hampshire",33,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,21,B03002,ACS 2020-2024 5-year
+county,33019,"Sullivan County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Asian,125,B03002,ACS 2020-2024 5-year
+county,33019,"Sullivan County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,8,B03002,ACS 2020-2024 5-year
+county,33019,"Sullivan County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Some other race,150,B03002,ACS 2020-2024 5-year
+county,33019,"Sullivan County, New Hampshire",33,race_ethnicity,,,Non-Hispanic Two or more races,2217,B03002,ACS 2020-2024 5-year
+county,33019,"Sullivan County, New Hampshire",33,race_ethnicity,,,Hispanic or Latino,911,B03002,ACS 2020-2024 5-year
+county,44001,"Bristol County, Rhode Island",44,total,,,,50490,B01001,ACS 2020-2024 5-year
+county,44001,"Bristol County, Rhode Island",44,age_sex,0-17,male,,4642,B01001,ACS 2020-2024 5-year
+county,44001,"Bristol County, Rhode Island",44,age_sex,18-44,male,,8308,B01001,ACS 2020-2024 5-year
+county,44001,"Bristol County, Rhode Island",44,age_sex,45-64,male,,6861,B01001,ACS 2020-2024 5-year
+county,44001,"Bristol County, Rhode Island",44,age_sex,65+,male,,4835,B01001,ACS 2020-2024 5-year
+county,44001,"Bristol County, Rhode Island",44,age_sex,0-17,female,,4331,B01001,ACS 2020-2024 5-year
+county,44001,"Bristol County, Rhode Island",44,age_sex,18-44,female,,8456,B01001,ACS 2020-2024 5-year
+county,44001,"Bristol County, Rhode Island",44,age_sex,45-64,female,,7218,B01001,ACS 2020-2024 5-year
+county,44001,"Bristol County, Rhode Island",44,age_sex,65+,female,,5839,B01001,ACS 2020-2024 5-year
+county,44001,"Bristol County, Rhode Island",44,race_ethnicity,,,Non-Hispanic White,44588,B03002,ACS 2020-2024 5-year
+county,44001,"Bristol County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Black,501,B03002,ACS 2020-2024 5-year
+county,44001,"Bristol County, Rhode Island",44,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,12,B03002,ACS 2020-2024 5-year
+county,44001,"Bristol County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Asian,1308,B03002,ACS 2020-2024 5-year
+county,44001,"Bristol County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,8,B03002,ACS 2020-2024 5-year
+county,44001,"Bristol County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Some other race,108,B03002,ACS 2020-2024 5-year
+county,44001,"Bristol County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Two or more races,1857,B03002,ACS 2020-2024 5-year
+county,44001,"Bristol County, Rhode Island",44,race_ethnicity,,,Hispanic or Latino,2108,B03002,ACS 2020-2024 5-year
+county,44003,"Kent County, Rhode Island",44,total,,,,171456,B01001,ACS 2020-2024 5-year
+county,44003,"Kent County, Rhode Island",44,age_sex,0-17,male,,16051,B01001,ACS 2020-2024 5-year
+county,44003,"Kent County, Rhode Island",44,age_sex,18-44,male,,29342,B01001,ACS 2020-2024 5-year
+county,44003,"Kent County, Rhode Island",44,age_sex,45-64,male,,23120,B01001,ACS 2020-2024 5-year
+county,44003,"Kent County, Rhode Island",44,age_sex,65+,male,,15312,B01001,ACS 2020-2024 5-year
+county,44003,"Kent County, Rhode Island",44,age_sex,0-17,female,,14868,B01001,ACS 2020-2024 5-year
+county,44003,"Kent County, Rhode Island",44,age_sex,18-44,female,,28344,B01001,ACS 2020-2024 5-year
+county,44003,"Kent County, Rhode Island",44,age_sex,45-64,female,,24714,B01001,ACS 2020-2024 5-year
+county,44003,"Kent County, Rhode Island",44,age_sex,65+,female,,19705,B01001,ACS 2020-2024 5-year
+county,44003,"Kent County, Rhode Island",44,race_ethnicity,,,Non-Hispanic White,143517,B03002,ACS 2020-2024 5-year
+county,44003,"Kent County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Black,3196,B03002,ACS 2020-2024 5-year
+county,44003,"Kent County, Rhode Island",44,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,56,B03002,ACS 2020-2024 5-year
+county,44003,"Kent County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Asian,5007,B03002,ACS 2020-2024 5-year
+county,44003,"Kent County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,75,B03002,ACS 2020-2024 5-year
+county,44003,"Kent County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Some other race,691,B03002,ACS 2020-2024 5-year
+county,44003,"Kent County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Two or more races,7152,B03002,ACS 2020-2024 5-year
+county,44003,"Kent County, Rhode Island",44,race_ethnicity,,,Hispanic or Latino,11762,B03002,ACS 2020-2024 5-year
+county,44005,"Newport County, Rhode Island",44,total,,,,84657,B01001,ACS 2020-2024 5-year
+county,44005,"Newport County, Rhode Island",44,age_sex,0-17,male,,7077,B01001,ACS 2020-2024 5-year
+county,44005,"Newport County, Rhode Island",44,age_sex,18-44,male,,14032,B01001,ACS 2020-2024 5-year
+county,44005,"Newport County, Rhode Island",44,age_sex,45-64,male,,10878,B01001,ACS 2020-2024 5-year
+county,44005,"Newport County, Rhode Island",44,age_sex,65+,male,,9876,B01001,ACS 2020-2024 5-year
+county,44005,"Newport County, Rhode Island",44,age_sex,0-17,female,,6474,B01001,ACS 2020-2024 5-year
+county,44005,"Newport County, Rhode Island",44,age_sex,18-44,female,,13079,B01001,ACS 2020-2024 5-year
+county,44005,"Newport County, Rhode Island",44,age_sex,45-64,female,,11511,B01001,ACS 2020-2024 5-year
+county,44005,"Newport County, Rhode Island",44,age_sex,65+,female,,11730,B01001,ACS 2020-2024 5-year
+county,44005,"Newport County, Rhode Island",44,race_ethnicity,,,Non-Hispanic White,69726,B03002,ACS 2020-2024 5-year
+county,44005,"Newport County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Black,2723,B03002,ACS 2020-2024 5-year
+county,44005,"Newport County, Rhode Island",44,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,137,B03002,ACS 2020-2024 5-year
+county,44005,"Newport County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Asian,1403,B03002,ACS 2020-2024 5-year
+county,44005,"Newport County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,90,B03002,ACS 2020-2024 5-year
+county,44005,"Newport County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Some other race,770,B03002,ACS 2020-2024 5-year
+county,44005,"Newport County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Two or more races,4107,B03002,ACS 2020-2024 5-year
+county,44005,"Newport County, Rhode Island",44,race_ethnicity,,,Hispanic or Latino,5701,B03002,ACS 2020-2024 5-year
+county,44007,"Providence County, Rhode Island",44,total,,,,664854,B01001,ACS 2020-2024 5-year
+county,44007,"Providence County, Rhode Island",44,age_sex,0-17,male,,68513,B01001,ACS 2020-2024 5-year
+county,44007,"Providence County, Rhode Island",44,age_sex,18-44,male,,129738,B01001,ACS 2020-2024 5-year
+county,44007,"Providence County, Rhode Island",44,age_sex,45-64,male,,80939,B01001,ACS 2020-2024 5-year
+county,44007,"Providence County, Rhode Island",44,age_sex,65+,male,,47525,B01001,ACS 2020-2024 5-year
+county,44007,"Providence County, Rhode Island",44,age_sex,0-17,female,,65427,B01001,ACS 2020-2024 5-year
+county,44007,"Providence County, Rhode Island",44,age_sex,18-44,female,,127382,B01001,ACS 2020-2024 5-year
+county,44007,"Providence County, Rhode Island",44,age_sex,45-64,female,,84343,B01001,ACS 2020-2024 5-year
+county,44007,"Providence County, Rhode Island",44,age_sex,65+,female,,60987,B01001,ACS 2020-2024 5-year
+county,44007,"Providence County, Rhode Island",44,race_ethnicity,,,Non-Hispanic White,375742,B03002,ACS 2020-2024 5-year
+county,44007,"Providence County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Black,46237,B03002,ACS 2020-2024 5-year
+county,44007,"Providence County, Rhode Island",44,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,1070,B03002,ACS 2020-2024 5-year
+county,44007,"Providence County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Asian,27690,B03002,ACS 2020-2024 5-year
+county,44007,"Providence County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,455,B03002,ACS 2020-2024 5-year
+county,44007,"Providence County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Some other race,7225,B03002,ACS 2020-2024 5-year
+county,44007,"Providence County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Two or more races,36059,B03002,ACS 2020-2024 5-year
+county,44007,"Providence County, Rhode Island",44,race_ethnicity,,,Hispanic or Latino,170376,B03002,ACS 2020-2024 5-year
+county,44009,"Washington County, Rhode Island",44,total,,,,130344,B01001,ACS 2020-2024 5-year
+county,44009,"Washington County, Rhode Island",44,age_sex,0-17,male,,10223,B01001,ACS 2020-2024 5-year
+county,44009,"Washington County, Rhode Island",44,age_sex,18-44,male,,22267,B01001,ACS 2020-2024 5-year
+county,44009,"Washington County, Rhode Island",44,age_sex,45-64,male,,17103,B01001,ACS 2020-2024 5-year
+county,44009,"Washington County, Rhode Island",44,age_sex,65+,male,,13995,B01001,ACS 2020-2024 5-year
+county,44009,"Washington County, Rhode Island",44,age_sex,0-17,female,,9819,B01001,ACS 2020-2024 5-year
+county,44009,"Washington County, Rhode Island",44,age_sex,18-44,female,,22257,B01001,ACS 2020-2024 5-year
+county,44009,"Washington County, Rhode Island",44,age_sex,45-64,female,,18253,B01001,ACS 2020-2024 5-year
+county,44009,"Washington County, Rhode Island",44,age_sex,65+,female,,16427,B01001,ACS 2020-2024 5-year
+county,44009,"Washington County, Rhode Island",44,race_ethnicity,,,Non-Hispanic White,115866,B03002,ACS 2020-2024 5-year
+county,44009,"Washington County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Black,1568,B03002,ACS 2020-2024 5-year
+county,44009,"Washington County, Rhode Island",44,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,346,B03002,ACS 2020-2024 5-year
+county,44009,"Washington County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Asian,2719,B03002,ACS 2020-2024 5-year
+county,44009,"Washington County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,15,B03002,ACS 2020-2024 5-year
+county,44009,"Washington County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Some other race,371,B03002,ACS 2020-2024 5-year
+county,44009,"Washington County, Rhode Island",44,race_ethnicity,,,Non-Hispanic Two or more races,4491,B03002,ACS 2020-2024 5-year
+county,44009,"Washington County, Rhode Island",44,race_ethnicity,,,Hispanic or Latino,4968,B03002,ACS 2020-2024 5-year
+county,50001,"Addison County, Vermont",50,total,,,,37664,B01001,ACS 2020-2024 5-year
+county,50001,"Addison County, Vermont",50,age_sex,0-17,male,,3151,B01001,ACS 2020-2024 5-year
+county,50001,"Addison County, Vermont",50,age_sex,18-44,male,,6596,B01001,ACS 2020-2024 5-year
+county,50001,"Addison County, Vermont",50,age_sex,45-64,male,,5016,B01001,ACS 2020-2024 5-year
+county,50001,"Addison County, Vermont",50,age_sex,65+,male,,4048,B01001,ACS 2020-2024 5-year
+county,50001,"Addison County, Vermont",50,age_sex,0-17,female,,2880,B01001,ACS 2020-2024 5-year
+county,50001,"Addison County, Vermont",50,age_sex,18-44,female,,6559,B01001,ACS 2020-2024 5-year
+county,50001,"Addison County, Vermont",50,age_sex,45-64,female,,4962,B01001,ACS 2020-2024 5-year
+county,50001,"Addison County, Vermont",50,age_sex,65+,female,,4452,B01001,ACS 2020-2024 5-year
+county,50001,"Addison County, Vermont",50,race_ethnicity,,,Non-Hispanic White,33735,B03002,ACS 2020-2024 5-year
+county,50001,"Addison County, Vermont",50,race_ethnicity,,,Non-Hispanic Black,340,B03002,ACS 2020-2024 5-year
+county,50001,"Addison County, Vermont",50,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,6,B03002,ACS 2020-2024 5-year
+county,50001,"Addison County, Vermont",50,race_ethnicity,,,Non-Hispanic Asian,675,B03002,ACS 2020-2024 5-year
+county,50001,"Addison County, Vermont",50,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,26,B03002,ACS 2020-2024 5-year
+county,50001,"Addison County, Vermont",50,race_ethnicity,,,Non-Hispanic Some other race,133,B03002,ACS 2020-2024 5-year
+county,50001,"Addison County, Vermont",50,race_ethnicity,,,Non-Hispanic Two or more races,1525,B03002,ACS 2020-2024 5-year
+county,50001,"Addison County, Vermont",50,race_ethnicity,,,Hispanic or Latino,1224,B03002,ACS 2020-2024 5-year
+county,50003,"Bennington County, Vermont",50,total,,,,37269,B01001,ACS 2020-2024 5-year
+county,50003,"Bennington County, Vermont",50,age_sex,0-17,male,,3675,B01001,ACS 2020-2024 5-year
+county,50003,"Bennington County, Vermont",50,age_sex,18-44,male,,5242,B01001,ACS 2020-2024 5-year
+county,50003,"Bennington County, Vermont",50,age_sex,45-64,male,,5059,B01001,ACS 2020-2024 5-year
+county,50003,"Bennington County, Vermont",50,age_sex,65+,male,,4258,B01001,ACS 2020-2024 5-year
+county,50003,"Bennington County, Vermont",50,age_sex,0-17,female,,3278,B01001,ACS 2020-2024 5-year
+county,50003,"Bennington County, Vermont",50,age_sex,18-44,female,,5686,B01001,ACS 2020-2024 5-year
+county,50003,"Bennington County, Vermont",50,age_sex,45-64,female,,5241,B01001,ACS 2020-2024 5-year
+county,50003,"Bennington County, Vermont",50,age_sex,65+,female,,4830,B01001,ACS 2020-2024 5-year
+county,50003,"Bennington County, Vermont",50,race_ethnicity,,,Non-Hispanic White,33822,B03002,ACS 2020-2024 5-year
+county,50003,"Bennington County, Vermont",50,race_ethnicity,,,Non-Hispanic Black,427,B03002,ACS 2020-2024 5-year
+county,50003,"Bennington County, Vermont",50,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,29,B03002,ACS 2020-2024 5-year
+county,50003,"Bennington County, Vermont",50,race_ethnicity,,,Non-Hispanic Asian,317,B03002,ACS 2020-2024 5-year
+county,50003,"Bennington County, Vermont",50,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,5,B03002,ACS 2020-2024 5-year
+county,50003,"Bennington County, Vermont",50,race_ethnicity,,,Non-Hispanic Some other race,174,B03002,ACS 2020-2024 5-year
+county,50003,"Bennington County, Vermont",50,race_ethnicity,,,Non-Hispanic Two or more races,1448,B03002,ACS 2020-2024 5-year
+county,50003,"Bennington County, Vermont",50,race_ethnicity,,,Hispanic or Latino,1047,B03002,ACS 2020-2024 5-year
+county,50005,"Caledonia County, Vermont",50,total,,,,30475,B01001,ACS 2020-2024 5-year
+county,50005,"Caledonia County, Vermont",50,age_sex,0-17,male,,2944,B01001,ACS 2020-2024 5-year
+county,50005,"Caledonia County, Vermont",50,age_sex,18-44,male,,4840,B01001,ACS 2020-2024 5-year
+county,50005,"Caledonia County, Vermont",50,age_sex,45-64,male,,4224,B01001,ACS 2020-2024 5-year
+county,50005,"Caledonia County, Vermont",50,age_sex,65+,male,,3372,B01001,ACS 2020-2024 5-year
+county,50005,"Caledonia County, Vermont",50,age_sex,0-17,female,,2665,B01001,ACS 2020-2024 5-year
+county,50005,"Caledonia County, Vermont",50,age_sex,18-44,female,,4555,B01001,ACS 2020-2024 5-year
+county,50005,"Caledonia County, Vermont",50,age_sex,45-64,female,,4210,B01001,ACS 2020-2024 5-year
+county,50005,"Caledonia County, Vermont",50,age_sex,65+,female,,3665,B01001,ACS 2020-2024 5-year
+county,50005,"Caledonia County, Vermont",50,race_ethnicity,,,Non-Hispanic White,28015,B03002,ACS 2020-2024 5-year
+county,50005,"Caledonia County, Vermont",50,race_ethnicity,,,Non-Hispanic Black,219,B03002,ACS 2020-2024 5-year
+county,50005,"Caledonia County, Vermont",50,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,54,B03002,ACS 2020-2024 5-year
+county,50005,"Caledonia County, Vermont",50,race_ethnicity,,,Non-Hispanic Asian,125,B03002,ACS 2020-2024 5-year
+county,50005,"Caledonia County, Vermont",50,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,2,B03002,ACS 2020-2024 5-year
+county,50005,"Caledonia County, Vermont",50,race_ethnicity,,,Non-Hispanic Some other race,262,B03002,ACS 2020-2024 5-year
+county,50005,"Caledonia County, Vermont",50,race_ethnicity,,,Non-Hispanic Two or more races,1141,B03002,ACS 2020-2024 5-year
+county,50005,"Caledonia County, Vermont",50,race_ethnicity,,,Hispanic or Latino,657,B03002,ACS 2020-2024 5-year
+county,50007,"Chittenden County, Vermont",50,total,,,,169758,B01001,ACS 2020-2024 5-year
+county,50007,"Chittenden County, Vermont",50,age_sex,0-17,male,,14720,B01001,ACS 2020-2024 5-year
+county,50007,"Chittenden County, Vermont",50,age_sex,18-44,male,,35762,B01001,ACS 2020-2024 5-year
+county,50007,"Chittenden County, Vermont",50,age_sex,45-64,male,,19757,B01001,ACS 2020-2024 5-year
+county,50007,"Chittenden County, Vermont",50,age_sex,65+,male,,12790,B01001,ACS 2020-2024 5-year
+county,50007,"Chittenden County, Vermont",50,age_sex,0-17,female,,14433,B01001,ACS 2020-2024 5-year
+county,50007,"Chittenden County, Vermont",50,age_sex,18-44,female,,35970,B01001,ACS 2020-2024 5-year
+county,50007,"Chittenden County, Vermont",50,age_sex,45-64,female,,20402,B01001,ACS 2020-2024 5-year
+county,50007,"Chittenden County, Vermont",50,age_sex,65+,female,,15924,B01001,ACS 2020-2024 5-year
+county,50007,"Chittenden County, Vermont",50,race_ethnicity,,,Non-Hispanic White,145073,B03002,ACS 2020-2024 5-year
+county,50007,"Chittenden County, Vermont",50,race_ethnicity,,,Non-Hispanic Black,3879,B03002,ACS 2020-2024 5-year
+county,50007,"Chittenden County, Vermont",50,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,133,B03002,ACS 2020-2024 5-year
+county,50007,"Chittenden County, Vermont",50,race_ethnicity,,,Non-Hispanic Asian,7423,B03002,ACS 2020-2024 5-year
+county,50007,"Chittenden County, Vermont",50,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,30,B03002,ACS 2020-2024 5-year
+county,50007,"Chittenden County, Vermont",50,race_ethnicity,,,Non-Hispanic Some other race,613,B03002,ACS 2020-2024 5-year
+county,50007,"Chittenden County, Vermont",50,race_ethnicity,,,Non-Hispanic Two or more races,7755,B03002,ACS 2020-2024 5-year
+county,50007,"Chittenden County, Vermont",50,race_ethnicity,,,Hispanic or Latino,4852,B03002,ACS 2020-2024 5-year
+county,50009,"Essex County, Vermont",50,total,,,,5982,B01001,ACS 2020-2024 5-year
+county,50009,"Essex County, Vermont",50,age_sex,0-17,male,,522,B01001,ACS 2020-2024 5-year
+county,50009,"Essex County, Vermont",50,age_sex,18-44,male,,765,B01001,ACS 2020-2024 5-year
+county,50009,"Essex County, Vermont",50,age_sex,45-64,male,,907,B01001,ACS 2020-2024 5-year
+county,50009,"Essex County, Vermont",50,age_sex,65+,male,,835,B01001,ACS 2020-2024 5-year
+county,50009,"Essex County, Vermont",50,age_sex,0-17,female,,477,B01001,ACS 2020-2024 5-year
+county,50009,"Essex County, Vermont",50,age_sex,18-44,female,,768,B01001,ACS 2020-2024 5-year
+county,50009,"Essex County, Vermont",50,age_sex,45-64,female,,892,B01001,ACS 2020-2024 5-year
+county,50009,"Essex County, Vermont",50,age_sex,65+,female,,816,B01001,ACS 2020-2024 5-year
+county,50009,"Essex County, Vermont",50,race_ethnicity,,,Non-Hispanic White,5539,B03002,ACS 2020-2024 5-year
+county,50009,"Essex County, Vermont",50,race_ethnicity,,,Non-Hispanic Black,4,B03002,ACS 2020-2024 5-year
+county,50009,"Essex County, Vermont",50,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,41,B03002,ACS 2020-2024 5-year
+county,50009,"Essex County, Vermont",50,race_ethnicity,,,Non-Hispanic Asian,60,B03002,ACS 2020-2024 5-year
+county,50009,"Essex County, Vermont",50,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,0,B03002,ACS 2020-2024 5-year
+county,50009,"Essex County, Vermont",50,race_ethnicity,,,Non-Hispanic Some other race,2,B03002,ACS 2020-2024 5-year
+county,50009,"Essex County, Vermont",50,race_ethnicity,,,Non-Hispanic Two or more races,240,B03002,ACS 2020-2024 5-year
+county,50009,"Essex County, Vermont",50,race_ethnicity,,,Hispanic or Latino,96,B03002,ACS 2020-2024 5-year
+county,50011,"Franklin County, Vermont",50,total,,,,50638,B01001,ACS 2020-2024 5-year
+county,50011,"Franklin County, Vermont",50,age_sex,0-17,male,,5710,B01001,ACS 2020-2024 5-year
+county,50011,"Franklin County, Vermont",50,age_sex,18-44,male,,8463,B01001,ACS 2020-2024 5-year
+county,50011,"Franklin County, Vermont",50,age_sex,45-64,male,,6962,B01001,ACS 2020-2024 5-year
+county,50011,"Franklin County, Vermont",50,age_sex,65+,male,,4253,B01001,ACS 2020-2024 5-year
+county,50011,"Franklin County, Vermont",50,age_sex,0-17,female,,5247,B01001,ACS 2020-2024 5-year
+county,50011,"Franklin County, Vermont",50,age_sex,18-44,female,,8585,B01001,ACS 2020-2024 5-year
+county,50011,"Franklin County, Vermont",50,age_sex,45-64,female,,6690,B01001,ACS 2020-2024 5-year
+county,50011,"Franklin County, Vermont",50,age_sex,65+,female,,4728,B01001,ACS 2020-2024 5-year
+county,50011,"Franklin County, Vermont",50,race_ethnicity,,,Non-Hispanic White,46534,B03002,ACS 2020-2024 5-year
+county,50011,"Franklin County, Vermont",50,race_ethnicity,,,Non-Hispanic Black,124,B03002,ACS 2020-2024 5-year
+county,50011,"Franklin County, Vermont",50,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,139,B03002,ACS 2020-2024 5-year
+county,50011,"Franklin County, Vermont",50,race_ethnicity,,,Non-Hispanic Asian,348,B03002,ACS 2020-2024 5-year
+county,50011,"Franklin County, Vermont",50,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,4,B03002,ACS 2020-2024 5-year
+county,50011,"Franklin County, Vermont",50,race_ethnicity,,,Non-Hispanic Some other race,201,B03002,ACS 2020-2024 5-year
+county,50011,"Franklin County, Vermont",50,race_ethnicity,,,Non-Hispanic Two or more races,2272,B03002,ACS 2020-2024 5-year
+county,50011,"Franklin County, Vermont",50,race_ethnicity,,,Hispanic or Latino,1016,B03002,ACS 2020-2024 5-year
+county,50013,"Grand Isle County, Vermont",50,total,,,,7450,B01001,ACS 2020-2024 5-year
+county,50013,"Grand Isle County, Vermont",50,age_sex,0-17,male,,741,B01001,ACS 2020-2024 5-year
+county,50013,"Grand Isle County, Vermont",50,age_sex,18-44,male,,1089,B01001,ACS 2020-2024 5-year
+county,50013,"Grand Isle County, Vermont",50,age_sex,45-64,male,,1173,B01001,ACS 2020-2024 5-year
+county,50013,"Grand Isle County, Vermont",50,age_sex,65+,male,,900,B01001,ACS 2020-2024 5-year
+county,50013,"Grand Isle County, Vermont",50,age_sex,0-17,female,,516,B01001,ACS 2020-2024 5-year
+county,50013,"Grand Isle County, Vermont",50,age_sex,18-44,female,,1048,B01001,ACS 2020-2024 5-year
+county,50013,"Grand Isle County, Vermont",50,age_sex,45-64,female,,1128,B01001,ACS 2020-2024 5-year
+county,50013,"Grand Isle County, Vermont",50,age_sex,65+,female,,855,B01001,ACS 2020-2024 5-year
+county,50013,"Grand Isle County, Vermont",50,race_ethnicity,,,Non-Hispanic White,6722,B03002,ACS 2020-2024 5-year
+county,50013,"Grand Isle County, Vermont",50,race_ethnicity,,,Non-Hispanic Black,26,B03002,ACS 2020-2024 5-year
+county,50013,"Grand Isle County, Vermont",50,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,100,B03002,ACS 2020-2024 5-year
+county,50013,"Grand Isle County, Vermont",50,race_ethnicity,,,Non-Hispanic Asian,24,B03002,ACS 2020-2024 5-year
+county,50013,"Grand Isle County, Vermont",50,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,0,B03002,ACS 2020-2024 5-year
+county,50013,"Grand Isle County, Vermont",50,race_ethnicity,,,Non-Hispanic Some other race,41,B03002,ACS 2020-2024 5-year
+county,50013,"Grand Isle County, Vermont",50,race_ethnicity,,,Non-Hispanic Two or more races,371,B03002,ACS 2020-2024 5-year
+county,50013,"Grand Isle County, Vermont",50,race_ethnicity,,,Hispanic or Latino,166,B03002,ACS 2020-2024 5-year
+county,50015,"Lamoille County, Vermont",50,total,,,,26148,B01001,ACS 2020-2024 5-year
+county,50015,"Lamoille County, Vermont",50,age_sex,0-17,male,,2632,B01001,ACS 2020-2024 5-year
+county,50015,"Lamoille County, Vermont",50,age_sex,18-44,male,,4505,B01001,ACS 2020-2024 5-year
+county,50015,"Lamoille County, Vermont",50,age_sex,45-64,male,,3577,B01001,ACS 2020-2024 5-year
+county,50015,"Lamoille County, Vermont",50,age_sex,65+,male,,2399,B01001,ACS 2020-2024 5-year
+county,50015,"Lamoille County, Vermont",50,age_sex,0-17,female,,2544,B01001,ACS 2020-2024 5-year
+county,50015,"Lamoille County, Vermont",50,age_sex,18-44,female,,4454,B01001,ACS 2020-2024 5-year
+county,50015,"Lamoille County, Vermont",50,age_sex,45-64,female,,3543,B01001,ACS 2020-2024 5-year
+county,50015,"Lamoille County, Vermont",50,age_sex,65+,female,,2494,B01001,ACS 2020-2024 5-year
+county,50015,"Lamoille County, Vermont",50,race_ethnicity,,,Non-Hispanic White,23949,B03002,ACS 2020-2024 5-year
+county,50015,"Lamoille County, Vermont",50,race_ethnicity,,,Non-Hispanic Black,233,B03002,ACS 2020-2024 5-year
+county,50015,"Lamoille County, Vermont",50,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,56,B03002,ACS 2020-2024 5-year
+county,50015,"Lamoille County, Vermont",50,race_ethnicity,,,Non-Hispanic Asian,223,B03002,ACS 2020-2024 5-year
+county,50015,"Lamoille County, Vermont",50,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,0,B03002,ACS 2020-2024 5-year
+county,50015,"Lamoille County, Vermont",50,race_ethnicity,,,Non-Hispanic Some other race,189,B03002,ACS 2020-2024 5-year
+county,50015,"Lamoille County, Vermont",50,race_ethnicity,,,Non-Hispanic Two or more races,837,B03002,ACS 2020-2024 5-year
+county,50015,"Lamoille County, Vermont",50,race_ethnicity,,,Hispanic or Latino,661,B03002,ACS 2020-2024 5-year
+county,50017,"Orange County, Vermont",50,total,,,,29761,B01001,ACS 2020-2024 5-year
+county,50017,"Orange County, Vermont",50,age_sex,0-17,male,,2676,B01001,ACS 2020-2024 5-year
+county,50017,"Orange County, Vermont",50,age_sex,18-44,male,,4648,B01001,ACS 2020-2024 5-year
+county,50017,"Orange County, Vermont",50,age_sex,45-64,male,,4170,B01001,ACS 2020-2024 5-year
+county,50017,"Orange County, Vermont",50,age_sex,65+,male,,3363,B01001,ACS 2020-2024 5-year
+county,50017,"Orange County, Vermont",50,age_sex,0-17,female,,2622,B01001,ACS 2020-2024 5-year
+county,50017,"Orange County, Vermont",50,age_sex,18-44,female,,4398,B01001,ACS 2020-2024 5-year
+county,50017,"Orange County, Vermont",50,age_sex,45-64,female,,4232,B01001,ACS 2020-2024 5-year
+county,50017,"Orange County, Vermont",50,age_sex,65+,female,,3652,B01001,ACS 2020-2024 5-year
+county,50017,"Orange County, Vermont",50,race_ethnicity,,,Non-Hispanic White,27606,B03002,ACS 2020-2024 5-year
+county,50017,"Orange County, Vermont",50,race_ethnicity,,,Non-Hispanic Black,101,B03002,ACS 2020-2024 5-year
+county,50017,"Orange County, Vermont",50,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,38,B03002,ACS 2020-2024 5-year
+county,50017,"Orange County, Vermont",50,race_ethnicity,,,Non-Hispanic Asian,170,B03002,ACS 2020-2024 5-year
+county,50017,"Orange County, Vermont",50,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,2,B03002,ACS 2020-2024 5-year
+county,50017,"Orange County, Vermont",50,race_ethnicity,,,Non-Hispanic Some other race,150,B03002,ACS 2020-2024 5-year
+county,50017,"Orange County, Vermont",50,race_ethnicity,,,Non-Hispanic Two or more races,1156,B03002,ACS 2020-2024 5-year
+county,50017,"Orange County, Vermont",50,race_ethnicity,,,Hispanic or Latino,538,B03002,ACS 2020-2024 5-year
+county,50019,"Orleans County, Vermont",50,total,,,,27606,B01001,ACS 2020-2024 5-year
+county,50019,"Orleans County, Vermont",50,age_sex,0-17,male,,2758,B01001,ACS 2020-2024 5-year
+county,50019,"Orleans County, Vermont",50,age_sex,18-44,male,,4330,B01001,ACS 2020-2024 5-year
+county,50019,"Orleans County, Vermont",50,age_sex,45-64,male,,3762,B01001,ACS 2020-2024 5-year
+county,50019,"Orleans County, Vermont",50,age_sex,65+,male,,3153,B01001,ACS 2020-2024 5-year
+county,50019,"Orleans County, Vermont",50,age_sex,0-17,female,,2588,B01001,ACS 2020-2024 5-year
+county,50019,"Orleans County, Vermont",50,age_sex,18-44,female,,3909,B01001,ACS 2020-2024 5-year
+county,50019,"Orleans County, Vermont",50,age_sex,45-64,female,,3654,B01001,ACS 2020-2024 5-year
+county,50019,"Orleans County, Vermont",50,age_sex,65+,female,,3452,B01001,ACS 2020-2024 5-year
+county,50019,"Orleans County, Vermont",50,race_ethnicity,,,Non-Hispanic White,25583,B03002,ACS 2020-2024 5-year
+county,50019,"Orleans County, Vermont",50,race_ethnicity,,,Non-Hispanic Black,255,B03002,ACS 2020-2024 5-year
+county,50019,"Orleans County, Vermont",50,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,110,B03002,ACS 2020-2024 5-year
+county,50019,"Orleans County, Vermont",50,race_ethnicity,,,Non-Hispanic Asian,177,B03002,ACS 2020-2024 5-year
+county,50019,"Orleans County, Vermont",50,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,0,B03002,ACS 2020-2024 5-year
+county,50019,"Orleans County, Vermont",50,race_ethnicity,,,Non-Hispanic Some other race,44,B03002,ACS 2020-2024 5-year
+county,50019,"Orleans County, Vermont",50,race_ethnicity,,,Non-Hispanic Two or more races,910,B03002,ACS 2020-2024 5-year
+county,50019,"Orleans County, Vermont",50,race_ethnicity,,,Hispanic or Latino,527,B03002,ACS 2020-2024 5-year
+county,50021,"Rutland County, Vermont",50,total,,,,60425,B01001,ACS 2020-2024 5-year
+county,50021,"Rutland County, Vermont",50,age_sex,0-17,male,,5398,B01001,ACS 2020-2024 5-year
+county,50021,"Rutland County, Vermont",50,age_sex,18-44,male,,9282,B01001,ACS 2020-2024 5-year
+county,50021,"Rutland County, Vermont",50,age_sex,45-64,male,,8454,B01001,ACS 2020-2024 5-year
+county,50021,"Rutland County, Vermont",50,age_sex,65+,male,,6985,B01001,ACS 2020-2024 5-year
+county,50021,"Rutland County, Vermont",50,age_sex,0-17,female,,5110,B01001,ACS 2020-2024 5-year
+county,50021,"Rutland County, Vermont",50,age_sex,18-44,female,,8710,B01001,ACS 2020-2024 5-year
+county,50021,"Rutland County, Vermont",50,age_sex,45-64,female,,8538,B01001,ACS 2020-2024 5-year
+county,50021,"Rutland County, Vermont",50,age_sex,65+,female,,7948,B01001,ACS 2020-2024 5-year
+county,50021,"Rutland County, Vermont",50,race_ethnicity,,,Non-Hispanic White,56009,B03002,ACS 2020-2024 5-year
+county,50021,"Rutland County, Vermont",50,race_ethnicity,,,Non-Hispanic Black,377,B03002,ACS 2020-2024 5-year
+county,50021,"Rutland County, Vermont",50,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,14,B03002,ACS 2020-2024 5-year
+county,50021,"Rutland County, Vermont",50,race_ethnicity,,,Non-Hispanic Asian,350,B03002,ACS 2020-2024 5-year
+county,50021,"Rutland County, Vermont",50,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,0,B03002,ACS 2020-2024 5-year
+county,50021,"Rutland County, Vermont",50,race_ethnicity,,,Non-Hispanic Some other race,56,B03002,ACS 2020-2024 5-year
+county,50021,"Rutland County, Vermont",50,race_ethnicity,,,Non-Hispanic Two or more races,2272,B03002,ACS 2020-2024 5-year
+county,50021,"Rutland County, Vermont",50,race_ethnicity,,,Hispanic or Latino,1347,B03002,ACS 2020-2024 5-year
+county,50023,"Washington County, Vermont",50,total,,,,60017,B01001,ACS 2020-2024 5-year
+county,50023,"Washington County, Vermont",50,age_sex,0-17,male,,5554,B01001,ACS 2020-2024 5-year
+county,50023,"Washington County, Vermont",50,age_sex,18-44,male,,10236,B01001,ACS 2020-2024 5-year
+county,50023,"Washington County, Vermont",50,age_sex,45-64,male,,8156,B01001,ACS 2020-2024 5-year
+county,50023,"Washington County, Vermont",50,age_sex,65+,male,,5958,B01001,ACS 2020-2024 5-year
+county,50023,"Washington County, Vermont",50,age_sex,0-17,female,,5230,B01001,ACS 2020-2024 5-year
+county,50023,"Washington County, Vermont",50,age_sex,18-44,female,,9595,B01001,ACS 2020-2024 5-year
+county,50023,"Washington County, Vermont",50,age_sex,45-64,female,,8281,B01001,ACS 2020-2024 5-year
+county,50023,"Washington County, Vermont",50,age_sex,65+,female,,7007,B01001,ACS 2020-2024 5-year
+county,50023,"Washington County, Vermont",50,race_ethnicity,,,Non-Hispanic White,54646,B03002,ACS 2020-2024 5-year
+county,50023,"Washington County, Vermont",50,race_ethnicity,,,Non-Hispanic Black,491,B03002,ACS 2020-2024 5-year
+county,50023,"Washington County, Vermont",50,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,9,B03002,ACS 2020-2024 5-year
+county,50023,"Washington County, Vermont",50,race_ethnicity,,,Non-Hispanic Asian,488,B03002,ACS 2020-2024 5-year
+county,50023,"Washington County, Vermont",50,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,0,B03002,ACS 2020-2024 5-year
+county,50023,"Washington County, Vermont",50,race_ethnicity,,,Non-Hispanic Some other race,368,B03002,ACS 2020-2024 5-year
+county,50023,"Washington County, Vermont",50,race_ethnicity,,,Non-Hispanic Two or more races,2351,B03002,ACS 2020-2024 5-year
+county,50023,"Washington County, Vermont",50,race_ethnicity,,,Hispanic or Latino,1664,B03002,ACS 2020-2024 5-year
+county,50025,"Windham County, Vermont",50,total,,,,45923,B01001,ACS 2020-2024 5-year
+county,50025,"Windham County, Vermont",50,age_sex,0-17,male,,4064,B01001,ACS 2020-2024 5-year
+county,50025,"Windham County, Vermont",50,age_sex,18-44,male,,7030,B01001,ACS 2020-2024 5-year
+county,50025,"Windham County, Vermont",50,age_sex,45-64,male,,6044,B01001,ACS 2020-2024 5-year
+county,50025,"Windham County, Vermont",50,age_sex,65+,male,,5631,B01001,ACS 2020-2024 5-year
+county,50025,"Windham County, Vermont",50,age_sex,0-17,female,,3665,B01001,ACS 2020-2024 5-year
+county,50025,"Windham County, Vermont",50,age_sex,18-44,female,,6926,B01001,ACS 2020-2024 5-year
+county,50025,"Windham County, Vermont",50,age_sex,45-64,female,,6447,B01001,ACS 2020-2024 5-year
+county,50025,"Windham County, Vermont",50,age_sex,65+,female,,6116,B01001,ACS 2020-2024 5-year
+county,50025,"Windham County, Vermont",50,race_ethnicity,,,Non-Hispanic White,41363,B03002,ACS 2020-2024 5-year
+county,50025,"Windham County, Vermont",50,race_ethnicity,,,Non-Hispanic Black,378,B03002,ACS 2020-2024 5-year
+county,50025,"Windham County, Vermont",50,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,12,B03002,ACS 2020-2024 5-year
+county,50025,"Windham County, Vermont",50,race_ethnicity,,,Non-Hispanic Asian,548,B03002,ACS 2020-2024 5-year
+county,50025,"Windham County, Vermont",50,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,0,B03002,ACS 2020-2024 5-year
+county,50025,"Windham County, Vermont",50,race_ethnicity,,,Non-Hispanic Some other race,218,B03002,ACS 2020-2024 5-year
+county,50025,"Windham County, Vermont",50,race_ethnicity,,,Non-Hispanic Two or more races,1981,B03002,ACS 2020-2024 5-year
+county,50025,"Windham County, Vermont",50,race_ethnicity,,,Hispanic or Latino,1423,B03002,ACS 2020-2024 5-year
+county,50027,"Windsor County, Vermont",50,total,,,,57990,B01001,ACS 2020-2024 5-year
+county,50027,"Windsor County, Vermont",50,age_sex,0-17,male,,5212,B01001,ACS 2020-2024 5-year
+county,50027,"Windsor County, Vermont",50,age_sex,18-44,male,,8654,B01001,ACS 2020-2024 5-year
+county,50027,"Windsor County, Vermont",50,age_sex,45-64,male,,7765,B01001,ACS 2020-2024 5-year
+county,50027,"Windsor County, Vermont",50,age_sex,65+,male,,6985,B01001,ACS 2020-2024 5-year
+county,50027,"Windsor County, Vermont",50,age_sex,0-17,female,,4974,B01001,ACS 2020-2024 5-year
+county,50027,"Windsor County, Vermont",50,age_sex,18-44,female,,8402,B01001,ACS 2020-2024 5-year
+county,50027,"Windsor County, Vermont",50,age_sex,45-64,female,,8188,B01001,ACS 2020-2024 5-year
+county,50027,"Windsor County, Vermont",50,age_sex,65+,female,,7810,B01001,ACS 2020-2024 5-year
+county,50027,"Windsor County, Vermont",50,race_ethnicity,,,Non-Hispanic White,53435,B03002,ACS 2020-2024 5-year
+county,50027,"Windsor County, Vermont",50,race_ethnicity,,,Non-Hispanic Black,264,B03002,ACS 2020-2024 5-year
+county,50027,"Windsor County, Vermont",50,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,44,B03002,ACS 2020-2024 5-year
+county,50027,"Windsor County, Vermont",50,race_ethnicity,,,Non-Hispanic Asian,592,B03002,ACS 2020-2024 5-year
+county,50027,"Windsor County, Vermont",50,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,0,B03002,ACS 2020-2024 5-year
+county,50027,"Windsor County, Vermont",50,race_ethnicity,,,Non-Hispanic Some other race,81,B03002,ACS 2020-2024 5-year
+county,50027,"Windsor County, Vermont",50,race_ethnicity,,,Non-Hispanic Two or more races,2247,B03002,ACS 2020-2024 5-year
+county,50027,"Windsor County, Vermont",50,race_ethnicity,,,Hispanic or Latino,1327,B03002,ACS 2020-2024 5-year
+zcta,02115,ZCTA5 02115,,total,,,,29705,B01001,ACS 2020-2024 5-year
+zcta,02115,ZCTA5 02115,,age_sex,0-17,male,,697,B01001,ACS 2020-2024 5-year
+zcta,02115,ZCTA5 02115,,age_sex,18-44,male,,9893,B01001,ACS 2020-2024 5-year
+zcta,02115,ZCTA5 02115,,age_sex,45-64,male,,1314,B01001,ACS 2020-2024 5-year
+zcta,02115,ZCTA5 02115,,age_sex,65+,male,,1323,B01001,ACS 2020-2024 5-year
+zcta,02115,ZCTA5 02115,,age_sex,0-17,female,,753,B01001,ACS 2020-2024 5-year
+zcta,02115,ZCTA5 02115,,age_sex,18-44,female,,12659,B01001,ACS 2020-2024 5-year
+zcta,02115,ZCTA5 02115,,age_sex,45-64,female,,1433,B01001,ACS 2020-2024 5-year
+zcta,02115,ZCTA5 02115,,age_sex,65+,female,,1633,B01001,ACS 2020-2024 5-year
+zcta,02115,ZCTA5 02115,,race_ethnicity,,,Non-Hispanic White,16132,B03002,ACS 2020-2024 5-year
+zcta,02115,ZCTA5 02115,,race_ethnicity,,,Non-Hispanic Black,1866,B03002,ACS 2020-2024 5-year
+zcta,02115,ZCTA5 02115,,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,6,B03002,ACS 2020-2024 5-year
+zcta,02115,ZCTA5 02115,,race_ethnicity,,,Non-Hispanic Asian,5582,B03002,ACS 2020-2024 5-year
+zcta,02115,ZCTA5 02115,,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,10,B03002,ACS 2020-2024 5-year
+zcta,02115,ZCTA5 02115,,race_ethnicity,,,Non-Hispanic Some other race,261,B03002,ACS 2020-2024 5-year
+zcta,02115,ZCTA5 02115,,race_ethnicity,,,Non-Hispanic Two or more races,1490,B03002,ACS 2020-2024 5-year
+zcta,02115,ZCTA5 02115,,race_ethnicity,,,Hispanic or Latino,4358,B03002,ACS 2020-2024 5-year
+zcta,02903,ZCTA5 02903,,total,,,,11836,B01001,ACS 2020-2024 5-year
+zcta,02903,ZCTA5 02903,,age_sex,0-17,male,,143,B01001,ACS 2020-2024 5-year
+zcta,02903,ZCTA5 02903,,age_sex,18-44,male,,2940,B01001,ACS 2020-2024 5-year
+zcta,02903,ZCTA5 02903,,age_sex,45-64,male,,1141,B01001,ACS 2020-2024 5-year
+zcta,02903,ZCTA5 02903,,age_sex,65+,male,,823,B01001,ACS 2020-2024 5-year
+zcta,02903,ZCTA5 02903,,age_sex,0-17,female,,174,B01001,ACS 2020-2024 5-year
+zcta,02903,ZCTA5 02903,,age_sex,18-44,female,,3864,B01001,ACS 2020-2024 5-year
+zcta,02903,ZCTA5 02903,,age_sex,45-64,female,,1240,B01001,ACS 2020-2024 5-year
+zcta,02903,ZCTA5 02903,,age_sex,65+,female,,1511,B01001,ACS 2020-2024 5-year
+zcta,02903,ZCTA5 02903,,race_ethnicity,,,Non-Hispanic White,7139,B03002,ACS 2020-2024 5-year
+zcta,02903,ZCTA5 02903,,race_ethnicity,,,Non-Hispanic Black,1086,B03002,ACS 2020-2024 5-year
+zcta,02903,ZCTA5 02903,,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,13,B03002,ACS 2020-2024 5-year
+zcta,02903,ZCTA5 02903,,race_ethnicity,,,Non-Hispanic Asian,1606,B03002,ACS 2020-2024 5-year
+zcta,02903,ZCTA5 02903,,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,1,B03002,ACS 2020-2024 5-year
+zcta,02903,ZCTA5 02903,,race_ethnicity,,,Non-Hispanic Some other race,38,B03002,ACS 2020-2024 5-year
+zcta,02903,ZCTA5 02903,,race_ethnicity,,,Non-Hispanic Two or more races,347,B03002,ACS 2020-2024 5-year
+zcta,02903,ZCTA5 02903,,race_ethnicity,,,Hispanic or Latino,1606,B03002,ACS 2020-2024 5-year
+zcta,03301,ZCTA5 03301,,total,,,,33995,B01001,ACS 2020-2024 5-year
+zcta,03301,ZCTA5 03301,,age_sex,0-17,male,,3117,B01001,ACS 2020-2024 5-year
+zcta,03301,ZCTA5 03301,,age_sex,18-44,male,,7316,B01001,ACS 2020-2024 5-year
+zcta,03301,ZCTA5 03301,,age_sex,45-64,male,,4430,B01001,ACS 2020-2024 5-year
+zcta,03301,ZCTA5 03301,,age_sex,65+,male,,2784,B01001,ACS 2020-2024 5-year
+zcta,03301,ZCTA5 03301,,age_sex,0-17,female,,2534,B01001,ACS 2020-2024 5-year
+zcta,03301,ZCTA5 03301,,age_sex,18-44,female,,5907,B01001,ACS 2020-2024 5-year
+zcta,03301,ZCTA5 03301,,age_sex,45-64,female,,4132,B01001,ACS 2020-2024 5-year
+zcta,03301,ZCTA5 03301,,age_sex,65+,female,,3775,B01001,ACS 2020-2024 5-year
+zcta,03301,ZCTA5 03301,,race_ethnicity,,,Non-Hispanic White,28607,B03002,ACS 2020-2024 5-year
+zcta,03301,ZCTA5 03301,,race_ethnicity,,,Non-Hispanic Black,1544,B03002,ACS 2020-2024 5-year
+zcta,03301,ZCTA5 03301,,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,57,B03002,ACS 2020-2024 5-year
+zcta,03301,ZCTA5 03301,,race_ethnicity,,,Non-Hispanic Asian,1036,B03002,ACS 2020-2024 5-year
+zcta,03301,ZCTA5 03301,,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,0,B03002,ACS 2020-2024 5-year
+zcta,03301,ZCTA5 03301,,race_ethnicity,,,Non-Hispanic Some other race,84,B03002,ACS 2020-2024 5-year
+zcta,03301,ZCTA5 03301,,race_ethnicity,,,Non-Hispanic Two or more races,1342,B03002,ACS 2020-2024 5-year
+zcta,03301,ZCTA5 03301,,race_ethnicity,,,Hispanic or Latino,1325,B03002,ACS 2020-2024 5-year
+zcta,05401,ZCTA5 05401,,total,,,,31662,B01001,ACS 2020-2024 5-year
+zcta,05401,ZCTA5 05401,,age_sex,0-17,male,,1374,B01001,ACS 2020-2024 5-year
+zcta,05401,ZCTA5 05401,,age_sex,18-44,male,,9941,B01001,ACS 2020-2024 5-year
+zcta,05401,ZCTA5 05401,,age_sex,45-64,male,,2332,B01001,ACS 2020-2024 5-year
+zcta,05401,ZCTA5 05401,,age_sex,65+,male,,1262,B01001,ACS 2020-2024 5-year
+zcta,05401,ZCTA5 05401,,age_sex,0-17,female,,1762,B01001,ACS 2020-2024 5-year
+zcta,05401,ZCTA5 05401,,age_sex,18-44,female,,11014,B01001,ACS 2020-2024 5-year
+zcta,05401,ZCTA5 05401,,age_sex,45-64,female,,1983,B01001,ACS 2020-2024 5-year
+zcta,05401,ZCTA5 05401,,age_sex,65+,female,,1994,B01001,ACS 2020-2024 5-year
+zcta,05401,ZCTA5 05401,,race_ethnicity,,,Non-Hispanic White,26686,B03002,ACS 2020-2024 5-year
+zcta,05401,ZCTA5 05401,,race_ethnicity,,,Non-Hispanic Black,936,B03002,ACS 2020-2024 5-year
+zcta,05401,ZCTA5 05401,,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,9,B03002,ACS 2020-2024 5-year
+zcta,05401,ZCTA5 05401,,race_ethnicity,,,Non-Hispanic Asian,1445,B03002,ACS 2020-2024 5-year
+zcta,05401,ZCTA5 05401,,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,0,B03002,ACS 2020-2024 5-year
+zcta,05401,ZCTA5 05401,,race_ethnicity,,,Non-Hispanic Some other race,75,B03002,ACS 2020-2024 5-year
+zcta,05401,ZCTA5 05401,,race_ethnicity,,,Non-Hispanic Two or more races,1575,B03002,ACS 2020-2024 5-year
+zcta,05401,ZCTA5 05401,,race_ethnicity,,,Hispanic or Latino,936,B03002,ACS 2020-2024 5-year
+zcta,19801,ZCTA5 19801,,total,,,,16327,B01001,ACS 2020-2024 5-year
+zcta,19801,ZCTA5 19801,,age_sex,0-17,male,,1411,B01001,ACS 2020-2024 5-year
+zcta,19801,ZCTA5 19801,,age_sex,18-44,male,,3650,B01001,ACS 2020-2024 5-year
+zcta,19801,ZCTA5 19801,,age_sex,45-64,male,,1625,B01001,ACS 2020-2024 5-year
+zcta,19801,ZCTA5 19801,,age_sex,65+,male,,792,B01001,ACS 2020-2024 5-year
+zcta,19801,ZCTA5 19801,,age_sex,0-17,female,,1794,B01001,ACS 2020-2024 5-year
+zcta,19801,ZCTA5 19801,,age_sex,18-44,female,,3708,B01001,ACS 2020-2024 5-year
+zcta,19801,ZCTA5 19801,,age_sex,45-64,female,,2520,B01001,ACS 2020-2024 5-year
+zcta,19801,ZCTA5 19801,,age_sex,65+,female,,827,B01001,ACS 2020-2024 5-year
+zcta,19801,ZCTA5 19801,,race_ethnicity,,,Non-Hispanic White,3077,B03002,ACS 2020-2024 5-year
+zcta,19801,ZCTA5 19801,,race_ethnicity,,,Non-Hispanic Black,9776,B03002,ACS 2020-2024 5-year
+zcta,19801,ZCTA5 19801,,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,23,B03002,ACS 2020-2024 5-year
+zcta,19801,ZCTA5 19801,,race_ethnicity,,,Non-Hispanic Asian,640,B03002,ACS 2020-2024 5-year
+zcta,19801,ZCTA5 19801,,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,7,B03002,ACS 2020-2024 5-year
+zcta,19801,ZCTA5 19801,,race_ethnicity,,,Non-Hispanic Some other race,48,B03002,ACS 2020-2024 5-year
+zcta,19801,ZCTA5 19801,,race_ethnicity,,,Non-Hispanic Two or more races,984,B03002,ACS 2020-2024 5-year
+zcta,19801,ZCTA5 19801,,race_ethnicity,,,Hispanic or Latino,1772,B03002,ACS 2020-2024 5-year
+zcta,96813,ZCTA5 96813,,total,,,,26766,B01001,ACS 2020-2024 5-year
+zcta,96813,ZCTA5 96813,,age_sex,0-17,male,,1871,B01001,ACS 2020-2024 5-year
+zcta,96813,ZCTA5 96813,,age_sex,18-44,male,,5158,B01001,ACS 2020-2024 5-year
+zcta,96813,ZCTA5 96813,,age_sex,45-64,male,,3932,B01001,ACS 2020-2024 5-year
+zcta,96813,ZCTA5 96813,,age_sex,65+,male,,2372,B01001,ACS 2020-2024 5-year
+zcta,96813,ZCTA5 96813,,age_sex,0-17,female,,1851,B01001,ACS 2020-2024 5-year
+zcta,96813,ZCTA5 96813,,age_sex,18-44,female,,4986,B01001,ACS 2020-2024 5-year
+zcta,96813,ZCTA5 96813,,age_sex,45-64,female,,3674,B01001,ACS 2020-2024 5-year
+zcta,96813,ZCTA5 96813,,age_sex,65+,female,,2922,B01001,ACS 2020-2024 5-year
+zcta,96813,ZCTA5 96813,,race_ethnicity,,,Non-Hispanic White,3893,B03002,ACS 2020-2024 5-year
+zcta,96813,ZCTA5 96813,,race_ethnicity,,,Non-Hispanic Black,782,B03002,ACS 2020-2024 5-year
+zcta,96813,ZCTA5 96813,,race_ethnicity,,,Non-Hispanic American Indian and Alaska Native,18,B03002,ACS 2020-2024 5-year
+zcta,96813,ZCTA5 96813,,race_ethnicity,,,Non-Hispanic Asian,12701,B03002,ACS 2020-2024 5-year
+zcta,96813,ZCTA5 96813,,race_ethnicity,,,Non-Hispanic Native Hawaiian and Other Pacific Islander,1907,B03002,ACS 2020-2024 5-year
+zcta,96813,ZCTA5 96813,,race_ethnicity,,,Non-Hispanic Some other race,87,B03002,ACS 2020-2024 5-year
+zcta,96813,ZCTA5 96813,,race_ethnicity,,,Non-Hispanic Two or more races,5421,B03002,ACS 2020-2024 5-year
+zcta,96813,ZCTA5 96813,,race_ethnicity,,,Hispanic or Latino,1957,B03002,ACS 2020-2024 5-year
