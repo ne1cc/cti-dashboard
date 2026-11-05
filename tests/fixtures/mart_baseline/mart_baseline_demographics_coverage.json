@@ -1,0 +1,5 @@
+{"columns": ["indication_profile_id", "condition_group", "completion_year", "trials_with_results_count", "reports_sex_count", "reports_age_count", "reports_race_count", "reports_ethnicity_count", "ambiguous_combined_trials_count", "reports_sex_share", "reports_age_share", "reports_race_share", "reports_ethnicity_share", "ambiguous_combined_share"],
+"rows": [
+["adrd", "non_dementia_other", 2025, 1, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0],
+["oncology_nsclc", "nsclc_squamous", 2025, 1, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0]
+]}

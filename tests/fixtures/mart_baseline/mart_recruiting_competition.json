@@ -1,0 +1,13 @@
+{"columns": ["indication_profile_id", "recruiting_trial_count", "competition_signal_band", "snapshot_date", "condition_group", "state_normalized", "phase_normalized", "listed_site_count", "entered_recruiting_count", "observed_history_days", "newly_registered_90d", "new_recruiting_30d", "new_recruiting_90d", "recruiting_count_90d_baseline", "recruiting_growth_90d", "sponsor_count", "top_sponsor_share", "sponsor_hhi", "density_percentile"],
+"rows": [
+["adrd", 1, "low", "2026-09-01", "alzheimers_disease", "CA", "PHASE3", 1, 0, 0, 0, null, null, 1, null, 1, 1.0, null, 0.0],
+["adrd", 1, "low", "2026-09-01", "alzheimers_disease", "NC", "PHASE3", 1, 0, 0, 0, null, null, 1, null, 1, 1.0, null, 0.0],
+["adrd", 1, "low", "2026-09-01", "alzheimers_disease", "NY", "EARLY_PHASE1", 1, 0, 0, 0, null, null, 1, null, 1, 1.0, null, 0.0],
+["adrd", 1, "low", "2026-09-01", "frontotemporal_dementia", "NY", "EARLY_PHASE1", 1, 0, 0, 0, null, null, 1, null, 1, 1.0, null, 0.0],
+["adrd", 1, "low", "2026-09-01", "mild_cognitive_impairment", "CA", "NOT_APPLICABLE", 1, 0, 0, 0, null, null, 1, null, 1, 1.0, null, 0.0],
+["adrd", 1, "low", "2026-09-01", "non_dementia_other", "CA", "NOT_APPLICABLE", 1, 0, 0, 0, null, null, 1, null, 1, 1.0, null, 0.0],
+["oncology_nsclc", 1, "low", "2026-09-01", "nsclc_metastatic_advanced", "NY", "EARLY_PHASE1", 1, 0, 0, 0, null, null, 1, null, 1, 1.0, null, 0.0],
+["oncology_nsclc", 1, "low", "2026-09-01", "nsclc_unspecified", "CA", "PHASE3", 1, 0, 0, 0, null, null, 1, null, 1, 1.0, null, 0.0],
+["oncology_nsclc", 1, "low", "2026-09-01", "nsclc_unspecified", "NC", "PHASE3", 1, 0, 0, 0, null, null, 1, null, 1, 1.0, null, 0.0],
+["oncology_nsclc", 1, "low", "2026-09-01", "other_thoracic_oncology", "CA", "NOT_APPLICABLE", 1, 0, 0, 0, null, null, 1, null, 1, 1.0, null, 0.0]
+]}

@@ -1,0 +1,4 @@
+{"columns": ["event_id", "indication_profile_id", "nct_id", "event_type", "field_name", "before_value", "after_value", "before_value_type", "after_value_type", "before_ingestion_run_id", "after_ingestion_run_id", "before_observed_at_utc", "after_observed_at_utc", "registry_url"],
+"rows": [
+
+]}

@@ -1,0 +1,21 @@
+{"columns": ["geography_key", "indication_profile_id", "state_code", "geo_level", "country", "county_fips", "metro_area", "trial_count", "listed_site_count"],
+"rows": [
+["10bc3d33f3f4e284c4d3a3ed9006d3b1", "adrd", "IL", "state", "United States", null, null, 1, 1],
+["1392303d6e5d866a360794e60e9d1770", "oncology_nsclc", "CA", "state", "United States", null, null, 4, 4],
+["25a95322dfedf18bae8e37ea863b49d0", "oncology_nsclc", "MA", "state", "United States", null, null, 1, 1],
+["3250e8aa2fa35c9ac71f74c7543fc61c", "adrd", "TX", "state", "United States", null, null, 1, 1],
+["41e78e161f1a031203382c3266af4c39", "oncology_nsclc", "MD", "state", "United States", null, null, 1, 1],
+["44914b0b5e8dadf7b40431119d0dc4b6", "adrd", "CA", "state", "United States", null, null, 4, 4],
+["5647b5154f859cfad058104230020afc", "oncology_nsclc", "IL", "state", "United States", null, null, 1, 1],
+["6f8cf4d38cf876742141f24439b0c184", "adrd", "FL", "state", "United States", null, null, 1, 1],
+["789bb0caeebde61921f79ca5bbb2a9b2", "adrd", "MD", "state", "United States", null, null, 1, 1],
+["9e088a50476f284586e293eade8dcf1d", "adrd", "MA", "state", "United States", null, null, 1, 1],
+["ab20a575f923d41136c93e822a55bbfe", "adrd", "NC", "state", "United States", null, null, 2, 2],
+["bf99b4991f7819178b98adf90c8fadbc", "adrd", "WA", "state", "United States", null, null, 1, 1],
+["c16bc6e6f4b85fd191ab1437fc16a601", "oncology_nsclc", "WA", "state", "United States", null, null, 1, 1],
+["d804469db59d5f1ca37c94e10e14a574", "oncology_nsclc", "NC", "state", "United States", null, null, 2, 2],
+["db90b9185388e6b8c6ca099bdc7cc88e", "oncology_nsclc", "TX", "state", "United States", null, null, 1, 1],
+["e4d2bcdea391d5398006f59321f50a61", "oncology_nsclc", "NY", "state", "United States", null, null, 2, 2],
+["eabbcd18ee35871784ba1bf3a94a8b70", "oncology_nsclc", "FL", "state", "United States", null, null, 1, 1],
+["f6e8495fce5e9c5440d70d64a80d6d25", "adrd", "NY", "state", "United States", null, null, 2, 2]
+]}
