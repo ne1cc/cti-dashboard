@@ -206,6 +206,8 @@ exposed per arm through the Read API `arms` field, sourced from
 | mart_recruiting_competition | snapshot × segment (RECRUITING) | recruiting count, 30/90-day windows, HHI, `competition_signal_band` |
 | mart_site_overlap | snapshot × facility | multi-trial facilities, phase_mix |
 | mart_condition_geography_trends | month × condition_group × state | 3-month rolling baseline |
+| dim_population | geography (state, county, ZCTA) × dimension × age band/sex/race-ethnicity | ACS 2020-2024 5-year counts with `table_id` and `vintage` |
+| mart_condition_state_rates | profile × MeSH node × state | recruiting trials per 100k residents and, where a burden source exists, per 1,000 estimated cases |
 | mart_data_reliability | ingestion run | reconciliation + usability shares |
 | mart_feasibility_priority_queue | segment @ latest snapshot | segment-level recruiting trial counts, distinct sponsors, sponsor HHI, site overlap, and deterministic interpretation note |
 

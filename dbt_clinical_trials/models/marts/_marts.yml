@@ -1313,3 +1313,145 @@ models:
         data_type: DOUBLE
       - name: ambiguous_combined_share
         data_type: DOUBLE
+
+  - name: dim_population
+    description: >
+      Census ACS 2020-2024 5-year population denominators (Issue #71). Grain:
+      geography (state, county or ZCTA) x dimension x age band x sex x
+      race/ethnicity. Each of the three dimensions (total, age_sex,
+      race_ethnicity) sums to the geography's total, so pick one and never add
+      across dimensions. Counties and ZCTAs are a pinned subset: absent means
+      "not loaded", not zero. ACS estimates carry sampling error that is not
+      stored here.
+    contract:
+      enforced: true
+    columns:
+      - name: population_key
+        data_type: VARCHAR
+        tests: [not_null, unique]
+      - name: geo_level
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: geo_id
+        data_type: VARCHAR
+        description: State FIPS, county FIPS or ZCTA, as text.
+        tests: [not_null]
+      - name: geo_name
+        data_type: VARCHAR
+      - name: state_fips
+        data_type: VARCHAR
+        description: Null for ZCTAs, which can cross state lines.
+      - name: state_code
+        data_type: VARCHAR
+        description: Two-letter postal code for state and county rows; null for ZCTAs.
+      - name: dimension
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: age_band
+        data_type: VARCHAR
+        description: 0-17, 18-44, 45-64 or 65+ (age_sex rows only).
+      - name: sex
+        data_type: VARCHAR
+        description: male or female (age_sex rows only).
+      - name: race_ethnicity
+        data_type: VARCHAR
+        description: >
+          Hispanic or Latino (any race) or a non-Hispanic race group
+          (race_ethnicity rows only).
+      - name: population
+        data_type: BIGINT
+        tests: [not_null]
+      - name: table_id
+        data_type: VARCHAR
+        description: ACS table the count came from (B01001 or B03002).
+        tests: [not_null]
+      - name: vintage
+        data_type: VARCHAR
+        description: ACS release, ACS 2020-2024 5-year.
+        tests: [not_null]
+      - name: source_name
+        data_type: VARCHAR
+      - name: source_url
+        data_type: VARCHAR
+
+  - name: mart_condition_state_rates
+    description: >
+      Recruiting trials per 100,000 residents and, where a burden source exists,
+      per 1,000 estimated cases (Issue #71). Grain: profile x MeSH condition node
+      x state, dense (zero-trial states included). The per-100k rate is
+      population-adjusted access only; a rate per estimated case appears only
+      when denominator_available is true. Everywhere else denominator_label reads
+      "no burden denominator available" and no raw count stands in for need.
+      Every chart or table built on this mart must show denominator_label or the
+      population_source in its title or caption.
+    contract:
+      enforced: true
+    columns:
+      - name: rate_key
+        data_type: VARCHAR
+        tests: [not_null, unique]
+      - name: indication_profile_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: node_id
+        data_type: VARCHAR
+        description: MeSH descriptor id (e.g. D002289).
+        tests: [not_null]
+      - name: condition_label
+        data_type: VARCHAR
+      - name: state_code
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: recruiting_trial_count
+        data_type: BIGINT
+        description: Distinct trials currently RECRUITING with a listed site in the state.
+      - name: population
+        data_type: BIGINT
+        description: ACS 5-year resident population of the state.
+      - name: population_source
+        data_type: VARCHAR
+        description: Population denominator source, vintage and table, ready for a caption.
+      - name: population_vintage
+        data_type: VARCHAR
+      - name: recruiting_trials_per_100k
+        data_type: DOUBLE
+        description: 100000 x recruiting_trial_count / population. Access, not need.
+      - name: burden_source_id
+        data_type: VARCHAR
+        description: Null when the node is not in condition_burden_map.
+      - name: burden_source_name
+        data_type: VARCHAR
+      - name: burden_measure
+        data_type: VARCHAR
+      - name: burden_vintage
+        data_type: VARCHAR
+      - name: burden_unit
+        data_type: VARCHAR
+      - name: denominator_available
+        data_type: BOOLEAN
+        description: >
+          True only when the map flags the source as measuring this condition and
+          the source has a positive estimate for the state.
+      - name: burden_estimated_cases
+        data_type: DOUBLE
+        description: Null unless the burden denominator is flagged available.
+      - name: burden_county_count
+        data_type: BIGINT
+        description: Counties the source lists for the state (1 for state-level sources).
+      - name: burden_county_estimate_count
+        data_type: BIGINT
+        description: >
+          Counties with a published estimate; lower than burden_county_count means
+          CDC suppressed some counties and the case total is a lower bound.
+      - name: recruiting_trials_per_1k_est_cases
+        data_type: DOUBLE
+        description: Null unless denominator_available.
+      - name: denominator_label
+        data_type: VARCHAR
+        description: >
+          Caption text naming the burden denominator, or "no burden denominator
+          available".
+        tests: [not_null]
+      - name: denominator_note
+        data_type: VARCHAR
+        description: Why no burden denominator applies (unmapped node, proxy-only source, or no state estimate).

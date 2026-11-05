@@ -107,6 +107,22 @@ equals the snapshot month — registrations, not transitions.
 
 Population normalization controls for state size so that large states (CA, TX, FL, NY) do not dominate maps solely due to resident count. **Interpretation guardrail:** neither raw listing counts nor population-adjusted rates measure clinical need, disease prevalence, or patient access. Unmatched jurisdictions (e.g. Guam, Virgin Islands) retain raw counts but carry null per-100k rates.
 
+## Condition rates (`mart_condition_state_rates`)
+
+Grain: profile × MeSH condition node × state, dense (states with no recruiting trial appear with 0). Sources and limits per condition are in `docs/burden_sources.md`.
+
+| Metric | Definition |
+|---|---|
+| recruiting_trial_count | Distinct trials with status RECRUITING and a listed site in the state |
+| population | ACS 2020-2024 5-year state total (`dim_population`, dimension `total`, table B01001) |
+| recruiting_trials_per_100k | `100000 * recruiting_trial_count / population` (4 decimals). Access relative to population size, not need |
+| burden_estimated_cases | Estimated cases from the condition's burden source; null when `denominator_available` is false |
+| recruiting_trials_per_1k_est_cases | `1000 * recruiting_trial_count / burden_estimated_cases` (4 decimals); null unless `denominator_available` |
+| denominator_available | True only if the source measures the condition itself and has a positive state estimate |
+| denominator_label | Caption text naming the burden source and vintage, or `no burden denominator available` |
+
+Every chart or table on this mart states its denominator in the title or caption (`dashboard/components/denominators.py`). A rate per estimated case is never computed from a proxy that does not count the condition (for example self-reported cognitive disability for Alzheimer disease).
+
 ## Reliability metrics (`mart_data_reliability`)
 | Metric | Definition |
 |---|---|
