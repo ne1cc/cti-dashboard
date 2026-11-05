@@ -601,25 +601,33 @@ models:
         data_type: HUGEINT
         description: >
           Sum of entered_recruiting transitions observed at snapshots inside
-          the trailing 30-day window; null unless observed_history_days >= 30
-          and the latest gap between snapshots is at most 30 days. Null means
-          not enough history, not zero transitions.
+          the trailing 30-day window; null unless observed_history_days >= 30,
+          the earliest in-window snapshot is within seven days of the boundary,
+          each entrant predecessor is within the window, and the latest gap
+          between snapshots is at most 30 days. Null means not enough history,
+          not zero transitions.
       - name: new_recruiting_90d
         data_type: HUGEINT
         description: >
           Sum of entered_recruiting transitions observed at snapshots inside
-          the trailing 90-day window; null unless observed_history_days >= 90
-          and the latest gap between snapshots is at most 90 days. Null means
-          not enough history, not zero transitions.
+          the trailing 90-day window; null unless observed_history_days >= 90,
+          the earliest in-window snapshot is within seven days of the boundary,
+          each entrant predecessor is within the window, and the latest gap
+          between snapshots is at most 90 days. Null means not enough history,
+          not zero transitions.
       - name: recruiting_count_90d_baseline
         data_type: BIGINT
         description: Earliest recruiting count among snapshots inside the trailing 90-day window.
       - name: recruiting_growth_90d
         data_type: DOUBLE
         description: >
-          (recruiting count − 90d baseline) / baseline; null unless the 90-day
-          window is covered (same guards as new_recruiting_90d, which
-          guarantees the baseline is an earlier snapshot) or the baseline is 0.
+          (recruiting count − 90d baseline) / baseline, where the baseline is
+          captured at the earliest in-window snapshot (spanning 84–90 days, or
+          84 days on a weekly cadence); null unless the 90-day window is
+          covered, the segment was observed at that earliest in-window snapshot,
+          the baseline predates counted transitions (no transitions at the
+          baseline snapshot itself, preventing manufactured 0.0), and the
+          baseline count is nonzero.
       - name: sponsor_count
         data_type: BIGINT
       - name: top_sponsor_share

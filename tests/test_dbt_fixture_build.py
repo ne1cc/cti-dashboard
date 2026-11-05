@@ -18,7 +18,7 @@ import os
 import re
 import sys
 from dataclasses import replace
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import duckdb
@@ -1762,7 +1762,8 @@ def test_monthly_growth_guard_pins_three_calendar_months_boundary(
     """
     from tests.fixture_warehouse import build_fixture_warehouse
 
-    # Negative side: 84 days (sub-3-calendar-month span)
+    # Negative side: 12-27 is 1 day short of 3 calendar months from 09-28
+    # (12-27 - 3m = 09-27 < 09-28)
     root_84d = tmp_path_factory.mktemp("span_84d_neg")
     runs_84d = [
         replace(
@@ -1777,8 +1778,8 @@ def test_monthly_growth_guard_pins_three_calendar_months_boundary(
         ),
         replace(
             DIVERGENT_ADRD_RUN2,
-            run_id="20261221T100000Z_s3",
-            started_at=datetime(2026, 12, 21, 10, tzinfo=UTC),
+            run_id="20261227T100000Z_s3",
+            started_at=datetime(2026, 12, 27, 10, tzinfo=UTC),
         ),
     ]
     build_fixture_warehouse(root_84d, runs=runs_84d)
@@ -1970,7 +1971,7 @@ def test_cadence_tolerance_boundary_conditions(tmp_path_factory: pytest.TempPath
         " from main_marts.mart_recruiting_competition"
         " where snapshot_date = '2026-12-08'",
     )
-    assert rows_90d_neg == [(0, 0)], "90d window with 7-day predecessor gap must emit null"
+    assert rows_90d_neg == [(7, 7)], "Only segments with uncertain entrant timing should be unknown"
 
     # 90-day window positive side: predecessor is 09-08 (1 day before 09-09 <= 1-day tolerance)
     root_90d_pos = tmp_path_factory.mktemp("tolerance_90d_pos")
@@ -2010,8 +2011,7 @@ def test_competition_growth_null_when_entrant_at_baseline(
 
     Root 09-08, 09-15, 12-08 with study NCT00000077 added as NOT_YET_RECRUITING on 09-08,
     flipping to RECRUITING on 09-15 (the baseline snapshot).
-    On 12-08, new_recruiting_90d counts the entrant (1), but recruiting_growth_90d
-    must be NULL because the entrant is in the baseline count.
+    On 12-08 the entrant interval crosses the window boundary, so both values are unknown.
     """
     from tests.fixture_warehouse import AddedStudy, build_fixture_warehouse
 
@@ -2057,7 +2057,7 @@ def test_competition_growth_null_when_entrant_at_baseline(
     )
     assert len(me_rows) == 1
     new_rec, growth = me_rows[0]
-    assert new_rec == 1, f"Expected 1 new_recruiting_90d from baseline transition, got {new_rec}"
+    assert new_rec is None, "A transition crossing the window boundary has unknown timing"
     assert growth is None, (
         f"Expected null recruiting_growth_90d when entrant is at baseline, got {growth}"
     )
@@ -2186,3 +2186,174 @@ def test_legacy_silver_without_bronze_builds_and_keeps_placebo_unknown(
         where indication_profile_id = 'oncology_nsclc'
         """,
     ) == [(False,)]
+
+
+def test_weekly_history_distinguishes_known_zero_and_uncertain_entrant(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    """A missing trial observation must not hide known zeros in other segments."""
+    from tests.fixture_warehouse import AddedStudy, build_fixture_warehouse
+
+    start = datetime(2026, 8, 31, 10, tzinfo=UTC)
+    study = AddedStudy(
+        nct_id="NCT00000099",
+        clone_of="NCT00000001",
+        overall_status="NOT_YET_RECRUITING",
+        phase="PHASE3",
+        condition="Alzheimer Disease",
+        sponsor="NeuroPharm Inc",
+        location=("Maine Medical Center", "Portland", "Maine"),
+    )
+    observed_study = replace(
+        study, nct_id="NCT00000098", location=("Hospital", "Boston", "Massachusetts")
+    )
+    runs = []
+    for i in range(17):
+        day = start + timedelta(days=7 * i)
+        observed = (
+            replace(observed_study, overall_status="RECRUITING") if i == 16 else observed_study
+        )
+        uncertain = (
+            (study,)
+            if i == 0
+            else ((replace(study, overall_status="RECRUITING"),) if i == 16 else ())
+        )
+        added = (observed, *uncertain)
+        runs.append(
+            replace(
+                _base_adrd_run(),
+                run_id=day.strftime("%Y%m%dT%H%M%SZ") + f"_w{i}",
+                started_at=day,
+                added=added,
+            )
+        )
+    root = tmp_path_factory.mktemp("weekly_uncertain_entrant")
+    build_fixture_warehouse(root, runs=runs)
+    rows = _rows(
+        root,
+        "select state_normalized, new_recruiting_30d, new_recruiting_90d, recruiting_growth_90d"
+        " from main_marts.mart_recruiting_competition where snapshot_date = '2026-12-21'",
+    )
+    assert any(
+        state == "ME" and days30 is None and days90 is None and growth is None
+        for state, days30, days90, growth in rows
+    )
+    assert any(
+        state != "ME" and days30 == 0 and days90 == 0 and growth == 0.0
+        for state, days30, days90, growth in rows
+    )
+    assert any(state == "MA" and days30 == 1 and days90 == 1 for state, days30, days90, _ in rows)
+
+
+@pytest.mark.parametrize("window", [30, 90])
+def test_entrant_predecessor_exact_boundary(
+    tmp_path_factory: pytest.TempPathFactory, window: int
+) -> None:
+    """Count entrants with a boundary observation, but not those last seen one day earlier."""
+    from tests.fixture_warehouse import AddedStudy, build_fixture_warehouse
+
+    end = datetime(2026, 12, 8, 10, tzinfo=UTC)
+    boundary = end - timedelta(days=window)
+    uncertain = AddedStudy(
+        nct_id="NCT00000097",
+        clone_of="NCT00000001",
+        overall_status="NOT_YET_RECRUITING",
+        phase="PHASE3",
+        condition="Alzheimer Disease",
+        sponsor="NeuroPharm Inc",
+        location=("Maine Medical Center", "Portland", "Maine"),
+    )
+    known = replace(uncertain, nct_id="NCT00000098", location=("Hospital", "Burlington", "Vermont"))
+    days_and_studies = [
+        (boundary - timedelta(days=1), (uncertain, known)),
+        (boundary, (known,)),
+        (
+            end,
+            (
+                replace(uncertain, overall_status="RECRUITING"),
+                replace(known, overall_status="RECRUITING"),
+            ),
+        ),
+    ]
+    runs = [
+        replace(
+            _base_adrd_run(),
+            run_id=day.strftime("%Y%m%dT%H%M%SZ") + f"_e{i}",
+            started_at=day,
+            added=studies,
+        )
+        for i, (day, studies) in enumerate(days_and_studies)
+    ]
+    root = tmp_path_factory.mktemp(f"entrant_boundary_{window}")
+    build_fixture_warehouse(root, runs=runs)
+    rows = _rows(
+        root,
+        f"select state_normalized, new_recruiting_{window}d"
+        " from main_marts.mart_recruiting_competition"
+        " where snapshot_date = '2026-12-08' and state_normalized in ('ME', 'VT')"
+        " and phase_normalized = 'PHASE3' order by state_normalized",
+    )
+    assert rows == [("ME", None), ("VT", 1)]
+
+
+def test_trends_growth_segment_grain_absent_on_last_baseline_snapshot(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    """Segment-grain regression test: a segment absent from the baseline month's
+    last snapshot is a clean baseline if its own latest baseline snapshot satisfies
+    baseline_snapshot_date <= latest_snapshot_date - interval 3 month.
+
+    Root: 08-01, 09-01, 09-30, 12-01.
+    Maine trial is present on 08-01 and 09-01, absent on 09-30, present on 12-01.
+    On 12-01, Maine segment baseline snapshot is 09-01 (12-01 - 3m = 09-01 <= 09-01).
+    ME emits recruiting_growth_3m = 0.0, other segments have baseline 09-30 (62 days)
+    and emit null. dbt build and assert_trends_growth_needs_full_window pass.
+    """
+    from tests.fixture_warehouse import AddedStudy, build_fixture_warehouse
+
+    me_study = AddedStudy(
+        nct_id="NCT00000099",
+        clone_of="NCT00000001",
+        overall_status="RECRUITING",
+        phase="PHASE3",
+        condition="Alzheimer Disease",
+        sponsor="NeuroPharm Inc",
+        location=("Maine Medical Center", "Portland", "Maine"),
+    )
+    runs = [
+        replace(
+            _base_adrd_run(),
+            run_id="20260801T100000Z_sg1",
+            started_at=datetime(2026, 8, 1, 10, tzinfo=UTC),
+            added=(me_study,),
+        ),
+        replace(
+            _base_adrd_run(),
+            run_id="20260901T100000Z_sg2",
+            started_at=datetime(2026, 9, 1, 10, tzinfo=UTC),
+            added=(me_study,),
+        ),
+        replace(
+            _base_adrd_run(),
+            run_id="20260930T100000Z_sg3",
+            started_at=datetime(2026, 9, 30, 10, tzinfo=UTC),
+        ),
+        replace(
+            _base_adrd_run(),
+            run_id="20261201T100000Z_sg4",
+            started_at=datetime(2026, 12, 1, 10, tzinfo=UTC),
+            added=(me_study,),
+        ),
+    ]
+    root = tmp_path_factory.mktemp("trends_segment_grain_absent_last_baseline")
+    build_fixture_warehouse(root, runs=runs)
+
+    rows = _rows(
+        root,
+        "select state_normalized, recruiting_growth_3m"
+        " from main_marts.mart_condition_geography_trends"
+        " where activity_month = '2026-12-01' and condition_group = 'alzheimers_disease'"
+        " and state_normalized in ('ME', 'NC')"
+        " order by state_normalized",
+    )
+    assert rows == [("ME", 0.0), ("NC", None)]

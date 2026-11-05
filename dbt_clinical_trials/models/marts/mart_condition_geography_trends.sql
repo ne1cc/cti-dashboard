@@ -9,7 +9,7 @@
 -- single-month window an unguarded (x - x) / x would read "flat" for a quantity
 -- that is unknown. Null means "not enough history"; zero is reserved for a
 -- covered window with no change. The 3-month mean is a different case: a one-point
--- so recruiting_trial_count_3m_avg keeps its value. observed_history_days
+-- mean is honest, so recruiting_trial_count_3m_avg keeps its value. observed_history_days
 -- is the profile's retained day span and travels with the growth figure.
 -- newly_registered_in_month counts registry first-post months: a
 -- registration count, not a recruiting transition. The rolling baseline is
