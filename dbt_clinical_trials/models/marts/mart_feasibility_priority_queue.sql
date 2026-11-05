@@ -137,6 +137,7 @@ select
     latest_snapshot_date,
     indication_profile_id,
     condition_group,
+    {{ generate_surrogate_key(["'group:' || condition_group"]) }} as registry_condition_key,
     state_normalized,
     phase_normalized,
     recruiting_trial_count,

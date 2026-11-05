@@ -17,6 +17,7 @@ current_mesh as (
 
 select
     {{ generate_surrogate_key(['c.nct_id', 'c.indication_profile_id']) }} as trial_key,
+    {{ generate_surrogate_key(['c.nct_id']) }} as registry_trial_key,
     c.nct_id,
     c.indication_profile_id,
     'https://clinicaltrials.gov/study/' || c.nct_id as registry_url,

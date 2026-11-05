@@ -1,6 +1,7 @@
 -- Recorded rows, including duplicate facility text; never inferred unique sites.
 select
     {{ generate_surrogate_key(['l.indication_profile_id', 'l.snapshot_id', 'l.nct_id', 'l.location_ordinal']) }} as location_audit_key,
+    {{ generate_surrogate_key(['l.nct_id']) }} as registry_trial_key,
     s.study_audit_key,
     l.indication_profile_id, l.snapshot_id, l.ingestion_run_id, l.nct_id,
     l.location_ordinal, l.retrieved_at_utc, l.raw_page_reference, l.raw_study_ordinal,

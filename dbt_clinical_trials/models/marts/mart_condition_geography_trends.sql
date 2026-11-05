@@ -98,6 +98,7 @@ select
     w.indication_profile_id,
     w.activity_month,
     w.condition_group,
+    {{ generate_surrogate_key(["'group:' || w.condition_group"]) }} as registry_condition_key,
     w.state_normalized,
     w.trial_count,
     w.recruiting_trial_count,

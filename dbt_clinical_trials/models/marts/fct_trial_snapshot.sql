@@ -37,6 +37,7 @@ select
         'h.nct_id', 'h.indication_profile_id', 'h.snapshot_date',
     ]) }} as snapshot_key,
     {{ generate_surrogate_key(['h.nct_id', 'h.indication_profile_id']) }} as trial_key,
+    {{ generate_surrogate_key(['h.nct_id']) }} as registry_trial_key,
     h.nct_id,
     h.indication_profile_id,
     h.ingestion_run_id,

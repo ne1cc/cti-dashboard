@@ -12,6 +12,7 @@ select distinct
     ]) }} as trial_sponsor_key,
     {{ generate_surrogate_key(['s.nct_id', 's.indication_profile_id']) }}
         as trial_key,
+    {{ generate_surrogate_key(['s.nct_id']) }} as registry_trial_key,
     -- sponsor_key hashes the same two inputs dim_sponsor does, because
     -- dim_sponsor's rows are per profile: its trial_count and
     -- lead_sponsor_trial_count describe one profile's listings, so a key built
