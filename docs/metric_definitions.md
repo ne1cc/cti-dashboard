@@ -107,6 +107,30 @@ equals the snapshot month — registrations, not transitions.
 
 Population normalization controls for state size so that large states (CA, TX, FL, NY) do not dominate maps solely due to resident count. **Interpretation guardrail:** neither raw listing counts nor population-adjusted rates measure clinical need, disease prevalence, or patient access. Unmatched jurisdictions (e.g. Guam, Virgin Islands) retain raw counts but carry null per-100k rates.
 
+## Population access and burden rates (`mart_condition_access_rates`, Issue #71)
+Grain: profile × MeSH node × state. `recruiting_trial_count` is the number of
+currently recruiting trials with at least one usable U.S. site in the state, in
+each trial's current record; a multi-state trial counts once per state, and
+states with no listing for the condition are absent.
+
+- `recruiting_trials_per_100k` = 100,000 × count ÷ ACS total population
+  (`dim_population`, table B01001, ACS 2020-2024 5-year). Always present when
+  the state has a population.
+- `recruiting_trials_per_1k_est_cases` = 1,000 × count ÷ `estimated_cases`.
+  Present only when `burden_denominator_available` is true for that row, i.e.
+  `condition_burden_map` confirms a source **and** that state has a value.
+  Otherwise `estimated_cases` and this rate are null and `denominator_label`
+  ends "no burden denominator available". No rate ever falls back to raw counts.
+- `estimated_cases` is a source-specific count: average annual lung and
+  bronchus cases (State Cancer Profiles, an incidence count) or PLACES crude
+  diabetes prevalence × adult population summed over counties (a prevalence
+  count). Compare per-case rates within one condition only.
+- Every row carries `denominator_label`, which the Access Rates page uses as
+  the chart title and caption so the denominator is always stated.
+
+Neither rate measures patient access or clinical need. Sources, vintages,
+licences and per-family limits are in `docs/burden_sources.md`.
+
 ## Reliability metrics (`mart_data_reliability`)
 | Metric | Definition |
 |---|---|
