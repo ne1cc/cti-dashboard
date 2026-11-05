@@ -1,0 +1,93 @@
+state_code,county_fips,county_name,measure_id,measure,prevalence_pct,ci_low_pct,ci_high_pct,adult_population,data_year,release,dataset_id
+DE,10001,Kent,COGNITION,Cognitive disability among adults,14.6,12.6,16.7,146800,2023,PLACES 2025 release,swc5-untb
+DE,10001,Kent,DIABETES,Diagnosed diabetes among adults,14.3,12.4,16.2,146800,2023,PLACES 2025 release,swc5-untb
+DE,10003,New Castle,COGNITION,Cognitive disability among adults,13.0,11.3,14.9,456332,2023,PLACES 2025 release,swc5-untb
+DE,10003,New Castle,DIABETES,Diagnosed diabetes among adults,12.2,10.7,13.8,456332,2023,PLACES 2025 release,swc5-untb
+DE,10005,Sussex,COGNITION,Cognitive disability among adults,12.1,10.2,14.3,216820,2023,PLACES 2025 release,swc5-untb
+DE,10005,Sussex,DIABETES,Diagnosed diabetes among adults,14.2,12.3,16.3,216820,2023,PLACES 2025 release,swc5-untb
+MD,24001,Allegany,COGNITION,Cognitive disability among adults,16.3,14.0,18.8,55228,2023,PLACES 2025 release,swc5-untb
+MD,24001,Allegany,DIABETES,Diagnosed diabetes among adults,13.3,11.6,15.1,55228,2023,PLACES 2025 release,swc5-untb
+MD,24003,Anne Arundel,COGNITION,Cognitive disability among adults,11.6,10.0,13.4,461032,2023,PLACES 2025 release,swc5-untb
+MD,24003,Anne Arundel,DIABETES,Diagnosed diabetes among adults,10.4,9.1,11.8,461032,2023,PLACES 2025 release,swc5-untb
+MD,24005,Baltimore,COGNITION,Cognitive disability among adults,12.3,10.7,14.2,661546,2023,PLACES 2025 release,swc5-untb
+MD,24005,Baltimore,DIABETES,Diagnosed diabetes among adults,13.1,11.7,14.6,661546,2023,PLACES 2025 release,swc5-untb
+MD,24009,Calvert,COGNITION,Cognitive disability among adults,11.9,10.1,13.7,72945,2023,PLACES 2025 release,swc5-untb
+MD,24009,Calvert,DIABETES,Diagnosed diabetes among adults,10.9,9.3,12.4,72945,2023,PLACES 2025 release,swc5-untb
+MD,24011,Caroline,COGNITION,Cognitive disability among adults,16.4,14.1,18.9,25618,2023,PLACES 2025 release,swc5-untb
+MD,24011,Caroline,DIABETES,Diagnosed diabetes among adults,14.2,12.4,16.2,25618,2023,PLACES 2025 release,swc5-untb
+MD,24013,Carroll,COGNITION,Cognitive disability among adults,11.5,9.6,13.7,137462,2023,PLACES 2025 release,swc5-untb
+MD,24013,Carroll,DIABETES,Diagnosed diabetes among adults,10.3,8.8,12.2,137462,2023,PLACES 2025 release,swc5-untb
+MD,24015,Cecil,COGNITION,Cognitive disability among adults,14.2,12.1,16.4,82332,2023,PLACES 2025 release,swc5-untb
+MD,24015,Cecil,DIABETES,Diagnosed diabetes among adults,13.2,11.6,15.0,82332,2023,PLACES 2025 release,swc5-untb
+MD,24017,Charles,COGNITION,Cognitive disability among adults,12.1,10.6,13.9,131229,2023,PLACES 2025 release,swc5-untb
+MD,24017,Charles,DIABETES,Diagnosed diabetes among adults,13.4,11.8,14.9,131229,2023,PLACES 2025 release,swc5-untb
+MD,24019,Dorchester,COGNITION,Cognitive disability among adults,15.2,13.1,17.4,26096,2023,PLACES 2025 release,swc5-untb
+MD,24019,Dorchester,DIABETES,Diagnosed diabetes among adults,16.6,14.6,18.8,26096,2023,PLACES 2025 release,swc5-untb
+MD,24021,Frederick,COGNITION,Cognitive disability among adults,11.1,9.5,12.9,224828,2023,PLACES 2025 release,swc5-untb
+MD,24021,Frederick,DIABETES,Diagnosed diabetes among adults,10.6,9.3,11.9,224828,2023,PLACES 2025 release,swc5-untb
+MD,24023,Garrett,COGNITION,Cognitive disability among adults,13.7,11.7,16.2,23480,2023,PLACES 2025 release,swc5-untb
+MD,24023,Garrett,DIABETES,Diagnosed diabetes among adults,14.1,12.2,16.2,23480,2023,PLACES 2025 release,swc5-untb
+MD,24025,Harford,COGNITION,Cognitive disability among adults,11.7,10.0,13.6,206050,2023,PLACES 2025 release,swc5-untb
+MD,24025,Harford,DIABETES,Diagnosed diabetes among adults,11.6,10.0,13.3,206050,2023,PLACES 2025 release,swc5-untb
+MD,24027,Howard,COGNITION,Cognitive disability among adults,9.1,7.8,10.6,256944,2023,PLACES 2025 release,swc5-untb
+MD,24027,Howard,DIABETES,Diagnosed diabetes among adults,10.4,9.1,11.8,256944,2023,PLACES 2025 release,swc5-untb
+MD,24029,Kent,COGNITION,Cognitive disability among adults,12.9,10.8,15.3,16393,2023,PLACES 2025 release,swc5-untb
+MD,24029,Kent,DIABETES,Diagnosed diabetes among adults,13.7,11.7,16.0,16393,2023,PLACES 2025 release,swc5-untb
+MD,24031,Montgomery,COGNITION,Cognitive disability among adults,10.0,8.6,11.4,819715,2023,PLACES 2025 release,swc5-untb
+MD,24031,Montgomery,DIABETES,Diagnosed diabetes among adults,10.8,9.6,12.2,819715,2023,PLACES 2025 release,swc5-untb
+MD,24033,Prince George's,COGNITION,Cognitive disability among adults,12.6,10.8,14.6,740721,2023,PLACES 2025 release,swc5-untb
+MD,24033,Prince George's,DIABETES,Diagnosed diabetes among adults,15.2,13.5,16.9,740721,2023,PLACES 2025 release,swc5-untb
+MD,24035,Queen Anne's,COGNITION,Cognitive disability among adults,11.6,9.7,13.6,41602,2023,PLACES 2025 release,swc5-untb
+MD,24035,Queen Anne's,DIABETES,Diagnosed diabetes among adults,11.6,9.9,13.3,41602,2023,PLACES 2025 release,swc5-untb
+MD,24037,St. Mary's,COGNITION,Cognitive disability among adults,12.9,11.0,15.0,87752,2023,PLACES 2025 release,swc5-untb
+MD,24037,St. Mary's,DIABETES,Diagnosed diabetes among adults,11.4,10.0,13.1,87752,2023,PLACES 2025 release,swc5-untb
+MD,24039,Somerset,COGNITION,Cognitive disability among adults,16.8,14.5,19.2,20561,2023,PLACES 2025 release,swc5-untb
+MD,24039,Somerset,DIABETES,Diagnosed diabetes among adults,14.2,12.4,16.1,20561,2023,PLACES 2025 release,swc5-untb
+MD,24041,Talbot,COGNITION,Cognitive disability among adults,11.6,9.8,13.6,30897,2023,PLACES 2025 release,swc5-untb
+MD,24041,Talbot,DIABETES,Diagnosed diabetes among adults,13.1,11.3,15.0,30897,2023,PLACES 2025 release,swc5-untb
+MD,24043,Washington,COGNITION,Cognitive disability among adults,15.1,13.1,17.1,122221,2023,PLACES 2025 release,swc5-untb
+MD,24043,Washington,DIABETES,Diagnosed diabetes among adults,13.3,11.8,15.0,122221,2023,PLACES 2025 release,swc5-untb
+MD,24045,Wicomico,COGNITION,Cognitive disability among adults,14.7,12.5,17.0,81312,2023,PLACES 2025 release,swc5-untb
+MD,24045,Wicomico,DIABETES,Diagnosed diabetes among adults,12.6,11.1,14.1,81312,2023,PLACES 2025 release,swc5-untb
+MD,24047,Worcester,COGNITION,Cognitive disability among adults,11.8,10.0,13.9,44887,2023,PLACES 2025 release,swc5-untb
+MD,24047,Worcester,DIABETES,Diagnosed diabetes among adults,13.7,11.7,15.9,44887,2023,PLACES 2025 release,swc5-untb
+MD,24510,Baltimore,COGNITION,Cognitive disability among adults,16.0,13.8,18.3,447486,2023,PLACES 2025 release,swc5-untb
+MD,24510,Baltimore,DIABETES,Diagnosed diabetes among adults,14.4,12.8,16.3,447486,2023,PLACES 2025 release,swc5-untb
+RI,44001,Bristol,COGNITION,Cognitive disability among adults,11.4,9.1,13.9,41462,2023,PLACES 2025 release,swc5-untb
+RI,44001,Bristol,DIABETES,Diagnosed diabetes among adults,9.8,8.2,11.7,41462,2023,PLACES 2025 release,swc5-untb
+RI,44003,Kent,COGNITION,Cognitive disability among adults,13.1,10.9,15.3,140721,2023,PLACES 2025 release,swc5-untb
+RI,44003,Kent,DIABETES,Diagnosed diabetes among adults,11.8,10.3,13.6,140721,2023,PLACES 2025 release,swc5-untb
+RI,44005,Newport,COGNITION,Cognitive disability among adults,10.9,9.1,12.8,70797,2023,PLACES 2025 release,swc5-untb
+RI,44005,Newport,DIABETES,Diagnosed diabetes among adults,10.3,8.7,11.9,70797,2023,PLACES 2025 release,swc5-untb
+RI,44007,Providence,COGNITION,Cognitive disability among adults,15.2,13.1,17.4,528665,2023,PLACES 2025 release,swc5-untb
+RI,44007,Providence,DIABETES,Diagnosed diabetes among adults,11.6,10.2,13.1,528665,2023,PLACES 2025 release,swc5-untb
+RI,44009,Washington,COGNITION,Cognitive disability among adults,11.5,9.3,13.9,110479,2023,PLACES 2025 release,swc5-untb
+RI,44009,Washington,DIABETES,Diagnosed diabetes among adults,9.0,7.5,10.6,110479,2023,PLACES 2025 release,swc5-untb
+VT,50001,Addison,COGNITION,Cognitive disability among adults,11.8,9.7,14.0,31723,2023,PLACES 2025 release,swc5-untb
+VT,50001,Addison,DIABETES,Diagnosed diabetes among adults,8.2,6.9,9.6,31723,2023,PLACES 2025 release,swc5-untb
+VT,50003,Bennington,COGNITION,Cognitive disability among adults,12.4,10.2,14.8,30362,2023,PLACES 2025 release,swc5-untb
+VT,50003,Bennington,DIABETES,Diagnosed diabetes among adults,10.0,8.4,11.8,30362,2023,PLACES 2025 release,swc5-untb
+VT,50005,Caledonia,COGNITION,Cognitive disability among adults,13.9,11.7,16.4,25067,2023,PLACES 2025 release,swc5-untb
+VT,50005,Caledonia,DIABETES,Diagnosed diabetes among adults,10.1,8.6,11.8,25067,2023,PLACES 2025 release,swc5-untb
+VT,50007,Chittenden,COGNITION,Cognitive disability among adults,12.1,10.1,14.5,140894,2023,PLACES 2025 release,swc5-untb
+VT,50007,Chittenden,DIABETES,Diagnosed diabetes among adults,6.6,5.6,7.7,140894,2023,PLACES 2025 release,swc5-untb
+VT,50009,Essex,COGNITION,Cognitive disability among adults,15.1,12.6,17.9,4937,2023,PLACES 2025 release,swc5-untb
+VT,50009,Essex,DIABETES,Diagnosed diabetes among adults,12.5,10.6,14.7,4937,2023,PLACES 2025 release,swc5-untb
+VT,50011,Franklin,COGNITION,Cognitive disability among adults,13.7,11.5,16.1,40099,2023,PLACES 2025 release,swc5-untb
+VT,50011,Franklin,DIABETES,Diagnosed diabetes among adults,9.6,8.1,11.3,40099,2023,PLACES 2025 release,swc5-untb
+VT,50013,Grand Isle,COGNITION,Cognitive disability among adults,11.4,9.4,13.4,6194,2023,PLACES 2025 release,swc5-untb
+VT,50013,Grand Isle,DIABETES,Diagnosed diabetes among adults,9.7,8.1,11.4,6194,2023,PLACES 2025 release,swc5-untb
+VT,50015,Lamoille,COGNITION,Cognitive disability among adults,12.7,10.4,15.1,20919,2023,PLACES 2025 release,swc5-untb
+VT,50015,Lamoille,DIABETES,Diagnosed diabetes among adults,8.3,7.0,9.8,20919,2023,PLACES 2025 release,swc5-untb
+VT,50017,Orange,COGNITION,Cognitive disability among adults,12.1,10.0,14.5,24672,2023,PLACES 2025 release,swc5-untb
+VT,50017,Orange,DIABETES,Diagnosed diabetes among adults,9.7,8.2,11.5,24672,2023,PLACES 2025 release,swc5-untb
+VT,50019,Orleans,COGNITION,Cognitive disability among adults,14.5,12.2,17.0,22246,2023,PLACES 2025 release,swc5-untb
+VT,50019,Orleans,DIABETES,Diagnosed diabetes among adults,10.7,9.0,12.5,22246,2023,PLACES 2025 release,swc5-untb
+VT,50021,Rutland,COGNITION,Cognitive disability among adults,13.3,11.1,15.6,49934,2023,PLACES 2025 release,swc5-untb
+VT,50021,Rutland,DIABETES,Diagnosed diabetes among adults,10.3,8.7,11.9,49934,2023,PLACES 2025 release,swc5-untb
+VT,50023,Washington,COGNITION,Cognitive disability among adults,11.9,9.9,14.1,49442,2023,PLACES 2025 release,swc5-untb
+VT,50023,Washington,DIABETES,Diagnosed diabetes among adults,8.9,7.6,10.6,49442,2023,PLACES 2025 release,swc5-untb
+VT,50025,Windham,COGNITION,Cognitive disability among adults,12.4,10.3,14.7,38295,2023,PLACES 2025 release,swc5-untb
+VT,50025,Windham,DIABETES,Diagnosed diabetes among adults,9.8,8.2,11.5,38295,2023,PLACES 2025 release,swc5-untb
+VT,50027,Windsor,COGNITION,Cognitive disability among adults,11.8,9.8,14.0,48044,2023,PLACES 2025 release,swc5-untb
+VT,50027,Windsor,DIABETES,Diagnosed diabetes among adults,9.5,7.9,11.1,48044,2023,PLACES 2025 release,swc5-untb
