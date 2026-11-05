@@ -65,6 +65,6 @@ git status --porcelain | grep -E "\.(mp4|mov|mp3|wav|m4a|webm)$" && echo "ERROR:
 ## Accidental Disclosure Remediation
 
 If identifiable participant data or PHI is committed:
-1. **Immediate Notice**: Inform the study owner and repository maintainer immediately.
-2. **Rewrite Git History**: Do not merely revert the commit with a second commit; use `git filter-repo` or repository history rewriting tools to purge the artifact from all commits and branch refs.
+1. **Immediate Notice**: Stop and notify the repository maintainer immediately. Do not attempt to rewrite git history yourself or push additional commits over it.
+2. **Maintainer Purges History**: The repository maintainer will purge the data from git history and all reflogs (contributors must not rewrite history or force-push).
 3. **Notify Institution**: Follow the sponsoring institution's protocol for reporting and mitigating data incidents.

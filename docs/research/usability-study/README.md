@@ -12,6 +12,8 @@ Issue #70 specifies a 5-person qualitative usability study evaluating the patien
 
 This kit prepares all necessary materials in advance so that a study owner or research facilitator can immediately recruit participants, conduct sessions, capture standardized observations, and synthesize findings into actionable product roadmap improvements.
 
+Nothing in this directory records results; completed findings go in `docs/research/usability-findings.md` after the sessions.
+
 Findings from this study directly inform issue #40 (*Roadmap: from analyst feasibility tool to an open clinical-trial access platform*), particularly Milestone M1 (Patient finder MVP).
 
 ---
@@ -33,7 +35,7 @@ The study recruits 5 participants across three distinct user roles to capture re
 - **Session Duration**: 30 minutes per participant.
 - **Session Format**: 1-on-1 moderated session conducted remotely via screen-share or in person.
 - **Facilitation Method**: Concurrent Think-Aloud protocol (participants verbalize their thoughts, expectations, and hesitations as they interact with the interface).
-- **Test Scenarios**: Standardized, fictional practice scenarios using fixture-safe data.
+- **Test Scenarios**: Standardized, fictional practice scenarios using fixture-safe and representative data.
 
 ---
 
@@ -59,11 +61,20 @@ The primary objective of this usability evaluation is to validate and refine the
 
 This directory contains the complete set of preparation templates:
 
-- **[Task Script](task-script.md)**: Moderated protocol containing the four core tasks from #70, two fixture-safe realistic scenarios, comprehension questions, and observer rules.
+- **[Task Script](task-script.md)**: Moderated protocol containing the four core tasks from #70, session setup commands, two fixture-safe realistic scenarios, comprehension questions, and observer rules.
 - **[Consent Template](consent-template.md)**: Plain-language informed consent form with institutional placeholders, zero-PHI commitments, and withdrawal rights.
 - **[Notes Template](notes-template.md)**: Standardized observation template tracking time-to-task, wrong turns, comprehension accuracy, and verbatim confusion points for each participant.
-- **[Findings Template](findings-template.md)**: Post-study synthesis template aggregating results across all 5 sessions, cataloging verbatim quotes, defining the top 3 issues, and detailing the impact on #40.
+- **[Findings Template](findings-template.md)**: Post-study synthesis template aggregating results across all 5 sessions, cataloging verbatim quotes, defining the top 3 issues, and detailing the impact on #40. Copy to `docs/research/usability-findings.md` when writing the completed report.
 - **[Anonymization Checklist](anonymization-checklist.md)**: Mandatory verification checklist to inspect notes and reports for PHI/PII before committing to git.
+
+---
+
+## After the Sessions Checklist
+
+Once all 5 participant sessions are completed:
+1. **Commit Findings**: Copy `docs/research/usability-study/findings-template.md` to `docs/research/usability-findings.md`, fill in the synthesized findings, run the `anonymization-checklist.md` checks, and commit `docs/research/usability-findings.md` to the repository.
+2. **Open Follow-Up Issues**: Open GitHub issues for each of the top 3 usability problems identified in the report.
+3. **Update Roadmap (#40)**: Update issue #40 (and Epic #42) if the findings contradict or adjust its priorities.
 
 ---
 
@@ -72,5 +83,6 @@ This directory contains the complete set of preparation templates:
 ```
 [1. Adapt Consent] ──> [2. Recruit 3 Roles] ──> [3. Conduct Sessions] ──> [4. Anonymize Notes] ──> [5. Synthesize & Feed #40]
   consent-template        P1-P5 (5 users)         task-script.md            anonymization-           findings-template.md
-                                                  notes-template.md         checklist.md             (Top 3 follow-up issues)
+                                                  notes-template.md         checklist.md             -> usability-findings.md
+                                                                                                     (Top 3 follow-up issues, update #40)
 ```

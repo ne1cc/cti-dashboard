@@ -2,6 +2,8 @@
 
 Post-study synthesis aggregating observations and findings across the 5 usability sessions.
 
+> **Facilitator Notice**: Do **not** commit filled participant data or session notes over this template file. Copy this template to `docs/research/usability-findings.md` after completing all sessions, fill in the report there, verify zero PHI against `anonymization-checklist.md`, and commit `docs/research/usability-findings.md`.
+
 > **Template Notice**: This document is an unapproved draft template for synthesizing usability research. It does **not** claim or imply legal or ethics-board approval. This report must contain only de-identified data and no real participant identifying information or PHI.
 
 ---
@@ -18,7 +20,7 @@ Post-study synthesis aggregating observations and findings across the 5 usabilit
   - `P5`: Clinician
 - **Scenarios Evaluated**:
   - Scenario A (Early Alzheimer Disease / ZIP 94143 / NCT04245644)
-  - Scenario B (Non-Small Cell Lung Cancer / ZIP 27710 / NCT00000001)
+  - Scenario B (Non-Small Cell Lung Cancer / ZIP 27710 / NCT04859881)
 
 ---
 
@@ -90,3 +92,13 @@ Ranked by severity and frequency across sessions. Each problem links to a concre
 - **Roadmap Impact Summary**: State whether these empirical findings confirm or challenge the assumptions in issue #40 and Epic #42.
 - **Milestone M1 Refinements**: Concrete backlog adjustments recommended before concluding the patient finder MVP.
 - **Follow-Up Milestones**: Implications for downstream milestones (e.g., M3 population access, M4 analyst workbench).
+
+---
+
+## After the Sessions Checklist
+
+- [ ] Copy completed report to `docs/research/usability-findings.md`
+- [ ] Run pre-commit checks from `anonymization-checklist.md` to ensure zero PHI/PII
+- [ ] Commit `docs/research/usability-findings.md` to the repository
+- [ ] Open follow-up GitHub issues for each of the top 3 usability problems
+- [ ] Update issue #40 and Epic #42 if findings contradict or refine roadmap priorities
