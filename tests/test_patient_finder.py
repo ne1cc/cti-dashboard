@@ -146,6 +146,9 @@ def test_warehouse_results_freshness_and_detail(tmp_path):
         assert detail.status_code == 200
         assert "NCT00000001" in detail.text
         assert "Warehouse snapshot:" in detail.text
+        assert "Related trials" in detail.text
+        assert "Same condition, comparable eligibility" in detail.text
+        assert "NCT00000002" in detail.text
         assert client.get("/trials/NCT99999999").status_code == 404
 
 

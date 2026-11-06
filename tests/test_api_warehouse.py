@@ -256,6 +256,35 @@ def _init_fixture_database(db_path: Path) -> None:
         intervention_names VARCHAR[],
         source_json_hash VARCHAR
     );
+
+    CREATE TABLE stg_trial_condition_mesh (
+        ingestion_run_id VARCHAR,
+        indication_profile_id VARCHAR,
+        nct_id VARCHAR,
+        mesh_id VARCHAR,
+        mesh_term VARCHAR,
+        is_ancestor BOOLEAN,
+        branch VARCHAR,
+        source_json_hash VARCHAR
+    );
+
+    CREATE TABLE similarity_score_weights (
+        component VARCHAR,
+        weight DOUBLE,
+        description VARCHAR
+    );
+
+    INSERT INTO similarity_score_weights VALUES
+    ('same_condition', 0.15, 'Trials share at least one mapped condition group'),
+    ('same_phase', 0.20, 'Trials have the same normalized phase'),
+    ('geography_overlap', 0.15, 'Trials share at least one listed U.S. state'),
+    ('intervention_type_overlap', 0.15, 'Trials share at least one intervention type'),
+    ('study_design_match', 0.15,
+     'Trials match on study type, allocation, and primary purpose (all three)'),
+    ('eligibility_compatible', 0.10,
+     'Trials have compatible sex, healthy-volunteer, and age-range eligibility'),
+    ('enrollment_band_match', 0.10,
+     'Trials fall in the same enrollment size band (small/medium/large)');
     """)
 
     # Populate Sample Trials in dim_trial (strictly matching real dbt schema)
@@ -1507,3 +1536,111 @@ def test_warehouse_timestamps_consistent_under_non_utc_timezone(
         monkeypatch.delenv("TZ", raising=False)
         if hasattr(time, "tzset"):
             time.tzset()
+
+
+def test_warehouse_related_trials_success(client_warehouse: TestClient) -> None:
+    """Validate /v1/trials/{nct_id}/related returns comparable trials with factor disclosures."""
+    resp = client_warehouse.get("/v1/trials/NCT00000001/related")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["target_nct_id"] == "NCT00000001"
+    assert "methodology_disclaimer" in data
+    assert len(data["related_trials"]) >= 1
+
+    item = data["related_trials"][0]
+    assert item["nct_id"] == "NCT00000002"
+    assert item["similarity_rank"] == 1
+    assert 0.0 <= item["similarity_score"] <= 1.0
+    assert "comparability_factors" in item
+    factors = item["comparability_factors"]
+    assert "same_condition" in factors
+    assert "same_phase" in factors
+    assert "explanation_summary" in factors
+    assert factors["same_condition"]["matched"] is True
+
+    # Check caching and snapshot headers
+    assert resp.headers.get("Data-Snapshot") is not None
+    assert resp.headers.get("ETag") is not None
+    assert resp.headers.get("Cache-Control") is not None
+
+
+def test_warehouse_related_trials_limit_and_min_score(client_warehouse: TestClient) -> None:
+    """Validate limit and min_score query parameters."""
+    # Min score above candidate score returns empty related_trials
+    resp_high_score = client_warehouse.get(
+        "/v1/trials/NCT00000001/related", params={"min_score": 0.95}
+    )
+    assert resp_high_score.status_code == 200
+    assert resp_high_score.json()["related_trials"] == []
+
+    # Limit parameter
+    resp_limit = client_warehouse.get("/v1/trials/NCT00000001/related", params={"limit": 1})
+    assert resp_limit.status_code == 200
+    assert len(resp_limit.json()["related_trials"]) <= 1
+
+
+def test_warehouse_related_trials_not_found_and_invalid(client_warehouse: TestClient) -> None:
+    """Validate 404 for unknown NCT and 400 for malformed NCT."""
+    resp_404 = client_warehouse.get("/v1/trials/NCT99999999/related")
+    assert resp_404.status_code == 404
+    assert resp_404.headers["content-type"].startswith("application/problem+json")
+    assert resp_404.json()["code"] == "STUDY_NOT_FOUND"
+
+    resp_400 = client_warehouse.get("/v1/trials/invalid_nct/related")
+    assert resp_400.status_code == 400
+    assert resp_400.headers["content-type"].startswith("application/problem+json")
+    assert resp_400.json()["code"] == "INVALID_NCT_ID"
+
+
+def test_warehouse_related_trials_mesh_ancestor_blocking_and_deduplication(
+    tmp_path: Path,
+) -> None:
+    """Validate on-demand candidate blocking via MeSH ancestors and deduplication.
+
+    Ensures trials are matched via direct and ancestor MeSH terms, and deduplicated
+    across multiple indication profiles.
+    """
+    db_path = tmp_path / "mesh_blocking.duckdb"
+    _init_fixture_database(db_path)
+
+    # Insert MeSH relations: NCT00000001 (target) shares direct MeSH with NCT00000003,
+    # and ancestor with NCT00000004.
+    con = duckdb.connect(str(db_path))
+    con.execute("""
+    INSERT INTO stg_trial_condition_mesh VALUES
+    ('run_01', 'adrd', 'NCT00000001', 'D000544', 'Alzheimer Disease', false, null, 'h1'),
+    ('run_01', 'adrd', 'NCT00000001', 'D003704', 'Dementia', true, null, 'h2'),
+    ('run_01', 'oncology_nsclc', 'NCT00000003', 'D000544', 'Alzheimer Disease', false, null, 'h3'),
+    ('run_01', 'adrd', 'NCT00000004', 'D003704', 'Dementia', false, null, 'h4');
+
+    -- Insert duplicate dim_trial row for NCT00000002 under another profile to test deduplication
+    INSERT INTO dim_trial VALUES
+    (
+        'key2_dup', 'NCT00000002', 'oncology_nsclc', 'https://clinicaltrials.gov/study/NCT00000002',
+        'Duplicate Profile Row for NCT2',
+        'ACTIVE_NOT_RECRUITING', 'PHASE2', 'INTERVENTIONAL',
+        'Cedar Cognitive Institute', 'cedar cognitive institute',
+        '2023-06-01', '2026-12-01', '2027-01-01', '2023-05-15',
+        120, 'ACTUAL', false, 'ok', '2026-09-01', '2026-09-01', true,
+        '60 Years', null, 60.0, null, ['OLDER_ADULT'], 'FEMALE',
+        false, null, true, true, false, false, true, false, false
+    );
+    """)
+    con.close()
+
+    mgr = DuckDBWarehouseManager(db_path)
+    container = APIContainer(warehouse=mgr)
+    with TestClient(create_app(container=container)) as client:
+        resp = client.get("/v1/trials/NCT00000001/related", params={"limit": 25})
+        assert resp.status_code == 200
+        data = resp.json()
+        nct_ids = [item["nct_id"] for item in data["related_trials"]]
+        # Ensure strictly zero duplicate NCT IDs returned
+        assert len(nct_ids) == len(set(nct_ids))
+        # NCT00000002 admitted via condition group match
+        assert "NCT00000002" in nct_ids
+        # NCT00000003 admitted via direct MeSH match
+        assert "NCT00000003" in nct_ids
+        # NCT00000004 admitted via MeSH ancestor match
+        assert "NCT00000004" in nct_ids
+    mgr.close()

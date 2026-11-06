@@ -104,6 +104,7 @@ def test_full_registry_latency_benchmark() -> None:
             },
         },
         {"path": "/v1/trials", "params": {"min_age": 18, "max_age": 65, "limit": 20}},
+        {"path": "/v1/trials/NCT00000001/related", "params": {"limit": 10}},
     ]
 
     # Warm-up phase
@@ -129,3 +130,22 @@ def test_full_registry_latency_benchmark() -> None:
     assert stats["p95"] <= 500.0, (
         f"p95 latency {stats['p95']}ms exceeded 500ms SLA budget against full registry"
     )
+
+
+def test_related_trials_latency_under_one_second(tmp_path: Path) -> None:
+    """Verify that on-demand related trials query executes in well under 1 second (< 1000ms)."""
+    from tests.test_api_warehouse import _init_fixture_database
+
+    db_path = tmp_path / "latency.duckdb"
+    _init_fixture_database(db_path)
+
+    container = APIContainer(warehouse_path=db_path)
+    client = TestClient(create_app(container=container))
+
+    # Measure execution time
+    t0 = time.perf_counter()
+    resp = client.get("/v1/trials/NCT00000001/related")
+    elapsed_ms = (time.perf_counter() - t0) * 1000
+
+    assert resp.status_code == 200
+    assert elapsed_ms < 1000.0, f"Related trials latency {elapsed_ms}ms exceeded 1000ms budget"

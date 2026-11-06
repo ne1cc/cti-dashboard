@@ -72,6 +72,53 @@ button:hover { background: #054366; }
   padding: 1.25rem;
   margin-block: 1rem;
 }
+.related-trials-section {
+  margin-block: 1.5rem;
+}
+.related-trials-section h2 {
+  font-size: 1.3rem;
+  margin-bottom: 0.25rem;
+}
+.section-subtitle {
+  color: #56717f;
+  font-size: 0.95rem;
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+.related-trials-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.related-trial-item {
+  background: white;
+  border: 1px solid #b9cbd2;
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+.related-trial-item h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.1rem;
+}
+.related-trial-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  color: #364d5c;
+  margin-bottom: 0.5rem;
+}
+.similarity-explanation {
+  margin: 0.25rem 0 0 0;
+  font-size: 0.9rem;
+  color: #243a48;
+  background: #f0f5f8;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.25rem;
+}
 .notice { grid-column: 1 / -1; margin: 0; font-size: .9rem; color: #405461; }
 .results { list-style: none; margin: 1rem 0; padding: 0; }
 .results li { background: white; border: 1px solid #b9cbd2; border-radius: .5rem; padding: 1rem; margin-bottom: .75rem; }
