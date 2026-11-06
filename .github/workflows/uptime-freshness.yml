@@ -1,0 +1,60 @@
+name: Uptime and freshness
+
+# Hourly: the Streamlit health endpoint and the published refresh marker. Both run every hour
+# so one issue (label stale-or-down) is opened, updated and closed from a single full picture.
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+concurrency:
+  group: uptime-freshness
+  cancel-in-progress: false
+
+env:
+  SITE_URL: https://cti-trials.duckdns.org
+  LABEL: stale-or-down
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check site and update the incident issue
+        run: |
+          set +e
+          python3 scripts/check_deployment.py "$SITE_URL" --max-age-days 10 > result.txt
+          rc=$?
+          set -e
+          cat result.txt
+          if [ "$rc" -gt 1 ]; then exit "$rc"; fi  # crash (exit 2, traceback in the log above): fail the run, leave the issue alone
+
+          gh label create "$LABEL" --description "Demo is down or its data is stale" --color B60205 2>/dev/null || true
+          number=$(gh issue list --label "$LABEL" --state open --json number --jq '.[0].number // empty')
+
+          if [ "$rc" -eq 0 ]; then
+            if [ -n "$number" ]; then
+              gh issue close "$number" --comment "Recovered at $(date -u +%FT%TZ): site healthy and data fresh ($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+            fi
+            exit 0
+          fi
+
+          {
+            echo "Last checked $(date -u +%FT%TZ) against $SITE_URL ([run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID))."
+            echo
+            sed 's/^/- /' result.txt
+            echo
+            echo "How to read this and recover: docs/OPERATIONS.md, section 'Uptime and freshness alerts'. This issue closes itself when a check passes."
+          } > body.md
+          if [ -n "$number" ]; then
+            gh issue edit "$number" --body-file body.md
+          else
+            gh issue create --title "Demo is down or its data is stale" --label "$LABEL" --body-file body.md
+          fi
