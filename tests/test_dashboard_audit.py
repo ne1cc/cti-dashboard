@@ -199,6 +199,7 @@ def test_missing_and_empty_guidance(warehouse, monkeypatch):
         "dashboard/pages/4_Site_Overlap.py",
         "dashboard/pages/5_Sponsor_Landscape.py",
         "dashboard/pages/6_Data_Reliability.py",
+        "dashboard/pages/9_Trial_Transparency.py",
     ],
 )
 def test_every_metric_page_exposes_profile_audit(script, warehouse):

@@ -1313,3 +1313,123 @@ models:
         data_type: DOUBLE
       - name: ambiguous_combined_share
         data_type: DOUBLE
+
+  - name: mart_early_stop_transparency
+    description: >
+      Early stop transparency mart: counts of terminated, withdrawn, and suspended
+      trials by condition group, sponsor class, and year, with the sponsor-stated
+      whyStopped reason passed through verbatim. Never categorizes reasons into
+      subjective judgements like "failure" (Issue #76).
+    contract:
+      enforced: true
+    columns:
+      - name: early_stop_key
+        data_type: VARCHAR
+        description: Surrogate key hashing profile, condition group, sponsor class, year, status, and reason.
+        tests: [unique, not_null]
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this row. Part of the model's grain.
+        tests: [not_null]
+      - name: condition_group
+        data_type: VARCHAR
+        description: Condition group (taxonomy).
+        tests: [not_null]
+      - name: sponsor_class
+        data_type: VARCHAR
+        description: Lead sponsor category class (INDUSTRY, NIH, FED, OTHER, etc.).
+        tests: [not_null]
+      - name: stopped_year
+        data_type: INTEGER
+        description: Calendar year of primary completion, completion, or start date when stopped.
+      - name: overall_status
+        data_type: VARCHAR
+        description: Registry overall status (TERMINATED, WITHDRAWN, or SUSPENDED).
+        tests: [not_null]
+      - name: why_stopped
+        data_type: VARCHAR
+        description: Verbatim sponsor-reported reason why study stopped (statusModule.whyStopped).
+      - name: stopped_trial_count
+        data_type: BIGINT
+        description: Distinct count of trials stopped early in this grain.
+        tests: [not_null]
+      - name: contributing_nct_ids
+        data_type: VARCHAR
+        description: Comma-separated list of contributing ClinicalTrials.gov NCT IDs.
+        tests: [not_null]
+
+  - name: mart_results_posting_transparency
+    description: >
+      Results posting transparency mart: tracking posted results vs primary completion
+      dates under a conservative 12-month overdue heuristic. Informational reporting
+      benchmark only: legal applicability under FDAAA 801 ("applicable clinical trials")
+      cannot be fully derived from public fields. Includes 95% Wilson score confidence
+      intervals and flags sponsors with small sample sizes (n < 5) as unranked (Issue #76).
+    contract:
+      enforced: true
+    columns:
+      - name: results_transparency_key
+        data_type: VARCHAR
+        description: Surrogate key hashing profile, sponsor class, and lead sponsor.
+        tests: [unique, not_null]
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: Indication profile whose query scope produced this row. Part of the model's grain.
+        tests: [not_null]
+      - name: sponsor_class
+        data_type: VARCHAR
+        description: Lead sponsor category class (INDUSTRY, NIH, FED, OTHER, etc.).
+        tests: [not_null]
+      - name: lead_sponsor
+        data_type: VARCHAR
+        description: Organization name of the lead sponsor.
+        tests: [not_null]
+      - name: total_completed_trials
+        data_type: BIGINT
+        description: Total trials with overall_status = 'COMPLETED'.
+        tests: [not_null]
+      - name: total_terminated_trials
+        data_type: BIGINT
+        description: Total trials with overall_status = 'TERMINATED'.
+        tests: [not_null]
+      - name: total_evaluable_trials
+        data_type: BIGINT
+        description: Denominator (n) - trials past primary completion date by >12 months at snapshot date.
+        tests: [not_null]
+      - name: results_posted_evaluable_count
+        data_type: BIGINT
+        description: Number of evaluable trials with posted results.
+        tests: [not_null]
+      - name: results_overdue_count
+        data_type: BIGINT
+        description: Number of evaluable trials without posted results under the 12-month heuristic.
+        tests: [not_null]
+      - name: results_posted_rate
+        data_type: DOUBLE
+        description: Proportion of evaluable trials with posted results.
+      - name: ci_lower
+        data_type: DOUBLE
+        description: 95% Wilson score confidence interval lower bound.
+      - name: ci_upper
+        data_type: DOUBLE
+        description: 95% Wilson score confidence interval upper bound.
+      - name: results_overdue_rate
+        data_type: DOUBLE
+        description: Proportion of evaluable trials that are overdue under the 12-month heuristic.
+      - name: is_ranked
+        data_type: BOOLEAN
+        description: Whether sponsor meets minimum sample size threshold (n >= 5) for ranking.
+        tests: [not_null]
+      - name: evaluable_nct_ids
+        data_type: VARCHAR
+        description: Comma-separated list of contributing NCT IDs that are evaluable under the 12-month heuristic.
+      - name: contributing_nct_ids
+        data_type: VARCHAR
+        description: Comma-separated list of all contributing NCT IDs for this sponsor.
+      - name: overdue_nct_ids
+        data_type: VARCHAR
+        description: Comma-separated list of contributing NCT IDs that are overdue under the heuristic.
+      - name: posted_nct_ids
+        data_type: VARCHAR
+        description: Comma-separated list of evaluable contributing NCT IDs with posted results.
+

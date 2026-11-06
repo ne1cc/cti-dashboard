@@ -66,6 +66,12 @@ SECTIONS: dict[str, tuple[PageSpec, ...]] = {
             ":material/fact_check:",
             "Data_Reliability",
         ),
+        PageSpec(
+            "pages/9_Trial_Transparency.py",
+            "Trial Transparency",
+            ":material/visibility:",
+            "Trial_Transparency",
+        ),
     ),
 }
 

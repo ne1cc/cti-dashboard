@@ -24,6 +24,7 @@ PAGES = [
     "dashboard/pages/6_Data_Reliability.py",
     "dashboard/pages/7_Trial_Explorer.py",
     "dashboard/pages/8_Trial_Similarity.py",
+    "dashboard/pages/9_Trial_Transparency.py",
 ]
 
 # What the first dataframe each page renders must hold, per profile, measured
@@ -48,6 +49,7 @@ PROFILE_SCOPED_FIRST_DATAFRAME_ROWS = {
 PROFILE_SCOPED_FIRST_DATAFRAME_COLUMN = {
     "dashboard/pages/5_Sponsor_Landscape.py": "indication_profile_id",
     "dashboard/pages/7_Trial_Explorer.py": "indication_profile_id",
+    "dashboard/pages/9_Trial_Transparency.py": "indication_profile_id",
 }
 
 

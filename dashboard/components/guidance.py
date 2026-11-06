@@ -325,6 +325,34 @@ PAGE_GUIDANCE: dict[str, dict[str, Any]] = {
         "what_it_shows": ("Pairwise registry similarity scores across recorded attributes."),
         "how_to_analyze": ("Compares recorded attributes against other trials in the warehouse."),
     },
+    "trial_transparency": {
+        "title": "Trial Transparency: Early Stops & Results Posting",
+        "what": (
+            "Reported registry transparency facts: early-stopped trials (TERMINATED, "
+            "WITHDRAWN, SUSPENDED) with sponsor-stated reasons passed through verbatim, "
+            "and results-posting rates by sponsor class under a conservative 12-month heuristic."
+        ),
+        "why": (
+            "Tracks public accountability indicators directly from registry listings. "
+            "Stopped trial reasons are never categorized into quality judgments like 'failure'. "
+            "Results posting evaluates trials >12 months past primary completion date with "
+            "95% Wilson score confidence intervals; small-sample sponsors (n < 5) are unranked."
+        ),
+        "how_to_verify": (
+            "Every row links to contributing NCT IDs on ClinicalTrials.gov. "
+            "Results posting is an informational benchmark, not an FDAAA 801 legal compliance "
+            "audit; statutory applicable clinical trial (ACT) applicability cannot be derived from "
+            "public fields."
+        ),
+        "what_it_shows": (
+            "Counts of stopped trials with verbatim reasons and results posting rates "
+            "with confidence bounds."
+        ),
+        "how_to_analyze": (
+            "Examines reporting transparency and sponsor-reported stop reasons without "
+            "inferring trial quality."
+        ),
+    },
 }
 
 PAGE_PLAYBOOKS = PAGE_GUIDANCE
