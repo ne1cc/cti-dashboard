@@ -421,6 +421,44 @@ def access_rates(preset: Preset) -> pd.DataFrame:
     )
 
 
+def county_access(preset: Preset) -> pd.DataFrame:
+    """Fetch county-level access to open trial sites for one preset.
+
+    Args:
+        preset: Preset whose profile owns the rows. ``mart_trial_access_by_geo`` is keyed
+            on MeSH node (``mesh_id``), not ``registry_condition_key``, so like the other
+            MeSH-grain marts it narrows to the owning profile only (re-key: #149).
+
+    Returns:
+        pd.DataFrame: Rows of ``mart_trial_access_by_geo`` (profile x MeSH condition x
+            county); empty when the mart is not built yet.
+    """
+    if not _table_exists("mart_trial_access_by_geo"):
+        return pd.DataFrame()
+    return query(
+        "select * from main_marts.mart_trial_access_by_geo where indication_profile_id = ?",
+        [preset.profile_id],
+    )
+
+
+def county_access_data_date(preset: Preset) -> pd.Timestamp | None:
+    """Latest captured snapshot date of one preset's profile (the county mart's data date).
+
+    Args:
+        preset: Preset whose profile owns the snapshots.
+
+    Returns:
+        pd.Timestamp | None: The date, or ``None`` when the profile has no snapshot.
+    """
+    row = query(
+        "select max(snapshot_date) as latest from main_marts.fct_trial_snapshot"
+        " where indication_profile_id = ?",
+        [preset.profile_id],
+    )
+    latest = row["latest"].iloc[0] if not row.empty else None
+    return None if pd.isna(latest) else pd.Timestamp(latest)
+
+
 def participation_prevalence(preset: Preset) -> pd.DataFrame:
     """Fetch participation-to-prevalence rows for one preset.
 

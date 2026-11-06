@@ -38,9 +38,32 @@ sites, color = signal band with explicit "relative percentile cuts"
 caption) + sortable segment table.
 
 ### 3 · Geography Trends
-Condition-group selector → USA choropleth of recruiting listings by
-state, top-states table, monthly trend line — or an honest notice showing
-how many snapshot months exist when a series is not yet possible.
+County access map (Issue #73, `dashboard/components/county_access.py`) → top-states
+table, monthly trend line — or an honest notice showing how many snapshot
+months exist when a series is not yet possible.
+
+The county map reads `mart_trial_access_by_geo` for the selected preset's
+profile (the mart is keyed on MeSH node, so it narrows to the profile only, #149).
+Controls: condition, optional "Compare with" condition, 25/50/100 miles, RUCA and SVI
+filters, and a switch between residents within N miles and distance to the nearest
+open site. Always visible: the "what this means / does not mean" box, the denominator,
+the data date (latest capture), site-coordinate coverage and the methodology line. The
+box, the caption, the methodology line and the CSV header also say the map covers only
+the seeded counties (count and states are read from the rows); other counties have no
+data, which is not zero.
+Counties under 5,000 residents, or conditions whose open sites have no usable
+coordinates, are grey "insufficient data", excluded from every total and never zero.
+Colour keys: Viridis for counties with an open site in range; burnt orange (#b35806, at least 3:1 against both theme backgrounds) for "no open site
+within N mi" (distance view: "100+ mi"), apart from grey "insufficient data", so a small
+in-range county never looks like a county with no site.
+Beside the map: a table of the same facts as the hover (RUCA group, SVI quartile,
+"within N mi", nearest site as text such as "no site within 100 mi"; tooltips are not
+keyboard reachable),
+a CSV with a methodology header, and a table of rural (small-town, rural) counties with
+no open site within 100 miles for either compared condition. Colours are Viridis.
+County shapes: `dashboard/static/us_counties.geojson` (Census county boundaries via the
+plotly/datasets FIPS GeoJSON, coordinates rounded to 3 decimals). The state-level
+per-100k / raw-count toggle from #51 is gone; the top-states table keeps both columns.
 
 ### 4 · Site Overlap
 Multi-trial facility table (default filter on), states ranked by

@@ -104,6 +104,20 @@ ZIP-level RUCA file was not used.
   `dbt_clinical_trials/models/marts/_marts.yml` do, and each stratum row carries it in
   `access_basis`.
 
+## Dashboard map (Issue #73)
+
+The Geography Trends page draws these rows as a county choropleth. It adds no figures:
+"residents within N miles" sums `population` over counties whose `within_Nmi` is true, and
+the median is the population-weighted median of `nearest_site_miles` (null, beyond 100
+miles, sorts last and is shown as "over 100 mi"). Two states are "insufficient data" and
+never zero: a county under 5,000 residents (`MIN_COUNTY_POPULATION`, a judgement about ACS
+5-year noise), and every county of a condition whose `coverage_confidence` is `none`
+(every ring flag would be a false "no"). Both are left out of the denominator. The map
+shows only the counties in the `county_access_context` seed; the page, its caption and the
+CSV header state the county count and states from the rows, and every other county has no
+data (not zero). A county with no open site in range (or beyond 100 miles in the distance
+view) is drawn burnt orange (visible on both the light and dark theme), outside the Viridis scale, so it is never mistaken for a small value.
+
 ## Performance
 
 Distances are computed once per distinct site against every county (a latitude and

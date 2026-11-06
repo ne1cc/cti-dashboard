@@ -321,8 +321,11 @@ def test_pages_smoke_contain_no_priority_score_or_bands(fixture_warehouse):
         assert "priority score" not in page_text.lower()
 
 
-def test_geography_trends_view_mode_toggle(fixture_warehouse):
-    """Both listing modes render counts, rate provenance, and interpretation limits."""
+def test_geography_trends_state_table_shows_rate_provenance(fixture_warehouse):
+    """The state table carries counts, rate provenance and interpretation limits.
+
+    The per-100k / raw-count toggle was replaced by the county map (#73).
+    """
     from streamlit.testing.v1 import AppTest
 
     if str(ROOT / "dashboard") not in sys.path:
@@ -331,16 +334,9 @@ def test_geography_trends_view_mode_toggle(fixture_warehouse):
         str(ROOT / "dashboard/pages/3_Geography_Trends.py"), default_timeout=60
     ).run()
     assert not at.exception, at.exception
+    assert not [w for w in at.radio if w.label == "Listing metric"]
 
-    # Radio toggle exists with "Per 100k residents" and "Raw count"
-    radio = next(w for w in at.radio if w.label == "Listing metric")
-    assert radio.options == ["Per 100k residents", "Raw count"]
-    assert radio.value == "Per 100k residents"
-
-    # Default view shows per 100k subheader
-    assert any("per 100k" in s.value.lower() for s in at.subheader)
-
-    # Top states dataframe has both columns
+    # Top states dataframe has both columns, ranked by the population-adjusted rate
     df = at.dataframe[0].value
     assert "recruiting_trials_per_100k" in df.columns
     assert "recruiting_trial_count" in df.columns
@@ -356,20 +352,9 @@ def test_geography_trends_view_mode_toggle(fixture_warehouse):
         for item in at.json
     )
 
-    # Toggle to "Raw count" works
-    radio.set_value("Raw count").run()
-    assert not at.exception, at.exception
-    assert radio.value == "Raw count"
-    assert any("recruiting listings by state" in s.value.lower() for s in at.subheader)
-    raw = at.dataframe[0].value
-    assert "recruiting_trials_per_100k" in raw.columns
-    assert raw["recruiting_trial_count"].is_monotonic_decreasing
-    assert any("measure patient access or clinical need" in c.value for c in at.caption)
 
-
-@pytest.mark.parametrize("rerun_raw", [False, True])
 def test_geography_legacy_warehouse_keeps_raw_counts(
-    fixture_warehouse, monkeypatch: pytest.MonkeyPatch, rerun_raw: bool
+    fixture_warehouse, monkeypatch: pytest.MonkeyPatch
 ):
     """A retained pre-population mart stays usable until its next dbt rebuild."""
     from streamlit.testing.v1 import AppTest
@@ -396,12 +381,6 @@ def test_geography_legacy_warehouse_keeps_raw_counts(
         str(ROOT / "dashboard/pages/3_Geography_Trends.py"), default_timeout=60
     ).run()
     assert not at.exception, at.exception
-    radio = next(widget for widget in at.radio if widget.label == "Listing metric")
-    assert radio.options == ["Raw count"]
-    assert radio.value == "Raw count"
-    if rerun_raw:
-        radio.set_value("Raw count").run()
-        assert not at.exception, at.exception
     table = at.dataframe[0].value
     assert table["recruiting_trials_per_100k"].isna().all()
     assert table["recruiting_trial_count"].is_monotonic_decreasing

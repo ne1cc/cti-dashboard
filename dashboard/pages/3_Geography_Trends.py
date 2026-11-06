@@ -1,10 +1,11 @@
-"""Geography Trends — state-level listing activity (choropleth + monthly)."""
+"""Geography Trends — county access map, state listing table and monthly trend."""
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 from components import data
 from components.audit_panel import render_provenance_drawer
+from components.county_access import render_county_access
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import format_condition_group, render_page_guide
 from components.profile import render_preset_selector
@@ -106,86 +107,22 @@ with col2:
         label="How this number is computed: Recruiting trials in condition",
     )
 
-view_mode = st.radio(
-    "Listing metric",
-    ["Per 100k residents", "Raw count"] if population_ready else ["Raw count"],
-    index=0,
-    horizontal=True,
-    help="Toggle between population-normalized listings per 100k residents and raw trial counts.",
-)
+# The county map replaces the interim state-level per-100k / raw-count toggle (#51): it
+# shows the question that toggle stood in for (distance to an open site), per county.
+render_county_access(preset)
 
 unknown_rates = int(latest["recruiting_trials_per_100k"].isna().sum())
 unknown_rate_note = (
-    f" {unknown_rates} state(s)/territory(ies) have unknown population rates "
-    "and may be uncolored on the rate map. The table shows only the top 20 rows "
-    "for the selected measure."
+    f" {unknown_rates} state(s)/territory(ies) have unknown population rates. "
+    "The table shows only the top 20 rows for the selected measure."
     if population_ready and unknown_rates > 0
     else ""
 )
 
-if view_mode == "Per 100k residents":
-    st.subheader(
-        f"Recruiting listings per 100k residents by state — "
-        f"{format_condition_group(condition, profile_id)}"
-    )
-    fig = px.choropleth(
-        latest,
-        locations="state_normalized",
-        locationmode="USA-states",
-        color="recruiting_trials_per_100k",
-        scope="usa",
-        color_continuous_scale="Blues",
-        labels={
-            "recruiting_trials_per_100k": "Recruiting listings per 100k",
-            "recruiting_trial_count": "Recruiting listings",
-            "state_normalized": "State",
-        },
-        hover_data={
-            "state_normalized": True,
-            "recruiting_trials_per_100k": ":.2f",
-            "recruiting_trial_count": True,
-        },
-    )
-    st.plotly_chart(fig, width="stretch")
-    st.caption(
-        f"Month shown: {latest_month}. Showing monthly recruiting registry listings "
-        "normalized by total state resident population (U.S. Census Bureau Vintage 2024, "
-        "July 1, 2024 estimates). Neither population-adjusted rates nor raw counts "
-        f"measure patient access or clinical need.{unknown_rate_note}"
-    )
-else:
-    st.subheader(f"Recruiting listings by state — {format_condition_group(condition, profile_id)}")
-    fig = px.choropleth(
-        latest,
-        locations="state_normalized",
-        locationmode="USA-states",
-        color="recruiting_trial_count",
-        scope="usa",
-        color_continuous_scale="Blues",
-        labels={
-            "recruiting_trial_count": "Recruiting listings",
-            "recruiting_trials_per_100k": "Recruiting listings per 100k",
-            "state_normalized": "State",
-        },
-        hover_data={
-            "state_normalized": True,
-            "recruiting_trial_count": True,
-            "recruiting_trials_per_100k": ":.2f",
-        },
-    )
-    st.plotly_chart(fig, width="stretch")
-    st.caption(
-        f"Month shown: {latest_month}. Counts are trial listings with at least one "
-        "usable U.S. site in that state. Neither raw listing counts nor population-adjusted "
-        f"rates measure patient access or clinical need.{unknown_rate_note}"
-    )
-
 st.subheader("Top states")
 # Growth renders as text so an uncovered window can say "not enough history"
 # instead of a blank that reads as zero; covered windows keep a signed percent.
-sort_col = (
-    "recruiting_trials_per_100k" if view_mode == "Per 100k residents" else "recruiting_trial_count"
-)
+sort_col = "recruiting_trials_per_100k" if population_ready else "recruiting_trial_count"
 top_rows = latest.sort_values(sort_col, ascending=False).head(20).copy()
 
 
@@ -214,6 +151,12 @@ latest_table = top_rows[
         "recruiting_growth_3m",
     ]
 ]
+st.caption(
+    f"Month shown: {latest_month}. Listings are normalized by total state resident population "
+    "(U.S. Census Bureau Vintage 2024, July 1, 2024 estimates) in the per-100k column. "
+    "Neither population-adjusted rates nor raw counts measure patient access or clinical "
+    f"need.{unknown_rate_note}"
+)
 st.dataframe(
     latest_table,
     hide_index=True,
