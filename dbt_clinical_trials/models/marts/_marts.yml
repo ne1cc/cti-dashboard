@@ -1812,3 +1812,145 @@ models:
         description: >
           Fixed wording guard that travels with every row.
         tests: [not_null]
+  - name: mart_trial_access_by_geo
+    description: >
+      Geographic access to open trial sites (Issue #72). For each county centroid and
+      MeSH condition node, whether the centroid lies within 25, 50 and 100
+      straight-line miles of at least one open site (site and trial status
+      RECRUITING or NOT_YET_RECRUITING), with ACS population, SVI quartile and RUCA
+      group. Coverage columns (sites_total, sites_exact, sites_zip_approx,
+      sites_city_approx, sites_excluded, exact_coordinate_share) and
+      coverage_confidence repeat on every county row of a node. Straight-line distance
+      from a county centroid is not travel time and not residents' own distance; read
+      docs/access_methodology.md before using it. Grain: profile x mesh_id x county.
+    contract:
+      enforced: true
+    columns:
+      - name: indication_profile_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: mesh_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: condition_label
+        data_type: VARCHAR
+      - name: county_fips
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: county_name
+        data_type: VARCHAR
+      - name: state_code
+        data_type: VARCHAR
+      - name: population
+        data_type: BIGINT
+        description: ACS total county residents.
+        tests: [not_null]
+      - name: population_vintage
+        data_type: VARCHAR
+      - name: svi_quartile
+        data_type: INTEGER
+        description: 1 (least vulnerable) to 4 (most), national SVI 2022 county rank; null when unranked.
+      - name: ruca_group
+        data_type: VARCHAR
+      - name: ruca_group_pop_share
+        data_type: DOUBLE
+      - name: nearest_site_miles
+        data_type: DOUBLE
+        description: Nearest open site, reported only up to 100 miles; null beyond.
+      - name: sites_within_25mi
+        data_type: BIGINT
+      - name: sites_within_50mi
+        data_type: BIGINT
+      - name: sites_within_100mi
+        data_type: BIGINT
+      - name: within_25mi
+        data_type: BOOLEAN
+        tests: [not_null]
+      - name: within_50mi
+        data_type: BOOLEAN
+        tests: [not_null]
+      - name: within_100mi
+        data_type: BOOLEAN
+        tests: [not_null]
+      - name: sites_total
+        data_type: BIGINT
+        description: Distinct open sites of the node, including those without coordinates.
+      - name: sites_exact
+        data_type: BIGINT
+      - name: sites_zip_approx
+        data_type: BIGINT
+      - name: sites_city_approx
+        data_type: BIGINT
+      - name: sites_excluded
+        data_type: BIGINT
+        description: Open sites with no registry, ZIP or city coordinates; not in any distance.
+      - name: exact_coordinate_share
+        data_type: DOUBLE
+      - name: coverage_confidence
+        data_type: VARCHAR
+        tests:
+          - accepted_values:
+              values: [high, medium, low, none]
+      - name: access_basis
+        data_type: VARCHAR
+        tests: [not_null]
+
+  - name: mart_trial_access_by_stratum
+    description: >
+      Population share within 25, 50 and 100 miles of an open site, by RUCA group and
+      SVI quartile (Issue #72). Rolls up mart_trial_access_by_geo, so it carries the
+      same straight-line and centroid limits and the same coverage columns; see
+      docs/access_methodology.md. Grain: profile x mesh_id x stratum_type x stratum_value.
+    contract:
+      enforced: true
+    columns:
+      - name: indication_profile_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: mesh_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: condition_label
+        data_type: VARCHAR
+      - name: stratum_type
+        data_type: VARCHAR
+        tests:
+          - accepted_values:
+              values: [overall, ruca_group, svi_quartile]
+      - name: stratum_value
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: county_count
+        data_type: BIGINT
+      - name: population
+        data_type: BIGINT
+      - name: population_within_25mi
+        data_type: BIGINT
+      - name: population_within_50mi
+        data_type: BIGINT
+      - name: population_within_100mi
+        data_type: BIGINT
+      - name: share_within_25mi
+        data_type: DOUBLE
+      - name: share_within_50mi
+        data_type: DOUBLE
+      - name: share_within_100mi
+        data_type: DOUBLE
+      - name: sites_total
+        data_type: BIGINT
+      - name: sites_exact
+        data_type: BIGINT
+      - name: sites_zip_approx
+        data_type: BIGINT
+      - name: sites_city_approx
+        data_type: BIGINT
+      - name: sites_excluded
+        data_type: BIGINT
+      - name: coverage_confidence
+        data_type: VARCHAR
+        tests:
+          - accepted_values:
+              values: [high, medium, low, none]
+      - name: access_basis
+        data_type: VARCHAR
+        tests: [not_null]

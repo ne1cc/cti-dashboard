@@ -286,12 +286,12 @@ Remediation in PR `fix/production-volume-and-profile-scope`:
   bytes visible inside the container at `/app/data`. If they do count, the
   extension stops being a recommendation.
 
-## Local freshness metadata and disk preflight (#88, partial)
+## Local freshness metadata and disk preflight (#88)
 
-This local implementation does not activate production monitoring. External
-uptime/freshness alerts, the public metadata/API contract in #58, secret setup,
-and real staging/production acceptance remain open. No HTTP route or server is
-added here. A healthy Streamlit process alone does not prove fresh data.
+The marker and disk guard below feed the external check described in
+"Uptime and freshness alerts". The public metadata/API contract in #58 and the
+`/v1/meta/freshness` route (#144) are separate. A healthy Streamlit process
+alone does not prove fresh data.
 
 Defaults are `CTI_FRESHNESS_MAX_AGE_DAYS=10` and
 `CTI_REFRESH_MIN_FREE_BYTES=500000000` (positive integer bytes). Capture age is
@@ -506,3 +506,58 @@ IP: the container's run `20260905T191901Z_77632421` reported
   `adrd` profile). Use `make orchestrate` for the configured profiles.
 - This app is a **portfolio demonstration**, not clinical decision
   support.
+
+## Uptime and freshness alerts (#88)
+
+**How it works.** `.github/workflows/uptime-freshness.yml` runs every hour
+(and on demand from the Actions tab) and calls `scripts/check_deployment.py`
+against `https://cti-trials.duckdns.org`. The script reports a problem when:
+
+- `/_stcore/health` does not return 200 (three attempts, 5 s apart); or
+- `https://cti-trials.duckdns.org/app/static/freshness.json` is missing, unreadable, not a verified success,
+  or any profile's `captured_at_utc` is more than 10 days old.
+
+The FastAPI routes are not reachable on that host, so the marker is served by
+Streamlit itself: `enableStaticServing = true` in `.streamlit/config.toml`
+exposes `dashboard/static/` at `/app/static/`. `python -m src.quality.freshness`
+copies a *verified successful* marker there at the end of every successful
+`--record-success` and on every container start (`--publish`; the folder is in
+the image, not the data volume, so a redeploy would otherwise lose it). A
+failed or interrupted refresh never touches the published copy, so it keeps
+describing the last good capture and ages out on its own.
+The copy holds only counts, run ids and timestamps, no secrets.
+
+**The issue.** One issue labelled `stale-or-down` is the whole alert. The first
+failing check opens it ("Demo is down or its data is stale") listing each
+problem; later failing checks rewrite its body (no new notifications); the first
+passing check closes it with a "Recovered" comment. The workflow uses only the
+default `GITHUB_TOKEN` with `issues: write`. A crashed script (exit code 2, traceback in the run log)
+fails the run visibly and leaves the issue as it was. GitHub also disables scheduled
+workflows after 60 days without repository activity: re-enable it in the Actions
+tab if the alerts stop.
+
+**Reading it.**
+
+| Line in the issue | Meaning | First thing to check |
+|---|---|---|
+| `/_stcore/health ... unreachable` or `HTTP 5xx` | Container or proxy is down | Host/container status and `docker logs` |
+| `/app/static/freshness.json returned HTTP 404` | Streamlit is up but nothing is published. Expected after a restart that follows a *failed* refresh; a successful refresh clears it | `data/.freshness.json` exists and has `attempt_status: success`; run `python -m src.quality.freshness --publish` |
+| `Published marker is missing or not served: body is not JSON` | The URL answers with the dashboard's HTML page: static serving is off in the running image (it predates this change, or `enableStaticServing` is missing), or the file is not valid JSON | Redeploy the current image, then `curl -s .../app/static/freshness.json` |
+| `<profile>: capture is stale (N days > 10)` | Refresh has not succeeded for over 10 days | `data/logs/pipeline.log` for `pipeline FAILED` or `refresh skipped: disk preflight FAILED` |
+| `Published marker is not a verified success` / `is unreadable` | Corrupt or unexpected marker | Compare with `python -m src.quality.freshness` output |
+
+**Recovering.** Fix the cause (free disk, rerun the pipeline: delete
+`data/.last_pipeline_run` and wait for the next hourly due-check, or run
+`make pipeline` followed by `python -m src.quality.freshness --record-success`
+inside the container). Success republishes the marker; the next hourly check
+closes the issue. After a container start that follows a *failed* attempt there
+is no published copy until the next success, so expect a 404 line in that case.
+
+**Testing the check.** Run it against a sample marker without any network
+other than the health URL:
+
+```bash
+python3 scripts/check_deployment.py https://cti-trials.duckdns.org --marker-file sample.json
+```
+
+It exits 0 with `OK: healthy and fresh`, or 1 with one line per problem.

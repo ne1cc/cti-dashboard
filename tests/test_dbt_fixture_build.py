@@ -107,6 +107,8 @@ MARTS_WITH_PROFILE_SCOPED_WINDOWS = [
     "mart_trial_similarity_reference",
     "fct_trial_site",
     "dim_condition",
+    # Per-site coordinate dedup: partitions by profile + site key.
+    "mart_trial_access_by_geo",
 ]
 
 _SQL_COMMENT_RE = re.compile(r"--[^\n]*|\{#.*?#\}", re.DOTALL)
@@ -1583,7 +1585,7 @@ def test_marts_contracts_enforced(fixture_project_root: Path) -> None:
         if node["resource_type"] == "model"
         and node["original_file_path"].startswith("models/marts/")
     }
-    assert len(marts) == 25
+    assert len(marts) == 27
     for name, node in marts.items():
         assert node["contract"]["enforced"] is True, name
         assert {c["name"] for c in node["columns"].values()}, name
@@ -1625,7 +1627,7 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
     # Membership, not just cardinality: a pin on len() alone stays green if a
     # mart is renamed or dim_date's exclusion clause goes stale, because the set
     # keeps its size while iterating something else. Names taken from
-    # _marts.yml's 25 model blocks minus the global dimensions.
+    # _marts.yml's 27 model blocks minus the global dimensions.
     assert trial_grain == {
         "bridge_trial_condition",
         "bridge_trial_sponsor",
@@ -1647,6 +1649,8 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
         "mart_results_posting_transparency",
         "mart_site_overlap",
         "mart_study_snapshot_audit",
+        "mart_trial_access_by_geo",
+        "mart_trial_access_by_stratum",
         "mart_trial_activity",
         "mart_trial_change_events",
         "mart_trial_similarity",

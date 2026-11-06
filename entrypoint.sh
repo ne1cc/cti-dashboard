@@ -189,6 +189,12 @@ elif ! similarity_mart_is_current; then
     run_similarity_rebuild || log "schema rebuild failed; dashboard will show a rebuild message for Trial Similarity"
 fi
 
+# dashboard/static lives in the image, not the data volume: re-publish the last
+# good marker after every container start. Best effort; a missing copy is what
+# the external check reports.
+run_logged "$PYTHON_BIN" -m src.quality.freshness --publish \
+    || log "freshness marker not published; external check will report it"
+
 start_dashboard
 log "dashboard serving (pid=$DASHBOARD_PID)"
 if [ "$SERVE_API" = 1 ]; then

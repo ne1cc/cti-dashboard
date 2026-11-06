@@ -57,3 +57,6 @@ logs/
 .superpowers/
 docs/superpowers/
 .scratch/
+
+# Published copy of the refresh marker (src/quality/freshness.py)
+dashboard/static/freshness.json

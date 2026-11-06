@@ -209,6 +209,8 @@ exposed per arm through the Read API `arms` field, sourced from
 | mart_condition_geography_trends | month × condition_group × state | 3-month rolling baseline |
 | mart_condition_access_rates | profile × MeSH node × state | per-100k and (where a burden source exists) per-estimated-case rates; see `docs/burden_sources.md` |
 | mart_participation_prevalence_ratio | profile × MeSH node × 5-year window × dimension × group | participant share, burden share and their ratio with Wilson interval, trial/participant counts, reporting share, burden source and vintage, contributing NCT IDs; composition only where no comparable burden share exists |
+| mart_trial_access_by_geo | profile × MeSH node × county | county centroid within 25/50/100 miles of an open site, ACS population, RUCA group, SVI quartile, site coordinate coverage and `coverage_confidence`; see `docs/access_methodology.md` |
+| mart_trial_access_by_stratum | profile × MeSH node × stratum (overall, RUCA group, SVI quartile) | population-weighted share of residents within 25/50/100 miles of an open site, with the same coverage fields |
 | mart_data_reliability | ingestion run | reconciliation + usability shares |
 | mart_feasibility_priority_queue | segment @ latest snapshot | segment-level recruiting trial counts, distinct sponsors, sponsor HHI, site overlap, and deterministic interpretation note |
 | mart_early_stop_transparency | profile × condition × sponsor class × year × status × why_stopped | stopped trial counts (TERMINATED, WITHDRAWN, SUSPENDED), verbatim sponsor reasons, contributing NCT IDs |
