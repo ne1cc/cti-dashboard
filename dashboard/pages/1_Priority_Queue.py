@@ -4,7 +4,10 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from components import data
-from components.audit_panel import PRIORITY_DERIVED_RULES, render_metric_audit
+from components.audit_panel import (
+    PRIORITY_DERIVED_RULES,
+    render_provenance_drawer,
+)
 from components.filters import segment_filters
 from components.formatting import format_phase, format_priority_explanation, hhi_status
 from components.guardrails import guarded_footer, page_setup
@@ -29,6 +32,7 @@ st.caption(
     "criteria. Scientific validity is not measured."
 )
 filtered = segment_filters(queue, profile_id=profile_id)
+
 
 observed_history_days = int(queue["observed_history_days"].max()) if not queue.empty else 0
 if observed_history_days < 90:
@@ -290,10 +294,10 @@ fig = px.bar(
 fig.update_layout(yaxis=dict(autorange="reversed"), height=480)
 st.plotly_chart(fig, width="stretch")
 
-if not filtered.empty:
+if not filtered.empty and observed_history_days >= 90:
     st.info(filtered.iloc[0]["interpretation_note"])
 
-render_metric_audit(
+render_provenance_drawer(
     profile_id,
     filters=filtered.attrs.get("audit_filters", {}),
     segments=filtered,
@@ -301,6 +305,7 @@ render_metric_audit(
         "derived_rules": PRIORITY_DERIVED_RULES,
     },
     key="priority",
+    label="How this table is computed: Registry segments",
 )
 
 guarded_footer()

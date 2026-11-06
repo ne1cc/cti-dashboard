@@ -446,9 +446,8 @@ def test_page_guide_renders_neutral_guidance_across_profiles():
         at = AppTest.from_function(page, args=(profile_id,)).run()
         assert not at.exception, at.exception
         assert not any("ADRD clinical feasibility nuances" in m.value for m in at.markdown)
-        assert any("What This Data Shows:" in m.value for m in at.markdown)
-        assert any("How It Is Computed:" in m.value for m in at.markdown)
-        assert any("How to Verify & Caveats:" in m.value for m in at.markdown)
+        assert any("**Scope:**" in m.value for m in at.markdown)
+        assert any("*Does not show:*" in m.value for m in at.markdown)
 
 
 def test_guidance_copy_does_not_overclaim():

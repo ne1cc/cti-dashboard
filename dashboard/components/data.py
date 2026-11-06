@@ -610,6 +610,13 @@ def audit_condition_mapping(profile_id: str) -> pd.DataFrame:
     """Load mappings before geographic exclusions, keyed by captured run and study."""
     if not _table_exists("int_trial_condition_mapping", "main_intermediate"):
         return _audit_unavailable()
+    if _has_column("int_trial_condition_mapping", "mapping_source", "main_intermediate"):
+        return query(
+            "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, "
+            "condition_group, mapping_source "
+            "from main_intermediate.int_trial_condition_mapping where indication_profile_id = ?",
+            [profile_id],
+        )
     return query(
         "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, condition_group "
         "from main_intermediate.int_trial_condition_mapping where indication_profile_id = ?",
@@ -627,7 +634,14 @@ def metric_audit_observations(profile_id: str, metric: str = "competition") -> p
     """
     if not _table_exists("mart_study_snapshot_audit"):
         return _audit_unavailable()
-    if metric == "latest_study":
+    if metric in {
+        "latest_study",
+        "manifest_reconciled",
+        "usable_location_share",
+        "low_confidence_condition_share",
+        "coordinates_exact_share",
+        "coordinates_fallback_eligible_share",
+    }:
         return query(
             "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, snapshot_date "
             "from main_intermediate.int_current_trial_status where indication_profile_id = ?",

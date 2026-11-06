@@ -5,6 +5,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 from components import data
+from components.audit_panel import render_provenance_drawer
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import (
     registry_link_guidance,
@@ -29,14 +30,6 @@ data.require_warehouse(profile_id)
 
 render_indication_banner(profile_id)
 render_page_guide("trial_similarity", profile_id)
-
-st.info(
-    "This page scores **structural trial-design comparability** — "
-    "shared phase, geography, intervention type, study design, and "
-    "eligibility criteria. It is not a claim of clinical equivalence, "
-    "and unlike the Competition Landscape and Priority Queue pages, it "
-    "is not itself a competition or recruitment signal."
-)
 
 trials = data.trial_explorer(profile_id)
 
@@ -188,6 +181,13 @@ if selected_rows:
             "factors, rounded to 4 decimals. Individual contributions are "
             "rounded first, so their displayed sum can differ in the last decimal."
         ),
+    )
+    render_provenance_drawer(
+        profile_id,
+        metric="latest_study",
+        key="similarity_metric",
+        label="How this number is computed: Weighted total",
+        context={"scope": "Similarity score weighted total."},
     )
     if "similarity_explanation" in m and pd.notna(m["similarity_explanation"]):
         st.caption(m["similarity_explanation"])

@@ -2,7 +2,10 @@
 
 import streamlit as st
 from components import data
-from components.audit_panel import PRIORITY_DERIVED_RULES, render_metric_audit
+from components.audit_panel import (
+    PRIORITY_DERIVED_RULES,
+    render_provenance_drawer,
+)
 from components.formatting import (
     format_phase,
     format_priority_explanation,
@@ -37,36 +40,92 @@ render_page_guide("overview", profile_id)
 metrics = data.overview_metrics(profile_id)
 
 col1, col2, col3, col4 = st.columns(4)
-col1.metric(
-    "Trials tracked",
-    f"{int(metrics['total_trials']):,}",
-    help="Trials known from retained captures, using each trial's latest-observed record.",
-    border=True,
-)
-col2.metric(
-    "Currently recruiting",
-    f"{int(metrics['recruiting_trials']):,}",
-    help="Trials whose latest-observed overall status is exactly RECRUITING.",
-    border=True,
-)
-col3.metric(
-    "States with listed sites",
-    int(metrics["states_with_sites"]),
-    help=(
-        "Distinct U.S. states and territories with usable listed locations "
-        "across retained captures."
-    ),
-    border=True,
-)
-col4.metric(
-    "Listed facilities",
-    f"{int(metrics['listed_facilities']):,}",
-    help=(
-        "Facility identities in the selected profile's latest captured snapshot "
-        "(best-effort normalized name + city + state); zero if none are attributable."
-    ),
-    border=True,
-)
+with col1:
+    st.metric(
+        "Trials tracked",
+        f"{int(metrics['total_trials']):,}",
+        help="Trials known from retained captures, using each trial's latest-observed record.",
+        border=True,
+    )
+    render_provenance_drawer(
+        profile_id,
+        metric="latest_study",
+        count_status="all",
+        context={
+            "displayed_measure": (
+                "Trials tracked counts each trial's latest-observed dim_trial row across "
+                "retained captures."
+            )
+        },
+        key="overview_trials",
+        label="How this number is computed: Trials tracked",
+    )
+with col2:
+    st.metric(
+        "Currently recruiting",
+        f"{int(metrics['recruiting_trials']):,}",
+        help="Trials whose latest-observed overall status is exactly RECRUITING.",
+        border=True,
+    )
+    render_provenance_drawer(
+        profile_id,
+        metric="latest_study",
+        count_status="recruiting",
+        context={
+            "displayed_measure": (
+                "Currently recruiting filters latest-observed status exactly RECRUITING."
+            )
+        },
+        key="overview_recruiting",
+        label="How this number is computed: Currently recruiting",
+    )
+with col3:
+    st.metric(
+        "States with listed sites",
+        int(metrics["states_with_sites"]),
+        help=(
+            "Distinct U.S. states and territories with usable listed locations "
+            "across retained captures."
+        ),
+        border=True,
+    )
+    render_provenance_drawer(
+        profile_id,
+        metric="facility",
+        observation_metric="history",
+        context={
+            "displayed_measure": (
+                "States with sites counts distinct profile/state geography rows across "
+                "retained captures."
+            )
+        },
+        key="overview_states",
+        label="How this number is computed: States with listed sites",
+    )
+with col4:
+    st.metric(
+        "Listed facilities",
+        f"{int(metrics['listed_facilities']):,}",
+        help=(
+            "Facility identities in the selected profile's latest captured snapshot "
+            "(best-effort normalized name + city + state); zero if none are attributable."
+        ),
+        border=True,
+    )
+    render_provenance_drawer(
+        profile_id,
+        metric="facility",
+        observation_metric="history",
+        context={
+            "displayed_measure": (
+                "Listed facilities counts best-effort normalized name + city + state "
+                "identities at the selected profile's latest captured snapshot date; "
+                "zero if that capture has no attributable facilities."
+            )
+        },
+        key="overview_facilities",
+        label="How this number is computed: Listed facilities",
+    )
 
 runs_count = metrics.get("snapshot_count", metrics.get("warehouse_runs", 0))
 st.caption(
@@ -165,6 +224,16 @@ st.page_link(
     label="Open all Registry Segments",
     icon=":material/arrow_forward:",
 )
+render_provenance_drawer(
+    profile_id,
+    segments=queue.head(10),
+    context={
+        "scope": "Queue preview row inputs; sidebar scope before segment filters.",
+        "derived_rules": PRIORITY_DERIVED_RULES,
+    },
+    key="overview_queue",
+    label="How this table is computed: Top registry segments",
+)
 
 st.subheader("Where to look next")
 for column, (section, purpose) in zip(
@@ -175,51 +244,5 @@ for column, (section, purpose) in zip(
         st.caption(purpose)
         for spec in SECTIONS[section]:
             st.page_link(spec.path, label=spec.title, icon=spec.icon)
-
-st.subheader("Evidence behind these figures")
-st.caption(
-    "Each audit lists the contributing NCT IDs, coverage, exclusions and rule "
-    "versions for one block above, with a JSON export."
-)
-render_metric_audit(
-    profile_id,
-    metric="latest_study",
-    context={
-        "displayed_measure": (
-            "Trials tracked counts each trial's latest-observed dim_trial row across "
-            "retained captures; currently recruiting filters that status exactly RECRUITING."
-        )
-    },
-    key="overview",
-    label="Audit: trials tracked and currently recruiting",
-)
-render_metric_audit(
-    profile_id,
-    metric="facility",
-    observation_metric="history",
-    context={
-        "displayed_measure": (
-            "Listed facilities counts best-effort normalized name + city + state "
-            "identities at the selected profile's latest captured snapshot date; "
-            "zero if that capture has no attributable facilities. States with sites "
-            "counts distinct profile/state geography rows across retained captures. "
-            "This combined audit keeps historical study observations and original "
-            "locations across retained captures; its summary counts distinct studies, "
-            "not either location card's scalar."
-        )
-    },
-    key="overview_locations",
-    label="Audit: states and listed facilities",
-)
-render_metric_audit(
-    profile_id,
-    segments=queue.head(10),
-    context={
-        "scope": "Queue preview row inputs; sidebar scope before segment filters.",
-        "derived_rules": PRIORITY_DERIVED_RULES,
-    },
-    key="overview_queue",
-    label="Audit: priority queue preview",
-)
 
 guarded_footer()
