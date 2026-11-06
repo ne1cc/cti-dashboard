@@ -97,6 +97,7 @@ select
     {{ safe_divide("count(*) filter (reports_ethnicity_flag)", 'count(*)') }}
         as reports_ethnicity_share,
     {{ safe_divide("count(*) filter (ambiguous_combined_flag)", 'count(*)') }}
-        as ambiguous_combined_share
+        as ambiguous_combined_share,
+    {{ generate_surrogate_key(["'group:' || condition_group"]) }} as registry_condition_key
 from per_trial
 group by 1, 2, 3

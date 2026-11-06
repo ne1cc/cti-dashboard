@@ -7,6 +7,7 @@ select
         'city_normalized', 'state_normalized', 'snapshot_date',
     ]) }} as trial_site_key,
     {{ generate_surrogate_key(['nct_id', 'indication_profile_id']) }} as trial_key,
+    {{ generate_surrogate_key(['nct_id']) }} as registry_trial_key,
     -- site_key deliberately stays profile-free: a facility is a physical place
     -- both profiles may list. Narrowing a facility question to one profile is
     -- the consumer's filter (indication_profile_id), not something to fold into

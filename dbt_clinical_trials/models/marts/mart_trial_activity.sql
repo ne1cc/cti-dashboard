@@ -19,6 +19,7 @@ select
     count(distinct nct_id) filter (dementia_relevance_flag)
         as dementia_relevant_trial_count,
     count(distinct nct_id) filter (record_quality_flag != 'ok')
-        as flagged_record_count
+        as flagged_record_count,
+    {{ generate_surrogate_key(["'group:' || condition_group"]) }} as registry_condition_key
 from {{ ref('int_condition_geography_activity') }}
 group by 1, 2, 3, 4, 5, 6

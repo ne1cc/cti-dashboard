@@ -57,6 +57,7 @@ with geography as (
 )
 select
     {{ generate_surrogate_key(['indication_profile_id', 'snapshot_id', 'nct_id']) }} as study_audit_key,
+    {{ generate_surrogate_key(['nct_id']) }} as registry_trial_key,
     indication_profile_id, snapshot_id, ingestion_run_id, nct_id,
     'https://clinicaltrials.gov/study/' || nct_id as registry_url,
     brief_title, study_type, overall_status, phase_normalized, lead_sponsor_name,

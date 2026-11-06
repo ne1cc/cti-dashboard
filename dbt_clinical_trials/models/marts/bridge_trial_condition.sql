@@ -70,8 +70,10 @@ select
     ]) }} as trial_condition_key,
     {{ generate_surrogate_key(['nct_id', 'indication_profile_id']) }}
         as trial_key,
+    {{ generate_surrogate_key(['nct_id']) }} as registry_trial_key,
     {{ generate_surrogate_key(['indication_profile_id', 'node_id']) }}
         as condition_key,
+    {{ generate_surrogate_key(['node_id']) }} as registry_condition_key,
     nct_id,
     indication_profile_id,
     node_id,

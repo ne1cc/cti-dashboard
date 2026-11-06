@@ -103,6 +103,7 @@ select
     {{ generate_surrogate_key(['indication_profile_id', 'node_id']) }}
         as condition_key,
     indication_profile_id,
+    {{ generate_surrogate_key(['node_id']) }} as registry_condition_key,
     node_id,
     node_label as condition_normalized,
     coalesce(condition_raw, node_label) as condition_display_name,

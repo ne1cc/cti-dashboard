@@ -1,0 +1,13 @@
+{"columns": ["condition_key", "indication_profile_id", "node_id", "condition_normalized", "condition_display_name", "condition_group", "mesh_id", "is_ancestor", "mapping_source", "dementia_relevance_flag", "mapping_confidence", "trial_count"],
+"rows": [
+["214be417f33452cd3b560b628741629a", "oncology_nsclc", "group:other_thoracic_oncology", "other_thoracic_oncology", "Anaplastic Lymphoma Kinase Positive Lung Cancer", "other_thoracic_oncology", null, false, "text_fallback", false, "low", 6],
+["60514b060bbac2e68cb65e70e0e818ac", "oncology_nsclc", "group:nsclc_squamous", "nsclc_squamous", "Squamous Cell Lung Cancer", "nsclc_squamous", null, false, "yaml_overlay", false, "medium", 1],
+["6682be37ca970a0b46141f59a72df6ab", "adrd", "group:mild_cognitive_impairment", "mild_cognitive_impairment", "Mild Cognitive Impairment", "mild_cognitive_impairment", null, false, "yaml_overlay", true, "medium", 2],
+["71968e170049ac97ed60894e0059a939", "adrd", "group:alzheimers_disease", "alzheimers_disease", "Alzheimer Disease", "alzheimers_disease", null, false, "yaml_overlay", true, "high", 3],
+["7bd5cf52ac0c6204890fe191c7c83f84", "oncology_nsclc", "group:nsclc_metastatic_advanced", "nsclc_metastatic_advanced", "Stage IV Non-Small Cell Lung Cancer", "nsclc_metastatic_advanced", null, false, "yaml_overlay", false, "medium", 1],
+["80d376658d39c4ebc8c5274f0b4ff45a", "adrd", "group:frontotemporal_dementia", "frontotemporal_dementia", "Frontotemporal Dementia", "frontotemporal_dementia", null, false, "yaml_overlay", true, "medium", 1],
+["983dd8f727f217bbc57c2c4c4ee98b33", "adrd", "group:lewy_body_dementia", "lewy_body_dementia", "Lewy Body Dementia", "lewy_body_dementia", null, false, "yaml_overlay", true, "medium", 1],
+["c42c3f6f7f9f58a565e26d975d2335d7", "adrd", "group:cognitive_impairment_other", "cognitive_impairment_other", "Memory Loss", "cognitive_impairment_other", null, false, "yaml_overlay", false, "medium", 1],
+["c6579272a1224bc5b25a7c117a0797d6", "oncology_nsclc", "group:nsclc_unspecified", "nsclc_unspecified", "NSCLC", "nsclc_unspecified", null, false, "yaml_overlay", false, "high", 5],
+["ec996d3cd8f684418dcb6f986eedfb55", "adrd", "group:non_dementia_other", "non_dementia_other", "Breast Cancer", "non_dementia_other", null, false, "text_fallback", false, "low", 4]
+]}

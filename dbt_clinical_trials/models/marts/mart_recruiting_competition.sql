@@ -215,5 +215,6 @@ select
             order by recruiting_trial_count
         ) < 0.8 then 'moderate'
         else 'elevated'
-    end as competition_signal_band
+    end as competition_signal_band,
+    {{ generate_surrogate_key(["'group:' || condition_group"]) }} as registry_condition_key
 from with_concentration

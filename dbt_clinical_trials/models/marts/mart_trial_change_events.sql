@@ -81,6 +81,7 @@ select
         'indication_profile_id', 'nct_id', 'previous_ingestion_run_id',
         'ingestion_run_id', 'event_type', 'field_name'
     ]) }} as event_id,
+    {{ generate_surrogate_key(['nct_id']) }} as registry_trial_key,
     indication_profile_id, nct_id, event_type, field_name,
     before_value, after_value, before_value_type, after_value_type,
     previous_ingestion_run_id as before_ingestion_run_id,

@@ -1,0 +1,17 @@
+{"columns": ["sponsor_key", "indication_profile_id", "sponsor_normalized", "sponsor_display_name", "sponsor_class", "trial_count", "lead_sponsor_trial_count"],
+"rows": [
+["01165f4b14beb02983fa8be4bcde63be", "oncology_nsclc", "oncology trials group", "Oncology Trials Group", "NETWORK", 1, 0],
+["06f42cbb20acb26eaf769ad7f2418199", "oncology_nsclc", "metadiab labs", "MetaDiab Labs", "INDUSTRY", 1, 1],
+["12ec7193992aa7807e9fc11e7676d87b", "oncology_nsclc", "pacific oncology institute", "Pacific Oncology Institute", "ACADEMIC", 2, 2],
+["149c1a576b94d05156c2e8d177a73e58", "adrd", "cedar cognitive institute", "Cedar Cognitive Institute", "ACADEMIC", 2, 2],
+["17dfa5447f5c8005eccbe1c5504c6102", "oncology_nsclc", "alzheimer research network", "Alzheimer Research Network", "NETWORK", 1, 0],
+["3df467b319d43b9f243bb42213eb1a37", "oncology_nsclc", "neuropharm inc", "NeuroPharm Inc", "INDUSTRY", 3, 3],
+["5caac341ea335d7ffd1b73d85768dd72", "adrd", "metadiab labs", "MetaDiab Labs", "INDUSTRY", 1, 1],
+["61efb8d6955d815d282860ba27cc2464", "oncology_nsclc", "cedar cognitive institute", "Cedar Cognitive Institute", "ACADEMIC", 2, 2],
+["643ff198646bf5a1d54ca6efd80da7c7", "adrd", "pacific oncology institute", "Pacific Oncology Institute", "ACADEMIC", 2, 2],
+["73a648490fe96e3dbc50998d70afa618", "oncology_nsclc", "national institute on aging", "National Institute on Aging", "NIH", 2, 2],
+["7dd28dd258aece58430090142089f771", "adrd", "oncology trials group", "Oncology Trials Group", "NETWORK", 1, 0],
+["b670d6c3ebd667ad160d37292fd030ff", "adrd", "national institute on aging", "National Institute on Aging", "NIH", 2, 2],
+["b8d00007922de3a2c03e3b0c48b1c628", "adrd", "alzheimer research network", "Alzheimer Research Network", "NETWORK", 1, 0],
+["f933577d9c107c697779a73581bf8c87", "adrd", "neuropharm inc", "NeuroPharm Inc", "INDUSTRY", 3, 3]
+]}

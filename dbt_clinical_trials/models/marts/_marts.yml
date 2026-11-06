@@ -9,6 +9,14 @@ models:
       - name: trial_key
         data_type: VARCHAR
         tests: [not_null, unique]
+      - name: registry_trial_key
+        data_type: VARCHAR
+        description: >
+          Registry-wide trial identity: md5 of nct_id alone, identical across
+          profiles. Sits beside trial_key (nct_id x indication_profile_id),
+          which is unchanged. Uniqueness at the model's grain is asserted by
+          assert_registry_keys_unique_at_grain where the grain is a trial.
+        tests: [not_null]
       - name: nct_id
         data_type: VARCHAR
         # Not unique: the same registry record appears once per indication
@@ -153,6 +161,13 @@ models:
         data_type: VARCHAR
         description: Indication profile whose query scope produced this row. Part of the model's grain.
         tests: [not_null]
+      - name: registry_condition_key
+        data_type: VARCHAR
+        description: >
+          Registry-wide condition identity: md5 of node_id alone (a MeSH id, or
+          "group:<slug>"), identical across profiles. Sits beside condition_key
+          (node_id x indication_profile_id), which is unchanged.
+        tests: [not_null]
       - name: node_id
         data_type: VARCHAR
         description: >
@@ -296,6 +311,14 @@ models:
           - relationships:
               to: ref('dim_trial')
               field: trial_key
+      - name: registry_trial_key
+        data_type: VARCHAR
+        description: >
+          Registry-wide trial identity: md5 of nct_id alone, identical across
+          profiles. Sits beside trial_key (nct_id x indication_profile_id),
+          which is unchanged. Uniqueness at the model's grain is asserted by
+          assert_registry_keys_unique_at_grain where the grain is a trial.
+        tests: [not_null]
       - name: nct_id
         data_type: VARCHAR
         tests: [not_null]
@@ -364,6 +387,14 @@ models:
           - relationships:
               to: ref('dim_trial')
               field: trial_key
+      - name: registry_trial_key
+        data_type: VARCHAR
+        description: >
+          Registry-wide trial identity: md5 of nct_id alone, identical across
+          profiles. Sits beside trial_key (nct_id x indication_profile_id),
+          which is unchanged. Uniqueness at the model's grain is asserted by
+          assert_registry_keys_unique_at_grain where the grain is a trial.
+        tests: [not_null]
       - name: state_normalized
         data_type: VARCHAR
         tests: [not_null]
@@ -420,6 +451,14 @@ models:
           - relationships:
               to: ref('dim_trial')
               field: trial_key
+      - name: registry_trial_key
+        data_type: VARCHAR
+        description: >
+          Registry-wide trial identity: md5 of nct_id alone, identical across
+          profiles. Sits beside trial_key (nct_id x indication_profile_id),
+          which is unchanged. Uniqueness at the model's grain is asserted by
+          assert_registry_keys_unique_at_grain where the grain is a trial.
+        tests: [not_null]
       - name: condition_key
         data_type: VARCHAR
         description: Same two inputs as dim_condition.condition_key (node_id x indication_profile_id).
@@ -428,6 +467,13 @@ models:
           - relationships:
               to: ref('dim_condition')
               field: condition_key
+      - name: registry_condition_key
+        data_type: VARCHAR
+        description: >
+          Registry-wide condition identity: md5 of node_id alone (a MeSH id, or
+          "group:<slug>"), identical across profiles. Sits beside condition_key
+          (node_id x indication_profile_id), which is unchanged.
+        tests: [not_null]
       - name: nct_id
         data_type: VARCHAR
       - name: indication_profile_id
@@ -482,6 +528,14 @@ models:
           - relationships:
               to: ref('dim_trial')
               field: trial_key
+      - name: registry_trial_key
+        data_type: VARCHAR
+        description: >
+          Registry-wide trial identity: md5 of nct_id alone, identical across
+          profiles. Sits beside trial_key (nct_id x indication_profile_id),
+          which is unchanged. Uniqueness at the model's grain is asserted by
+          assert_registry_keys_unique_at_grain where the grain is a trial.
+        tests: [not_null]
       - name: sponsor_key
         data_type: VARCHAR
         description: >
@@ -529,6 +583,13 @@ models:
         data_type: DATE
       - name: condition_group
         data_type: VARCHAR
+      - name: registry_condition_key
+        data_type: VARCHAR
+        description: >
+          Registry-wide condition identity: md5 of the "group:<slug>" node id,
+          matching dim_condition.registry_condition_key for the same group and
+          identical across profiles. Added beside the profile grain.
+        tests: [not_null]
       - name: state_normalized
         data_type: VARCHAR
       - name: phase_normalized
@@ -575,6 +636,13 @@ models:
         data_type: DATE
       - name: condition_group
         data_type: VARCHAR
+      - name: registry_condition_key
+        data_type: VARCHAR
+        description: >
+          Registry-wide condition identity: md5 of the "group:<slug>" node id,
+          matching dim_condition.registry_condition_key for the same group and
+          identical across profiles. Added beside the profile grain.
+        tests: [not_null]
       - name: state_normalized
         data_type: VARCHAR
       - name: phase_normalized
@@ -693,6 +761,13 @@ models:
         tests: [not_null]
       - name: condition_group
         data_type: VARCHAR
+        tests: [not_null]
+      - name: registry_condition_key
+        data_type: VARCHAR
+        description: >
+          Registry-wide condition identity: md5 of the "group:<slug>" node id,
+          matching dim_condition.registry_condition_key for the same group and
+          identical across profiles. Added beside the profile grain.
         tests: [not_null]
       - name: state_normalized
         data_type: VARCHAR
@@ -857,6 +932,13 @@ models:
       - name: condition_group
         data_type: VARCHAR
         description: Clinical condition / indication taxonomy group.
+      - name: registry_condition_key
+        data_type: VARCHAR
+        description: >
+          Registry-wide condition identity: md5 of the "group:<slug>" node id,
+          matching dim_condition.registry_condition_key for the same group and
+          identical across profiles. Added beside the profile grain.
+        tests: [not_null]
       - name: state_normalized
         data_type: VARCHAR
         description: Two-letter abbreviation of US state or jurisdiction.
@@ -1040,6 +1122,12 @@ models:
       - name: study_audit_key
         data_type: VARCHAR
         tests: [not_null, unique]
+      - name: registry_trial_key
+        data_type: VARCHAR
+        description: >
+          Registry-wide trial identity: md5 of nct_id alone, identical across
+          profiles. Added beside the profile grain; nothing was removed.
+        tests: [not_null]
       - name: indication_profile_id
         data_type: VARCHAR
         tests: [not_null]
@@ -1134,6 +1222,12 @@ models:
       - name: location_audit_key
         data_type: VARCHAR
         tests: [not_null, unique]
+      - name: registry_trial_key
+        data_type: VARCHAR
+        description: >
+          Registry-wide trial identity: md5 of nct_id alone, identical across
+          profiles. Added beside the profile grain; nothing was removed.
+        tests: [not_null]
       - name: study_audit_key
         data_type: VARCHAR
         tests:
@@ -1222,6 +1316,12 @@ models:
         data_type: VARCHAR
         description: md5 of profile, NCT ID, both run ids, event_type and field_name.
         tests: [unique, not_null]
+      - name: registry_trial_key
+        data_type: VARCHAR
+        description: >
+          Registry-wide trial identity: md5 of nct_id alone, identical across
+          profiles. Added beside the profile grain; nothing was removed.
+        tests: [not_null]
       - name: indication_profile_id
         data_type: VARCHAR
         tests: [not_null]
@@ -1280,6 +1380,13 @@ models:
       - name: condition_group
         data_type: VARCHAR
         description: Normalized condition group (taxonomy). Part of the model's grain.
+        tests: [not_null]
+      - name: registry_condition_key
+        data_type: VARCHAR
+        description: >
+          Registry-wide condition identity: md5 of the "group:<slug>" node id,
+          matching dim_condition.registry_condition_key for the same group and
+          identical across profiles. Added beside the profile grain.
         tests: [not_null]
       - name: completion_year
         data_type: BIGINT
