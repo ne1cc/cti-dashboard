@@ -155,6 +155,30 @@ class DuckDBConnectionPool:
             # Offline Gazetteer fallback coordinates (Issue #63): always present
             # (empty when reference files are missing) so queries stay bindable.
             register_gazetteer_views(conn, self.gazetteer_dir)
+
+            # Ensure stg_trial_condition_mesh view exists so queries remain bindable
+            # even on legacy warehouses or test fixtures missing MeSH tables.
+            existing_tables = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT table_name FROM information_schema.tables "
+                    "WHERE table_name = 'stg_trial_condition_mesh';"
+                ).fetchall()
+            }
+            if not existing_tables:
+                conn.execute("""
+                    CREATE TEMP VIEW stg_trial_condition_mesh AS
+                    SELECT
+                        cast(null as varchar) as ingestion_run_id,
+                        cast(null as varchar) as indication_profile_id,
+                        cast(null as varchar) as nct_id,
+                        cast(null as varchar) as mesh_id,
+                        cast(null as varchar) as mesh_term,
+                        cast(null as boolean) as is_ancestor,
+                        cast(null as varchar) as branch,
+                        cast(null as varchar) as source_json_hash
+                    WHERE false;
+                """)
             return conn
         except Exception as err:
             raise WarehouseNotReadyError(f"Failed to connect to DuckDB warehouse: {err}") from err

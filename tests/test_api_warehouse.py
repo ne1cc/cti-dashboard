@@ -285,6 +285,37 @@ def _init_fixture_database(db_path: Path) -> None:
      'Trials have compatible sex, healthy-volunteer, and age-range eligibility'),
     ('enrollment_band_match', 0.10,
      'Trials fall in the same enrollment size band (small/medium/large)');
+
+    CREATE TABLE dim_condition (
+        condition_key VARCHAR,
+        indication_profile_id VARCHAR,
+        node_id VARCHAR,
+        condition_normalized VARCHAR,
+        condition_display_name VARCHAR,
+        condition_group VARCHAR,
+        mesh_id VARCHAR,
+        is_ancestor BOOLEAN,
+        mapping_source VARCHAR,
+        dementia_relevance_flag BOOLEAN,
+        mapping_confidence VARCHAR,
+        trial_count INTEGER
+    );
+
+    CREATE TABLE bridge_trial_condition (
+        trial_condition_key VARCHAR,
+        trial_key VARCHAR,
+        condition_key VARCHAR,
+        nct_id VARCHAR,
+        indication_profile_id VARCHAR,
+        node_id VARCHAR,
+        condition_group VARCHAR,
+        mesh_id VARCHAR,
+        is_ancestor BOOLEAN,
+        mapping_source VARCHAR,
+        dementia_relevance_flag BOOLEAN,
+        mapping_confidence VARCHAR,
+        source_condition_count BIGINT
+    );
     """)
 
     # Populate Sample Trials in dim_trial (strictly matching real dbt schema)
@@ -521,6 +552,61 @@ def _init_fixture_database(db_path: Path) -> None:
      'Matching placebo administered intrathecally', ['Drug: Placebo'], 'ha2'),
     ('run_01', 'adrd', 'NCT00000002', 0, 'CogniMab', 'EXPERIMENTAL',
      null, ['Drug: CogniMab'], 'ha3');
+    """)
+
+    # MeSH condition rows with ancestor closure (Issue #52 & #68)
+    con.execute("""
+    INSERT INTO stg_trial_condition_mesh VALUES
+    ('run_01', 'adrd', 'NCT00000001', 'D000544', 'Alzheimer Disease', false, null, 'hm1'),
+    ('run_01', 'adrd', 'NCT00000001', 'D003704', 'Dementia', true, null, 'hm2'),
+    ('run_01', 'adrd', 'NCT00000001', 'D001927', 'Brain Diseases', true, null, 'hm3'),
+    ('run_01', 'adrd', 'NCT00000001', 'D008569', 'Memory Disorders', true, null, 'hm11'),
+    ('run_01', 'adrd', 'NCT00000002', 'D060825', 'Cognitive Dysfunction', false, null, 'hm4'),
+    ('run_01', 'adrd', 'NCT00000002', 'D003072', 'Cognition Disorders', true, null, 'hm5'),
+    ('run_01', 'oncology_nsclc', 'NCT00000003', 'D002289',
+     'Carcinoma, Non-Small-Cell Lung', false, null, 'hm6'),
+    ('run_01', 'oncology_nsclc', 'NCT00000003', 'D008175', 'Lung Neoplasms', true, null, 'hm7'),
+    ('run_01', 'oncology_nsclc', 'NCT00000003', 'D009369', 'Neoplasms', true, null, 'hm8'),
+    ('run_01', 'adrd', 'NCT00000004', 'D010300', 'Parkinson Disease', false, null, 'hm9'),
+    ('run_01', 'adrd', 'NCT00000004', 'D019636',
+     'Neurodegenerative Diseases', true, null, 'hm10');
+    """)
+
+    con.execute("""
+    INSERT INTO dim_condition VALUES
+    ('ck1', 'adrd', 'D000544', 'alzheimer disease', 'Alzheimer Disease',
+     'Alzheimer Disease', 'D000544', false, 'mesh', true, '1.0', 1),
+    ('ck2', 'adrd', 'D003704', 'dementia', 'Dementia',
+     'Dementia', 'D003704', true, 'mesh', true, '1.0', 1),
+    ('ck3', 'adrd', 'D060825', 'cognitive dysfunction', 'Cognitive Dysfunction',
+     'Cognitive Dysfunction', 'D060825', false, 'mesh', true, '1.0', 1),
+    ('ck4', 'oncology_nsclc', 'D002289', 'carcinoma, non-small-cell lung',
+     'Carcinoma, Non-Small-Cell Lung', 'Non-Small Cell Lung Cancer', 'D002289',
+     false, 'mesh', false, '1.0', 1),
+    ('ck5', 'oncology_nsclc', 'D008175', 'lung neoplasms', 'Lung Neoplasms',
+     'Lung Neoplasms', 'D008175', true, 'mesh', false, '1.0', 1),
+    ('ck6', 'adrd', 'D010300', 'parkinson disease', 'Parkinson Disease',
+     'Parkinson Disease', 'D010300', false, 'mesh', false, '1.0', 1),
+    ('ck7', 'adrd', 'D008569', 'memory disorders', 'Memory Disorders',
+     'Memory Disorders', 'D008569', true, 'mesh', true, '1.0', 1);
+    """)
+
+    con.execute("""
+    INSERT INTO bridge_trial_condition VALUES
+    ('btk1', 'key1', 'ck1', 'NCT00000001', 'adrd', 'D000544',
+     'Alzheimer Disease', 'D000544', false, 'mesh', true, '1.0', 1),
+    ('btk2', 'key1', 'ck2', 'NCT00000001', 'adrd', 'D003704',
+     'Dementia', 'D003704', true, 'mesh', true, '1.0', 1),
+    ('btk3', 'key2', 'ck3', 'NCT00000002', 'adrd', 'D060825',
+     'Cognitive Dysfunction', 'D060825', false, 'mesh', true, '1.0', 1),
+    ('btk4', 'key3', 'ck4', 'NCT00000003', 'oncology_nsclc', 'D002289',
+     'Carcinoma, Non-Small-Cell Lung', 'D002289', false, 'mesh', false, '1.0', 1),
+    ('btk5', 'key3', 'ck5', 'NCT00000003', 'oncology_nsclc', 'D008175',
+     'Lung Neoplasms', 'D008175', true, 'mesh', false, '1.0', 1),
+    ('btk6', 'key4', 'ck6', 'NCT00000004', 'adrd', 'D010300',
+     'Parkinson Disease', 'D010300', false, 'mesh', false, '1.0', 1),
+    ('btk7', 'key1', 'ck7', 'NCT00000001', 'adrd', 'D008569',
+     'Memory Disorders', 'D008569', true, 'mesh', true, '1.0', 1);
     """)
 
     con.close()

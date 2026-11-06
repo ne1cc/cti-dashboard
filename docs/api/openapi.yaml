@@ -1567,6 +1567,36 @@ components:
           type: boolean
           description: True if sub-branches exist in the MeSH taxonomy under this node.
           example: true
+        broader:
+          type: array
+          description: Broader/parent concepts in MeSH hierarchy to widen search.
+          items:
+            $ref: '#/components/schemas/ConceptReference'
+        narrower:
+          type: array
+          description: Narrower/child concepts in MeSH hierarchy to narrow search.
+          items:
+            $ref: '#/components/schemas/ConceptReference'
+
+    ConceptReference:
+      type: object
+      required:
+        - term
+      properties:
+        mesh_id:
+          type:
+            - string
+            - 'null'
+          example: 'D003920'
+        term:
+          type: string
+          example: 'Diabetes Mellitus'
+        tree_code:
+          type:
+            - string
+            - 'null'
+          example: 'C18.452.394.750'
+
 
     RelatedTrialsResponse:
       type: object
