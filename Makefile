@@ -6,6 +6,8 @@ DBT         := uv run dbt
 DBT_DIR     := dbt_clinical_trials
 DBT_FLAGS   := --project-dir $(DBT_DIR) --profiles-dir $(DBT_DIR)
 CONDITION   ?= Alzheimer Disease
+# Extra `orchestrate` flags; `make pipeline ORCHESTRATE_FLAGS=--full-refresh` forces a full registry pull.
+ORCHESTRATE_FLAGS ?=
 
 .DEFAULT_GOAL := help
 
@@ -61,10 +63,10 @@ ingest-full-catalog: ## Opt-in: snapshot the full ClinicalTrials.gov registry, a
 full-catalog-full-refresh: ## Opt-in: force a full re-pull of the full-catalog profile
 	$(PYTHON) -m src.cli ingest --profile full_catalog --full-refresh
 
-orchestrate: ## Run ingest + transform for all indication profiles in config/profiles/
-	$(PYTHON) -m src.cli orchestrate
+orchestrate: ## Ingest the registry-wide run once, then derive every indication preset from it
+	$(PYTHON) -m src.cli orchestrate $(ORCHESTRATE_FLAGS)
 
-orchestrate-full-refresh: ## Force full re-ingest + transform for all indication profiles
+orchestrate-full-refresh: ## Force a full registry-wide re-ingest, then derive every indication preset
 	$(PYTHON) -m src.cli orchestrate --full-refresh
 
 prune-data: ## Delete run artifacts past the per-profile retention horizon

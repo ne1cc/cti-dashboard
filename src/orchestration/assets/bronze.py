@@ -1,4 +1,4 @@
-"""Bronze asset: snapshot ClinicalTrials.gov studies into immutable raw pages."""
+"""Bronze asset: snapshot the whole ClinicalTrials.gov registry into immutable raw pages."""
 
 from dagster import (
     AssetExecutionContext,
@@ -12,14 +12,15 @@ from dagster import (
 
 from src.ingest.extract_studies import run_ingestion
 from src.profiles import get_registry
+from src.transform.preset_runs import registry_run_is_incremental
 
 
 class IngestParams(Config):
-    """Job-level knobs applied to *every* refreshable profile.
+    """Job-level knobs for the one registry-wide run.
 
-    No `condition`: each profile's `query_params` in config/profiles/*.yml is
-    its scope, and one override applied across profiles would query NSCLC with
-    an Alzheimer's string.
+    No `condition`: the registry run has no condition filter; each indication
+    profile is a preset (MeSH node(s) + default filters) applied to its pages
+    in `silver_entities`.
     """
 
     full_refresh: bool = False
@@ -29,62 +30,53 @@ class IngestParams(Config):
 @asset(
     name="ctg_raw_pages",
     description=(
-        "Paginated snapshot of ClinicalTrials.gov API v2 studies, one run per "
-        "refreshable indication profile, written to bronze as raw JSON pages "
-        "plus a signed ingestion manifest."
+        "Paginated snapshot of the whole ClinicalTrials.gov API v2 registry "
+        "(first run and --full-refresh), or the studies changed since the last "
+        "run, written to bronze as raw JSON pages plus an ingestion manifest."
     ),
     # Three attempts with exponential backoff for transient registry outages.
     retry_policy=RetryPolicy(max_retries=2, delay=30, backoff=Backoff.EXPONENTIAL),
 )
 def ctg_raw_pages(context: AssetExecutionContext, config: IngestParams) -> MaterializeResult[None]:
-    """One materialization = one refresh of every profile `make pipeline` refreshes.
+    """One materialization = one registry-wide run, the unit every preset derives from.
 
-    Per-profile asset keys were the alternative and are not taken: the
-    container's refresh path is `make pipeline` (entrypoint.sh), so N keys would
-    double the UI's surface for a graph nothing schedules, and the blocking
-    checks would still have to aggregate across all N.
+    Contract:
+    - Returns metadata `registry_run` for a run that reached `success`.
+    - Raises when the run fails or stops short (`partial`, from `max_pages`): the
+      downstream silver and checks must not read a snapshot the API did not finish.
     """
-    runs: dict[str, dict[str, object]] = {}
-    failures: list[str] = []
-    for indication_profile in get_registry().refreshable():
-        pid = indication_profile.profile_id
-        try:
-            manifest = run_ingestion(
-                full_refresh=config.full_refresh,
-                max_pages=config.max_pages,
-                config=indication_profile,
-            )
-        except Exception as exc:
-            # Containment, not silence. `src/cli.py`'s `orchestrate` wraps each
-            # profile's body the same way; without this a raise on profile 1
-            # skipped profile 2's refresh and the retry policy then re-pulled
-            # profile 1 — a duplicate ~600-page fetch for a different outcome on
-            # the two paths. The aggregate raise below still fails the
-            # materialization, so only the survival of the fan-out changes.
-            failures.append(f"{pid}: {exc}")
-            continue
-        if manifest.status == "failed":
-            # Collect, do not raise: a profile that fails must not stop the
-            # others' runs from being recorded in this materialization's log.
-            failures.append(f"{pid}: {manifest.error or 'no error detail'}")
-            continue
-        context.log.info(
-            f"[{pid}] ingestion run {manifest.ingestion_run_id} "
-            f"status={manifest.status} records={manifest.record_count} "
-            f"pages={manifest.page_count}"
-        )
-        runs[pid] = {
-            "ingestion_run_id": manifest.ingestion_run_id,
-            "status": manifest.status,
-            "record_count": manifest.record_count,
-            "page_count": manifest.page_count,
-            "query_hash": manifest.query_hash,
-        }
-    if failures:
-        raise RuntimeError("Ingestion failed for: " + "; ".join(failures))
-    if not runs:
+    registry_profile = get_registry().registry_wide()
+    pid = registry_profile.profile_id
+    # 1. Pull the registry → incremental once a base snapshot exists, so a weekly
+    # refresh fetches only changed studies instead of ~5 GB again.
+    manifest = run_ingestion(
+        full_refresh=config.full_refresh,
+        max_pages=config.max_pages,
+        config=registry_profile,
+        incremental_refresh=registry_run_is_incremental(registry_profile, config.full_refresh),
+        require_silver=False,
+    )
+    # 2. Refuse anything but a finished run → partial/failed would derive from missing pages.
+    if manifest.status != "success":
         raise RuntimeError(
-            "No refreshable profiles produced a run — check config/profiles/*.yml "
-            "and the ingest_only flags."
+            f"Ingestion for {pid} ended {manifest.status}: {manifest.error or 'no error detail'}"
         )
-    return MaterializeResult(metadata={"runs_by_profile": MetadataValue.json(runs)})
+    context.log.info(
+        f"[{pid}] ingestion run {manifest.ingestion_run_id} "
+        f"status={manifest.status} records={manifest.record_count} "
+        f"pages={manifest.page_count}"
+    )
+    return MaterializeResult(
+        metadata={
+            "registry_run": MetadataValue.json(
+                {
+                    "profile": pid,
+                    "ingestion_run_id": manifest.ingestion_run_id,
+                    "status": manifest.status,
+                    "record_count": manifest.record_count,
+                    "page_count": manifest.page_count,
+                    "query_hash": manifest.query_hash,
+                }
+            )
+        }
+    )

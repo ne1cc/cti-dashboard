@@ -409,18 +409,17 @@ def test_report_reconciliation_table_names_the_profile(project_root_tmp, monkeyp
     assert (report.checks_total, report.checks_failed) == (1, 1)
 
 
-def test_report_drift_section_names_its_profile(project_root_tmp, monkeypatch):
-    """The Schema drift half of the report is a registry loop with two
-    profile-dependent parts — the heading and the tree drift is computed
-    from — and the reviewer's probe 2C replaced both (caller's cfg plus a
-    hardcoded "### adrd") while `tests/test_reconciliation.py` stayed at 16
-    passed (task-13-review-quality.md §2C — F4).
+def test_report_drift_section_is_the_registry_runs(project_root_tmp, monkeypatch):
+    """The Schema drift half of the report reads the registry-wide run's tree.
 
-    Each profile's tree here holds its own bronze run and its own baseline:
-    one baseline matches the run (status ok), the other carries a path the
-    run no longer shows (status drift_detected, with the sentinel in the
-    removed list). A section computed from the wrong tree or under the wrong
-    heading cannot reproduce that per-section pairing."""
+    A preset's derived run has no pages of its own (issue #147), so the section
+    is computed from the registry profile's tree and heading; a preset tree that
+    holds a run and a drifted baseline must not appear. The reviewer's probe 2C
+    (task-13-review-quality.md §2C — F4) replaced the heading and the tree with
+    the caller's cfg and a hardcoded "### adrd" while the suite stayed green, so
+    the registry tree's baseline here carries a sentinel path the run no longer
+    shows: only the right tree and heading can report it.
+    """
     import json
 
     from src.profiles import get_registry
@@ -429,30 +428,24 @@ def test_report_drift_section_names_its_profile(project_root_tmp, monkeypatch):
 
     monkeypatch.setattr("src.quality.data_quality_report.run_reconciliation", lambda: [])
 
-    profiles = get_registry().refreshable()
-    assert len(profiles) >= 2, "a one-profile loop cannot show per-profile drift"
+    registry = get_registry()
     sentinel = "protocolSection.baselineOnlyModule.goneField"
     study = make_study("NCT00000001")
     observed = sorted(collect_field_paths(study))
     runs: dict[str, str] = {}
-    for index, indication_profile in enumerate(profiles):
+    for index, indication_profile in enumerate([registry.registry_wide(), *registry.refreshable()]):
         profile_cfg = indication_profile.config
         run_id = f"20260904T120000Z_d000000{index}"
         runs[indication_profile.profile_id] = run_id
         write_bronze_page(profile_cfg.paths.bronze_api_responses / f"run_id={run_id}", 1, [study])
         profile_cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
         write_manifest(profile_cfg.paths.bronze_manifests, make_manifest(run_id, record_count=1))
-        baseline_paths = (
-            sorted([*observed, sentinel])
-            if indication_profile.profile_id == "oncology_nsclc"
-            else observed
-        )
         (profile_cfg.paths.bronze_api_responses.parent / BASELINE_FILENAME).write_text(
             json.dumps(
                 {
                     "created_at_utc": "2026-09-04T12:00:00Z",
                     "source_run_id": "old",
-                    "paths": baseline_paths,
+                    "paths": sorted([*observed, sentinel]),
                 }
             ),
             encoding="utf-8",
@@ -465,18 +458,10 @@ def test_report_drift_section_names_its_profile(project_root_tmp, monkeypatch):
     for chunk in text.split("### ")[1:]:
         heading, _, body = chunk.partition("\n")
         sections[heading.strip()] = body
-    assert {"adrd", "oncology_nsclc"} <= set(sections), (
-        f"every refreshable profile gets its own drift heading; headings rendered: "
-        f"{sorted(sections)}"
+    assert set(sections) == {registry.registry_wide().profile_id}, (
+        f"only the registry-wide run is drift-checked; headings rendered: {sorted(sections)}"
     )
-    for pid, expected_status in (("adrd", "**ok**"), ("oncology_nsclc", "**drift_detected**")):
-        body = sections[pid]
-        assert f"Run checked: `{runs[pid]}`" in body, (
-            f"the {pid} section must report {pid}'s own run; a section computed "
-            "from another tree cannot name it"
-        )
-        assert f"Status: {expected_status}" in body, (
-            f"the {pid} section must report {pid}'s own baseline delta"
-        )
-    assert sentinel in sections["oncology_nsclc"]
-    assert sentinel not in sections["adrd"], "removed paths must not bleed across sections"
+    body = sections[registry.registry_wide().profile_id]
+    assert f"Run checked: `{runs[registry.registry_wide().profile_id]}`" in body
+    assert "Status: **drift_detected**" in body
+    assert sentinel in body

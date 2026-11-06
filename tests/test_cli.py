@@ -166,132 +166,140 @@ def test_cli_parser_orchestrate_full_refresh():
     assert args.max_pages == 2
 
 
-def test_cli_main_orchestrate_skips_ingest_only_profiles(monkeypatch):
-    """orchestrate runs the *refreshable* profiles only. full_catalog is a
-    602-page / 9.7 GB registry pull (measured 2026-09-05) and must never be
-    reachable from `make pipeline`."""
+class _Manifest:
+    status = "success"
+    error = None
+
+
+class _Profile:
+    ingest_only = False
+
+    def __init__(self, profile_id: str) -> None:
+        self.profile_id = profile_id
+        self.config = SimpleNamespace(profile_id=profile_id)
+
+
+class _OrchestrateRegistry:
+    """Registry stand-in: one registry-wide profile plus the given presets."""
+
+    def __init__(self, *preset_ids: str) -> None:
+        self.registry_profile = _Profile("full_catalog")
+        self.presets = [_Profile(pid) for pid in preset_ids]
+
+    def registry_wide(self):
+        return self.registry_profile
+
+    def refreshable(self):
+        return self.presets
+
+    def get(self, profile_id):
+        for p in [self.registry_profile, *self.presets]:
+            if p.profile_id == profile_id:
+                return p
+        raise KeyError(f"No profile '{profile_id}' found in config/profiles/")
+
+    def all(self):  # pragma: no cover - orchestrate must not call this
+        raise AssertionError("orchestrate must use registry_wide()/refreshable(), not all()")
+
+
+def _patch_orchestrate(monkeypatch, registry, *, ingest=None, derive=None, profile_run=None):
+    """Wire the orchestrate collaborators; each defaults to a quiet success."""
+    monkeypatch.setattr("src.cli.get_registry", lambda: registry)
+    monkeypatch.setattr(
+        "src.ingest.extract_studies.run_ingestion", ingest or (lambda **kw: _Manifest())
+    )
+    monkeypatch.setattr("src.transform.preset_runs.derive_preset_runs", derive or (lambda r, p: []))
+    monkeypatch.setattr(
+        "src.transform.preset_runs.registry_run_is_incremental", lambda profile, full: False
+    )
+    monkeypatch.setattr("src.quality.profiling.profile_run", profile_run or (lambda *a, **k: None))
+
+
+def test_cli_main_orchestrate_ingests_the_registry_once_and_derives_each_preset(monkeypatch):
+    """One registry-wide pull is the unit of ingest; each refreshable profile is
+    a preset derived from it, so the multi-GB pull happens once, not per profile."""
+    ingested: list[dict] = []
+    derived: list[tuple[str, str]] = []
+
+    def fake_ingest(**kwargs):
+        ingested.append(kwargs)
+        return _Manifest()
+
+    def fake_derive(registry_profile, preset):
+        derived.append((registry_profile.profile_id, preset.profile_id))
+        return []
+
+    registry = _OrchestrateRegistry("adrd", "oncology_nsclc")
+    _patch_orchestrate(monkeypatch, registry, ingest=fake_ingest, derive=fake_derive)
+
+    assert main(["orchestrate", "--full-refresh", "--max-pages", "3"]) == 0
+    assert [k["config"].profile_id for k in ingested] == ["full_catalog"]
+    assert ingested[0]["full_refresh"] is True
+    assert ingested[0]["max_pages"] == 3
+    assert ingested[0]["incremental_refresh"] is False
+    assert ingested[0]["require_silver"] is False
+    assert derived == [("full_catalog", "adrd"), ("full_catalog", "oncology_nsclc")]
+
+
+def test_cli_main_orchestrate_single_preset_still_ingests_the_registry(monkeypatch):
+    derived: list[str] = []
     ingested: list[str] = []
-    transformed: list[str] = []
-
-    class FakeManifest:
-        status = "success"
-        error = None
-
-    class FakeProfileA:
-        profile_id = "adrd"
-        ingest_only = False
-
-    class FakeProfileB:
-        profile_id = "oncology_nsclc"
-        ingest_only = False
-
-    class FakeRegistry:
-        def refreshable(self):
-            return [FakeProfileA(), FakeProfileB()]
-
-        def all(self):  # pragma: no cover - orchestrate must not call this
-            raise AssertionError("orchestrate must use refreshable(), not all()")
 
     def fake_ingest(**kwargs):
         ingested.append(kwargs["config"].profile_id)
-        return FakeManifest()
+        return _Manifest()
 
-    def fake_transform(**kwargs):
-        transformed.append(kwargs["profile"].profile_id)
-        return []
-
-    monkeypatch.setattr("src.cli.get_registry", lambda: FakeRegistry())
-    monkeypatch.setattr("src.ingest.extract_studies.run_ingestion", fake_ingest)
-    monkeypatch.setattr("src.transform.build_silver_entities.run_transform", fake_transform)
-    monkeypatch.setattr("src.quality.profiling.profile_run", lambda *a, **k: None)
-
-    assert main(["orchestrate"]) == 0
-    assert ingested == ["adrd", "oncology_nsclc"]
-    assert transformed == ["adrd", "oncology_nsclc"]
-
-
-def test_cli_main_orchestrate_refuses_ingest_only_profile(monkeypatch):
-    """`orchestrate --profile full_catalog` is exit 2 before anything runs.
-
-    The test above pins the default branch — `orchestrate` without --profile
-    takes `refreshable()`, so full_catalog is not in it. The single-profile
-    branch went straight to `registry.get()`, and the alias normalises
-    `full-catalog` straight in, so the 602-page registry pull was reachable
-    from the command that also transforms: the branch review measured exit 0
-    with `('transform', 'full_catalog', True)` recorded, i.e. ADRD-classified
-    rows stamped `indication_profile_id = 'full_catalog'` written into the
-    *shared* silver tree that dbt globs. `transform` already refuses this
-    profile with exit 2; `orchestrate` has to hold the same line *before* the
-    loop so no ingestion is attempted either.
-    """
-    calls: list[str] = []
-
-    class FakeManifest:
-        status = "success"
-        error = None
-
-    class FullCatalogProfile:
-        profile_id = "full_catalog"
-        ingest_only = True
-
-    class RefreshableProfile:
-        profile_id = "adrd"
-        ingest_only = False
-
-    class FakeRegistry:
-        def refreshable(self):
-            calls.append("refreshable")
-            return [RefreshableProfile()]
-
-        def get(self, profile_id):
-            calls.append(f"get:{profile_id}")
-            return FullCatalogProfile()
-
-    def fake_ingest(**kwargs):
-        calls.append("ingest")
-        return FakeManifest()
-
-    monkeypatch.setattr("src.cli.get_registry", lambda: FakeRegistry())
-    monkeypatch.setattr("src.ingest.extract_studies.run_ingestion", fake_ingest)
-    monkeypatch.setattr(
-        "src.transform.build_silver_entities.run_transform",
-        lambda **kw: (_ for _ in ()).throw(AssertionError("must not run")),
+    registry = _OrchestrateRegistry("adrd", "oncology_nsclc")
+    _patch_orchestrate(
+        monkeypatch,
+        registry,
+        ingest=fake_ingest,
+        derive=lambda r, p: derived.append(p.profile_id) or [],
     )
-    monkeypatch.setattr(
-        "src.quality.profiling.profile_run",
-        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not run")),
+
+    assert main(["orchestrate", "--profile", "oncology_nsclc"]) == 0
+    assert ingested == ["full_catalog"]
+    assert derived == ["oncology_nsclc"]
+
+
+def test_cli_main_orchestrate_refuses_the_registry_profile_as_a_preset(monkeypatch):
+    """`orchestrate --profile full_catalog` is exit 2 before anything runs: the
+    registry-wide profile is the run itself, not a preset to derive. The legacy
+    hyphen alias takes the same path."""
+    calls: list[str] = []
+    registry = _OrchestrateRegistry("adrd")
+    _patch_orchestrate(
+        monkeypatch,
+        registry,
+        ingest=lambda **kw: calls.append("ingest"),
+        derive=lambda r, p: calls.append("derive") or [],
     )
 
     assert main(["orchestrate", "--profile", "full_catalog"]) == 2
-    # the legacy hyphen alias is what the reviewer's probe used
     assert main(["orchestrate", "--profile", "full-catalog"]) == 2
-    assert "ingest" not in calls
-    assert calls == ["get:full_catalog", "get:full_catalog"]
+    assert calls == []
+
+
+def test_cli_main_orchestrate_refuses_ingest_only_profile(monkeypatch):
+    calls: list[str] = []
+    registry = _OrchestrateRegistry("adrd")
+    registry.presets[0].ingest_only = True
+    _patch_orchestrate(
+        monkeypatch, registry, ingest=lambda **kw: calls.append("ingest") or _Manifest()
+    )
+
+    assert main(["orchestrate", "--profile", "adrd"]) == 2
+    assert calls == []
 
 
 def test_cli_main_orchestrate_unknown_profile_is_usage_error(monkeypatch):
     """A typo'd `orchestrate --profile` id exits 2 (usage), never a traceback.
 
-    Same convention `transform` keeps at 1449a5c: 2 = usage, 1 = data failure.
-    `orchestrate` built its one-profile list outside any try, so the registry's
-    KeyError escaped as an uncaught exception.
+    Same convention `transform` keeps: 2 = usage, 1 = data failure.
     """
     calls: list[str] = []
-
-    class FakeRegistry:
-        def get(self, profile_id):
-            raise KeyError(f"No profile '{profile_id}' found in config/profiles/")
-
-        def refreshable(self):  # pragma: no cover - --profile must not widen
-            calls.append("refreshable")
-            return []
-
-    monkeypatch.setattr("src.cli.get_registry", lambda: FakeRegistry())
-    monkeypatch.setattr(
-        "src.ingest.extract_studies.run_ingestion",
-        lambda **kw: calls.append("ingest"),
-    )
-    monkeypatch.setattr("src.transform.build_silver_entities.run_transform", lambda **kw: [])
+    registry = _OrchestrateRegistry("adrd")
+    _patch_orchestrate(monkeypatch, registry, ingest=lambda **kw: calls.append("ingest"))
 
     assert main(["orchestrate", "--profile", "no-such-profile"]) == 2
     assert calls == []
@@ -299,131 +307,84 @@ def test_cli_main_orchestrate_unknown_profile_is_usage_error(monkeypatch):
 
 def test_cli_main_orchestrate_fails_when_registry_has_no_refreshable_profiles(monkeypatch):
     """An empty refreshable() set is a mis-mounted config/profiles/ or every
-    profile marked ingest_only — not a refresh that landed data. `make pipeline`
-    gates on this exit code from Task 5 onward, so it must never be 0."""
+    profile marked ingest_only, not a refresh that landed data. `make pipeline`
+    gates on this exit code, so it must never be 0."""
     ingested: list[str] = []
-
-    class FakeManifest:
-        status = "success"
-        error = None
-
-    class EmptyRegistry:
-        def refreshable(self):
-            return []
-
-    def fake_ingest(**kwargs):
-        ingested.append(kwargs["config"].profile_id)
-        return FakeManifest()
-
-    monkeypatch.setattr("src.cli.get_registry", lambda: EmptyRegistry())
-    monkeypatch.setattr("src.ingest.extract_studies.run_ingestion", fake_ingest)
-    monkeypatch.setattr("src.transform.build_silver_entities.run_transform", lambda **kw: [])
-    monkeypatch.setattr("src.quality.profiling.profile_run", lambda *a, **k: None)
+    registry = _OrchestrateRegistry()
+    _patch_orchestrate(monkeypatch, registry, ingest=lambda **kw: ingested.append("x"))
 
     assert main(["orchestrate"]) != 0
     assert ingested == []
 
 
+def test_cli_main_orchestrate_registry_ingest_failure_derives_nothing(monkeypatch):
+    """A failed or raising registry pull is exit 1 and no preset derives from
+    pages that are not there."""
+    derived: list[str] = []
+
+    class FailedManifest:
+        status = "failed"
+        error = "boom"
+
+    registry = _OrchestrateRegistry("adrd")
+    _patch_orchestrate(
+        monkeypatch,
+        registry,
+        ingest=lambda **kw: FailedManifest(),
+        derive=lambda r, p: derived.append(p.profile_id) or [],
+    )
+    assert main(["orchestrate"]) == 1
+
+    def raising(**kw):
+        raise RuntimeError("Connection reset by peer on page 4")
+
+    _patch_orchestrate(
+        monkeypatch,
+        registry,
+        ingest=raising,
+        derive=lambda r, p: derived.append(p.profile_id) or [],
+    )
+    assert main(["orchestrate"]) == 1
+    assert derived == []
+
+
 def test_cli_main_orchestrate_contains_a_raise_and_attempts_the_rest(monkeypatch):
-    """One profile's exception is recorded; it does not end the refresh.
+    """One preset's exception is recorded; it does not end the refresh.
 
-    The loop's `except Exception` arm is the CLI twin of the containment the
-    assets got in `ae8bf89`, and no test reached it: every other orchestrate test
-    either returns before the loop (usage errors, empty registry) or has both
-    fakes succeed — measured 2026-09-07, narrowing the arm to
-    `except ZeroDivisionError` reddened this test and no other. Widening a
-    two-profile refresh to fail-fast would still leave the *exit code* right by
-    accident, because the traceback is non-zero too, while silently costing the
-    healthy profile its ingest. So the arm needs both halves pinned: the
-    survivor ran, and the run is red.
+    Both halves are pinned: the surviving preset ran, and the run is red.
     """
-    ingested: list[str] = []
-    transformed: list[str] = []
+    derived: list[str] = []
 
-    class FakeManifest:
-        status = "success"
-        error = None
-
-    class FakeProfileA:
-        profile_id = "adrd"
-        ingest_only = False
-
-    class FakeProfileB:
-        profile_id = "oncology_nsclc"
-        ingest_only = False
-
-    class FakeRegistry:
-        def refreshable(self):
-            return [FakeProfileA(), FakeProfileB()]
-
-    def fake_ingest(**kwargs):
-        pid = kwargs["config"].profile_id
-        ingested.append(pid)
-        if pid == "adrd":
-            raise RuntimeError("Connection reset by peer on page 4")
-        return FakeManifest()
-
-    def fake_transform(**kwargs):
-        transformed.append(kwargs["profile"].profile_id)
+    def fake_derive(registry_profile, preset):
+        derived.append(preset.profile_id)
+        if preset.profile_id == "adrd":
+            raise RuntimeError("registry run pages hold 3 studies but its manifest records 4")
         return []
 
-    monkeypatch.setattr("src.cli.get_registry", lambda: FakeRegistry())
-    monkeypatch.setattr("src.ingest.extract_studies.run_ingestion", fake_ingest)
-    monkeypatch.setattr("src.transform.build_silver_entities.run_transform", fake_transform)
-    monkeypatch.setattr("src.quality.profiling.profile_run", lambda *a, **k: None)
+    registry = _OrchestrateRegistry("adrd", "oncology_nsclc")
+    _patch_orchestrate(monkeypatch, registry, derive=fake_derive)
 
     assert main(["orchestrate"]) == 1
-    assert ingested == ["adrd", "oncology_nsclc"], "the raise ended the loop"
-    assert transformed == ["oncology_nsclc"]
+    assert derived == ["adrd", "oncology_nsclc"], "the raise ended the loop"
 
 
 def test_cli_main_orchestrate_profiles_each_run_with_that_profiles_config(monkeypatch):
-    """Each run is profiled against the config of the profile that made it.
+    """Each derived run is profiled against the config of the preset that made it.
 
-    `transform` calls `profile_run(run_id, config=indication_profile.config)`;
-    `orchestrate` called it with the bare run id, so profiling used the
-    *default* profile's paths and looked the run up in
-    `data/bronze/adrd/manifests/`. For `oncology_nsclc` the manifest is not
-    there, so `silver/_profiles/profile_<run>.json` recorded a reconciliation
-    block it had no business calling clean. The assertion is on identity, not
-    equality: a profile that happened to carry an equal-but-default config
-    would pass the weaker test while profiling the wrong tree.
+    `profile_run` looks the run's manifest up in the config's bronze tree; the
+    assertion is on identity so an equal-but-default config cannot pass.
     """
     profiled: list[dict] = []
 
-    class FakeManifest:
-        status = "success"
-        error = None
-
-    class AdrdProfile:
-        profile_id = "adrd"
-        ingest_only = False
-        config = SimpleNamespace(profile_id="adrd")
-
-    class NsclcProfile:
-        profile_id = "oncology_nsclc"
-        ingest_only = False
-        config = SimpleNamespace(profile_id="oncology_nsclc")
-
-    class FakeRegistry:
-        def refreshable(self):
-            return [AdrdProfile(), NsclcProfile()]
-
-    def fake_ingest(**kwargs):
-        return FakeManifest()
-
-    def fake_transform(**kwargs):
-        pid = kwargs["profile"].profile_id
-        return [f"run_{pid}_a", f"run_{pid}_b"]
+    def fake_derive(registry_profile, preset):
+        return [f"run_{preset.profile_id}_a", f"run_{preset.profile_id}_b"]
 
     def fake_profile_run(*args, **kwargs):
         profiled.append({"run_id": args[0], **kwargs})
         return {}
 
-    monkeypatch.setattr("src.cli.get_registry", lambda: FakeRegistry())
-    monkeypatch.setattr("src.ingest.extract_studies.run_ingestion", fake_ingest)
-    monkeypatch.setattr("src.transform.build_silver_entities.run_transform", fake_transform)
-    monkeypatch.setattr("src.quality.profiling.profile_run", fake_profile_run)
+    registry = _OrchestrateRegistry("adrd", "oncology_nsclc")
+    _patch_orchestrate(monkeypatch, registry, derive=fake_derive, profile_run=fake_profile_run)
 
     assert main(["orchestrate"]) == 0
     assert [p["run_id"] for p in profiled] == [
@@ -432,14 +393,8 @@ def test_cli_main_orchestrate_profiles_each_run_with_that_profiles_config(monkey
         "run_oncology_nsclc_a",
         "run_oncology_nsclc_b",
     ]
-    assert [p["config"].profile_id for p in profiled] == [
-        "adrd",
-        "adrd",
-        "oncology_nsclc",
-        "oncology_nsclc",
-    ]
-    assert profiled[0]["config"] is AdrdProfile.config
-    assert profiled[-1]["config"] is NsclcProfile.config
+    assert profiled[0]["config"] is registry.presets[0].config
+    assert profiled[-1]["config"] is registry.presets[1].config
 
 
 def test_cli_has_no_local_profile_alias_table() -> None:
@@ -587,23 +542,18 @@ def test_cli_parser_quality_report():
     assert args.update_schema_baseline is True
 
 
-def test_cli_quality_report_updates_a_baseline_per_profile_tree(project_root_tmp, monkeypatch):
-    """`--update-schema-baseline` loops the registry so each profile's
-    baseline is re-frozen against *that profile's* latest run — the loop's
-    own comment at src/cli.py:208-210 says updating only the default tree
-    "would freeze every other profile's baseline against a run it never
-    made", and reviewer F5 measured that no test reached the loop at all
-    (task-13-review-quality.md §2D: the only prior coverage asserted the
-    parser sets the flag).
+def test_cli_quality_report_updates_the_registry_runs_baseline(project_root_tmp, monkeypatch):
+    """`--update-schema-baseline` re-freezes the registry-wide profile's baseline.
 
-    The attribution has to survive build_report's own drift loop, which
-    *creates* a missing baseline as a side effect — a first draft of this
-    test that only asserted baseline existence stayed green under a
-    loop-truncation mutant (measured 2026-09-06). So each tree here starts
-    with a stale baseline frozen on an older run, plus a newer run whose
-    schema drifted from it; only `update_baseline=True` rewrites a baseline
-    that already exists, and each rewritten baseline must name its own
-    profile's newer run."""
+    Schema drift is checked on the registry-wide run only: a preset's derived
+    run has no pages of its own, so a baseline in its tree would freeze a run
+    that never read the API (issue #147). The tree starts with a stale baseline
+    frozen on an older run plus a newer run whose schema drifted from it: only
+    `update_baseline=True` rewrites a baseline that already exists, and it must
+    name the newer run. The first draft of the per-profile version of this
+    test stayed green under a loop-truncation mutant when it only asserted
+    existence (measured 2026-09-06), hence the stale-baseline setup.
+    """
     import json
 
     from src.ingest.snapshot_manifest import write_manifest
@@ -619,33 +569,31 @@ def test_cli_quality_report_updates_a_baseline_per_profile_tree(project_root_tmp
         }
     }
 
-    runs: dict[str, tuple[str, str]] = {}
-    profiles = get_registry().refreshable()
-    assert len(profiles) >= 2, "a one-profile loop cannot test a per-profile flag"
-    for index, indication_profile in enumerate(profiles):
-        profile_cfg = indication_profile.config
-        stale_run = f"20260904T120000Z_o000000{index}"
-        new_run = f"20260905T120000Z_n000000{index}"
-        runs[indication_profile.profile_id] = (stale_run, new_run)
-        write_bronze_page(
-            profile_cfg.paths.bronze_api_responses / f"run_id={stale_run}", 1, [make_study("NCT1")]
-        )
-        write_bronze_page(
-            profile_cfg.paths.bronze_api_responses / f"run_id={new_run}", 1, [drifted_study]
-        )
-        profile_cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
-        write_manifest(profile_cfg.paths.bronze_manifests, make_manifest(stale_run, record_count=1))
-        write_manifest(profile_cfg.paths.bronze_manifests, make_manifest(new_run, record_count=1))
-        (profile_cfg.paths.bronze_api_responses.parent / BASELINE_FILENAME).write_text(
-            json.dumps(
-                {
-                    "created_at_utc": "2026-09-04T12:00:00Z",
-                    "source_run_id": stale_run,
-                    "paths": stale_paths,
-                }
-            ),
-            encoding="utf-8",
-        )
+    registry_profile = get_registry().registry_wide()
+    presets = get_registry().refreshable()
+    assert presets, "the registry must hold presets for the negative assertion below"
+    profile_cfg = registry_profile.config
+    stale_run = "20260904T120000Z_o0000000"
+    new_run = "20260905T120000Z_n0000000"
+    write_bronze_page(
+        profile_cfg.paths.bronze_api_responses / f"run_id={stale_run}", 1, [make_study("NCT1")]
+    )
+    write_bronze_page(
+        profile_cfg.paths.bronze_api_responses / f"run_id={new_run}", 1, [drifted_study]
+    )
+    profile_cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+    write_manifest(profile_cfg.paths.bronze_manifests, make_manifest(stale_run, record_count=1))
+    write_manifest(profile_cfg.paths.bronze_manifests, make_manifest(new_run, record_count=1))
+    (profile_cfg.paths.bronze_api_responses.parent / BASELINE_FILENAME).write_text(
+        json.dumps(
+            {
+                "created_at_utc": "2026-09-04T12:00:00Z",
+                "source_run_id": stale_run,
+                "paths": stale_paths,
+            }
+        ),
+        encoding="utf-8",
+    )
 
     # main() reaches build_report() with its default output; keep that write
     # inside the temp root instead of the checkout's reports/ directory.
@@ -660,15 +608,16 @@ def test_cli_quality_report_updates_a_baseline_per_profile_tree(project_root_tmp
     monkeypatch.setattr("src.quality.data_quality_report.run_reconciliation", lambda: [])
     assert main(["quality-report", "--update-schema-baseline"]) == 0
 
-    for pid, (stale_run, new_run) in runs.items():
-        baseline = (
-            get_registry().get(pid).config.paths.bronze_api_responses.parent / BASELINE_FILENAME
-        )
-        assert baseline.exists(), f"no schema baseline in {pid}'s tree"
-        payload = json.loads(baseline.read_text(encoding="utf-8"))
-        assert payload["source_run_id"] == new_run, (
-            f"{pid}'s baseline still freezes the stale run {stale_run}: the "
-            "--update-schema-baseline loop never reached this profile's tree"
+    baseline = profile_cfg.paths.bronze_api_responses.parent / BASELINE_FILENAME
+    payload = json.loads(baseline.read_text(encoding="utf-8"))
+    assert payload["source_run_id"] == new_run, (
+        f"the registry baseline still freezes the stale run {stale_run}: "
+        "--update-schema-baseline never reached the registry-wide tree"
+    )
+    # Presets read the registry run's pages, so none gets a baseline of its own.
+    for preset in presets:
+        assert not (preset.config.paths.bronze_api_responses.parent / BASELINE_FILENAME).exists(), (
+            f"{preset.profile_id} grew its own schema baseline"
         )
 
 
@@ -735,48 +684,6 @@ def test_cli_parser_orchestrate_with_profile():
     parser = build_parser()
     args = parser.parse_args(["orchestrate", "--profile", "oncology_nsclc"])
     assert args.profile == "oncology_nsclc"
-
-
-def test_cli_main_orchestrate_with_profile_runs_only_named_profile(monkeypatch):
-    ingested = []
-    transformed = []
-
-    class FakeManifest:
-        status = "success"
-        error = None
-
-    class FakeProfileA:
-        profile_id = "adrd"
-        ingest_only = False
-        config = SimpleNamespace(profile_id="adrd")
-
-    class FakeProfileB:
-        profile_id = "oncology_nsclc"
-        ingest_only = False
-        config = SimpleNamespace(profile_id="oncology_nsclc")
-
-    class FakeRegistry:
-        def get(self, profile_id):
-            if profile_id == "oncology_nsclc":
-                return FakeProfileB()
-            return FakeProfileA()
-
-    monkeypatch.setattr("src.cli.get_registry", lambda: FakeRegistry())
-    monkeypatch.setattr(
-        "src.ingest.extract_studies.run_ingestion",
-        lambda **kw: (ingested.append(kw["config"].profile_id), FakeManifest())[1],
-    )
-    monkeypatch.setattr(
-        "src.transform.build_silver_entities.run_transform",
-        lambda **kw: (transformed.append(kw["profile"].profile_id), ["r1"])[1],
-    )
-    monkeypatch.setattr("src.quality.profiling.profile_run", lambda *a, **k: {})
-
-    exit_code = main(["orchestrate", "--profile", "oncology_nsclc"])
-
-    assert exit_code == 0
-    assert ingested == ["oncology_nsclc"]
-    assert transformed == ["oncology_nsclc"]
 
 
 def test_cli_main_transform_custom_profile_passes_profile(monkeypatch):

@@ -216,7 +216,10 @@ documented in the [operations guide](OPERATIONS.md).
   continues to process ADRD bronze (`--profile adrd`).
 - **Multi-indication (implemented).** An indication profile is one YAML file in
   `config/profiles/`, the registry loads all of them, and `make orchestrate`
-  refreshes every profile that is not `ingest_only` into the *same* warehouse. The
+  ingests the registry-wide run once, then derives every profile that is not
+  `ingest_only` from it (a preset: `preset.mesh_terms` plus the profile's
+  `scope` filters, `src/transform/preset_runs.py`) into the *same* warehouse.
+  `CTI_REFRESHABLE_PROFILES` narrows which presets are derived, never the pull. The
   trial grain is `(nct_id, indication_profile_id)`, carried through staging,
   intermediate and mart models, while silver, gold and the DuckDB file stay shared
   (`config/shared_paths.yml`) — the profile column is what keeps two indications

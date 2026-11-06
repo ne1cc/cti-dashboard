@@ -492,8 +492,18 @@ IP: the container's run `20260905T191901Z_77632421` reported
 ## Notes
 
 - **The scheduled refresh covers the configured refreshable indications, and
-  the dashboard serves one at a time.** `make pipeline` runs `orchestrate`;
-  `CTI_REFRESHABLE_PROFILES` can limit the eligible profiles. The former Fly
+  the dashboard serves one at a time.** `make pipeline` runs `orchestrate`,
+  which pulls the registry-wide run once (incrementally after the first
+  success) and derives each indication from it as a preset;
+  `CTI_REFRESHABLE_PROFILES` limits the presets derived, not the pull. No full
+  snapshot is ever scheduled: force one with `make pipeline
+  ORCHESTRATE_FLAGS=--full-refresh` (or `make orchestrate-full-refresh`), e.g. after
+  editing a preset's `mesh_terms`, since an incremental run cannot see a study that
+  stopped matching without the registry reporting a change. A full registry pull
+  is about 5 GB of pages; `prune-data` keeps a registry run's pages only until every
+  refreshable preset has derived from it (then `bronze_runs_to_keep: 1` applies),
+  so a failed preset holds up to `snapshot_runs_to_keep` (3) registry runs,
+  about 15 GB, until it derives or the run ages out. The former Fly
   deployment ran two profiles, `adrd` and `oncology_nsclc` (2026-09-07,
   commit `78c2050`). `full_catalog` stays opt-in —
   `ingest_only: true` at `config/profiles/full_catalog.yml:21` — so its

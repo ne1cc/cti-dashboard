@@ -102,23 +102,25 @@ def test_failed_bronze_check_blocks_silver(project_root_tmp, monkeypatch) -> Non
         total_count_reported=999,
     )
 
-    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
-        from src.config import load_config
+    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None, **kwargs):
         from src.ingest.snapshot_manifest import write_manifest
 
-        write_manifest(load_config().paths.bronze_manifests, bad)
+        # The registry-wide run: its manifest lives in the registry profile's tree.
+        write_manifest(config.config.paths.bronze_manifests, bad)
         return bad
 
     transform_calls: list[str | None] = []
 
-    def fake_run_transform(run_id=None, force=False, profile=None):
+    def fake_derive_preset_runs(registry_profile, preset):
         # Record the invocation and return normally: if blocking were absent,
         # the run would succeed with silver materialized and this list non-empty.
-        transform_calls.append(run_id)
+        transform_calls.append(preset.profile_id)
         return []
 
     monkeypatch.setattr("src.orchestration.assets.bronze.run_ingestion", fake_run_ingestion)
-    monkeypatch.setattr("src.orchestration.assets.silver.run_transform", fake_run_transform)
+    monkeypatch.setattr(
+        "src.orchestration.assets.silver.derive_preset_runs", fake_derive_preset_runs
+    )
     result = materialize_with_checks(
         assets=[ctg_raw_pages, silver_entities],
         asset_checks=[manifest_integrity, bronze_silver_reconciliation],

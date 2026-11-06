@@ -59,7 +59,8 @@ def _aggregate(checks: list[ReconciliationCheck]) -> AssetCheckResult:
 def manifest_integrity() -> AssetCheckResult:
     per_profile: dict[str, dict[str, Any]] = {}
     broken: list[str] = []
-    for profile in _refreshable_or_fail():
+    # The registry-wide run is the ingest; each preset's derived run follows it.
+    for profile in [get_registry().registry_wide(), *_refreshable_or_fail()]:
         manifests = load_manifests(profile.config.paths.bronze_manifests)
         success_runs = [m for m in manifests if m.status == "success"]
         pid = profile.profile_id

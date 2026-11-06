@@ -218,7 +218,7 @@ These pipeline commands use configured data paths and can contact the live regis
 | Command | Behavior |
 |---|---|
 | `make pipeline` | Sequentially runs orchestrate → prune-data → dbt-run → dbt-test → quality-report; ingestion uses incremental reuse, and pruning deletes artifacts beyond configured retention |
-| `make orchestrate` / `make orchestrate-full-refresh` | Ingest + transform refreshable profiles; the full-refresh variant bypasses ingestion reuse |
+| `make orchestrate` / `make orchestrate-full-refresh` | Ingest the registry-wide run once, then derive each refreshable profile (a MeSH-node preset) from it; every run after the first pulls incrementally, and the full-refresh variant pulls a new full snapshot (`make pipeline ORCHESTRATE_FLAGS=--full-refresh` forces one through the pipeline) |
 | `make transform` | Transform completed ADRD bronze runs into silver Parquet and profile the results |
 | `make dbt-deps` / `make dbt-docs` | Install dbt packages / generate warehouse documentation; `make dbt-run` seeds before building models |
 | `make test` | Run pytest |
