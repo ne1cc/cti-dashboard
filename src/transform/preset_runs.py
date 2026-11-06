@@ -16,8 +16,10 @@ docs/profile-retirement-expected-diffs.md.
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
+from src.ingest.extract_studies import INCREMENTAL_OVERLAP_DAYS
 from src.ingest.snapshot_manifest import (
     IngestionManifest,
     load_manifests,
@@ -37,6 +39,9 @@ if TYPE_CHECKING:
 
 # scope.* values meaning "no filter" on the registry-wide profile.
 _NO_FILTER_PREFIX = "ALL"
+
+# Projection entries that carry the MeSH terms the selector matches on.
+_MESH_FIELDS = {"derivedSection", "derivedSection.conditionBrowseModule"}
 
 
 def preset_selector(preset: IndicationProfile) -> Callable[[dict[str, Any]], bool]:
@@ -76,18 +81,30 @@ def preset_selector(preset: IndicationProfile) -> Callable[[dict[str, Any]], boo
     return select
 
 
+def _carries_mesh(run: IngestionManifest) -> bool:
+    """False for a run whose field projection leaves out the MeSH terms.
+
+    No `fields` param means CTG sent whole records, which include them.
+    """
+    fields = run.params.get("fields")
+    return not fields or not _MESH_FIELDS.isdisjoint(fields.split("|"))
+
+
 def registry_run_is_incremental(registry: IndicationProfile, full_refresh: bool) -> bool:
     """True when the next registry-wide pull should be an incremental refresh.
 
     A weekly refresh fetches only studies changed since the last successful run
-    (a whole-registry snapshot is ~5 GB); the first run, or an explicit
-    `full_refresh`, pulls everything.
+    (a whole-registry snapshot is ~5 GB); the first run, an explicit
+    `full_refresh`, or a newest run without MeSH terms (written before presets
+    existed, so no preset can be derived from it or from an increment on it)
+    pulls everything.
     """
     if full_refresh:
         return False
-    return any(
-        m.status == "success" for m in load_manifests(registry.config.paths.bronze_manifests)
-    )
+    successes = [
+        m for m in load_manifests(registry.config.paths.bronze_manifests) if m.status == "success"
+    ]
+    return bool(successes) and _carries_mesh(max(successes, key=lambda m: m.started_at_utc))
 
 
 def pending_source_runs(
@@ -95,8 +112,17 @@ def pending_source_runs(
 ) -> list[IngestionManifest]:
     """Registry-wide success runs `preset` has not been derived from, oldest first.
 
-    A preset with no derived run yet starts at the latest full snapshot: earlier
-    runs are superseded by it, and an incremental run needs a base to carry from.
+    Contract:
+    - Order is monotonic: a run started before one the preset already derived from
+      is never returned, so an older snapshot cannot be published under a newer
+      run id.
+    - The list starts at the latest full snapshot among the candidates: earlier
+      runs are superseded by it.
+    - Raises ValueError when no full base exists and the preset cannot continue
+      from its last derived run: it has none, or a registry run between them was
+      pruned before the preset derived it (silently skipping it would leave that
+      run's changes out). Recover with `orchestrate --full-refresh`.
+    - Raises ValueError when a candidate was pulled without MeSH terms.
     """
     sources = sorted(
         (
@@ -106,21 +132,54 @@ def pending_source_runs(
         ),
         key=lambda m: m.started_at_utc,
     )
-    derived = {
-        m.source_run_id
+    derived = [
+        m
         for m in load_manifests(preset.config.paths.bronze_manifests)
         if m.status == "success" and m.source_run_id
-    }
-    pending = [m for m in sources if m.ingestion_run_id not in derived]
-    if pending and not derived:
-        fulls = [i for i, m in enumerate(pending) if not m.updated_since_utc]
-        if not fulls:
-            raise ValueError(
-                f"Profile '{preset.profile_id}' has no derived run and the retained registry "
-                "runs are all incremental; run 'orchestrate --full-refresh' for a base snapshot."
-            )
+    ]
+    last = max(derived, key=lambda m: m.started_at_utc, default=None)
+    done = {m.source_run_id for m in derived}
+    pending = [
+        m
+        for m in sources
+        if m.ingestion_run_id not in done
+        and (last is None or m.started_at_utc > last.started_at_utc)
+    ]
+    if not pending:
+        return pending
+    fulls = [i for i, m in enumerate(pending) if not m.updated_since_utc]
+    if fulls:
         pending = pending[fulls[-1] :]
+    elif last is None:
+        raise ValueError(
+            f"Profile '{preset.profile_id}' has no derived run and the retained registry "
+            "runs are all incremental; run 'orchestrate --full-refresh' for a base snapshot."
+        )
+    elif str(pending[0].updated_since_utc) > _covered_until(last):
+        # The first increment starts after the day the last derived run began, so a
+        # registry run in between is gone.
+        raise ValueError(
+            f"Profile '{preset.profile_id}' last derived registry run {last.source_run_id}, "
+            f"but the next retained run {pending[0].ingestion_run_id} only covers changes since "
+            f"{pending[0].updated_since_utc}: a registry run in between was pruned before this "
+            "preset derived it. Run 'orchestrate --full-refresh' for a new base snapshot."
+        )
+    stale = [m.ingestion_run_id for m in pending if not _carries_mesh(m)]
+    if stale:
+        raise ValueError(
+            f"Registry run(s) {', '.join(stale)} were pulled without derivedSection."
+            "conditionBrowseModule, so no preset can be derived from them; run "
+            "'orchestrate --full-refresh'."
+        )
     return pending
+
+
+def _covered_until(derived: IngestionManifest) -> str:
+    """Day a registry run's successor starts its changed-since window at.
+
+    Mirrors `latest_snapshot_date`: the run's start minus the overlap.
+    """
+    return (derived.started_at_utc - timedelta(days=INCREMENTAL_OVERLAP_DAYS)).date().isoformat()
 
 
 def derive_preset_runs(registry: IndicationProfile, preset: IndicationProfile) -> list[str]:

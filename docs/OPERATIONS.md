@@ -503,7 +503,11 @@ IP: the container's run `20260905T191901Z_77632421` reported
   is about 5 GB of pages; `prune-data` keeps a registry run's pages only until every
   refreshable preset has derived from it (then `bronze_runs_to_keep: 1` applies),
   so a failed preset holds up to `snapshot_runs_to_keep` (3) registry runs,
-  about 15 GB, until it derives or the run ages out. The former Fly
+  about 15 GB, until it derives or the run ages out. A run that ages out before a
+  preset derived it is not skipped: that preset's next derivation fails and asks
+  for `--full-refresh`. Registry runs written before presets existed lack MeSH
+  terms: the first pull after the upgrade is forced to be a full one, and no preset
+  is derived from such a run (it fails the same way). The former Fly
   deployment ran two profiles, `adrd` and `oncology_nsclc` (2026-09-07,
   commit `78c2050`). `full_catalog` stays opt-in —
   `ingest_only: true` at `config/profiles/full_catalog.yml:21` — so its

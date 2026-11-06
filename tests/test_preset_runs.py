@@ -96,6 +96,7 @@ def write_registry_run(
     incremental_since: str | None = None,
     minutes: int = 0,
     status: str = "success",
+    params: dict[str, str] | None = None,
 ) -> IngestionManifest:
     """Write one registry-wide run: a page of studies plus its manifest."""
     run_dir = registry.config.paths.bronze_api_responses / f"run_id={run_id}"
@@ -104,7 +105,7 @@ def write_registry_run(
         ingestion_run_id=run_id,
         query_hash="q",
         endpoint="https://ctg.test/api/v2/studies",
-        params={},
+        params=params or {},
         profile=registry.profile_id,
         status=status,
         started_at_utc=utc_now() + timedelta(minutes=minutes),
@@ -293,7 +294,7 @@ def test_incremental_registry_run_upserts_onto_the_presets_previous_snapshot(
         registry_profile,
         "reg2",
         [mesh_study("NCT00000003", direct=("Dementia",))],
-        incremental_since="2026-11-01",
+        incremental_since="2020-01-01",
         minutes=5,
     )
 
@@ -331,7 +332,7 @@ def test_incremental_run_drops_a_touched_study_that_no_longer_matches(
         registry_profile,
         "reg2",
         [mesh_study("NCT00000002", **{"direct": ("Dementia",), **changed})],
-        incremental_since="2026-11-01",
+        incremental_since="2020-01-01",
         minutes=5,
     )
 
@@ -346,11 +347,40 @@ def test_pending_runs_start_at_the_latest_full_snapshot(tmp_path: Path, registry
     study = [mesh_study("NCT00000001", direct=("Dementia",))]
     write_registry_run(registry_profile, "old_full", study)
     write_registry_run(registry_profile, "new_full", study, minutes=5)
-    write_registry_run(registry_profile, "inc", study, incremental_since="2026-11-01", minutes=10)
+    write_registry_run(registry_profile, "inc", study, incremental_since="2020-01-01", minutes=10)
 
     pending = pending_source_runs(registry_profile, adrd)
 
     assert [m.ingestion_run_id for m in pending] == ["new_full", "inc"]
+
+
+def test_an_older_full_snapshot_the_first_pass_skipped_is_never_derived_later(
+    tmp_path: Path, registry_profile
+):
+    """Order is monotonic: once r2 is derived, the superseded r1 stays skipped."""
+    adrd = make_profile(tmp_path, "adrd", "adrd")
+    r1 = [mesh_study("NCT00000001", direct=("Dementia",))]
+    write_registry_run(registry_profile, "r1_old_full", r1)
+    write_registry_run(
+        registry_profile,
+        "r2_new_full",
+        r1 + [mesh_study("NCT00000002", direct=("Dementia",))],
+        minutes=5,
+    )
+    (first,) = derive_preset_runs(registry_profile, adrd)
+    write_registry_run(
+        registry_profile,
+        "r3_inc",
+        [mesh_study("NCT00000003", direct=("Dementia",))],
+        incremental_since="2020-01-01",
+        minutes=10,
+    )
+
+    assert [m.ingestion_run_id for m in pending_source_runs(registry_profile, adrd)] == ["r3_inc"]
+    (second,) = derive_preset_runs(registry_profile, adrd)
+
+    assert silver_ncts(adrd, first) == ["NCT00000001", "NCT00000002"]
+    assert silver_ncts(adrd, second) == ["NCT00000001", "NCT00000002", "NCT00000003"]
 
 
 def test_pending_runs_refuse_when_only_incremental_runs_remain(tmp_path: Path, registry_profile):
@@ -359,7 +389,7 @@ def test_pending_runs_refuse_when_only_incremental_runs_remain(tmp_path: Path, r
         registry_profile,
         "inc",
         [mesh_study("NCT00000001", direct=("Dementia",))],
-        incremental_since="2026-11-01",
+        incremental_since="2020-01-01",
     )
 
     with pytest.raises(ValueError, match="--full-refresh"):
@@ -385,3 +415,84 @@ def test_a_failed_derivation_is_recorded_and_publishes_no_silver(
     assert list(adrd.config.paths.silver.glob("*/*.parquet")) == []
     # A failed run is not "derived": the next pass retries the same registry run.
     assert [m.ingestion_run_id for m in pending_source_runs(registry_profile, adrd)] == ["reg1"]
+
+
+NO_MESH_FIELDS = {"fields": "protocolSection.identificationModule|hasResults"}
+
+
+def test_a_registry_run_without_mesh_terms_is_not_derived_from(tmp_path: Path, registry_profile):
+    """A run pulled before the MeSH field was projected would select 0 studies and
+    still look like a success; deriving from it must fail, publishing nothing."""
+    adrd = make_profile(tmp_path, "adrd", "adrd")
+    write_registry_run(
+        registry_profile,
+        "pre_full",
+        [mesh_study("NCT00000001", direct=("Dementia",))],
+        params=NO_MESH_FIELDS,
+    )
+
+    with pytest.raises(ValueError, match="--full-refresh"):
+        derive_preset_runs(registry_profile, adrd)
+
+    assert load_manifests(adrd.config.paths.bronze_manifests) == []
+
+
+def test_the_next_registry_pull_is_full_when_the_newest_run_lacks_mesh_terms(registry_profile):
+    write_registry_run(registry_profile, "pre_full", [], params=NO_MESH_FIELDS)
+    assert not registry_run_is_incremental(registry_profile, full_refresh=False)
+
+    mesh_fields = {"fields": "hasResults|derivedSection.conditionBrowseModule"}
+    write_registry_run(registry_profile, "new_full", [], params=mesh_fields, minutes=5)
+    assert registry_run_is_incremental(registry_profile, full_refresh=False)
+
+
+def test_a_preset_behind_a_pruned_registry_run_fails_instead_of_skipping_it(
+    tmp_path: Path, registry_profile
+):
+    """r2 moved NCT1 out of the preset and was pruned before the preset derived it.
+    Deriving r3 on top of r1 would keep NCT1, so the gap must be an error."""
+    adrd = make_profile(tmp_path, "adrd", "adrd")
+    write_registry_run(
+        registry_profile, "r1_full", [mesh_study("NCT00000001", direct=("Dementia",))]
+    )
+    derive_preset_runs(registry_profile, adrd)
+    # r3 asks for changes since r2 started (less the overlap); r2's files are gone.
+    r2_start = utc_now() + timedelta(days=7)
+    since = (r2_start - timedelta(days=1)).date().isoformat()
+    write_registry_run(
+        registry_profile,
+        "r3_inc",
+        [mesh_study("NCT00000002", direct=("Dementia",))],
+        incremental_since=since,
+        minutes=2 * 7 * 24 * 60,
+    )
+
+    with pytest.raises(ValueError, match="pruned before this preset derived it"):
+        derive_preset_runs(registry_profile, adrd)
+
+
+def test_a_new_full_snapshot_recovers_a_preset_behind_a_pruned_registry_run(
+    tmp_path: Path, registry_profile
+):
+    adrd = make_profile(tmp_path, "adrd", "adrd")
+    write_registry_run(
+        registry_profile, "r1_full", [mesh_study("NCT00000001", direct=("Dementia",))]
+    )
+    derive_preset_runs(registry_profile, adrd)
+    write_registry_run(
+        registry_profile,
+        "r3_inc",
+        [mesh_study("NCT00000002", direct=("Dementia",))],
+        incremental_since="2999-01-01",
+        minutes=10,
+    )
+    write_registry_run(
+        registry_profile,
+        "r4_full",
+        [mesh_study("NCT00000002", direct=("Dementia",))],
+        minutes=20,
+    )
+
+    (run,) = derive_preset_runs(registry_profile, adrd)
+
+    assert silver_ncts(adrd, run) == ["NCT00000002"]
