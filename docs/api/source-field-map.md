@@ -160,11 +160,11 @@ Derived from Gold marts `mart_condition_geography_trends` and `mart_site_overlap
 
 | API Field | Ingestion & Manifest Source | Warehouse Staging & Model | Description |
 |---|---|---|---|
-| `latest_snapshot_id` | `data/bronze/<profile>/manifests/manifest_<run_id>.json` | `stg_trial_snapshots.snapshot_id` | Timestamped run identifier serving current records. |
-| `latest_snapshot_date` | Manifest timestamp | `dim_date.date_day` | Calendar date of latest snapshot. |
-| `source_api` | Ingestion configuration | N/A | Upstream source name ("ClinicalTrials.gov API v2"). |
-| `source_api_version` | Ingestion configuration | N/A | Registry API version ("v2.0"). |
-| `schema_baseline_version` | Bronze baseline file | `_schema_baseline.json` | Version baseline for drift detection. |
-| `total_studies_tracked` | Manifest summary parquet | `mart_data_reliability.total_studies` | Count of unique studies tracked in profile. |
-| `quality_summary.ok_records_percent`| `mart_data_reliability` | `mart_data_reliability.ok_rate` | Percentage of studies passing all quality gates. |
-| `quarantined_records_count` | Manifest `quarantined_record_count` | `stg_trial_snapshots.quarantined_count` | Records isolated due to schema violations. |
+| `latest_snapshot_id`, `latest_ingestion_run_id` | `.freshness.json` `last_success.profiles.<profile>.run_id` | N/A | Ingestion run that the warehouse currently serves. |
+| `latest_snapshot_date`, `latest_snapshot_timestamp_utc` | `.freshness.json` `captured_at_utc` | N/A | Capture time of that run. |
+| `source_api` | Constant | N/A | Upstream source name ("ClinicalTrials.gov API v2"). |
+| `source_api_version` | `.freshness.json` `last_success.source_api_version` | N/A | Registry API version ("v2"). |
+| `total_studies_tracked`, `row_counts` | `.freshness.json` `row_counts` | `main_marts.dim_trial`, `fct_trial_snapshot`, `mart_trial_similarity` | Per-profile mart row counts recorded at refresh time. |
+| `last_success_at_utc` | `.freshness.json` `last_success.pipeline_completed_at_utc` | N/A | When the latest verified refresh completed. |
+| `reconciliation` | `.freshness.json` `last_success.reconciliation` | N/A | Bronze/silver/warehouse reconciliation check totals. |
+| `system_status` | Derived | N/A | `HEALTHY`, `STALE` (capture older than `CTI_FRESHNESS_MAX_AGE_DAYS`) or `DEGRADED` (refresh running). |

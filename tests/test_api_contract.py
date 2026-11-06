@@ -18,6 +18,7 @@ Validates:
 
 import json
 import re
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -412,3 +413,165 @@ def test_warehouse_endpoint_responses_conform_to_openapi(
     assert resp_rel.headers.get("Cache-Control") is not None
     rel_data = resp_rel.json()
     jsonschema.validate(instance=rel_data, schema=related_schema)
+
+
+@pytest.fixture
+def freshness_client(project_root_tmp: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
+    """Warehouse-less app whose `.freshness.json` marker lives under the temp project root."""
+    from fastapi.testclient import TestClient
+
+    from src.api.app import APIContainer, create_app
+
+    monkeypatch.setenv("CTI_REFRESHABLE_PROFILES", "adrd,oncology_nsclc")
+    monkeypatch.delenv("CTI_FRESHNESS_MAX_AGE_DAYS", raising=False)
+    container = APIContainer(cache_path=project_root_tmp / "cache.db")
+    return TestClient(create_app(container=container))
+
+
+def _write_freshness_marker(captured_at: datetime, **overrides: Any) -> None:
+    from src.quality.freshness import marker_path
+
+    now = datetime.now(UTC)
+    capture = {
+        "run_id": "20261020T120000Z_p",
+        "captured_at_utc": captured_at.isoformat(),
+        "row_counts": {"dim_trial": 3, "fct_trial_snapshot": 3, "mart_trial_similarity": 0},
+    }
+    marker = {
+        "schema_version": 1,
+        "attempt_at_utc": now.isoformat(),
+        "attempt_status": "success",
+        "error": None,
+        "last_success": {
+            "pipeline_completed_at_utc": (now - timedelta(seconds=1)).isoformat(),
+            "source_api_version": "v2",
+            "source_release_at_utc": None,
+            "profiles": {pid: capture for pid in ("adrd", "oncology_nsclc")},
+            "reconciliation": {"checks_total": 10, "checks_failed": 0},
+        },
+    } | overrides
+    marker_path().parent.mkdir(parents=True, exist_ok=True)
+    marker_path().write_text(json.dumps(marker), encoding="utf-8")
+
+
+def test_meta_freshness_fresh_marker_conforms_to_openapi(
+    openapi_doc: dict[str, Any], freshness_client: Any
+) -> None:
+    _write_freshness_marker(datetime.now(UTC) - timedelta(days=1))
+    schema = _dereference_schema(
+        openapi_doc, openapi_doc["components"]["schemas"]["MetaFreshnessResponse"]
+    )
+
+    resp = freshness_client.get("/v1/meta/freshness")
+
+    assert resp.status_code == 200
+    jsonschema.validate(
+        instance=resp.json(), schema=schema, format_checker=jsonschema.FormatChecker()
+    )
+    body = resp.json()
+    assert body["system_status"] == "HEALTHY"
+    assert {p["indication_profile_id"] for p in body["profiles"]} == {"adrd", "oncology_nsclc"}
+    assert body["profiles"][0]["total_studies_tracked"] == 3
+    assert body["reconciliation"] == {"checks_total": 10, "checks_failed": 0}
+    for header in ("Data-Snapshot", "Data-Updated", "ETag", "Cache-Control"):
+        assert resp.headers.get(header)
+
+    one = freshness_client.get("/v1/meta/freshness", params={"indication_profile_id": "adrd"})
+    assert [p["indication_profile_id"] for p in one.json()["profiles"]] == ["adrd"]
+    unknown = freshness_client.get("/v1/meta/freshness", params={"indication_profile_id": "nope"})
+    assert unknown.status_code == 422
+    assert unknown.headers["content-type"].startswith("application/problem+json")
+
+
+def test_meta_freshness_stale_marker_reports_stale_status(
+    openapi_doc: dict[str, Any], freshness_client: Any
+) -> None:
+    _write_freshness_marker(datetime.now(UTC) - timedelta(days=30))
+    schema = _dereference_schema(
+        openapi_doc, openapi_doc["components"]["schemas"]["MetaFreshnessResponse"]
+    )
+
+    resp = freshness_client.get("/v1/meta/freshness")
+
+    assert resp.status_code == 200
+    jsonschema.validate(
+        instance=resp.json(), schema=schema, format_checker=jsonschema.FormatChecker()
+    )
+    assert resp.json()["system_status"] == "STALE"
+
+
+def test_meta_freshness_profile_filter_scopes_staleness_to_requested_profile(
+    freshness_client: Any,
+) -> None:
+    from src.quality.freshness import marker_path
+
+    now = datetime.now(UTC)
+    _write_freshness_marker(now)
+    path = marker_path()
+    marker = json.loads(path.read_text(encoding="utf-8"))
+    profiles = marker["last_success"]["profiles"]
+    profiles["adrd"]["captured_at_utc"] = (now - timedelta(days=1)).isoformat()
+    profiles["oncology_nsclc"]["captured_at_utc"] = (now - timedelta(days=30)).isoformat()
+    path.write_text(json.dumps(marker), encoding="utf-8")
+
+    def status(**params: str) -> str:
+        return freshness_client.get("/v1/meta/freshness", params=params).json()["system_status"]
+
+    assert status() == "STALE"
+    assert status(indication_profile_id="adrd") == "HEALTHY"
+    assert status(indication_profile_id="oncology_nsclc") == "STALE"
+
+
+def test_meta_freshness_running_attempt_reports_degraded_status(
+    openapi_doc: dict[str, Any], freshness_client: Any
+) -> None:
+    _write_freshness_marker(datetime.now(UTC) - timedelta(days=1), attempt_status="running")
+    schema = _dereference_schema(
+        openapi_doc, openapi_doc["components"]["schemas"]["MetaFreshnessResponse"]
+    )
+
+    resp = freshness_client.get("/v1/meta/freshness")
+
+    assert resp.status_code == 200
+    jsonschema.validate(
+        instance=resp.json(), schema=schema, format_checker=jsonschema.FormatChecker()
+    )
+    assert resp.json()["system_status"] == "DEGRADED"
+
+
+def test_meta_freshness_is_not_publicly_cacheable_and_etag_revalidates(
+    freshness_client: Any,
+) -> None:
+    _write_freshness_marker(datetime.now(UTC) - timedelta(days=1))
+
+    first = freshness_client.get("/v1/meta/freshness")
+    second = freshness_client.get(
+        "/v1/meta/freshness", headers={"If-None-Match": first.headers["ETag"]}
+    )
+
+    assert first.headers["Cache-Control"] == "private, no-cache"
+    assert second.status_code == 304
+
+
+@pytest.mark.parametrize("marker", [None, "{not json", "failed"])
+def test_meta_freshness_missing_malformed_or_failed_marker_is_503_problem(
+    openapi_doc: dict[str, Any], freshness_client: Any, marker: str | None
+) -> None:
+    from src.quality.freshness import marker_path
+
+    if marker == "failed":
+        _write_freshness_marker(
+            datetime.now(UTC), attempt_status="failed", error="reconciliation failed"
+        )
+    elif marker is not None:
+        marker_path().parent.mkdir(parents=True, exist_ok=True)
+        marker_path().write_text(marker, encoding="utf-8")
+    schema = _dereference_schema(
+        openapi_doc, openapi_doc["components"]["schemas"]["ProblemDetails"]
+    )
+
+    resp = freshness_client.get("/v1/meta/freshness")
+
+    assert resp.status_code == 503
+    assert resp.headers["content-type"].startswith("application/problem+json")
+    jsonschema.validate(instance=resp.json(), schema=schema)
