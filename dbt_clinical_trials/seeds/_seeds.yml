@@ -98,3 +98,26 @@ seeds:
         tests: [not_null, unique]
       - name: denominator_available
         tests: [not_null]
+
+  - name: burden_demographic_share
+    description: >
+      National (US, SEER + NPCR) average annual lung and bronchus cancer cases by sex and
+      by Hispanic origin, 2019-2023, from the same State Cancer Profiles report as
+      burden_scp_lung_state. The share of cases per group is the burden side of the
+      participation-to-prevalence ratio. "Not Hispanic or Latino" is the sum of the four
+      non-Hispanic race reports (scp_race_codes). Pulled by src/ingest/burden_extracts.py
+      (scp-demographics). Only sources listed here, with denominator_available true in
+      condition_burden_map, can produce a ratio.
+    columns:
+      - name: burden_source_id
+        tests: [not_null]
+      - name: dimension
+        tests:
+          - not_null
+          - accepted_values:
+              values: [sex, ethnicity]
+      - name: group_label
+        description: Same labels as the participant groups (Female, Male, Hispanic or Latino, Not Hispanic or Latino).
+        tests: [not_null]
+      - name: annual_cases
+        tests: [not_null]
