@@ -5,8 +5,8 @@ one therapeutic indication: API query scope, bronze-specific paths, condition
 taxonomy, and score-weight references.
 
 ProfileRegistry auto-discovers all *.yml files in config/profiles/ and
-exposes them by profile_id. The shared silver/gold/duckdb paths are loaded
-once from config/shared_paths.yml and injected into every profile's config.
+exposes them by profile_id. The shared silver/gold/duckdb paths are the
+SHARED_* constants below, injected into every profile's config.
 
 Backward compatibility
 ─────────────────────
@@ -59,7 +59,14 @@ from src.transform.normalize_conditions import (
 from src.utils.paths import project_root, resolve_path
 
 PROFILES_DIR = "config/profiles"
-SHARED_PATHS_FILE = "config/shared_paths.yml"
+
+# The one silver/gold/warehouse destination every profile writes to. Not
+# per-profile YAML keys: a preset differs from another by its filter, never by
+# where it writes. Tests re-scope these by pointing CTI_PROJECT_ROOT at a temp
+# root, or by passing explicit paths (SharedPaths) to ProfileRegistry/load_profile.
+SHARED_SILVER = "data/silver"
+SHARED_GOLD = "data/gold"
+SHARED_DUCKDB = "data/warehouse/clinical_trials.duckdb"
 
 # The one profile whose bronze run is the unit of ingest (issue #147): every
 # other refreshable profile is a preset over that run.
@@ -95,14 +102,12 @@ class SharedPaths:
     duckdb: Path
 
 
-def load_shared_paths(path: str | Path | None = None) -> SharedPaths:
-    """Load config/shared_paths.yml (or an override) into a SharedPaths object."""
-    p = Path(path) if path else project_root() / SHARED_PATHS_FILE
-    raw = yaml.safe_load(p.read_text(encoding="utf-8"))
+def load_shared_paths() -> SharedPaths:
+    """The shared silver/gold/duckdb paths, resolved against the current project root."""
     return SharedPaths(
-        silver=resolve_path(raw["silver"]),
-        gold=resolve_path(raw["gold"]),
-        duckdb=resolve_path(raw["duckdb"]),
+        silver=resolve_path(SHARED_SILVER),
+        gold=resolve_path(SHARED_GOLD),
+        duckdb=resolve_path(SHARED_DUCKDB),
     )
 
 
@@ -124,7 +129,7 @@ class IndicationProfile:
                             skipped.  Used for the full_catalog profile.
         config:             ProjectConfig wired to this profile's bronze paths and
                             API query parameters, with shared silver/gold/duckdb
-                            paths injected from config/shared_paths.yml.
+                            paths injected from the SHARED_* constants.
         taxonomy:           Loaded ConditionTaxonomy, or None for ingest_only profiles.
                             A refreshable profile without a taxonomy file gets
                             REGISTRY_TAXONOMY (whole-registry profiles classify
@@ -161,8 +166,8 @@ class IndicationProfile:
 def _build_project_config(raw: dict[str, Any], shared: SharedPaths) -> ProjectConfig:
     """Build a ProjectConfig from a profile YAML dict.
 
-    Shared silver/gold/duckdb paths from shared_paths.yml are injected so
-    ProfileRegistry callers never need to duplicate those in every profile YAML.
+    Shared silver/gold/duckdb paths are injected so ProfileRegistry callers
+    never need to duplicate those in every profile YAML.
     """
     api_raw = dict(raw["api"])
     http_raw = dict(api_raw.get("http", {}))
@@ -183,7 +188,6 @@ def _build_project_config(raw: dict[str, Any], shared: SharedPaths) -> ProjectCo
         ingestion=IngestionConfig(**(raw.get("ingestion") or {})),
         retention=RetentionConfig.from_raw(raw.get("retention")),
         scope=raw.get("scope", {}),
-        guardrails=raw.get("guardrails", {}),
     )
 
 
@@ -195,7 +199,7 @@ def load_profile(
 
     Args:
         profile_path: Path to the profile YAML (absolute, or relative to project root).
-        shared:       Pre-loaded SharedPaths; loaded from config/shared_paths.yml if None.
+        shared:       Explicit SharedPaths; the SHARED_* defaults if None.
     """
     path = Path(profile_path)
     if not path.is_absolute():
@@ -251,10 +255,10 @@ class ProfileRegistry:
     def __init__(
         self,
         profiles_dir: str | Path | None = None,
-        shared_paths_file: str | Path | None = None,
+        shared_paths: SharedPaths | None = None,
     ) -> None:
         self._dir = Path(profiles_dir) if profiles_dir else project_root() / PROFILES_DIR
-        self._shared = load_shared_paths(shared_paths_file)
+        self._shared = shared_paths or load_shared_paths()
         self._profiles: dict[str, IndicationProfile] = {}
         self._loaded = False
 

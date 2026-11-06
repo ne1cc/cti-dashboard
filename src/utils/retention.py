@@ -25,7 +25,7 @@ directory with no manifest is invisible to every later prune, so those bytes can
 only be reclaimed by hand. A horizon deep enough to hit that is one config edit
 away and fails silently, which is why it is a refusal rather than a comment.
 
-Silver is shared between profiles (config/shared_paths.yml) and its per-run files
+Silver is shared between profiles (SHARED_SILVER in src/profiles.py) and its per-run files
 are keyed by run id alone (`silver/silver_trials/run_id=X.parquet`), so nothing in
 the *path* says which profile owns a file. What keeps one profile's prune inside
 its own artifacts is that its candidates are named by that profile's own manifests,

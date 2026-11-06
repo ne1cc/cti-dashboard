@@ -194,10 +194,7 @@ def prepare_fixture_root(
     try:
         (root / "config").mkdir(parents=True, exist_ok=True)
         (root / "config" / "project_config.yml").write_text(CONFIG_YAML, encoding="utf-8")
-        for cfg_name in (
-            "geography_rules.yml",
-            "shared_paths.yml",
-        ):
+        for cfg_name in ("geography_rules.yml",):
             shutil.copy(REPO_ROOT / "config" / cfg_name, root / "config" / cfg_name)
         for taxonomy in (REPO_ROOT / "config").glob("condition_taxonomy*.yml"):
             shutil.copy(taxonomy, root / "config" / taxonomy.name)
@@ -213,7 +210,7 @@ def prepare_fixture_root(
         from src.transform.build_silver_entities import run_transform
 
         cfg = load_config()
-        shared = load_shared_paths(root / "config" / "shared_paths.yml")
+        shared = load_shared_paths()
         profiles = {
             "adrd": load_profile(root / "config/profiles/adrd.yml", shared=shared),
             "oncology_nsclc": load_profile(

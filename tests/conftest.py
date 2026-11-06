@@ -92,8 +92,8 @@ _variant_page = variant_page
 def project_root_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Temp project root carrying the real config/ tree.
 
-    ProfileRegistry resolves config/profiles/*.yml and config/shared_paths.yml
-    against the project root, so a temp root without them cannot build a
+    ProfileRegistry resolves config/profiles/*.yml and the shared silver/gold/duckdb
+    paths against the project root, so a temp root without them cannot build a
     profile at all. Every path in those files is relative, which re-scopes
     bronze/silver/warehouse inside tmp_path. project_config.yml is then
     replaced by CONFIG_YAML so the single-config callers keep their fixture.
@@ -1009,7 +1009,7 @@ def legacy_silver_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path
         from src.profiles import load_profile, load_shared_paths
         from src.transform.build_silver_entities import run_transform
 
-        shared = load_shared_paths(root / "config" / "shared_paths.yml")
+        shared = load_shared_paths()
         adrd = load_profile(root / "config/profiles/adrd.yml", shared=shared)
         processed = run_transform(profile=adrd)
         assert processed == [], (

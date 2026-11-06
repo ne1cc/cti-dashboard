@@ -572,7 +572,7 @@ def test_old_schema_silver_with_pruned_bronze_builds_end_to_end(
         from src.profiles import load_profile, load_shared_paths
         from src.transform.build_silver_entities import run_transform
 
-        shared = load_shared_paths(root / "config" / "shared_paths.yml")
+        shared = load_shared_paths()
         nsclc = load_profile(root / "config/profiles/oncology_nsclc.yml", shared=shared)
         assert run_transform() == []  # ADRD manifests via the global config
         assert run_transform(config=nsclc.config) == []

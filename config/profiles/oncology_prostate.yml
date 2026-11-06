@@ -56,9 +56,6 @@ scope:
 paths:
   bronze_api_responses: data/bronze/oncology_prostate/api_responses
   bronze_manifests: data/bronze/oncology_prostate/manifests
-  silver: data/silver
-  gold: data/gold
-  duckdb: data/warehouse/clinical_trials.duckdb
   quarantine: data/bronze/oncology_prostate/manifests/quarantine
 ingestion:
   mode_default: incremental
@@ -68,7 +65,3 @@ ingestion:
 retention:
   bronze_runs_to_keep: 1
   snapshot_runs_to_keep: 3
-guardrails:
-  disclaimer: Public-registry-based planning signals for analytical portfolio demonstration
-    only. Not a recruitment forecast, not clinical decision support, and not an assessment
-    of site, sponsor, or population quality.

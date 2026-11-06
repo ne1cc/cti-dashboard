@@ -115,7 +115,6 @@ class ProjectConfig(BaseModel):
     ingestion: IngestionConfig
     retention: RetentionConfig = RetentionConfig()
     scope: dict[str, Any] = {}
-    guardrails: dict[str, Any] = {}
     default_profile: str | None = None
 
 
@@ -181,7 +180,6 @@ def load_config(config_path: str | Path | None = None) -> ProjectConfig:
         ingestion=IngestionConfig(**(raw.get("ingestion") or {})),
         retention=RetentionConfig.from_raw(raw.get("retention")),
         scope=scope_raw,
-        guardrails=raw.get("guardrails", {}),
         default_profile=default_profile,
     )
 

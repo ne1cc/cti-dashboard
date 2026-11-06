@@ -99,7 +99,7 @@ def test_events_survive_pruning_and_rebuild(change_radar_root: Path, monkeypatch
 
     before = _events(change_radar_root)
     monkeypatch.setenv("CTI_PROJECT_ROOT", str(change_radar_root))
-    shared = load_shared_paths(change_radar_root / "config/shared_paths.yml")
+    shared = load_shared_paths()
     profile = load_profile(change_radar_root / "config/profiles/adrd.yml", shared=shared)
     pruned = prune_profile(profile, RetentionConfig(bronze_runs_to_keep=1, snapshot_runs_to_keep=1))
     assert RUNS["r1"] in {p.run_id for p in pruned}
