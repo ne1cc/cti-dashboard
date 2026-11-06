@@ -12,7 +12,9 @@ from fastapi.responses import FileResponse, HTMLResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from starlette.types import Message, Scope
 
+from src.api import patient_copy as copy
 from src.api.conditions import resolve_consumer_condition
+from src.api.gazetteer import resolve_postal_code
 from src.utils.privacy import patient_request
 
 _ROOT = Path(__file__).resolve().parent
@@ -120,6 +122,85 @@ def _freshness(headers: dict[str, str]) -> str:
         stale = " (cached data may be stale)" if headers.get("x-cache-status") == "STALE" else ""
         return f"Registry data retrieved: {timestamp}{stale}."
     return f"Warehouse snapshot: {timestamp}."
+
+
+def _trial_view(trial: dict[str, Any], nct_id: str, *, has_distance: bool) -> dict[str, Any]:
+    """Derive the display facts for one trial; registry text is passed through untouched."""
+    design = trial.get("study_design") or {}
+    dates = trial.get("dates") or {}
+    elig = trial.get("eligibility") or {}
+    sections = elig.get("eligibility_sections") or {}
+
+    by_type: dict[str, list[dict[str, Any]]] = {}
+    for item in trial.get("interventions") or []:
+        label = copy.lookup(copy.INTERVENTION_TYPE, item.get("intervention_type")) or "Other"
+        by_type.setdefault(label, []).append(item)
+
+    def site_order(site: dict[str, Any]) -> tuple[Any, ...]:
+        distance = site.get("distance_miles")
+        return (
+            distance is None,
+            distance or 0,
+            site.get("country") or "",
+            site.get("state") or "",
+            site.get("city") or "",
+            site.get("facility_name") or "",
+        )
+
+    sites = []
+    for site in sorted(trial.get("sites") or [], key=site_order):
+        place = [site.get("city"), site.get("state"), site.get("country")]
+        query = ", ".join(
+            part
+            for part in [site.get("facility_name"), *place[:2], site.get("zip_code"), place[2]]
+            if part
+        )
+        distance = site.get("distance_miles")
+        sites.append(
+            {
+                **site,
+                "place": ", ".join(part for part in place if part),
+                "status_text": copy.lookup(copy.STATUS, site.get("location_status")),
+                "distance_text": None
+                if distance is None
+                else f"{distance:g} miles away"
+                + (" (approximate)" if site.get("coordinate_approximate") else ""),
+                "maps_url": "https://www.openstreetmap.org/search?" + urlencode({"query": query}),
+            }
+        )
+
+    contact_url = trial.get("registry_contact_url") or ""
+    if not contact_url.startswith(trial["registry_url"]):
+        contact_url = trial["registry_url"]  # never follow an unexpected upstream destination
+
+    return {
+        "status": copy.lookup(copy.STATUS, trial.get("overall_status")),
+        "phase": copy.phase_label(design.get("phase_normalized")),
+        "purpose": copy.lookup(copy.PURPOSE, design.get("primary_purpose")),
+        "allocation": copy.lookup(copy.ALLOCATION, design.get("allocation")),
+        "masking": copy.lookup(copy.MASKING, design.get("masking")),
+        "span": copy.span_words(dates.get("start_date"), dates.get("primary_completion_date")),
+        "interventions": by_type,
+        "placebo": copy.PLACEBO[trial.get("has_placebo_arm")],
+        "age": copy.age_text(elig.get("minimum_age_raw"), elig.get("maximum_age_raw")),
+        "sex": copy.lookup(copy.SEX, elig.get("sex")),
+        "healthy": copy.HEALTHY_VOLUNTEERS[elig.get("accepts_healthy_volunteers")],
+        "age_groups": [
+            copy.lookup(copy.AGE_GROUP, group) for group in elig.get("std_age_groups") or []
+        ],
+        "inclusion": sections.get("inclusion") or [],
+        "exclusion": sections.get("exclusion") or [],
+        "unclassified": sections.get("unclassified") or [],
+        "criteria_text": elig.get("criteria_text"),
+        "sites": sites,
+        "has_distance": has_distance,
+        "contact_url": contact_url,
+        "nearest_site": ", ".join(
+            part for part in (sites[0]["facility_name"], sites[0]["place"]) if part
+        )
+        if sites
+        else "",
+    }
 
 
 def _page(name: str, *, status: int = 200, **context: Any) -> HTMLResponse:
@@ -266,7 +347,11 @@ def register_patient_routes(app: FastAPI) -> None:
                 error="That trial ID is not valid.",
                 trial=None,
             )
-        status, headers, trial = await _read_api(app, request, f"/v1/trials/{canonical}", {})
+        # An optional ZIP code only sorts the site list; it is resolved offline, never stored.
+        postal_code = request.query_params.get("postal_code", "").strip()
+        point = resolve_postal_code(postal_code) if postal_code else None
+        geo = {"lat": str(point.lat), "lon": str(point.lon)} if point else {}
+        status, headers, trial = await _read_api(app, request, f"/v1/trials/{canonical}", geo)
         if status != 200:
             message = (
                 "This trial could not be found."
@@ -299,5 +384,9 @@ def register_patient_routes(app: FastAPI) -> None:
             freshness=_freshness(headers),
             error=None,
             trial=trial,
+            view=_trial_view(trial, canonical, has_distance=point is not None),
+            postal_code=postal_code,
+            postal_unknown=bool(postal_code) and point is None,
+            copy=copy,
             related_trials=related_trials,
         )

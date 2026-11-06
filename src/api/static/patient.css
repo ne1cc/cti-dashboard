@@ -111,14 +111,6 @@ button:hover { background: #054366; }
   color: #364d5c;
   margin-bottom: 0.5rem;
 }
-.similarity-explanation {
-  margin: 0.25rem 0 0 0;
-  font-size: 0.9rem;
-  color: #243a48;
-  background: #f0f5f8;
-  padding: 0.4rem 0.6rem;
-  border-radius: 0.25rem;
-}
 .notice { grid-column: 1 / -1; margin: 0; font-size: .9rem; color: #405461; }
 .concept-disclosure {
   background: #ffffff;
@@ -283,3 +275,30 @@ footer { background: #e7eff1; padding-block: 1rem; }
     text-decoration: none !important;
   }
 }
+
+/* Trial detail page (Issue #66) */
+.trial-id { margin: 0; color: #364d5c; font-weight: 600; }
+.trial-badges { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin-block: .5rem; }
+.status-badge { background: #e3f0f6; color: #0b3550; border: 1px solid #075b88; border-radius: 1rem; padding: .15rem .75rem; font-weight: 700; }
+.trial-dates { color: #364d5c; font-size: .95rem; }
+.trial-notice { background: #fff6e0; border: 1px solid #8a5a00; border-radius: .25rem; padding: .6rem .8rem; }
+.trial-section { background: white; border: 1px solid #b9cbd2; border-radius: .5rem; padding: 1.25rem; margin-block: 1rem; }
+.trial-section h2 { margin-top: 0; font-size: 1.35rem; }
+.trial-section h3 { font-size: 1.05rem; margin-bottom: .25rem; }
+.facts { display: grid; grid-template-columns: minmax(0, 12rem) 1fr; gap: .4rem 1rem; margin: 0 0 1rem; }
+.facts dt { font-weight: 700; }
+.facts dd { margin: 0; overflow-wrap: anywhere; }
+.registry-label { font-size: .85rem; color: #364d5c; font-style: italic; margin-bottom: .25rem; }
+.registry-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+blockquote.registry-text { margin: 0 0 1rem; padding-left: 1rem; border-left: 4px solid #56717f; }
+.unclassified { border: 2px solid #8a5a00; background: #fff6e0; border-radius: .25rem; padding: .75rem 1rem; margin-block: 1rem; }
+.unclassified h3 { margin-top: 0; }
+details { border: 1px solid #b9cbd2; border-radius: .25rem; padding: .5rem .75rem; margin-block: .5rem; }
+summary { cursor: pointer; font-weight: 700; min-height: 2.75rem; display: flex; align-items: center; }
+.zip-form { display: grid; grid-template-columns: minmax(0, 12rem) auto; gap: .5rem; align-items: end; }
+.zip-form label { grid-column: 1 / -1; margin-bottom: 0; }
+.zip-form button { width: auto; padding-inline: 1rem; }
+.site-list { padding-left: 1.5rem; }
+.site-list li { margin-block: .75rem; }
+summary:focus-visible { outline: 3px solid #b04c00; outline-offset: 3px; }
+@media (max-width: 480px) { .facts { grid-template-columns: 1fr; } .facts dd { margin-bottom: .5rem; } }
