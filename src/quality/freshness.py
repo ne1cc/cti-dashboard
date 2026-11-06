@@ -1,4 +1,4 @@
-"""Local refresh metadata and disk guard; no server or external alert transport."""
+"""Refresh metadata, its published copy for external checks, and the disk guard."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from src.ingest.snapshot_manifest import load_manifests
 from src.profiles import get_registry, load_shared_paths
 from src.quality.reconciliation import reconcile_profile
 from src.utils.dates import utc_now
+from src.utils.paths import project_root
 
 Count = Annotated[int, Field(strict=True, ge=0)]
 TABLES = ("dim_trial", "fct_trial_snapshot", "mart_trial_similarity")
@@ -63,13 +64,18 @@ def marker_path() -> Path:
     return load_shared_paths().duckdb.parent.parent / ".freshness.json"
 
 
+def published_marker_path() -> Path:
+    """Copy of the marker under Streamlit's static folder, served at /app/static/."""
+    return project_root() / "dashboard" / "static" / "freshness.json"
+
+
 def _read_marker() -> Marker:
     return Marker.model_validate_json(marker_path().read_text(encoding="utf-8"))
 
 
-def _write_marker(payload: dict[str, Any]) -> None:
-    """Publish a complete marker atomically; a failed replace preserves the old file."""
-    path = marker_path()
+def _write_marker(payload: dict[str, Any], path: Path | None = None) -> None:
+    """Write a complete marker atomically; a failed replace preserves the old file."""
+    path = path or marker_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary: Path | None = None
     try:
@@ -216,6 +222,15 @@ def _collect_success() -> Success:
     )
 
 
+def _publish() -> None:
+    """Copy a verified successful marker to the served path; anything else leaves it as is."""
+    marker = _read_marker()
+    if marker.attempt_status != "success":
+        raise ValueError(f"Not publishing: latest attempt is {marker.attempt_status}")
+    _verify_success(marker)
+    _write_marker(marker.model_dump(mode="json"), published_marker_path())
+
+
 def preflight() -> dict[str, Any]:
     floor = int(os.environ.get("CTI_REFRESH_MIN_FREE_BYTES", "500000000"))
     if floor <= 0:
@@ -230,7 +245,14 @@ def preflight() -> dict[str, Any]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     actions = parser.add_mutually_exclusive_group()
-    for action in ("check", "preflight", "record-attempt", "record-success", "record-failure"):
+    for action in (
+        "check",
+        "preflight",
+        "record-attempt",
+        "record-success",
+        "record-failure",
+        "publish",
+    ):
         actions.add_argument(f"--{action}", action="store_true")
     parser.add_argument("--error", help="Reason for --record-failure; replaces any previous error")
     args = parser.parse_args(argv)
@@ -256,6 +278,13 @@ def main(argv: list[str] | None = None) -> int:
                 _record_attempt("failed", str(exc))
                 raise
             _write_marker(marker.model_dump(mode="json"))
+            try:
+                _publish()
+            except Exception as exc:  # the refresh succeeded; a missing public copy only ages out
+                print(f"warning: published marker not updated: {exc}", file=sys.stderr)
+            result = {"ok": True}
+        elif args.publish:
+            _publish()
             result = {"ok": True}
         else:
             result = status()
