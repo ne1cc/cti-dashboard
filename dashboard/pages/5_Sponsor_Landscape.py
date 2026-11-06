@@ -7,15 +7,16 @@ from components.audit_panel import render_provenance_drawer
 from components.formatting import format_phase
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import render_page_guide
-from components.profile import render_profile_selector
+from components.profile import render_preset_selector
 
 page_setup("Sponsor Landscape")
-profile_id = render_profile_selector()
-data.require_warehouse(profile_id)
+preset = render_preset_selector()
+profile_id = preset.preset_id
+data.require_warehouse(preset)
 
 render_page_guide("sponsor_landscape", profile_id)
 
-sponsors = data.sponsor_landscape(profile_id)
+sponsors = data.sponsor_landscape(preset)
 
 col1, col2 = st.columns(2)
 with col1:
@@ -28,7 +29,7 @@ with col1:
         ),
     )
     render_provenance_drawer(
-        profile_id,
+        preset,
         metric="latest_study",
         sponsors=sponsors["lead_sponsor"].tolist(),
         key="sponsors",
@@ -47,7 +48,7 @@ with col2:
         help="Total actively recruiting study protocols sponsored across all organizations.",
     )
     render_provenance_drawer(
-        profile_id,
+        preset,
         metric="latest_study",
         sponsors=sponsors["lead_sponsor"].tolist(),
         key="sponsors_listings",

@@ -5,13 +5,13 @@ import streamlit as st
 from components import data
 from components.guardrails import guarded_footer, page_setup
 from components.participation_prevalence import ratio_view
-from components.profile import render_profile_selector
+from components.profile import render_preset_selector
 
 page_setup("Participation vs Burden")
-profile_id = render_profile_selector()
-data.require_warehouse(profile_id)
+preset = render_preset_selector()
+data.require_warehouse(preset)
 
-rows = data.participation_prevalence(profile_id)
+rows = data.participation_prevalence(preset)
 if rows.empty:
     st.info(
         "No participation rows yet. They need completed trials with posted baseline "

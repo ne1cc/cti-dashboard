@@ -16,15 +16,16 @@ from components.guidance import (
     format_condition_group,
     render_page_guide,
 )
-from components.profile import render_profile_selector
+from components.profile import render_preset_selector
 
 page_setup("Registry Segments")
-profile_id = render_profile_selector()
-data.require_warehouse(profile_id)
+preset = render_preset_selector()
+profile_id = preset.preset_id
+data.require_warehouse(preset)
 
 render_page_guide("priority_queue", profile_id)
 
-queue = data.priority_queue(profile_id)
+queue = data.priority_queue(preset)
 st.caption(
     "Segments are defined by condition group, U.S. state, and clinical trial phase. "
     "Sort directly by any raw metric below (e.g. active recruiting trials, sponsor "
@@ -248,7 +249,7 @@ if selected_rows:
         "eligibility, inclusion criteria, and trial sites."
     )
     trials_df = data.trials_for_segment(
-        profile_id,
+        preset,
         condition_group=str(segment["condition_group"]),
         state_normalized=str(segment["state_normalized"]),
         phase_normalized=str(segment["phase_normalized"]),
@@ -298,7 +299,7 @@ if not filtered.empty and observed_history_days >= 90:
     st.info(filtered.iloc[0]["interpretation_note"])
 
 render_provenance_drawer(
-    profile_id,
+    preset,
     filters=filtered.attrs.get("audit_filters", {}),
     segments=filtered,
     context={

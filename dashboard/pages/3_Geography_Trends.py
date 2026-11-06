@@ -7,15 +7,16 @@ from components import data
 from components.audit_panel import render_provenance_drawer
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import format_condition_group, render_page_guide
-from components.profile import render_profile_selector
+from components.profile import render_preset_selector
 
 page_setup("Geography Trends")
-profile_id = render_profile_selector()
-data.require_warehouse(profile_id)
+preset = render_preset_selector()
+profile_id = preset.preset_id
+data.require_warehouse(preset)
 
 render_page_guide("geography_trends", profile_id)
 
-trends = data.condition_geography_trends(profile_id)
+trends = data.condition_geography_trends(preset)
 
 # 1. Keep retained warehouses usable without inventing population-adjusted rates.
 population_ready = "recruiting_trials_per_100k" in trends.columns
@@ -29,7 +30,7 @@ if not population_ready:
 condition_options = sorted(trends["condition_group"].dropna().unique())
 if not condition_options:
     st.info("No condition group records available for this profile.")
-    render_provenance_drawer(profile_id, metric="latest_study", key="geography")
+    render_provenance_drawer(preset, metric="latest_study", key="geography")
     guarded_footer()
     st.stop()
 
@@ -81,7 +82,7 @@ with col1:
         help="States and territories with at least one actively recruiting study listed.",
     )
     render_provenance_drawer(
-        profile_id,
+        preset,
         metric="latest_study",
         filters={"conditions": [condition] if condition else []},
         key="geo_states",
@@ -95,7 +96,7 @@ with col2:
         help="Total actively recruiting study listings in the selected condition.",
     )
     render_provenance_drawer(
-        profile_id,
+        preset,
         filters={"conditions": [condition] if condition else []},
         metric="history",
         months=scoped["activity_month"],

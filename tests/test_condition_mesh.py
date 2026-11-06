@@ -35,6 +35,7 @@ from tests.fixture_warehouse import (
     build_fixture_warehouse,
     prepare_fixture_root,
 )
+from tests.preset_helpers import preset_for
 
 TAXONOMY = get_taxonomy()
 GEOGRAPHY = get_geography_rules()
@@ -378,7 +379,7 @@ def test_trials_for_segment_with_mesh_rows(mesh_warehouse: Path, monkeypatch):
 
     try:
         df = data.trials_for_segment(
-            profile_id="adrd",
+            preset=preset_for("adrd"),
             condition_group="alzheimers_disease",
             state_normalized="CA",
             phase_normalized="PHASE3",

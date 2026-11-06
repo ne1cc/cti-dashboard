@@ -8,16 +8,17 @@ from components.audit_panel import render_provenance_drawer
 from components.formatting import format_phase
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import registry_link_guidance, render_indication_banner, render_page_guide
-from components.profile import render_profile_selector
+from components.profile import render_preset_selector
 
 page_setup("Trial Explorer")
-profile_id = render_profile_selector()
-data.require_warehouse(profile_id)
+preset = render_preset_selector()
+profile_id = preset.preset_id
+data.require_warehouse(preset)
 
 render_indication_banner(profile_id)
 render_page_guide("trial_explorer", profile_id)
 
-trials = data.trial_explorer(profile_id)
+trials = data.trial_explorer(preset)
 
 col1, col2 = st.columns(3)[:2]
 with col1:
@@ -30,7 +31,7 @@ with col1:
         ),
     )
     render_provenance_drawer(
-        profile_id,
+        preset,
         metric="latest_study",
         count_status="all",
         key="explorer_trials",
@@ -44,7 +45,7 @@ with col2:
         help="Studies marked with overall status RECRUITING in the latest snapshot.",
     )
     render_provenance_drawer(
-        profile_id,
+        preset,
         metric="latest_study",
         count_status="recruiting",
         key="explorer_recruiting",

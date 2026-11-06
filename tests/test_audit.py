@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from dashboard.components import audit, data
+from tests.preset_helpers import preset_for
 
 
 def inputs():
@@ -210,11 +211,11 @@ def readers(audit_fixture_root, monkeypatch):
 
 @pytest.mark.parametrize("metric", ["competition", "history", "facility", "latest_study"])
 def test_real_metric_observation_scope_and_loaders(readers, metric):
-    observations = readers.metric_audit_observations("adrd", metric)
+    observations = readers.metric_audit_observations(preset_for("adrd"), metric)
     ids = observations.snapshot_id.unique().tolist()
-    studies = readers.audit_studies("adrd", ids)
-    locations = readers.audit_locations("adrd", ids)
-    conditions = readers.audit_condition_mapping("adrd")
+    studies = readers.audit_studies(preset_for("adrd"), ids)
+    locations = readers.audit_locations(preset_for("adrd"), ids)
+    conditions = readers.audit_condition_mapping(preset_for("adrd"))
     result = audit.compute_audit(
         studies,
         locations,
@@ -243,14 +244,14 @@ def test_real_metric_observation_scope_and_loaders(readers, metric):
             ["adrd"],
         )
         assert result["contributors"] == sorted(actual.nct_id.tolist())
-    assert readers.audit_studies("adrd", []).empty
-    assert readers.audit_locations("adrd", []).empty
+    assert readers.audit_studies(preset_for("adrd"), []).empty
+    assert readers.audit_locations(preset_for("adrd"), []).empty
 
 
 def test_missing_audit_marts_returns_guidance(monkeypatch):
     monkeypatch.setattr(data, "_table_exists", lambda *args: False)
-    assert data.audit_studies("adrd", ["run"]).empty
-    assert "rebuild" in data.audit_studies("adrd", ["run"]).attrs["audit_unavailable"]
+    assert data.audit_studies(preset_for("adrd"), ["run"]).empty
+    assert "rebuild" in data.audit_studies(preset_for("adrd"), ["run"]).attrs["audit_unavailable"]
 
 
 def test_empty_inputs_and_nullable_status():
@@ -494,16 +495,16 @@ def event_readers(audit_event_fixture_root, monkeypatch):
 
 
 def test_real_transition_event_predecessor_is_before_window(event_readers):
-    observations = event_readers.metric_audit_observations("adrd", "recent_recruiting")
+    observations = event_readers.metric_audit_observations(preset_for("adrd"), "recent_recruiting")
     selected = observations.loc[
         pd.to_datetime(observations.snapshot_date) >= pd.Timestamp("2026-06-03")
     ]
     ids = sorted(set(selected.snapshot_id) | set(selected.predecessor_snapshot_id.dropna()))
-    studies = event_readers.audit_studies("adrd", ids)
+    studies = event_readers.audit_studies(preset_for("adrd"), ids)
     result = audit.compute_audit(
         studies,
-        event_readers.audit_locations("adrd", ids),
-        event_readers.audit_condition_mapping("adrd"),
+        event_readers.audit_locations(preset_for("adrd"), ids),
+        event_readers.audit_condition_mapping(preset_for("adrd")),
         profile_id="adrd",
         observations=selected,
         filters={},
@@ -532,12 +533,14 @@ def test_real_transition_event_predecessor_is_before_window(event_readers):
 
 
 def test_real_first_post_registered_source_boundary(event_readers):
-    observations = event_readers.metric_audit_observations("adrd", "first_post_registered")
+    observations = event_readers.metric_audit_observations(
+        preset_for("adrd"), "first_post_registered"
+    )
     ids = observations.snapshot_id.unique().tolist()
     result = audit.compute_audit(
-        event_readers.audit_studies("adrd", ids),
-        event_readers.audit_locations("adrd", ids),
-        event_readers.audit_condition_mapping("adrd"),
+        event_readers.audit_studies(preset_for("adrd"), ids),
+        event_readers.audit_locations(preset_for("adrd"), ids),
+        event_readers.audit_condition_mapping(preset_for("adrd")),
         profile_id="adrd",
         observations=observations,
         filters={},

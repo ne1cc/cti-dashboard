@@ -15,6 +15,7 @@ from components import data  # noqa: E402
 from components.audit_panel import build_display_audit  # noqa: E402
 
 from src.config import get_config  # noqa: E402
+from tests.preset_helpers import preset_for  # noqa: E402
 
 
 @pytest.fixture
@@ -35,9 +36,9 @@ def warehouse(audit_fixture_root, monkeypatch):
 def test_filter_scope_and_export(warehouse):
     from components.audit import export_audit
 
-    observations = data.metric_audit_observations("adrd", "competition")
-    result = build_display_audit("adrd", observations, {"states": ["NC"]})
-    other = build_display_audit("adrd", observations, {"states": ["XX"]})
+    observations = data.metric_audit_observations(preset_for("adrd"), "competition")
+    result = build_display_audit(preset_for("adrd"), observations, {"states": ["NC"]})
+    other = build_display_audit(preset_for("adrd"), observations, {"states": ["XX"]})
     assert result["contributors"] != other["contributors"]
     for audit in (result, other):
         payload = json.loads(export_audit(audit))
@@ -51,10 +52,12 @@ def test_filter_scope_and_export(warehouse):
 
 def test_profile_and_period_scope(warehouse):
     for profile in ("adrd", "oncology_nsclc"):
-        observations = data.metric_audit_observations(profile, "history")
+        observations = data.metric_audit_observations(preset_for(profile), "history")
         latest = pd.to_datetime(observations.snapshot_date).max()
         selected = observations[pd.to_datetime(observations.snapshot_date) == latest]
-        audit = build_display_audit(profile, selected, {}, metric="history", count_status="all")
+        audit = build_display_audit(
+            preset_for(profile), selected, {}, metric="history", count_status="all"
+        )
         assert set(audit["studies"].indication_profile_id) == {profile}
         assert audit["metadata"]["snapshot_ids"] == sorted(selected.snapshot_id.unique())
         assert audit["metadata"]["count_status"] == "all"
@@ -280,9 +283,9 @@ def test_competition_audit_gating_below_90d_labels_and_clamps(warehouse):
 def test_empty_facility_export_keeps_snapshot_scope(warehouse):
     from components.audit import export_audit
 
-    observations = data.metric_audit_observations("adrd", "facility")
+    observations = data.metric_audit_observations(preset_for("adrd"), "facility")
     result = build_display_audit(
-        "adrd",
+        preset_for("adrd"),
         observations,
         {"facilities": []},
         metric="facility",
@@ -298,9 +301,9 @@ def test_empty_facility_export_keeps_snapshot_scope(warehouse):
 
 
 def test_all_status_mode_matches_current_study_count(warehouse):
-    observations = data.metric_audit_observations("adrd", "latest_study")
+    observations = data.metric_audit_observations(preset_for("adrd"), "latest_study")
     result = build_display_audit(
-        "adrd", observations, {}, metric="latest_study", count_status="all"
+        preset_for("adrd"), observations, {}, metric="latest_study", count_status="all"
     )
     assert result["summary"]["contributing_studies"] == observations.nct_id.nunique()
     assert result["metadata"]["count_status"] == "all"
@@ -385,7 +388,9 @@ def test_provenance_drawer_study_decisions_tables(warehouse):
     def page():
         from components.audit_panel import render_provenance_drawer
 
-        render_provenance_drawer("adrd", as_popover=False, key="test_table")
+        from tests.preset_helpers import preset_for
+
+        render_provenance_drawer(preset_for("adrd"), as_popover=False, key="test_table")
 
     at = AppTest.from_function(page).run()
     assert not at.exception

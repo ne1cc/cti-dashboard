@@ -9,15 +9,16 @@ from components.filters import segment_filters
 from components.formatting import format_phase, hhi_status
 from components.guardrails import guarded_footer, page_setup, proxy_caption
 from components.guidance import format_condition_group, render_page_guide
-from components.profile import render_profile_selector
+from components.profile import render_preset_selector
 
 page_setup("Competition Landscape")
-profile_id = render_profile_selector()
-data.require_warehouse(profile_id)
+preset = render_preset_selector()
+profile_id = preset.preset_id
+data.require_warehouse(preset)
 
 render_page_guide("competition_landscape", profile_id)
 
-competition = data.recruiting_competition(profile_id)
+competition = data.recruiting_competition(preset)
 filtered = segment_filters(competition, profile_id=profile_id)
 
 observed_history_days = (
@@ -67,7 +68,7 @@ with col1:
         ),
     )
     render_provenance_drawer(
-        profile_id,
+        preset,
         metric="latest_study",
         filters=filtered.attrs.get("audit_filters", {}),
         segments=filtered,
@@ -95,7 +96,7 @@ with col2:
         else filtered
     )
     render_provenance_drawer(
-        profile_id,
+        preset,
         metric="latest_study",
         filters=filtered.attrs.get("audit_filters", {}),
         segments=elevated_segments,
@@ -119,7 +120,7 @@ with col3:
         ),
     )
     render_provenance_drawer(
-        profile_id,
+        preset,
         filters=filtered.attrs.get("audit_filters", {}),
         segments=filtered,
         context={"derived_rules": derived_rules_text},

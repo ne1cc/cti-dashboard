@@ -24,13 +24,6 @@ from pathlib import Path
 import duckdb
 import pytest
 
-# These are the strings tests/conftest.py writes into the warehouses it builds, so
-# this module imports them rather than keeping a second copy: this file used to
-# re-declare FIXTURE_RUN_ID locally, which was harmless while it was the only
-# warehouse, and became a drift hazard the moment the divergent fixture's three
-# other run ids were needed -- an edited conftest id would leave the assertions
-# describing a warehouse that no longer exists. Same pattern as
-# tests/test_orchestration_assets.py:10.
 from tests.conftest import (
     DIVERGENT_ADRD_RUN2,
     DIVERGENT_ADRD_RUN2_ID,
@@ -40,6 +33,15 @@ from tests.conftest import (
     UNSTAMPED_NSCLC_RUN_ID,
     _base_adrd_run,
 )
+
+# These are the strings tests/conftest.py writes into the warehouses it builds, so
+# this module imports them rather than keeping a second copy: this file used to
+# re-declare FIXTURE_RUN_ID locally, which was harmless while it was the only
+# warehouse, and became a drift hazard the moment the divergent fixture's three
+# other run ids were needed -- an edited conftest id would leave the assertions
+# describing a warehouse that no longer exists. Same pattern as
+# tests/test_orchestration_assets.py:10.
+from tests.preset_helpers import preset_for
 
 STAGING_WITH_PROFILE = [
     "stg_trials",
@@ -906,7 +908,7 @@ def test_mart_feasibility_priority_queue_deterministic_tiebreaker(
     st.cache_data.clear()
     st.cache_resource.clear()
 
-    df = data.priority_queue("adrd")
+    df = data.priority_queue(preset_for("adrd"))
     assert len(df) == 8
 
     # Assert that the returned segment keys strictly follow the tuple order:
