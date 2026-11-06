@@ -5,8 +5,8 @@
 # refactor. This file is the drop-in replacement for the original default
 # config. All downstream pipeline behaviour is unchanged.
 #
-# Silver / gold / duckdb paths are NOT defined here — they are shared across
-# all non-ingest-only profiles and loaded from config/shared_paths.yml.
+# Silver / gold / duckdb paths are NOT defined here — every profile writes to
+# the shared SHARED_* destinations in src/profiles.py.
 #
 # API query parameters verified against ClinicalTrials.gov API v2
 # (GET /api/v2/studies) on 2026-07-24. OpenAPI spec:
@@ -103,10 +103,6 @@ scope:
 paths:
   bronze_api_responses: data/bronze/adrd/api_responses
   bronze_manifests: data/bronze/adrd/manifests
-  # silver / gold / duckdb resolved from config/shared_paths.yml at runtime
-  silver: data/silver
-  gold: data/gold
-  duckdb: data/warehouse/clinical_trials.duckdb
   quarantine: data/bronze/adrd/manifests/quarantine
 
 ingestion:
@@ -123,8 +119,3 @@ retention:
   bronze_runs_to_keep: 1
   snapshot_runs_to_keep: 3
 
-guardrails:
-  disclaimer: >-
-    Public-registry-based planning signals for analytical portfolio
-    demonstration only. Not a recruitment forecast, not clinical decision
-    support, and not an assessment of site, sponsor, or population quality.

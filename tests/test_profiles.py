@@ -54,12 +54,6 @@ guardrails:
   disclaimer: test disclaimer
 """
 
-SHARED_PATHS_YAML = """\
-silver: data/silver
-gold: data/gold
-duckdb: data/warehouse/x.duckdb
-"""
-
 
 @pytest.fixture()
 def tmp_profiles_dir(tmp_path: Path) -> Path:
@@ -70,10 +64,10 @@ def tmp_profiles_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
-def tmp_shared_paths(tmp_path: Path) -> Path:
-    p = tmp_path / "shared_paths.yml"
-    p.write_text(SHARED_PATHS_YAML)
-    return p
+def tmp_shared_paths(tmp_path: Path) -> SharedPaths:
+    return SharedPaths(
+        silver=tmp_path / "silver", gold=tmp_path / "gold", duckdb=tmp_path / "x.duckdb"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -81,12 +75,14 @@ def tmp_shared_paths(tmp_path: Path) -> Path:
 # ---------------------------------------------------------------------------
 
 
-def test_load_shared_paths(tmp_shared_paths: Path) -> None:
-    shared = load_shared_paths(tmp_shared_paths)
-    assert isinstance(shared, SharedPaths)
-    assert shared.silver.name == "silver"
-    assert shared.gold.name == "gold"
-    assert "x.duckdb" in str(shared.duckdb)
+def test_load_shared_paths_defaults_to_the_one_warehouse(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(tmp_path))
+    shared = load_shared_paths()
+    assert shared == SharedPaths(
+        silver=tmp_path / "data/silver",
+        gold=tmp_path / "data/gold",
+        duckdb=tmp_path / "data/warehouse/clinical_trials.duckdb",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -94,10 +90,8 @@ def test_load_shared_paths(tmp_shared_paths: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_load_profile_ingest_only(tmp_profiles_dir: Path, tmp_shared_paths: Path) -> None:
-    from src.profiles import load_shared_paths
-
-    shared = load_shared_paths(tmp_shared_paths)
+def test_load_profile_ingest_only(tmp_profiles_dir: Path, tmp_shared_paths: SharedPaths) -> None:
+    shared = tmp_shared_paths
     profile = load_profile(tmp_profiles_dir / "test_ind.yml", shared=shared)
 
     assert isinstance(profile, IndicationProfile)
@@ -108,11 +102,9 @@ def test_load_profile_ingest_only(tmp_profiles_dir: Path, tmp_shared_paths: Path
 
 
 def test_load_profile_bronze_paths_are_profile_scoped(
-    tmp_profiles_dir: Path, tmp_shared_paths: Path
+    tmp_profiles_dir: Path, tmp_shared_paths: SharedPaths
 ) -> None:
-    from src.profiles import load_shared_paths
-
-    shared = load_shared_paths(tmp_shared_paths)
+    shared = tmp_shared_paths
     profile = load_profile(tmp_profiles_dir / "test_ind.yml", shared=shared)
 
     assert "test_ind" in str(profile.config.paths.bronze_api_responses)
@@ -120,14 +112,12 @@ def test_load_profile_bronze_paths_are_profile_scoped(
 
 
 def test_load_profile_silver_gold_are_shared(
-    tmp_profiles_dir: Path, tmp_shared_paths: Path
+    tmp_profiles_dir: Path, tmp_shared_paths: SharedPaths
 ) -> None:
-    from src.profiles import load_shared_paths
-
-    shared = load_shared_paths(tmp_shared_paths)
+    shared = tmp_shared_paths
     profile = load_profile(tmp_profiles_dir / "test_ind.yml", shared=shared)
 
-    # Silver and gold come from shared_paths, not from the profile YAML.
+    # Silver and gold come from the shared paths, not from the profile YAML.
     assert profile.config.paths.silver == shared.silver
     assert profile.config.paths.gold == shared.gold
     assert profile.config.paths.duckdb == shared.duckdb
@@ -138,28 +128,28 @@ def test_load_profile_silver_gold_are_shared(
 # ---------------------------------------------------------------------------
 
 
-def test_registry_discovers_profiles(tmp_profiles_dir: Path, tmp_shared_paths: Path) -> None:
-    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths_file=tmp_shared_paths)
+def test_registry_discovers_profiles(tmp_profiles_dir: Path, tmp_shared_paths: SharedPaths) -> None:
+    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths=tmp_shared_paths)
     profiles = registry.all()
     assert len(profiles) == 1
     assert profiles[0].profile_id == "test_ind"
 
 
 def test_registry_get_returns_correct_profile(
-    tmp_profiles_dir: Path, tmp_shared_paths: Path
+    tmp_profiles_dir: Path, tmp_shared_paths: SharedPaths
 ) -> None:
-    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths_file=tmp_shared_paths)
+    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths=tmp_shared_paths)
     profile = registry.get("test_ind")
     assert profile.profile_id == "test_ind"
 
 
-def test_registry_get_unknown_raises(tmp_profiles_dir: Path, tmp_shared_paths: Path) -> None:
-    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths_file=tmp_shared_paths)
+def test_registry_get_unknown_raises(tmp_profiles_dir: Path, tmp_shared_paths: SharedPaths) -> None:
+    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths=tmp_shared_paths)
     with pytest.raises(KeyError, match="No profile 'nonexistent'"):
         registry.get("nonexistent")
 
 
-def test_registry_multiple_profiles(tmp_profiles_dir: Path, tmp_shared_paths: Path) -> None:
+def test_registry_multiple_profiles(tmp_profiles_dir: Path, tmp_shared_paths: SharedPaths) -> None:
     # Add a second profile
     second = dict(yaml.safe_load(MINIMAL_PROFILE_YAML))
     second["profile"] = dict(second["profile"])
@@ -167,15 +157,15 @@ def test_registry_multiple_profiles(tmp_profiles_dir: Path, tmp_shared_paths: Pa
     second["profile"]["display_name"] = "Parkinson's Disease"
     (tmp_profiles_dir / "parkinsons.yml").write_text(yaml.dump(second))
 
-    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths_file=tmp_shared_paths)
+    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths=tmp_shared_paths)
     ids = {p.profile_id for p in registry.all()}
     assert ids == {"test_ind", "parkinsons"}
 
 
 def test_registry_refreshable_excludes_ingest_only(
-    tmp_profiles_dir: Path, tmp_shared_paths: Path
+    tmp_profiles_dir: Path, tmp_shared_paths: SharedPaths
 ) -> None:
-    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths_file=tmp_shared_paths)
+    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths=tmp_shared_paths)
     # MINIMAL_PROFILE_YAML is ingest_only, so nothing survives the filter.
     assert registry.refreshable() == []
     assert [p.profile_id for p in registry.all()] == ["test_ind"]
@@ -192,7 +182,7 @@ def _write_refreshable_profile(profiles_dir: Path, profile_id: str) -> None:
 
 def test_refreshable_env_var_scopes_profiles(
     tmp_profiles_dir: Path,
-    tmp_shared_paths: Path,
+    tmp_shared_paths: SharedPaths,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """CTI_REFRESHABLE_PROFILES pins which profiles the full pipeline refreshes.
@@ -203,47 +193,47 @@ def test_refreshable_env_var_scopes_profiles(
     _write_refreshable_profile(tmp_profiles_dir, "beta")
     monkeypatch.setenv("CTI_REFRESHABLE_PROFILES", "alpha")
 
-    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths_file=tmp_shared_paths)
+    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths=tmp_shared_paths)
     assert [p.profile_id for p in registry.refreshable()] == ["alpha"]
 
 
 def test_refreshable_env_var_unset_returns_all_refreshable(
     tmp_profiles_dir: Path,
-    tmp_shared_paths: Path,
+    tmp_shared_paths: SharedPaths,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _write_refreshable_profile(tmp_profiles_dir, "alpha")
     _write_refreshable_profile(tmp_profiles_dir, "beta")
     monkeypatch.delenv("CTI_REFRESHABLE_PROFILES", raising=False)
 
-    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths_file=tmp_shared_paths)
+    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths=tmp_shared_paths)
     assert {p.profile_id for p in registry.refreshable()} == {"alpha", "beta"}
 
 
 def test_refreshable_env_var_unknown_id_fails_loudly(
     tmp_profiles_dir: Path,
-    tmp_shared_paths: Path,
+    tmp_shared_paths: SharedPaths,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A typo in the deploy env must not silently shrink the refresh."""
     _write_refreshable_profile(tmp_profiles_dir, "alpha")
     monkeypatch.setenv("CTI_REFRESHABLE_PROFILES", "alpha,nope")
 
-    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths_file=tmp_shared_paths)
+    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths=tmp_shared_paths)
     with pytest.raises(ValueError, match="nope"):
         registry.refreshable()
 
 
 def test_refreshable_env_var_blank_fails_loudly(
     tmp_profiles_dir: Path,
-    tmp_shared_paths: Path,
+    tmp_shared_paths: SharedPaths,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Blank or whitespace-only would silently refresh nothing."""
     _write_refreshable_profile(tmp_profiles_dir, "alpha")
     monkeypatch.setenv("CTI_REFRESHABLE_PROFILES", "  ")
 
-    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths_file=tmp_shared_paths)
+    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths=tmp_shared_paths)
     with pytest.raises(ValueError, match="no refreshable profile"):
         registry.refreshable()
 
@@ -297,7 +287,7 @@ def test_registry_profile_is_transformable_but_not_orchestrated() -> None:
 
 
 def test_refreshable_excludes_non_orchestrated_profiles(
-    tmp_profiles_dir: Path, tmp_shared_paths: Path
+    tmp_profiles_dir: Path, tmp_shared_paths: SharedPaths
 ) -> None:
     """orchestrate: false opts a refreshable pipeline out of the loop."""
     raw = yaml.safe_load(MINIMAL_PROFILE_YAML)
@@ -307,7 +297,7 @@ def test_refreshable_excludes_non_orchestrated_profiles(
     raw["profile"]["orchestrate"] = False
     (tmp_profiles_dir / "registry_like.yml").write_text(yaml.dump(raw))
 
-    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths_file=tmp_shared_paths)
+    registry = ProfileRegistry(profiles_dir=tmp_profiles_dir, shared_paths=tmp_shared_paths)
     assert [p.profile_id for p in registry.refreshable()] == []
     assert {p.profile_id for p in registry.all()} == {"registry_like", "test_ind"}
 
@@ -691,7 +681,7 @@ def test_dbt_ingest_only_var_matches_registry() -> None:
 
 
 def test_no_top_level_config_declares_a_private_silver_tree() -> None:
-    """One silver root, from config/shared_paths.yml.
+    """One silver root, from SHARED_SILVER in src/profiles.py.
 
     `config/full_catalog_config.yml` used to point `silver:` at
     data/silver_full_catalog: a tree dbt never globbed and nothing pruned.

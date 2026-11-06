@@ -147,9 +147,7 @@ def _write_profile(directory: Path, profile_id: str, taxonomy: str) -> None:
 
 
 def _registry(directory: Path) -> ProfileRegistry:
-    return ProfileRegistry(
-        profiles_dir=directory, shared_paths_file=ROOT / "config/shared_paths.yml"
-    )
+    return ProfileRegistry(profiles_dir=directory)
 
 
 @pytest.fixture

@@ -66,7 +66,7 @@ def _temp_config_tree(root: Path) -> Path:
     """Copy the real ``config/`` tree into a temp project root.
 
     ``load_profile()`` resolves a profile's taxonomy and
-    ``config/shared_paths.yml`` against ``project_root()``, and the registry
+    the shared silver/gold/duckdb paths against ``project_root()``, and the registry
     discovers profiles from ``project_root()/config/profiles`` — so a temp root
     needs those files before a profile can be pointed at it.
     ``project_config.yml`` is deliberately *not* copied: the
@@ -520,7 +520,7 @@ def test_the_deletion_layer_refuses_anything_outside_the_profile_roots(profile_w
 
 
 def test_pruning_one_profile_leaves_another_profile_silver_alone(tmp_path, monkeypatch):
-    """`config/shared_paths.yml` gives every refreshable profile the *same* silver
+    """The shared silver paths give every refreshable profile the *same* silver
     root, and a silver file is named by run id alone — nothing in the path says
     which profile owns it. This is the test that states the property out loud:
     a profile's candidates come from its own manifests, so an adrd prune cannot

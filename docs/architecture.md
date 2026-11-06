@@ -173,10 +173,10 @@ collection. This is documented, not hidden.
 
 | File | Responsibility |
 |---|---|
-| [`config/project_config.yml`](../config/project_config.yml) | Legacy single-config API/query, paths, ingestion/reuse, retention, scope, and guardrails; used by `load_config` / `get_config` |
+| [`config/project_config.yml`](../config/project_config.yml) | Legacy single-config API/query, paths, ingestion/reuse, retention, and scope; used by `load_config` / `get_config` |
 | `config/profiles/*.yml` | Indication metadata, API/query/HTTP settings, bronze/quarantine paths, reuse/retention policy, and taxonomy/score-weight references; CLI ingest/transform/orchestrate use the registry |
 | [`config/profiles/adrd.yml`](../config/profiles/adrd.yml) / [`config/profiles/full_catalog.yml`](../config/profiles/full_catalog.yml) | ADRD profile / opt-in registry-wide, ingest-only profile |
-| [`config/shared_paths.yml`](../config/shared_paths.yml) | Silver, gold, and DuckDB destinations injected into profile configs, overriding those profile path fields |
+| [`src/profiles.py`](../src/profiles.py) `SHARED_SILVER` / `SHARED_GOLD` / `SHARED_DUCKDB` | The one silver, gold, and DuckDB destination every profile writes to, injected into each profile config (profile YAMLs do not declare them) |
 | `config/condition_taxonomy*.yml` / [`config/geography_rules.yml`](../config/geography_rules.yml) | Profile-selected condition mapping/confidence rules / state-name normalization |
 | [`config/similarity_weights.yml`](../config/similarity_weights.yml) | Comparability factor weights mirrored in the similarity dbt seed, checked by pytest |
 | [`dbt_clinical_trials/dbt_project.yml`](../dbt_clinical_trials/dbt_project.yml) / `dbt_clinical_trials/profiles.yml` | Schema routing, seed types, and score-band vars / dbt connection settings (created from the example at setup) |
@@ -222,7 +222,7 @@ documented in the [operations guide](OPERATIONS.md).
   `CTI_REFRESHABLE_PROFILES` narrows which presets are derived, never the pull. The
   trial grain is `(nct_id, indication_profile_id)`, carried through staging,
   intermediate and mart models, while silver, gold and the DuckDB file stay shared
-  (`config/shared_paths.yml`) — the profile column is what keeps two indications
+  (`SHARED_*` in `src/profiles.py`) — the profile column is what keeps two indications
   from cross-joining on a shared date. Reconciliation is per profile
   (`src/quality/reconciliation.py` binds `indication_profile_id` into every check),
   the dashboard serves one profile at a time (`dashboard/components/profile.py`
@@ -241,7 +241,7 @@ documented in the [operations guide](OPERATIONS.md).
   profiling (`src/quality/profiling.py`) is a single DuckDB streaming aggregate
   instead of a full pandas re-read. Every profile `transform` accepts writes
   through this same writer into the single shared silver root
-  (`data/silver/`, from `config/shared_paths.yml`); gold, dbt, and the dashboard
+  (`data/silver/`, `SHARED_SILVER` in `src/profiles.py`); gold, dbt, and the dashboard
   read that root, so a profile reaches the warehouse only once it has a taxonomy
   and is no longer `ingest_only`.
 - **Dual-frontend delivery model ([ADR 0061](decisions/0061-patient-frontend.md)).** The

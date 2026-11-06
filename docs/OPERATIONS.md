@@ -78,6 +78,12 @@ profile snapshots in a measured environment, record peak and steady data size
 and pipeline duration, then set a volume size and retention horizon with safe
 headroom. A first deployment of new profiles also rebuilds the shared warehouse.
 
+A profile YAML declares only its bronze and quarantine paths. Silver, gold and the
+DuckDB file are the same for every profile (`SHARED_SILVER`, `SHARED_GOLD`,
+`SHARED_DUCKDB` in `src/profiles.py`, not a config file), so adding a profile
+never creates a second warehouse. Moving those paths out of YAML changes no path
+and no column: an existing warehouse needs no rebuild.
+
 Local measurement on 2026-10-04 for complete snapshots of ten added profiles:
 50,795 studies produced 1.4 GB of bronze and 161 MB of silver. The warehouse
 models other than trial similarity occupied 272 MB. Building
