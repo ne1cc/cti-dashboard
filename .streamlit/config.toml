@@ -33,6 +33,8 @@ secondaryBackgroundColor = "#EBF1F7"
 
 [server]
 headless = true
+# Serves dashboard/static/ at /app/static/ (the published freshness marker, #88).
+enableStaticServing = true
 
 [browser]
 gatherUsageStats = false

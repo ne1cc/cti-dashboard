@@ -367,3 +367,41 @@ def test_check_prints_json_even_with_invalid_disk_configuration(freshness, monke
     monkeypatch.setenv("CTI_REFRESH_MIN_FREE_BYTES", "invalid")
     assert freshness.main(["--check"]) == 1
     assert not json.loads(capsys.readouterr().out)["ok"]
+
+
+def test_success_publishes_marker_and_failed_refresh_keeps_it(freshness, accepted_root):
+    assert freshness.main(["--record-success"]) == 0
+    published = freshness.published_marker_path()
+    assert json.loads(published.read_text()) == json.loads(freshness.marker_path().read_text())
+    before = published.read_bytes()
+    with duckdb.connect(str(accepted_root)) as con:
+        con.execute("delete from main_marts.dim_trial where indication_profile_id='adrd'")
+    assert freshness.main(["--record-success"]) == 1
+    assert json.loads(freshness.marker_path().read_text())["attempt_status"] == "failed"
+    assert published.read_bytes() == before
+
+
+def test_publish_failure_does_not_fail_the_refresh(freshness, accepted_root, monkeypatch, capsys):
+    blocked = freshness.marker_path().parent / "blocked"
+    blocked.write_text("a file where the served folder should be")
+    monkeypatch.setattr(freshness, "published_marker_path", lambda: blocked / "freshness.json")
+    assert freshness.main(["--record-success"]) == 0
+    assert json.loads(freshness.marker_path().read_text())["attempt_status"] == "success"
+    assert "published marker not updated" in capsys.readouterr().err
+
+
+def test_publish_copies_only_a_verified_success(freshness):
+    payload = marker_payload()
+    write_marker(freshness, payload)
+    assert freshness.main(["--publish"]) == 0
+    published = json.loads(freshness.published_marker_path().read_text())
+    assert published["attempt_status"] == "success"
+    assert set(published["last_success"]["profiles"]) == {"adrd", "oncology_nsclc"}
+    freshness.published_marker_path().unlink()
+    for bad in ("failed", "running"):
+        write_marker(freshness, {**payload, "attempt_status": bad})
+        assert freshness.main(["--publish"]) == 1
+    del payload["last_success"]["profiles"]["adrd"]
+    write_marker(freshness, payload)
+    assert freshness.main(["--publish"]) == 1
+    assert not freshness.published_marker_path().exists()
