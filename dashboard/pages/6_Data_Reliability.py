@@ -5,15 +5,16 @@ from components import data
 from components.audit_panel import render_provenance_drawer
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import render_page_guide
-from components.profile import render_profile_selector
+from components.profile import render_preset_selector
 
 page_setup("Data Reliability")
-profile_id = render_profile_selector()
-data.require_warehouse(profile_id)
+preset = render_preset_selector()
+profile_id = preset.preset_id
+data.require_warehouse(preset)
 
 render_page_guide("data_reliability", profile_id)
 
-reliability = data.data_reliability(profile_id)
+reliability = data.data_reliability(preset)
 
 st.subheader("Ingestion runs")
 st.dataframe(
@@ -90,7 +91,7 @@ if not success.empty:
             ),
         )
         render_provenance_drawer(
-            profile_id,
+            preset,
             metric="manifest_reconciled",
             key="rel_reconciled",
             label="How this number is computed: Latest run reconciled",
@@ -110,7 +111,7 @@ if not success.empty:
             ),
         )
         render_provenance_drawer(
-            profile_id,
+            preset,
             metric="usable_location_share",
             key="rel_location",
             label="How this number is computed: Usable U.S. location share",
@@ -131,7 +132,7 @@ if not success.empty:
             ),
         )
         render_provenance_drawer(
-            profile_id,
+            preset,
             metric="low_confidence_condition_share",
             key="reliability",
             label="How this number is computed: Low-confidence condition share",
@@ -152,7 +153,7 @@ if not success.empty:
             help=("Trial sites with registry geoPoint latitude/longitude (exact coordinates)."),
         )
         render_provenance_drawer(
-            profile_id,
+            preset,
             metric="coordinates_exact_share",
             key="rel_exact_geo",
             label="How this number is computed: Exact coordinates share",
@@ -175,7 +176,7 @@ if not success.empty:
             ),
         )
         render_provenance_drawer(
-            profile_id,
+            preset,
             metric="coordinates_fallback_eligible_share",
             key="rel_approx_geo",
             label="How this number is computed: Approximate coordinates (eligible)",

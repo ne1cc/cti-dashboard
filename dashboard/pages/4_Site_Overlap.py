@@ -7,15 +7,16 @@ from components.audit_panel import render_provenance_drawer
 from components.formatting import format_phase
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import render_page_guide
-from components.profile import render_profile_selector
+from components.profile import render_preset_selector
 
 page_setup("Site Overlap")
-profile_id = render_profile_selector()
-data.require_warehouse(profile_id)
+preset = render_preset_selector()
+profile_id = preset.preset_id
+data.require_warehouse(preset)
 
 render_page_guide("site_overlap", profile_id)
 
-overlap = data.site_overlap(profile_id)
+overlap = data.site_overlap(preset)
 
 st.sidebar.header("Filters")
 states = sorted(overlap["state_normalized"].dropna().unique())
@@ -36,7 +37,7 @@ with col1:
         help="Number of clinical facilities matching current state and overlap filters.",
     )
     render_provenance_drawer(
-        profile_id,
+        preset,
         filters={"states": selected_states},
         metric="facility",
         facilities=filtered[["facility_normalized", "city_normalized", "state_normalized"]]
@@ -64,7 +65,7 @@ with col2:
         ),
     )
     render_provenance_drawer(
-        profile_id,
+        preset,
         metric="facility",
         facilities=overlap.loc[
             overlap["repeated_site_participation_flag"],

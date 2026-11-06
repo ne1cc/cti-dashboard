@@ -20,7 +20,7 @@ from components.guidance import (
     render_page_guide,
 )
 from components.navigation import SECTIONS
-from components.profile import render_profile_selector
+from components.profile import render_preset_selector
 
 SECTION_PURPOSE = {
     "Compare": (
@@ -31,13 +31,14 @@ SECTION_PURPOSE = {
 }
 
 page_setup("Recruitment Competition Intelligence")
-profile_id = render_profile_selector()
-data.require_warehouse(profile_id)
+preset = render_preset_selector()
+profile_id = preset.preset_id
+data.require_warehouse(preset)
 
 render_indication_banner(profile_id)
 render_page_guide("overview", profile_id)
 
-metrics = data.overview_metrics(profile_id)
+metrics = data.overview_metrics(preset)
 
 col1, col2, col3, col4 = st.columns(4)
 with col1:
@@ -48,7 +49,7 @@ with col1:
         border=True,
     )
     render_provenance_drawer(
-        profile_id,
+        preset,
         metric="latest_study",
         count_status="all",
         context={
@@ -68,7 +69,7 @@ with col2:
         border=True,
     )
     render_provenance_drawer(
-        profile_id,
+        preset,
         metric="latest_study",
         count_status="recruiting",
         context={
@@ -90,7 +91,7 @@ with col3:
         border=True,
     )
     render_provenance_drawer(
-        profile_id,
+        preset,
         metric="facility",
         observation_metric="history",
         context={
@@ -113,7 +114,7 @@ with col4:
         border=True,
     )
     render_provenance_drawer(
-        profile_id,
+        preset,
         metric="facility",
         observation_metric="history",
         context={
@@ -135,7 +136,7 @@ st.caption(
 proxy_caption()
 
 st.subheader("Top registry segments by recruiting trials")
-queue = data.priority_queue(profile_id)
+queue = data.priority_queue(preset)
 preview_df = queue.head(10)[
     [
         "condition_group",
@@ -225,7 +226,7 @@ st.page_link(
     icon=":material/arrow_forward:",
 )
 render_provenance_drawer(
-    profile_id,
+    preset,
     segments=queue.head(10),
     context={
         "scope": "Queue preview row inputs; sidebar scope before segment filters.",

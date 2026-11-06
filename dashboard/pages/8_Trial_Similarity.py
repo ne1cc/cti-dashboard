@@ -12,7 +12,7 @@ from components.guidance import (
     render_indication_banner,
     render_page_guide,
 )
-from components.profile import render_profile_selector
+from components.profile import render_preset_selector
 
 FACTOR_LABELS = {
     "same_condition": "Same condition",
@@ -25,13 +25,14 @@ FACTOR_LABELS = {
 }
 
 page_setup("Trial Similarity Explorer")
-profile_id = render_profile_selector()
-data.require_warehouse(profile_id)
+preset = render_preset_selector()
+profile_id = preset.preset_id
+data.require_warehouse(preset)
 
 render_indication_banner(profile_id)
 render_page_guide("trial_similarity", profile_id)
 
-trials = data.trial_explorer(profile_id)
+trials = data.trial_explorer(preset)
 
 search = st.text_input("Search for an index trial by NCT ID or title")
 
@@ -72,7 +73,7 @@ options: dict[str, str] = {
 selected_label = st.selectbox("Select the index trial", list(options))
 selected_nct_id = str(options[selected_label])
 
-sim_df = data.trial_similarity(profile_id, selected_nct_id)
+sim_df = data.trial_similarity(preset, selected_nct_id)
 if sim_df.empty or "nct_id_b" not in sim_df.columns:
     st.info("No comparable trials found in the current warehouse for this trial.")
     guarded_footer()
@@ -183,7 +184,7 @@ if selected_rows:
         ),
     )
     render_provenance_drawer(
-        profile_id,
+        preset,
         metric="latest_study",
         key="similarity_metric",
         label="How this number is computed: Weighted total",

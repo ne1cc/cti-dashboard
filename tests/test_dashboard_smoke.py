@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.preset_helpers import preset_for
+
 ROOT = Path(__file__).resolve().parents[1]
 WAREHOUSE = ROOT / "data" / "warehouse" / "clinical_trials.duckdb"
 
@@ -31,7 +33,7 @@ PAGES = [
 
 # What the first dataframe each page renders must hold, per profile, measured
 # 2026-09-06 against the session two-profile fixture. A page can render the
-# selector and discard its return value (`render_profile_selector(); profile_id =
+# selector and discard its return value (`render_preset_selector(); profile_id =
 # "adrd"`) and keep every widget assertion here green — the widget still holds the
 # pick, the page just shows one fixed indication. These are the numbers it shows
 # instead. Pages left out render the *same* row count for both profiles (site
@@ -378,9 +380,9 @@ def test_geography_legacy_warehouse_keeps_raw_counts(
 
     original = data.condition_geography_trends
 
-    def legacy_trends(profile_id: str):
+    def legacy_trends(preset):
         """Return the legacy mart's columns without changing the shared warehouse."""
-        return original(profile_id).drop(
+        return original(preset).drop(
             columns=[
                 "population",
                 "population_source",
@@ -418,7 +420,7 @@ def test_geography_missing_rates_caption_describes_top_twenty(
         sys.path.insert(0, str(ROOT / "dashboard"))
     from components import data
 
-    template = data.condition_geography_trends("adrd").iloc[[0]].copy()
+    template = data.condition_geography_trends(preset_for("adrd")).iloc[[0]].copy()
     states = "AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA GU".split()
     rows = []
     for index, state in enumerate(states):

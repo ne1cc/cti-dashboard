@@ -11,11 +11,12 @@ from components import data
 from components.audit_panel import render_metric_audit
 from components.guardrails import guarded_footer, page_setup
 from components.guidance import format_condition_group, render_page_guide
-from components.profile import render_profile_selector
+from components.profile import render_preset_selector
 
 page_setup("Trial Transparency")
-profile_id = render_profile_selector()
-data.require_warehouse(profile_id)
+preset = render_preset_selector()
+profile_id = preset.preset_id
+data.require_warehouse(preset)
 
 render_page_guide("trial_transparency", profile_id)
 
@@ -37,8 +38,8 @@ def _parse_nct_ids(val: pd.Series | str | None) -> set[str]:
     return ncts
 
 
-stopped_df = data.early_stop_transparency(profile_id)
-results_df = data.results_posting_transparency(profile_id)
+stopped_df = data.early_stop_transparency(preset)
+results_df = data.results_posting_transparency(preset)
 
 tab_stopped, tab_results = st.tabs(
     ["Early-stopped trials (reported reasons)", "Results-posting rates by sponsor class"]
@@ -473,6 +474,6 @@ with tab_results:
                 )
 
 
-render_metric_audit(profile_id, metric="latest_study", key="transparency")
+render_metric_audit(preset, metric="latest_study", key="transparency")
 
 guarded_footer()

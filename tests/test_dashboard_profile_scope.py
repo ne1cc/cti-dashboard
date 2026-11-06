@@ -1,4 +1,4 @@
-"""The dashboard may only read one indication profile at a time.
+"""The dashboard may only read one preset's registry condition nodes at a time.
 
 Two kinds of check live here. Static guards read `dashboard/` source and enforce
 the rules a green page run cannot see (a page may not discard the selector's
@@ -6,6 +6,10 @@ return value; a reader may not put a profile id into SQL text; trial joins go on
 `trial_key`, not `nct_id`). Behavioural checks read the two committed fixture
 warehouses: `fixture_project_root` (both profiles, one snapshot date) and
 `divergent_fixture_root` (both profiles, ADRD a week ahead).
+
+Scope is a `src.presets.Preset` (#148): readers filter on `registry_condition_key`
+directly, through `bridge_trial_condition` (trial grain) or through the profiles that
+`dim_condition` derives from those keys (profile-grain marts).
 """
 
 import ast
@@ -17,6 +21,8 @@ from unittest import mock
 
 import duckdb
 import pytest
+
+from tests.preset_helpers import preset_for as _preset
 
 ROOT = Path(__file__).resolve().parents[1]
 DASHBOARD = ROOT / "dashboard"
@@ -53,8 +59,8 @@ def _load_profile_module():
     return profile
 
 
-def test_every_warehouse_reader_is_profile_first() -> None:
-    """A reader without `profile_id` is a cross-indication blend, and it will
+def test_every_warehouse_reader_is_preset_first() -> None:
+    """A reader without `preset` is a cross-indication blend, and it will
     not raise — it will just look like a bigger ADRD.
 
     `inspect.getmembers(data, inspect.isfunction)` cannot be used: st.cache_data
@@ -71,7 +77,7 @@ def test_every_warehouse_reader_is_profile_first() -> None:
         if not callable(obj) or getattr(obj, "__module__", None) != data.__name__:
             continue
         params = list(inspect.signature(obj).parameters)
-        assert params and params[0] == "profile_id", f"{name}() is not scoped: {params}"
+        assert params and params[0] == "preset", f"{name}() is not scoped: {params}"
         checked += 1
     assert checked >= 10, f"only {checked} readers found; the module shape changed"
 
@@ -88,27 +94,27 @@ def test_no_page_calls_a_reader_without_arguments() -> None:
         assert not pattern.findall(source), f"{script}: {pattern.findall(source)}"
 
 
-def test_every_page_renders_the_profile_selector() -> None:
+def test_every_page_renders_the_preset_selector() -> None:
     for script in PAGES:
         source = (ROOT / script).read_text(encoding="utf-8")
-        assert "render_profile_selector(" in source, f"{script} has no profile selector"
+        assert "render_preset_selector(" in source, f"{script} has no preset selector"
 
 
 def test_every_page_binds_the_selector_return_value() -> None:
-    """The selector *returns* the picked profile id, and the page must use it.
+    """The selector *returns* the picked preset, and the page must use it.
 
-    `test_every_page_renders_the_profile_selector` only greps for the call, so the
-    shape `render_profile_selector(); profile_id = "adrd"` passes it: the widget is
+    `test_every_page_renders_the_preset_selector` only greps for the call, so the
+    shape `render_preset_selector(); preset = load_presets()[0]` passes it: the widget is
     still rendered, still keyed, still holds whatever the user picked, and the page
     still runs -- it just shows one fixed indication no matter what is selected. The
     smoke suite's `landed.value == profile_id` proves the widget kept the value, not
     that the page read it. This pins the assignment every page actually uses.
     """
-    binding = re.compile(r"^profile_id = render_profile_selector\(\)$", re.M)
+    binding = re.compile(r"^preset = render_preset_selector\(\)$", re.M)
     for script in PAGES:
         source = (ROOT / script).read_text(encoding="utf-8")
         bound = binding.search(source) is not None
-        assert bound, f"{script} does not bind profile_id from render_profile_selector()"
+        assert bound, f"{script} does not bind preset from render_preset_selector()"
 
 
 # The three registry ids. `full_catalog` is one of them: a reader could hard-wire
@@ -121,6 +127,8 @@ PROFILE_IDS = ("adrd", "oncology_nsclc", "full_catalog")
 _PROFILE_COMPARISON = re.compile(
     r"indication_profile_id\s*(?:=|!=|<>|<=|>=|<|>|\b(?:in|like)\b)", re.I
 )
+# Allowed: `= ?` only. The preset's owning profile is bound; the keys narrow further
+# through `registry_condition_key in (select unnest(?))`, never through the profile column.
 _PROFILE_COMPARISON_BOUND = re.compile(r"indication_profile_id\s*=\s*\?", re.I)
 _PROFILE_ID_IN_TEXT = re.compile(
     r"(?<![A-Za-z0-9_])(?:" + "|".join(PROFILE_IDS) + r")(?![A-Za-z0-9_])"
@@ -407,7 +415,7 @@ def test_no_reader_returns_another_profiles_rows(fixture_project_root) -> None:
     for profile in PROFILES:
         for reader in readers:
             label = f"{reader.__name__}({profile})"
-            frame = reader(profile)
+            frame = reader(_preset(profile))
             if frame.empty:
                 failures.append(f"{label} returned no rows")
                 continue
@@ -419,7 +427,7 @@ def test_no_reader_returns_another_profiles_rows(fixture_project_root) -> None:
                 failures.append(f"{label} returned rows belonging to {sorted(leaked)}")
     assert not failures, "readers crossed the profile boundary:\n" + "\n".join(failures)
 
-    both = {p: len(data.trial_explorer(p)) for p in PROFILES}
+    both = {p: len(data.trial_explorer(_preset(p))) for p in PROFILES}
     assert min(both.values()) > 0
     unscoped = data.query("select nct_id, indication_profile_id from main_marts.dim_trial")
     assert len(unscoped) == sum(both.values()), "readers dropped or duplicated rows"
@@ -429,14 +437,14 @@ def test_no_reader_returns_another_profiles_rows(fixture_project_root) -> None:
 def test_overview_metrics_counts_only_its_profile(fixture_project_root) -> None:
     data = _load_data_module()
     for profile in PROFILES:
-        metrics = data.overview_metrics(profile)
-        assert int(metrics["total_trials"]) == len(data.trial_explorer(profile))
+        metrics = data.overview_metrics(_preset(profile))
+        assert int(metrics["total_trials"]) == len(data.trial_explorer(_preset(profile)))
 
     # The KPI Task 11 recorded as blended: `states_with_sites` is a count of
     # `dim_geography`, whose grain became (profile, state) in Task 11, so an
     # unscoped count adds the other profile's states onto this one's.
-    adrd = data.overview_metrics("adrd")
-    nsclc = data.overview_metrics("oncology_nsclc")
+    adrd = data.overview_metrics(_preset("adrd"))
+    nsclc = data.overview_metrics(_preset("oncology_nsclc"))
     assert int(adrd["states_with_sites"]) == ADRD_STATES_WITH_SITES
     blended = data.query("select count(*) as n from main_marts.dim_geography").iloc[0]["n"]
     assert int(adrd["states_with_sites"]) < int(blended), (
@@ -452,7 +460,7 @@ def test_overview_metrics_counts_only_its_profile(fixture_project_root) -> None:
     # and 1 either way — measured 2026-09-06), which means no pin here could
     # fail. They are pinned against `divergent_fixture_root` instead, below.
     for tile, pinned in PINNED_OVERVIEW_TILES.items():
-        scoped = {p: int(data.overview_metrics(p)[tile]) for p in PROFILES}
+        scoped = {p: int(data.overview_metrics(_preset(p))[tile]) for p in PROFILES}
         assert scoped == dict.fromkeys(PROFILES, pinned), (
             f"{tile} moved off its per-profile value of {pinned}: {scoped}"
         )
@@ -475,9 +483,15 @@ def facility_snapshots(monkeypatch):
             create schema main_marts;
             create schema main_intermediate;
             create table main_marts.dim_trial (
-                indication_profile_id varchar, current_overall_status varchar
+                trial_key varchar, indication_profile_id varchar, current_overall_status varchar
             );
             create table main_marts.dim_geography (indication_profile_id varchar);
+            create table main_marts.dim_condition (
+                indication_profile_id varchar, registry_condition_key varchar
+            );
+            create table main_marts.bridge_trial_condition (
+                trial_key varchar, registry_condition_key varchar
+            );
             create table main_marts.mart_site_overlap as
             select *, 'city' as city_normalized, 'NC' as state_normalized,
                    1 as recruiting_trial_count, 1 as listed_trial_count
@@ -491,7 +505,8 @@ def facility_snapshots(monkeypatch):
                 ('oncology_nsclc', date '2026-09-15', 'five')
             ) as sites(indication_profile_id, snapshot_date, facility_normalized);
             create table main_marts.fct_trial_snapshot as
-            select distinct indication_profile_id, snapshot_date
+            select distinct indication_profile_id, snapshot_date,
+                   indication_profile_id || '-trial' as trial_key
             from main_marts.mart_site_overlap;
             create table main_intermediate.int_trial_status_history as
             select *, indication_profile_id || '-' || snapshot_date as ingestion_run_id,
@@ -500,6 +515,13 @@ def facility_snapshots(monkeypatch):
             create table main_marts.mart_study_snapshot_audit as
             select * from main_intermediate.int_trial_status_history;
         """)
+        for profile in PROFILES:
+            key = _preset(profile).registry_condition_keys[0]
+            connection.execute("insert into main_marts.dim_condition values (?, ?)", [profile, key])
+            connection.execute(
+                "insert into main_marts.bridge_trial_condition values (?, ?)",
+                [f"{profile}-trial", key],
+            )
         monkeypatch.setattr(data, "_connection", lambda: connection)
         yield connection
 
@@ -509,10 +531,10 @@ def test_overview_facilities_count_only_the_profiles_latest_capture(
     facility_snapshots, profile, expected
 ) -> None:
     data = _load_data_module()
-    assert int(data.overview_metrics(profile)["listed_facilities"]) == expected
-    overlap = data.site_overlap(profile)
+    assert int(data.overview_metrics(_preset(profile))["listed_facilities"]) == expected
+    overlap = data.site_overlap(_preset(profile))
     assert len(overlap) == expected
-    observations = data.metric_audit_observations(profile, "facility")
+    observations = data.metric_audit_observations(_preset(profile), "facility")
     assert _snapshot_dates(observations) == _snapshot_dates(overlap)
     assert set(observations.indication_profile_id) == {profile}
 
@@ -524,26 +546,28 @@ def test_facility_readers_do_not_fall_back_when_latest_capture_has_no_facilities
     facility_snapshots, reader
 ) -> None:
     facility_snapshots.execute("""
-        insert into main_marts.fct_trial_snapshot values ('adrd', date '2026-09-22');
+        insert into main_marts.fct_trial_snapshot
+        values ('adrd', date '2026-09-22', 'adrd-trial');
         insert into main_intermediate.int_trial_status_history
+            (indication_profile_id, snapshot_date, ingestion_run_id, nct_id)
         values ('adrd', date '2026-09-22', 'adrd-2026-09-22', 'NCT00000001');
     """)
     data = _load_data_module()
     if reader == "overview_metrics":
-        assert int(data.overview_metrics("adrd")["listed_facilities"]) == 0
+        assert int(data.overview_metrics(_preset("adrd"))["listed_facilities"]) == 0
     elif reader == "site_overlap":
-        assert data.site_overlap("adrd").empty
+        assert data.site_overlap(_preset("adrd")).empty
     else:
-        observations = data.metric_audit_observations("adrd", "facility")
+        observations = data.metric_audit_observations(_preset("adrd"), "facility")
         assert _snapshot_dates(observations) == {"2026-09-22"}
         assert set(observations.indication_profile_id) == {"adrd"}
 
 
 def test_overview_facilities_are_zero_for_an_empty_profile(facility_snapshots) -> None:
     data = _load_data_module()
-    assert int(data.overview_metrics("full_catalog")["listed_facilities"]) == 0
-    assert data.site_overlap("full_catalog").empty
-    assert data.metric_audit_observations("full_catalog", "facility").empty
+    assert int(data.overview_metrics(_preset("full_catalog"))["listed_facilities"]) == 0
+    assert data.site_overlap(_preset("full_catalog")).empty
+    assert data.metric_audit_observations(_preset("full_catalog"), "facility").empty
 
 
 def test_overview_location_tiles_preserve_their_documented_grains(
@@ -551,9 +575,9 @@ def test_overview_location_tiles_preserve_their_documented_grains(
 ) -> None:
     monkeypatch.chdir(divergent_warehouse)
     data = _load_data_module()
-    assert data.profile_trial_count("adrd") == DIVERGENT_ADRD_TRIALS
+    assert data.preset_trial_count(_preset("adrd")) == DIVERGENT_ADRD_TRIALS
     for profile in PROFILES:
-        metrics = data.overview_metrics(profile)
+        metrics = data.overview_metrics(_preset(profile))
         expected = data.query(
             "select count(*) as n from main_marts.mart_site_overlap "
             "where indication_profile_id = ? and snapshot_date = "
@@ -581,7 +605,7 @@ def test_trial_similarity_stays_inside_its_profile(
     get_config.cache_clear()
     data = _load_data_module()
     for profile in PROFILES:
-        matches = data.trial_similarity(profile, "NCT00000001")
+        matches = data.trial_similarity(_preset(profile), "NCT00000001")
         assert not matches.empty, f"{profile} has no similarity rows"
         assert set(matches["indication_profile_id"]) == {profile}
 
@@ -618,9 +642,9 @@ def test_overview_snapshot_tiles_track_their_own_profile(divergent_warehouse) ->
     data = _load_data_module()
     # The anchor: 27 rows exist only on this warehouse, so a fixture that stopped
     # taking effect fails here rather than quietly re-measuring the base one.
-    assert data.profile_trial_count("adrd") == DIVERGENT_ADRD_TRIALS
+    assert data.preset_trial_count(_preset("adrd")) == DIVERGENT_ADRD_TRIALS
 
-    nsclc = data.overview_metrics("oncology_nsclc")
+    nsclc = data.overview_metrics(_preset("oncology_nsclc"))
     assert str(nsclc["latest_snapshot"])[:10] == NSCLC_OWN_LATEST_SNAPSHOT, (
         "NSCLC's overview carries a snapshot date it has no rows at: max() is global, "
         f"not per profile ({DIVERGENT_GLOBAL_LATEST_SNAPSHOT} belongs to adrd)"
@@ -628,7 +652,7 @@ def test_overview_snapshot_tiles_track_their_own_profile(divergent_warehouse) ->
     assert int(nsclc["snapshot_count"]) == NSCLC_OWN_SNAPSHOT_COUNT, (
         "NSCLC's overview counts ADRD's second snapshot as its own"
     )
-    assert int(data.overview_metrics("adrd")["total_trials"]) == DIVERGENT_ADRD_TRIALS, (
+    assert int(data.overview_metrics(_preset("adrd"))["total_trials"]) == DIVERGENT_ADRD_TRIALS, (
         f"adrd's trial tile left {DIVERGENT_ADRD_TRIALS}; both profiles together are 37"
     )
 
@@ -645,21 +669,21 @@ def test_the_stale_profile_sees_only_its_own_latest_snapshot(divergent_warehouse
     side that goes empty. Asserting ADRD would pass under the mutation.
     """
     data = _load_data_module()
-    assert data.profile_trial_count("adrd") == DIVERGENT_ADRD_TRIALS  # fixture anchor
+    assert data.preset_trial_count(_preset("adrd")) == DIVERGENT_ADRD_TRIALS  # fixture anchor
 
-    competition = data.recruiting_competition("oncology_nsclc")
+    competition = data.recruiting_competition(_preset("oncology_nsclc"))
     assert len(competition) == NSCLC_RECRUITING_COMPETITION_ROWS, (
         "NSCLC's competition mart was filtered to a snapshot date it does not own"
     )
     assert _snapshot_dates(competition) == {NSCLC_OWN_LATEST_SNAPSHOT}
 
-    overlap = data.site_overlap("oncology_nsclc")
+    overlap = data.site_overlap(_preset("oncology_nsclc"))
     assert len(overlap) == NSCLC_SITE_OVERLAP_ROWS, (
         "NSCLC's site overlap mart was filtered to a snapshot date it does not own"
     )
     assert _snapshot_dates(overlap) == {NSCLC_OWN_LATEST_SNAPSHOT}
 
-    explorer = data.trial_explorer("oncology_nsclc")
+    explorer = data.trial_explorer(_preset("oncology_nsclc"))
     assert len(explorer) == NSCLC_TRIAL_EXPLORER_ROWS
     states = explorer["us_states"]
     with_states = int((states.fillna("").astype(str).str.strip().str.len() > 0).sum())
@@ -687,15 +711,17 @@ def test_require_warehouse_warns_rather_than_stops_on_an_empty_scope(
     # The branch is decided by these two counts, so they are pinned: delete the
     # predicate inside `profile_trial_count` and every profile reports the same
     # wrong total, which turns the warning below into a coin flip.
-    assert data.profile_trial_count("adrd") == BASE_PROFILE_TRIALS
-    assert data.profile_trial_count("full_catalog") == 0, "full_catalog is no longer an empty scope"
+    assert data.preset_trial_count(_preset("adrd")) == BASE_PROFILE_TRIALS
+    assert data.preset_trial_count(_preset("full_catalog")) == 0, (
+        "full_catalog is no longer an empty scope"
+    )
 
     with (
         mock.patch("streamlit.error") as error,
         mock.patch("streamlit.stop") as stop,
         mock.patch("streamlit.warning") as warning,
     ):
-        data.require_warehouse("full_catalog")
+        data.require_warehouse(_preset("full_catalog"))
 
     assert error.call_count == 0, "a warehouse that exists was reported missing"
     assert stop.call_count == 0, (
@@ -712,13 +738,11 @@ def test_require_warehouse_warns_rather_than_stops_on_an_empty_scope(
 def test_the_selector_refuses_an_empty_registry() -> None:
     """An empty registry stops the page; it does not hand it a phantom scope.
 
-    Measured on 2026-09-07 by calling `render_profile_selector()` under
-    `AppTest.from_string` with `refreshable()` patched to `[]`: `st.selectbox`
-    does *not* raise on zero options. The widget renders empty, `str(None)`
-    becomes the chosen id — `CHOSEN='None'` — and the sidebar still prints the
-    "All figures cover this indication profile only" caption. So the failure is
-    silent, and it is silent on all nine pages at once, because each binds a
-    profile id the registry cannot name.
+    Measured on 2026-09-07 by calling the selector under `AppTest.from_string` with
+    `refreshable()` patched to `[]`: `st.selectbox` does *not* raise on zero
+    options. The widget renders empty and the chosen value becomes `None`. So the
+    failure is silent, and it is silent on every page at once, because each binds
+    a scope the registry cannot name.
 
     Every other registry-driven entry point refuses this state out loud:
     `src/cli.py:270`, `src/orchestration/checks.py:26`, and both assets
@@ -728,17 +752,16 @@ def test_the_selector_refuses_an_empty_registry() -> None:
     """
     profile = _load_profile_module()
 
-    class EmptyRegistry:
-        def refreshable(self):
-            return []
-
     with (
-        mock.patch("components.profile.get_registry", lambda: EmptyRegistry()),
+        mock.patch("components.profile.load_presets", lambda: []),
         mock.patch("streamlit.selectbox") as selectbox,
         mock.patch("streamlit.error") as error,
-        mock.patch("streamlit.stop") as stop,
+        # The real `st.stop()` raises to end the script run; a bare mock would let the
+        # selector carry on past it, which no page ever does.
+        mock.patch("streamlit.stop", side_effect=RuntimeError("stopped")) as stop,
+        pytest.raises(RuntimeError, match="stopped"),
     ):
-        profile.render_profile_selector()
+        profile.render_preset_selector()
 
     assert stop.call_count == 1, "an empty registry reached the widget layer"
     assert error.call_count == 1, "the refusal stopped the page without saying why"

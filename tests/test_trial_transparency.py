@@ -14,9 +14,9 @@ Tests:
    - Provides contributing, overdue, and posted NCT IDs.
 
 3. dashboard.components.data:
-   - early_stop_transparency(profile_id)
-   - results_posting_transparency(profile_id)
-   - Adheres to profile-first argument and parameter binding.
+   - early_stop_transparency(preset)
+   - results_posting_transparency(preset)
+   - Adheres to preset-first argument and parameter binding.
 """
 
 import math
@@ -29,6 +29,7 @@ from dashboard.components.data import (
     early_stop_transparency,
     results_posting_transparency,
 )
+from tests.preset_helpers import preset_for
 
 
 def _duckdb_connection(root: Path) -> duckdb.DuckDBPyConnection:
@@ -140,8 +141,8 @@ def test_data_readers_profile_isolated(
     db_path = str(fixture_project_root / "data/warehouse/clinical_trials.duckdb")
     monkeypatch.setenv("DUCKDB_PATH", db_path)
 
-    df_early_stop_adrd = early_stop_transparency("adrd")
-    df_results_adrd = results_posting_transparency("adrd")
+    df_early_stop_adrd = early_stop_transparency(preset_for("adrd"))
+    df_results_adrd = results_posting_transparency(preset_for("adrd"))
 
     assert not df_early_stop_adrd.empty or df_early_stop_adrd is not None
     assert not df_results_adrd.empty or df_results_adrd is not None
@@ -161,9 +162,9 @@ def test_data_readers_profile_isolated(
         assert "posted_nct_ids" in df_results_adrd.columns
         assert "overdue_nct_ids" in df_results_adrd.columns
 
-    df_early_stop_nsclc = early_stop_transparency("nsclc")
+    df_early_stop_nsclc = early_stop_transparency(preset_for("oncology_nsclc"))
     if not df_early_stop_nsclc.empty:
-        assert (df_early_stop_nsclc["indication_profile_id"] == "nsclc").all()
+        assert (df_early_stop_nsclc["indication_profile_id"] == "oncology_nsclc").all()
 
 
 def test_mart_results_posting_nct_id_consistency(fixture_project_root: Path) -> None:

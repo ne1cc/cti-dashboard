@@ -5,13 +5,13 @@ import streamlit as st
 from components import data
 from components.access_rates import NO_BURDEN, PER_1K_CASES, rate_view
 from components.guardrails import guarded_footer, page_setup
-from components.profile import render_profile_selector
+from components.profile import render_preset_selector
 
 page_setup("Access Rates")
-profile_id = render_profile_selector()
-data.require_warehouse(profile_id)
+preset = render_preset_selector()
+data.require_warehouse(preset)
 
-rates = data.access_rates(profile_id)
+rates = data.access_rates(preset)
 if rates.empty:
     st.info("No access-rate rows yet. Rebuild the marts (`make pipeline`) once trials are loaded.")
     guarded_footer()

@@ -15,6 +15,7 @@ import yaml
 from components import data
 from components.audit import DEFINITIONS, DISCLAIMER, compute_audit, export_audit
 from components.formatting import format_phase
+from src.presets import Preset
 from src.utils.paths import project_root
 
 PRIORITY_DERIVED_RULES = (
@@ -81,7 +82,7 @@ def active_rules(profile_id: str) -> dict[str, Any]:
 
 
 def build_display_audit(
-    profile_id: str,
+    preset: Preset,
     observations: pd.DataFrame,
     filters: dict[str, Any],
     *,
@@ -93,9 +94,10 @@ def build_display_audit(
     ids = observations.snapshot_id.unique().tolist() if not observations.empty else []
     if "predecessor_snapshot_id" in observations.columns:
         ids = sorted(set(ids) | set(observations.predecessor_snapshot_id.dropna()))
-    studies = data.audit_studies(profile_id, ids)
-    locations = data.audit_locations(profile_id, ids)
-    conditions = data.audit_condition_mapping(profile_id)
+    profile_id = preset.preset_id
+    studies = data.audit_studies(preset, ids)
+    locations = data.audit_locations(preset, ids)
+    conditions = data.audit_condition_mapping(preset)
     for frame in (studies, locations, conditions):
         if frame.attrs.get("audit_unavailable"):
             raise ValueError(frame.attrs["audit_unavailable"])
@@ -125,7 +127,7 @@ def build_display_audit(
 
 
 def render_metric_audit(
-    profile_id: str,
+    preset: Preset,
     *,
     filters: dict[str, Any] | None = None,
     metric: str = "competition",
@@ -143,6 +145,7 @@ def render_metric_audit(
     show_table: bool | None = None,
 ) -> None:
     """Reusable provenance popover/drawer for displayed registry metrics."""
+    profile_id = preset.preset_id
     help_text = (
         "Inspect definition, filters, snapshot provenance, "
         "rule hashes, contributing NCT IDs, and export JSON"
@@ -238,7 +241,7 @@ def render_metric_audit(
             ),
         )
         display_context["observation_selection"] = observation_metric or metric
-        observations = data.metric_audit_observations(profile_id, observation_metric or metric)
+        observations = data.metric_audit_observations(preset, observation_metric or metric)
         if metric == "competition" and not observations.empty:
             end = pd.Timestamp(pd.to_datetime(observations.snapshot_date).max()).date()
             if (
@@ -251,8 +254,10 @@ def render_metric_audit(
                 hist_bounds = data.query(
                     "select min(snapshot_date) as min_date, max(snapshot_date) as max_date "
                     "from main_intermediate.int_trial_status_history "
-                    "where indication_profile_id = ?",
-                    [profile_id],
+                    "where indication_profile_id in (select indication_profile_id "
+                    "from main_marts.dim_condition "
+                    "where registry_condition_key in (select unnest(?)))",
+                    [list(preset.registry_condition_keys)],
                 )
                 if not hist_bounds.empty and pd.notna(hist_bounds["min_date"].iloc[0]):
                     min_d = pd.to_datetime(hist_bounds["min_date"].iloc[0]).date()
@@ -270,7 +275,7 @@ def render_metric_audit(
                 key=f"{key}_{profile_id}_window",
             )
             if mode in ("90-day growth observations", "Recruiting-entry events"):
-                observations = data.metric_audit_observations(profile_id, "recent_recruiting")
+                observations = data.metric_audit_observations(preset, "recent_recruiting")
                 dates = pd.to_datetime(observations.snapshot_date).dt.date
                 clamped_start = max(end - timedelta(days=90), first_date)
                 observations = observations[(dates >= clamped_start) & (dates <= end)]
@@ -345,7 +350,7 @@ def render_metric_audit(
             )
         try:
             result = build_display_audit(
-                profile_id,
+                preset,
                 observations,
                 selected_filters,
                 metric=metric,

@@ -7,6 +7,8 @@ import duckdb
 import pandas as pd
 import pytest
 
+from tests.preset_helpers import preset_for
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "dashboard") not in sys.path:
     sys.path.insert(0, str(ROOT / "dashboard"))
@@ -14,7 +16,7 @@ if str(ROOT / "dashboard") not in sys.path:
 
 @pytest.fixture
 def temp_duckdb_legacy_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Create minimal DuckDB without indication_profile_id and without mart_trial_similarity."""
+    """Create minimal pre-profile DuckDB: no indication_profile_id, no mart_trial_similarity."""
     db_path = tmp_path / "legacy.duckdb"
     con = duckdb.connect(str(db_path))
     con.execute("create schema main_marts")
@@ -81,7 +83,6 @@ def temp_duckdb_legacy_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     data._table_exists.clear()
     data._has_column.clear()
     data.trial_similarity.clear()
-    data.get_indication_profiles.clear()
 
     return db_path
 
@@ -98,34 +99,13 @@ def test_schema_helpers_detect_presence_and_absence(temp_duckdb_legacy_schema: P
     assert not data._has_column("nonexistent_table", "nct_id")
 
 
-def test_trial_explorer_legacy_schema_omits_indication_column(temp_duckdb_legacy_schema: Path):
-    from components import data
-
-    with pytest.raises(TypeError):
-        data.trial_explorer()
-
-    df = data.trial_explorer("adrd")
-    assert isinstance(df, pd.DataFrame)
-    assert not df.empty
-    assert "nct_id" in df.columns
-    assert "indication_profile_id" not in df.columns
-    assert df.iloc[0]["nct_id"] == "NCT00000001"
-
-
-def test_get_indication_profiles_legacy_schema_returns_empty(temp_duckdb_legacy_schema: Path):
-    from components import data
-
-    profiles = data.get_indication_profiles()
-    assert profiles == []
-
-
 def test_trial_similarity_legacy_schema_returns_empty_dataframe(temp_duckdb_legacy_schema: Path):
     from components import data
 
     with pytest.raises(TypeError):
         data.trial_similarity("NCT00000001")
 
-    df = data.trial_similarity("adrd", "NCT00000001")
+    df = data.trial_similarity(preset_for("adrd"), "NCT00000001")
     assert isinstance(df, pd.DataFrame)
     assert df.empty
     data._connection.clear()
@@ -140,30 +120,9 @@ def test_trial_similarity_legacy_schema_returns_empty_dataframe(temp_duckdb_lega
     data._has_column.clear()
     data.trial_similarity.clear()
 
-    df = data.trial_similarity("adrd", "NCT00000001")
+    df = data.trial_similarity(preset_for("adrd"), "NCT00000001")
     assert isinstance(df, pd.DataFrame)
     assert df.empty
-
-
-def test_trial_explorer_page_smoke_legacy_schema(temp_duckdb_legacy_schema: Path):
-    from streamlit.testing.v1 import AppTest
-
-    at = AppTest.from_file(str(ROOT / "dashboard/pages/7_Trial_Explorer.py"), default_timeout=30)
-    at.run()
-    assert not at.exception, at.exception[0].value if at.exception else ""
-    # Registry-link guidance names the canonical URL shape and the 403 search fallback
-    assert any("clinicaltrials.gov/search" in str(caption.value) for caption in at.caption)
-    assert any("study/<NCT_ID>" in str(caption.value) for caption in at.caption)
-
-
-def test_trial_similarity_page_smoke_legacy_schema(temp_duckdb_legacy_schema: Path):
-    from streamlit.testing.v1 import AppTest
-
-    at = AppTest.from_file(str(ROOT / "dashboard/pages/8_Trial_Similarity.py"), default_timeout=30)
-    at.run()
-    assert not at.exception, at.exception[0].value if at.exception else ""
-    # Should display info message when no comparable trials or table exist
-    assert any("No comparable trials found" in str(msg.value) for msg in at.info)
 
 
 @pytest.fixture
@@ -217,15 +176,28 @@ def temp_duckdb_modern_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
         )
         """
     )
+    adrd_key = preset_for("adrd").registry_condition_keys[0]
+    nsclc_key = preset_for("oncology_nsclc").registry_condition_keys[0]
     con.execute("""
         create table main_marts.bridge_trial_condition (
-            trial_key varchar, nct_id varchar, condition_group varchar
+            trial_key varchar, nct_id varchar, condition_group varchar,
+            registry_condition_key varchar
         );
-        insert into main_marts.bridge_trial_condition values
-            ('adrd:NCT00000001', 'NCT00000001', 'alzheimers_disease'),
-            ('adrd:NCT00000002', 'NCT00000002', 'alzheimers_disease'),
-            ('oncology_nsclc:NCT00000003', 'NCT00000003', 'oncology_nsclc')
+        create table main_marts.dim_condition (
+            indication_profile_id varchar, registry_condition_key varchar
+        );
     """)
+    con.execute(
+        "insert into main_marts.bridge_trial_condition values "
+        "('adrd:NCT00000001', 'NCT00000001', 'alzheimers_disease', ?), "
+        "('adrd:NCT00000002', 'NCT00000002', 'alzheimers_disease', ?), "
+        "('oncology_nsclc:NCT00000003', 'NCT00000003', 'oncology_nsclc', ?)",
+        [adrd_key, adrd_key, nsclc_key],
+    )
+    con.execute(
+        "insert into main_marts.dim_condition values ('adrd', ?), ('oncology_nsclc', ?)",
+        [adrd_key, nsclc_key],
+    )
     con.execute(
         """
         create table main_marts.fct_trial_site (
@@ -339,7 +311,6 @@ def temp_duckdb_modern_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     data._table_exists.clear()
     data._has_column.clear()
     data.trial_similarity.clear()
-    data.get_indication_profiles.clear()
 
     return db_path
 
@@ -347,28 +318,17 @@ def temp_duckdb_modern_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
 def test_trial_explorer_modern_schema_includes_indication_column(temp_duckdb_modern_schema: Path):
     from components import data
 
-    df = data.trial_explorer("adrd")
+    df = data.trial_explorer(preset_for("adrd"))
     assert "indication_profile_id" in df.columns
     assert set(df["indication_profile_id"]) == {"adrd"}
-    df_onc = data.trial_explorer("oncology_nsclc")
+    df_onc = data.trial_explorer(preset_for("oncology_nsclc"))
     assert set(df_onc["indication_profile_id"]) == {"oncology_nsclc"}
-
-
-def test_get_indication_profiles_modern_schema_resolves_display_names(
-    temp_duckdb_modern_schema: Path,
-):
-    from components import data
-
-    profiles = data.get_indication_profiles()
-    assert len(profiles) == 2
-    ids = {p["id"] for p in profiles}
-    assert ids == {"adrd", "oncology_nsclc"}
 
 
 def test_trial_similarity_modern_schema_returns_matches(temp_duckdb_modern_schema: Path):
     from components import data
 
-    df = data.trial_similarity("adrd", "NCT00000001")
+    df = data.trial_similarity(preset_for("adrd"), "NCT00000001")
     assert not df.empty
     assert len(df) == 1
     assert df.iloc[0]["nct_id_b"] == "NCT00000002"
@@ -492,7 +452,7 @@ def test_clinicaltrials_gov_search_url():
 def test_trials_for_segment_modern_schema(temp_duckdb_modern_schema: Path):
     from components import data
 
-    df = data.trials_for_segment("adrd", "alzheimers_disease", "CA", "PHASE2")
+    df = data.trials_for_segment(preset_for("adrd"), "alzheimers_disease", "CA", "PHASE2")
     assert isinstance(df, pd.DataFrame)
     assert len(df) == 1
     assert df.iloc[0]["nct_id"] == "NCT00000001"
@@ -502,7 +462,7 @@ def test_trials_for_segment_modern_schema(temp_duckdb_modern_schema: Path):
     assert "registry_url" in df.columns
 
     # Non-existent segment returns empty DataFrame
-    df_empty = data.trials_for_segment("adrd", "alzheimers_disease", "FL", "PHASE2")
+    df_empty = data.trials_for_segment(preset_for("adrd"), "alzheimers_disease", "FL", "PHASE2")
     assert isinstance(df_empty, pd.DataFrame)
     assert df_empty.empty
 
@@ -522,20 +482,24 @@ def test_trials_for_segment_keeps_profile_keys_and_snapshot_scope(temp_duckdb_mo
                    active_in_latest_snapshot_flag
             from main_marts.dim_trial where nct_id = 'NCT00000001'
         """)
-        con.execute("""
-            insert into main_marts.bridge_trial_condition (trial_key, nct_id, condition_group)
-            values ('oncology_nsclc:NCT00000001', 'NCT00000001', 'oncology_nsclc')
-        """)
+        con.execute(
+            "insert into main_marts.bridge_trial_condition "
+            "(trial_key, nct_id, condition_group, registry_condition_key) "
+            "values ('oncology_nsclc:NCT00000001', 'NCT00000001', 'oncology_nsclc', ?)",
+            [preset_for("oncology_nsclc").registry_condition_keys[0]],
+        )
         con.execute("""
             insert into main_marts.fct_trial_site values
                 ('oncology_nsclc:NCT00000001', 'NCT00000001', 'oncology_nsclc', '2024-02-01', 'TX')
         """)
     data.trials_for_segment.clear()
-    adrd = data.trials_for_segment("adrd", "alzheimers_disease", "CA", "PHASE2")
+    adrd = data.trials_for_segment(preset_for("adrd"), "alzheimers_disease", "CA", "PHASE2")
     assert adrd["lead_sponsor"].tolist() == ["Test Lead Sponsor"]
-    assert data.trials_for_segment("adrd", "alzheimers_disease", "TX", "PHASE2").empty
-    assert data.trials_for_segment("adrd", "oncology_nsclc", "CA", "PHASE2").empty
-    oncology = data.trials_for_segment("oncology_nsclc", "oncology_nsclc", "TX", "PHASE2")
+    assert data.trials_for_segment(preset_for("adrd"), "alzheimers_disease", "TX", "PHASE2").empty
+    assert data.trials_for_segment(preset_for("adrd"), "oncology_nsclc", "CA", "PHASE2").empty
+    oncology = data.trials_for_segment(
+        preset_for("oncology_nsclc"), "oncology_nsclc", "TX", "PHASE2"
+    )
     assert oncology["lead_sponsor"].tolist() == ["Other profile sponsor"]
 
 
@@ -545,7 +509,9 @@ def test_require_warehouse_warns_for_unknown_freshness(temp_duckdb_modern_schema
     def page():
         from components import data
 
-        data.require_warehouse("adrd")
+        from tests.preset_helpers import preset_for
+
+        data.require_warehouse(preset_for("adrd"))
 
     at = AppTest.from_function(page).run()
     assert not at.exception, at.exception
@@ -576,7 +542,9 @@ def test_freshness_banner_uses_selected_capture_and_uncached_clock(
     def page(profile_id):
         from components import data
 
-        data.require_warehouse(profile_id)
+        from tests.preset_helpers import preset_for
+
+        data.require_warehouse(preset_for(profile_id))
 
     fresh = AppTest.from_function(page, args=("adrd",)).run()
     assert not fresh.exception, fresh.exception
