@@ -64,6 +64,12 @@ built so a cross-condition comparison has to go through per-100,000 residents.
 - Estimated cases = the file's "average annual count". Suppressed cells would stay empty (none in this extract).
 - Licence: the site is a NCI/CDC product. NCI content may be reused with credit to NCI; NPCR/CDC data are public domain. Attribution is shown on the page.
 
+### State Cancer Profiles by sex and Hispanic origin (NSCLC, `burden_demographic_share`, Issue #75)
+
+- Same export as above, national (US `00000`) row only, filtered by sex (`1` male, `2` female) or by race/ethnicity code (`05` Hispanic; `07`, `28`, `38`, `48` non-Hispanic White, Black, AIAN, API). "Not Hispanic or Latino" is the sum of the four non-Hispanic race reports, so cases of unknown origin are excluded.
+- Used for the participation-to-prevalence ratio (`mart_participation_prevalence_ratio`). Burden shares are taken within a dimension; sex and ethnicity are the only dimensions with a participant-comparable burden. The SCP race groups are non-Hispanic, so race is not compared and keeps participant composition only.
+- Limits: national, not state-level; NSCLC only; one period (`2019-2023`) applied to every completion window.
+
 ### CDC PLACES (type 2 diabetes, ADRD fallback)
 
 - Dataset: data.cdc.gov `swc5-untb` (PLACES county data, 2025 release, BRFSS 2023). Fetched with a Socrata `$where` on `measureid in ('DIABETES','COGNITION') and datavaluetypeid='CrdPrv' and stateabbr in (...)`.
@@ -95,6 +101,8 @@ python -m src.ingest.burden_extracts places --states DE,MD,RI,VT \
     --out dbt_clinical_trials/seeds/burden_places_county.csv
 python -m src.ingest.burden_extracts scp \
     --out dbt_clinical_trials/seeds/burden_scp_lung_state.csv
+python -m src.ingest.burden_extracts scp-demographics \
+    --out dbt_clinical_trials/seeds/burden_demographic_share.csv
 ```
 
 Tests never call these sources: they parse small committed excerpts of the

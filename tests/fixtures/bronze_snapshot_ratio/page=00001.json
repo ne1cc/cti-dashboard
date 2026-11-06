@@ -1,0 +1,2285 @@
+{
+ "studies": [
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT99750001",
+     "briefTitle": "Ratio fixture: Non-small Cell Lung Cancer 01",
+     "officialTitle": "A Phase 3 Randomized Study of Maintenance Versus Tapered Donepezil in Mild to Moderate Alzheimer Disease"
+    },
+    "statusModule": {
+     "overallStatus": "COMPLETED",
+     "lastKnownStatus": "COMPLETED",
+     "statusVerifiedDate": "2024-08-01",
+     "startDateStruct": {
+      "date": "2019-01-15"
+     },
+     "primaryCompletionDateStruct": {
+      "date": "2021-03-31"
+     },
+     "completionDateStruct": {
+      "date": "2021-03-31"
+     },
+     "studyFirstPostDateStruct": {
+      "date": "2019-02-20"
+     },
+     "resultsFirstPostDateStruct": {
+      "date": "2024-10-05"
+     },
+     "lastUpdatePostDateStruct": {
+      "date": "2025-01-10"
+     }
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {
+      "name": "NeuroPharm Inc",
+      "class": "INDUSTRY"
+     },
+     "collaborators": [
+      {
+       "name": "Alzheimer Research Network",
+       "class": "NETWORK"
+      }
+     ]
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": [
+      "PHASE3"
+     ],
+     "enrollmentInfo": {
+      "count": 146,
+      "type": "Actual"
+     }
+    },
+    "conditionsModule": {
+     "conditions": [
+      "Non-small Cell Lung Cancer"
+     ]
+    },
+    "armsInterventionsModule": {
+     "interventions": [
+      {
+       "name": "Donepezil 10 mg maintenance",
+       "type": "Drug",
+       "description": "Continuous daily dose."
+      },
+      {
+       "name": "Placebo oral tablet",
+       "type": "Drug"
+      }
+     ]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [
+      {
+       "measure": "ADAS-Cog13 change from baseline",
+       "timeFrame": "78 weeks"
+      }
+     ]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "55 Years",
+     "maximumAge": "90 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: probable Alzheimer disease (NINCDS-ADRDA). Exclusion: severe renal impairment."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {
+       "facility": "Duke Memory Center",
+       "city": "Durham",
+       "state": "North Carolina",
+       "zip": "27710",
+       "country": "United States",
+       "status": "COMPLETED"
+      },
+      {
+       "facility": "UCSF Memory Clinic",
+       "city": "San Francisco",
+       "state": "CA",
+       "zip": "94143",
+       "country": "United States",
+       "status": "COMPLETED"
+      }
+     ]
+    }
+   },
+   "resultsSection": {
+    "baselineCharacteristicsModule": {
+     "groups": [
+      {
+       "id": "BG000",
+       "title": "Arm A"
+      },
+      {
+       "id": "BG001",
+       "title": "Arm B"
+      },
+      {
+       "id": "BG002",
+       "title": "Total"
+      }
+     ],
+     "denoms": [],
+     "measures": [
+      {
+       "title": "Sex: Female, Male",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {
+         "title": null,
+         "categories": [
+          {
+           "title": "Female",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "30"
+            },
+            {
+             "groupId": "BG001",
+             "value": "28"
+            },
+            {
+             "groupId": "BG002",
+             "value": "58"
+            }
+           ]
+          },
+          {
+           "title": "Male",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "40"
+            },
+            {
+             "groupId": "BG001",
+             "value": "42"
+            },
+            {
+             "groupId": "BG002",
+             "value": "82"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "Ethnicity (NIH/OMB)",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {
+         "title": null,
+         "categories": [
+          {
+           "title": "Hispanic or Latino",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "2"
+            },
+            {
+             "groupId": "BG001",
+             "value": "3"
+            },
+            {
+             "groupId": "BG002",
+             "value": "5"
+            }
+           ]
+          },
+          {
+           "title": "Not Hispanic or Latino",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "66"
+            },
+            {
+             "groupId": "BG001",
+             "value": "64"
+            },
+            {
+             "groupId": "BG002",
+             "value": "130"
+            }
+           ]
+          },
+          {
+           "title": "Unknown or Not Reported",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "2"
+            },
+            {
+             "groupId": "BG001",
+             "value": "3"
+            },
+            {
+             "groupId": "BG002",
+             "value": "5"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "Race (NIH/OMB)",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {
+         "title": null,
+         "categories": [
+          {
+           "title": "White",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "50"
+            },
+            {
+             "groupId": "BG001",
+             "value": "48"
+            },
+            {
+             "groupId": "BG002",
+             "value": "98"
+            }
+           ]
+          },
+          {
+           "title": "Black or African American",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "10"
+            },
+            {
+             "groupId": "BG001",
+             "value": "12"
+            },
+            {
+             "groupId": "BG002",
+             "value": "22"
+            }
+           ]
+          },
+          {
+           "title": "Asian",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "10"
+            },
+            {
+             "groupId": "BG001",
+             "value": "10"
+            },
+            {
+             "groupId": "BG002",
+             "value": "20"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "hasResults": true,
+   "derivedSection": {
+    "conditionBrowseModule": {
+     "meshes": [
+      {
+       "id": "D002289",
+       "term": "Carcinoma, Non-Small-Cell Lung"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT99750002",
+     "briefTitle": "Ratio fixture: Non-small Cell Lung Cancer 02",
+     "officialTitle": "A Phase 3 Randomized Study of Maintenance Versus Tapered Donepezil in Mild to Moderate Alzheimer Disease"
+    },
+    "statusModule": {
+     "overallStatus": "COMPLETED",
+     "lastKnownStatus": "COMPLETED",
+     "statusVerifiedDate": "2024-08-01",
+     "startDateStruct": {
+      "date": "2019-01-15"
+     },
+     "primaryCompletionDateStruct": {
+      "date": "2022-06-30"
+     },
+     "completionDateStruct": {
+      "date": "2022-06-30"
+     },
+     "studyFirstPostDateStruct": {
+      "date": "2019-02-20"
+     },
+     "resultsFirstPostDateStruct": {
+      "date": "2024-10-05"
+     },
+     "lastUpdatePostDateStruct": {
+      "date": "2025-01-10"
+     }
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {
+      "name": "NeuroPharm Inc",
+      "class": "INDUSTRY"
+     },
+     "collaborators": [
+      {
+       "name": "Alzheimer Research Network",
+       "class": "NETWORK"
+      }
+     ]
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": [
+      "PHASE3"
+     ],
+     "enrollmentInfo": {
+      "count": 146,
+      "type": "Actual"
+     }
+    },
+    "conditionsModule": {
+     "conditions": [
+      "Non-small Cell Lung Cancer"
+     ]
+    },
+    "armsInterventionsModule": {
+     "interventions": [
+      {
+       "name": "Donepezil 10 mg maintenance",
+       "type": "Drug",
+       "description": "Continuous daily dose."
+      },
+      {
+       "name": "Placebo oral tablet",
+       "type": "Drug"
+      }
+     ]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [
+      {
+       "measure": "ADAS-Cog13 change from baseline",
+       "timeFrame": "78 weeks"
+      }
+     ]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "55 Years",
+     "maximumAge": "90 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: probable Alzheimer disease (NINCDS-ADRDA). Exclusion: severe renal impairment."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {
+       "facility": "Duke Memory Center",
+       "city": "Durham",
+       "state": "North Carolina",
+       "zip": "27710",
+       "country": "United States",
+       "status": "COMPLETED"
+      },
+      {
+       "facility": "UCSF Memory Clinic",
+       "city": "San Francisco",
+       "state": "CA",
+       "zip": "94143",
+       "country": "United States",
+       "status": "COMPLETED"
+      }
+     ]
+    }
+   },
+   "resultsSection": {
+    "baselineCharacteristicsModule": {
+     "groups": [
+      {
+       "id": "BG000",
+       "title": "Arm A"
+      },
+      {
+       "id": "BG001",
+       "title": "Arm B"
+      }
+     ],
+     "denoms": [],
+     "measures": [
+      {
+       "title": "Sex: Female, Male",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {
+         "title": null,
+         "categories": [
+          {
+           "title": "Female",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "20"
+            },
+            {
+             "groupId": "BG001",
+             "value": "25"
+            }
+           ]
+          },
+          {
+           "title": "Male",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "35"
+            },
+            {
+             "groupId": "BG001",
+             "value": "30"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "Ethnicity (NIH/OMB)",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {
+         "title": null,
+         "categories": [
+          {
+           "title": "Hispanic or Latino",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "4"
+            },
+            {
+             "groupId": "BG001",
+             "value": "2"
+            }
+           ]
+          },
+          {
+           "title": "Not Hispanic or Latino",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "50"
+            },
+            {
+             "groupId": "BG001",
+             "value": "51"
+            }
+           ]
+          },
+          {
+           "title": "Unknown or Not Reported",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "1"
+            },
+            {
+             "groupId": "BG001",
+             "value": "2"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "Race (NIH/OMB)",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {
+         "title": null,
+         "categories": [
+          {
+           "title": "White",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "40"
+            },
+            {
+             "groupId": "BG001",
+             "value": "42"
+            }
+           ]
+          },
+          {
+           "title": "Black or African American",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "8"
+            },
+            {
+             "groupId": "BG001",
+             "value": "6"
+            }
+           ]
+          },
+          {
+           "title": "Asian",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "7"
+            },
+            {
+             "groupId": "BG001",
+             "value": "7"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "hasResults": true,
+   "derivedSection": {
+    "conditionBrowseModule": {
+     "meshes": [
+      {
+       "id": "D002289",
+       "term": "Carcinoma, Non-Small-Cell Lung"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT99750003",
+     "briefTitle": "Ratio fixture: Non-small Cell Lung Cancer 03",
+     "officialTitle": "A Phase 3 Randomized Study of Maintenance Versus Tapered Donepezil in Mild to Moderate Alzheimer Disease"
+    },
+    "statusModule": {
+     "overallStatus": "COMPLETED",
+     "lastKnownStatus": "COMPLETED",
+     "statusVerifiedDate": "2024-08-01",
+     "startDateStruct": {
+      "date": "2019-01-15"
+     },
+     "primaryCompletionDateStruct": {
+      "date": "2023-01-31"
+     },
+     "completionDateStruct": {
+      "date": "2023-01-31"
+     },
+     "studyFirstPostDateStruct": {
+      "date": "2019-02-20"
+     },
+     "resultsFirstPostDateStruct": {
+      "date": "2024-10-05"
+     },
+     "lastUpdatePostDateStruct": {
+      "date": "2025-01-10"
+     }
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {
+      "name": "NeuroPharm Inc",
+      "class": "INDUSTRY"
+     },
+     "collaborators": [
+      {
+       "name": "Alzheimer Research Network",
+       "class": "NETWORK"
+      }
+     ]
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": [
+      "PHASE3"
+     ],
+     "enrollmentInfo": {
+      "count": 146,
+      "type": "Actual"
+     }
+    },
+    "conditionsModule": {
+     "conditions": [
+      "Non-small Cell Lung Cancer"
+     ]
+    },
+    "armsInterventionsModule": {
+     "interventions": [
+      {
+       "name": "Donepezil 10 mg maintenance",
+       "type": "Drug",
+       "description": "Continuous daily dose."
+      },
+      {
+       "name": "Placebo oral tablet",
+       "type": "Drug"
+      }
+     ]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [
+      {
+       "measure": "ADAS-Cog13 change from baseline",
+       "timeFrame": "78 weeks"
+      }
+     ]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "55 Years",
+     "maximumAge": "90 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: probable Alzheimer disease (NINCDS-ADRDA). Exclusion: severe renal impairment."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {
+       "facility": "Duke Memory Center",
+       "city": "Durham",
+       "state": "North Carolina",
+       "zip": "27710",
+       "country": "United States",
+       "status": "COMPLETED"
+      },
+      {
+       "facility": "UCSF Memory Clinic",
+       "city": "San Francisco",
+       "state": "CA",
+       "zip": "94143",
+       "country": "United States",
+       "status": "COMPLETED"
+      }
+     ]
+    }
+   },
+   "resultsSection": {
+    "baselineCharacteristicsModule": {
+     "groups": [
+      {
+       "id": "BG000",
+       "title": "Arm A"
+      },
+      {
+       "id": "BG001",
+       "title": "Arm B"
+      }
+     ],
+     "denoms": [],
+     "measures": [
+      {
+       "title": "Sex: Female, Male",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {
+         "title": null,
+         "categories": [
+          {
+           "title": "Female",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "10"
+            },
+            {
+             "groupId": "BG001",
+             "value": "12"
+            }
+           ]
+          },
+          {
+           "title": "Male",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "18"
+            },
+            {
+             "groupId": "BG001",
+             "value": "16"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "Ethnicity (NIH/OMB)",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {
+         "title": null,
+         "categories": [
+          {
+           "title": "Hispanic or Latino",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "1"
+            },
+            {
+             "groupId": "BG001",
+             "value": "0"
+            }
+           ]
+          },
+          {
+           "title": "Not Hispanic or Latino",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "27"
+            },
+            {
+             "groupId": "BG001",
+             "value": "28"
+            }
+           ]
+          },
+          {
+           "title": "Unknown or Not Reported",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "0"
+            },
+            {
+             "groupId": "BG001",
+             "value": "0"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "Race (NIH/OMB)",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {
+         "title": null,
+         "categories": [
+          {
+           "title": "White",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "20"
+            },
+            {
+             "groupId": "BG001",
+             "value": "22"
+            }
+           ]
+          },
+          {
+           "title": "Black or African American",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "4"
+            },
+            {
+             "groupId": "BG001",
+             "value": "3"
+            }
+           ]
+          },
+          {
+           "title": "Asian",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "4"
+            },
+            {
+             "groupId": "BG001",
+             "value": "3"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "hasResults": true,
+   "derivedSection": {
+    "conditionBrowseModule": {
+     "meshes": [
+      {
+       "id": "D002289",
+       "term": "Carcinoma, Non-Small-Cell Lung"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT99750004",
+     "briefTitle": "Ratio fixture: Non-small Cell Lung Cancer 04",
+     "officialTitle": "A Phase 3 Randomized Study of Maintenance Versus Tapered Donepezil in Mild to Moderate Alzheimer Disease"
+    },
+    "statusModule": {
+     "overallStatus": "COMPLETED",
+     "lastKnownStatus": "COMPLETED",
+     "statusVerifiedDate": "2024-08-01",
+     "startDateStruct": {
+      "date": "2019-01-15"
+     },
+     "primaryCompletionDateStruct": {
+      "date": "2023-09-30"
+     },
+     "completionDateStruct": {
+      "date": "2023-09-30"
+     },
+     "studyFirstPostDateStruct": {
+      "date": "2019-02-20"
+     },
+     "resultsFirstPostDateStruct": {
+      "date": "2024-10-05"
+     },
+     "lastUpdatePostDateStruct": {
+      "date": "2025-01-10"
+     }
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {
+      "name": "NeuroPharm Inc",
+      "class": "INDUSTRY"
+     },
+     "collaborators": [
+      {
+       "name": "Alzheimer Research Network",
+       "class": "NETWORK"
+      }
+     ]
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": [
+      "PHASE3"
+     ],
+     "enrollmentInfo": {
+      "count": 146,
+      "type": "Actual"
+     }
+    },
+    "conditionsModule": {
+     "conditions": [
+      "Non-small Cell Lung Cancer"
+     ]
+    },
+    "armsInterventionsModule": {
+     "interventions": [
+      {
+       "name": "Donepezil 10 mg maintenance",
+       "type": "Drug",
+       "description": "Continuous daily dose."
+      },
+      {
+       "name": "Placebo oral tablet",
+       "type": "Drug"
+      }
+     ]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [
+      {
+       "measure": "ADAS-Cog13 change from baseline",
+       "timeFrame": "78 weeks"
+      }
+     ]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "55 Years",
+     "maximumAge": "90 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: probable Alzheimer disease (NINCDS-ADRDA). Exclusion: severe renal impairment."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {
+       "facility": "Duke Memory Center",
+       "city": "Durham",
+       "state": "North Carolina",
+       "zip": "27710",
+       "country": "United States",
+       "status": "COMPLETED"
+      },
+      {
+       "facility": "UCSF Memory Clinic",
+       "city": "San Francisco",
+       "state": "CA",
+       "zip": "94143",
+       "country": "United States",
+       "status": "COMPLETED"
+      }
+     ]
+    }
+   },
+   "resultsSection": {
+    "baselineCharacteristicsModule": {
+     "groups": [
+      {
+       "id": "BG000",
+       "title": "Arm A"
+      },
+      {
+       "id": "BG001",
+       "title": "Arm B"
+      }
+     ],
+     "denoms": [],
+     "measures": [
+      {
+       "title": "Sex: Female, Male",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {
+         "title": null,
+         "categories": [
+          {
+           "title": "Female",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "45"
+            },
+            {
+             "groupId": "BG001",
+             "value": "40"
+            }
+           ]
+          },
+          {
+           "title": "Male",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "55"
+            },
+            {
+             "groupId": "BG001",
+             "value": "60"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "Ethnicity (NIH/OMB)",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {
+         "title": null,
+         "categories": [
+          {
+           "title": "Hispanic or Latino",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "5"
+            },
+            {
+             "groupId": "BG001",
+             "value": "6"
+            }
+           ]
+          },
+          {
+           "title": "Not Hispanic or Latino",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "93"
+            },
+            {
+             "groupId": "BG001",
+             "value": "90"
+            }
+           ]
+          },
+          {
+           "title": "Unknown or Not Reported",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "2"
+            },
+            {
+             "groupId": "BG001",
+             "value": "4"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "Race (NIH/OMB)",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {
+         "title": null,
+         "categories": [
+          {
+           "title": "White",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "80"
+            },
+            {
+             "groupId": "BG001",
+             "value": "78"
+            }
+           ]
+          },
+          {
+           "title": "Black or African American",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "10"
+            },
+            {
+             "groupId": "BG001",
+             "value": "12"
+            }
+           ]
+          },
+          {
+           "title": "Asian",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "10"
+            },
+            {
+             "groupId": "BG001",
+             "value": "10"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "hasResults": true,
+   "derivedSection": {
+    "conditionBrowseModule": {
+     "meshes": [
+      {
+       "id": "D002289",
+       "term": "Carcinoma, Non-Small-Cell Lung"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT99750005",
+     "briefTitle": "Ratio fixture: Non-small Cell Lung Cancer 05",
+     "officialTitle": "A Phase 3 Randomized Study of Maintenance Versus Tapered Donepezil in Mild to Moderate Alzheimer Disease"
+    },
+    "statusModule": {
+     "overallStatus": "COMPLETED",
+     "lastKnownStatus": "COMPLETED",
+     "statusVerifiedDate": "2024-08-01",
+     "startDateStruct": {
+      "date": "2019-01-15"
+     },
+     "primaryCompletionDateStruct": {
+      "date": "2020-11-30"
+     },
+     "completionDateStruct": {
+      "date": "2020-11-30"
+     },
+     "studyFirstPostDateStruct": {
+      "date": "2019-02-20"
+     },
+     "resultsFirstPostDateStruct": {
+      "date": "2024-10-05"
+     },
+     "lastUpdatePostDateStruct": {
+      "date": "2025-01-10"
+     }
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {
+      "name": "NeuroPharm Inc",
+      "class": "INDUSTRY"
+     },
+     "collaborators": [
+      {
+       "name": "Alzheimer Research Network",
+       "class": "NETWORK"
+      }
+     ]
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": [
+      "PHASE3"
+     ],
+     "enrollmentInfo": {
+      "count": 146,
+      "type": "Actual"
+     }
+    },
+    "conditionsModule": {
+     "conditions": [
+      "Non-small Cell Lung Cancer"
+     ]
+    },
+    "armsInterventionsModule": {
+     "interventions": [
+      {
+       "name": "Donepezil 10 mg maintenance",
+       "type": "Drug",
+       "description": "Continuous daily dose."
+      },
+      {
+       "name": "Placebo oral tablet",
+       "type": "Drug"
+      }
+     ]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [
+      {
+       "measure": "ADAS-Cog13 change from baseline",
+       "timeFrame": "78 weeks"
+      }
+     ]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "55 Years",
+     "maximumAge": "90 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: probable Alzheimer disease (NINCDS-ADRDA). Exclusion: severe renal impairment."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {
+       "facility": "Duke Memory Center",
+       "city": "Durham",
+       "state": "North Carolina",
+       "zip": "27710",
+       "country": "United States",
+       "status": "COMPLETED"
+      },
+      {
+       "facility": "UCSF Memory Clinic",
+       "city": "San Francisco",
+       "state": "CA",
+       "zip": "94143",
+       "country": "United States",
+       "status": "COMPLETED"
+      }
+     ]
+    }
+   },
+   "resultsSection": {
+    "baselineCharacteristicsModule": {
+     "groups": [
+      {
+       "id": "BG000",
+       "title": "Arm A"
+      },
+      {
+       "id": "BG001",
+       "title": "Arm B"
+      }
+     ],
+     "denoms": [],
+     "measures": [
+      {
+       "title": "Sex: Female, Male",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {
+         "title": null,
+         "categories": [
+          {
+           "title": "Female",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "15"
+            },
+            {
+             "groupId": "BG001",
+             "value": "14"
+            }
+           ]
+          },
+          {
+           "title": "Male",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "22"
+            },
+            {
+             "groupId": "BG001",
+             "value": "20"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "hasResults": true,
+   "derivedSection": {
+    "conditionBrowseModule": {
+     "meshes": [
+      {
+       "id": "D002289",
+       "term": "Carcinoma, Non-Small-Cell Lung"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT99750006",
+     "briefTitle": "Ratio fixture: Non-small Cell Lung Cancer 06",
+     "officialTitle": "A Phase 3 Randomized Study of Maintenance Versus Tapered Donepezil in Mild to Moderate Alzheimer Disease"
+    },
+    "statusModule": {
+     "overallStatus": "COMPLETED",
+     "lastKnownStatus": "COMPLETED",
+     "statusVerifiedDate": "2024-08-01",
+     "startDateStruct": {
+      "date": "2019-01-15"
+     },
+     "primaryCompletionDateStruct": {
+      "date": "2018-05-31"
+     },
+     "completionDateStruct": {
+      "date": "2018-05-31"
+     },
+     "studyFirstPostDateStruct": {
+      "date": "2019-02-20"
+     },
+     "resultsFirstPostDateStruct": {
+      "date": "2024-10-05"
+     },
+     "lastUpdatePostDateStruct": {
+      "date": "2025-01-10"
+     }
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {
+      "name": "NeuroPharm Inc",
+      "class": "INDUSTRY"
+     },
+     "collaborators": [
+      {
+       "name": "Alzheimer Research Network",
+       "class": "NETWORK"
+      }
+     ]
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": [
+      "PHASE3"
+     ],
+     "enrollmentInfo": {
+      "count": 146,
+      "type": "Actual"
+     }
+    },
+    "conditionsModule": {
+     "conditions": [
+      "Non-small Cell Lung Cancer"
+     ]
+    },
+    "armsInterventionsModule": {
+     "interventions": [
+      {
+       "name": "Donepezil 10 mg maintenance",
+       "type": "Drug",
+       "description": "Continuous daily dose."
+      },
+      {
+       "name": "Placebo oral tablet",
+       "type": "Drug"
+      }
+     ]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [
+      {
+       "measure": "ADAS-Cog13 change from baseline",
+       "timeFrame": "78 weeks"
+      }
+     ]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "55 Years",
+     "maximumAge": "90 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: probable Alzheimer disease (NINCDS-ADRDA). Exclusion: severe renal impairment."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {
+       "facility": "Duke Memory Center",
+       "city": "Durham",
+       "state": "North Carolina",
+       "zip": "27710",
+       "country": "United States",
+       "status": "COMPLETED"
+      },
+      {
+       "facility": "UCSF Memory Clinic",
+       "city": "San Francisco",
+       "state": "CA",
+       "zip": "94143",
+       "country": "United States",
+       "status": "COMPLETED"
+      }
+     ]
+    }
+   },
+   "resultsSection": {
+    "baselineCharacteristicsModule": {
+     "groups": [
+      {
+       "id": "BG000",
+       "title": "Arm A"
+      },
+      {
+       "id": "BG001",
+       "title": "Arm B"
+      }
+     ],
+     "denoms": [],
+     "measures": [
+      {
+       "title": "Sex: Female, Male",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {
+         "title": null,
+         "categories": [
+          {
+           "title": "Female",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "8"
+            },
+            {
+             "groupId": "BG001",
+             "value": "9"
+            }
+           ]
+          },
+          {
+           "title": "Male",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "12"
+            },
+            {
+             "groupId": "BG001",
+             "value": "11"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "Ethnicity (NIH/OMB)",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {
+         "title": null,
+         "categories": [
+          {
+           "title": "Hispanic or Latino",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "1"
+            },
+            {
+             "groupId": "BG001",
+             "value": "1"
+            }
+           ]
+          },
+          {
+           "title": "Not Hispanic or Latino",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "18"
+            },
+            {
+             "groupId": "BG001",
+             "value": "18"
+            }
+           ]
+          },
+          {
+           "title": "Unknown or Not Reported",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "1"
+            },
+            {
+             "groupId": "BG001",
+             "value": "1"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "hasResults": true,
+   "derivedSection": {
+    "conditionBrowseModule": {
+     "meshes": [
+      {
+       "id": "D002289",
+       "term": "Carcinoma, Non-Small-Cell Lung"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT99750007",
+     "briefTitle": "Ratio fixture: Non-small Cell Lung Cancer 07",
+     "officialTitle": "A Phase 3 Randomized Study of Maintenance Versus Tapered Donepezil in Mild to Moderate Alzheimer Disease"
+    },
+    "statusModule": {
+     "overallStatus": "COMPLETED",
+     "lastKnownStatus": "COMPLETED",
+     "statusVerifiedDate": "2024-08-01",
+     "startDateStruct": {
+      "date": "2019-01-15"
+     },
+     "primaryCompletionDateStruct": {
+      "date": "2019-02-28"
+     },
+     "completionDateStruct": {
+      "date": "2019-02-28"
+     },
+     "studyFirstPostDateStruct": {
+      "date": "2019-02-20"
+     },
+     "resultsFirstPostDateStruct": {
+      "date": "2024-10-05"
+     },
+     "lastUpdatePostDateStruct": {
+      "date": "2025-01-10"
+     }
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {
+      "name": "NeuroPharm Inc",
+      "class": "INDUSTRY"
+     },
+     "collaborators": [
+      {
+       "name": "Alzheimer Research Network",
+       "class": "NETWORK"
+      }
+     ]
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": [
+      "PHASE3"
+     ],
+     "enrollmentInfo": {
+      "count": 146,
+      "type": "Actual"
+     }
+    },
+    "conditionsModule": {
+     "conditions": [
+      "Non-small Cell Lung Cancer"
+     ]
+    },
+    "armsInterventionsModule": {
+     "interventions": [
+      {
+       "name": "Donepezil 10 mg maintenance",
+       "type": "Drug",
+       "description": "Continuous daily dose."
+      },
+      {
+       "name": "Placebo oral tablet",
+       "type": "Drug"
+      }
+     ]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [
+      {
+       "measure": "ADAS-Cog13 change from baseline",
+       "timeFrame": "78 weeks"
+      }
+     ]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "55 Years",
+     "maximumAge": "90 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: probable Alzheimer disease (NINCDS-ADRDA). Exclusion: severe renal impairment."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {
+       "facility": "Duke Memory Center",
+       "city": "Durham",
+       "state": "North Carolina",
+       "zip": "27710",
+       "country": "United States",
+       "status": "COMPLETED"
+      },
+      {
+       "facility": "UCSF Memory Clinic",
+       "city": "San Francisco",
+       "state": "CA",
+       "zip": "94143",
+       "country": "United States",
+       "status": "COMPLETED"
+      }
+     ]
+    }
+   },
+   "resultsSection": {
+    "baselineCharacteristicsModule": {
+     "groups": [
+      {
+       "id": "BG000",
+       "title": "Arm A"
+      },
+      {
+       "id": "BG001",
+       "title": "Arm B"
+      }
+     ],
+     "denoms": [],
+     "measures": [
+      {
+       "title": "Sex: Female, Male",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {
+         "title": null,
+         "categories": [
+          {
+           "title": "Female",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "9"
+            },
+            {
+             "groupId": "BG001",
+             "value": "7"
+            }
+           ]
+          },
+          {
+           "title": "Male",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "11"
+            },
+            {
+             "groupId": "BG001",
+             "value": "13"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "Ethnicity (NIH/OMB)",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {
+         "title": null,
+         "categories": [
+          {
+           "title": "Hispanic or Latino",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "0"
+            },
+            {
+             "groupId": "BG001",
+             "value": "1"
+            }
+           ]
+          },
+          {
+           "title": "Not Hispanic or Latino",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "19"
+            },
+            {
+             "groupId": "BG001",
+             "value": "18"
+            }
+           ]
+          },
+          {
+           "title": "Unknown or Not Reported",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "1"
+            },
+            {
+             "groupId": "BG001",
+             "value": "1"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "hasResults": true,
+   "derivedSection": {
+    "conditionBrowseModule": {
+     "meshes": [
+      {
+       "id": "D002289",
+       "term": "Carcinoma, Non-Small-Cell Lung"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT99750011",
+     "briefTitle": "Ratio fixture: Alzheimer Disease 11",
+     "officialTitle": "A Phase 3 Randomized Study of Maintenance Versus Tapered Donepezil in Mild to Moderate Alzheimer Disease"
+    },
+    "statusModule": {
+     "overallStatus": "COMPLETED",
+     "lastKnownStatus": "COMPLETED",
+     "statusVerifiedDate": "2024-08-01",
+     "startDateStruct": {
+      "date": "2019-01-15"
+     },
+     "primaryCompletionDateStruct": {
+      "date": "2021-04-30"
+     },
+     "completionDateStruct": {
+      "date": "2021-04-30"
+     },
+     "studyFirstPostDateStruct": {
+      "date": "2019-02-20"
+     },
+     "resultsFirstPostDateStruct": {
+      "date": "2024-10-05"
+     },
+     "lastUpdatePostDateStruct": {
+      "date": "2025-01-10"
+     }
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {
+      "name": "NeuroPharm Inc",
+      "class": "INDUSTRY"
+     },
+     "collaborators": [
+      {
+       "name": "Alzheimer Research Network",
+       "class": "NETWORK"
+      }
+     ]
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": [
+      "PHASE3"
+     ],
+     "enrollmentInfo": {
+      "count": 146,
+      "type": "Actual"
+     }
+    },
+    "conditionsModule": {
+     "conditions": [
+      "Alzheimer Disease"
+     ]
+    },
+    "armsInterventionsModule": {
+     "interventions": [
+      {
+       "name": "Donepezil 10 mg maintenance",
+       "type": "Drug",
+       "description": "Continuous daily dose."
+      },
+      {
+       "name": "Placebo oral tablet",
+       "type": "Drug"
+      }
+     ]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [
+      {
+       "measure": "ADAS-Cog13 change from baseline",
+       "timeFrame": "78 weeks"
+      }
+     ]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "55 Years",
+     "maximumAge": "90 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: probable Alzheimer disease (NINCDS-ADRDA). Exclusion: severe renal impairment."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {
+       "facility": "Duke Memory Center",
+       "city": "Durham",
+       "state": "North Carolina",
+       "zip": "27710",
+       "country": "United States",
+       "status": "COMPLETED"
+      },
+      {
+       "facility": "UCSF Memory Clinic",
+       "city": "San Francisco",
+       "state": "CA",
+       "zip": "94143",
+       "country": "United States",
+       "status": "COMPLETED"
+      }
+     ]
+    }
+   },
+   "resultsSection": {
+    "baselineCharacteristicsModule": {
+     "groups": [
+      {
+       "id": "BG000",
+       "title": "Arm A"
+      },
+      {
+       "id": "BG001",
+       "title": "Arm B"
+      }
+     ],
+     "denoms": [],
+     "measures": [
+      {
+       "title": "Sex: Female, Male",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {
+         "title": null,
+         "categories": [
+          {
+           "title": "Female",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "25"
+            },
+            {
+             "groupId": "BG001",
+             "value": "24"
+            }
+           ]
+          },
+          {
+           "title": "Male",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "20"
+            },
+            {
+             "groupId": "BG001",
+             "value": "21"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "hasResults": true,
+   "derivedSection": {
+    "conditionBrowseModule": {
+     "meshes": [
+      {
+       "id": "D000544",
+       "term": "Alzheimer Disease"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT99750012",
+     "briefTitle": "Ratio fixture: Alzheimer Disease 12",
+     "officialTitle": "A Phase 3 Randomized Study of Maintenance Versus Tapered Donepezil in Mild to Moderate Alzheimer Disease"
+    },
+    "statusModule": {
+     "overallStatus": "COMPLETED",
+     "lastKnownStatus": "COMPLETED",
+     "statusVerifiedDate": "2024-08-01",
+     "startDateStruct": {
+      "date": "2019-01-15"
+     },
+     "primaryCompletionDateStruct": {
+      "date": "2022-08-31"
+     },
+     "completionDateStruct": {
+      "date": "2022-08-31"
+     },
+     "studyFirstPostDateStruct": {
+      "date": "2019-02-20"
+     },
+     "resultsFirstPostDateStruct": {
+      "date": "2024-10-05"
+     },
+     "lastUpdatePostDateStruct": {
+      "date": "2025-01-10"
+     }
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {
+      "name": "NeuroPharm Inc",
+      "class": "INDUSTRY"
+     },
+     "collaborators": [
+      {
+       "name": "Alzheimer Research Network",
+       "class": "NETWORK"
+      }
+     ]
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": [
+      "PHASE3"
+     ],
+     "enrollmentInfo": {
+      "count": 146,
+      "type": "Actual"
+     }
+    },
+    "conditionsModule": {
+     "conditions": [
+      "Alzheimer Disease"
+     ]
+    },
+    "armsInterventionsModule": {
+     "interventions": [
+      {
+       "name": "Donepezil 10 mg maintenance",
+       "type": "Drug",
+       "description": "Continuous daily dose."
+      },
+      {
+       "name": "Placebo oral tablet",
+       "type": "Drug"
+      }
+     ]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [
+      {
+       "measure": "ADAS-Cog13 change from baseline",
+       "timeFrame": "78 weeks"
+      }
+     ]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "55 Years",
+     "maximumAge": "90 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: probable Alzheimer disease (NINCDS-ADRDA). Exclusion: severe renal impairment."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {
+       "facility": "Duke Memory Center",
+       "city": "Durham",
+       "state": "North Carolina",
+       "zip": "27710",
+       "country": "United States",
+       "status": "COMPLETED"
+      },
+      {
+       "facility": "UCSF Memory Clinic",
+       "city": "San Francisco",
+       "state": "CA",
+       "zip": "94143",
+       "country": "United States",
+       "status": "COMPLETED"
+      }
+     ]
+    }
+   },
+   "resultsSection": {
+    "baselineCharacteristicsModule": {
+     "groups": [
+      {
+       "id": "BG000",
+       "title": "Arm A"
+      },
+      {
+       "id": "BG001",
+       "title": "Arm B"
+      }
+     ],
+     "denoms": [],
+     "measures": [
+      {
+       "title": "Sex: Female, Male",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {
+         "title": null,
+         "categories": [
+          {
+           "title": "Female",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "30"
+            },
+            {
+             "groupId": "BG001",
+             "value": "28"
+            }
+           ]
+          },
+          {
+           "title": "Male",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "22"
+            },
+            {
+             "groupId": "BG001",
+             "value": "25"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "hasResults": true,
+   "derivedSection": {
+    "conditionBrowseModule": {
+     "meshes": [
+      {
+       "id": "D000544",
+       "term": "Alzheimer Disease"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "protocolSection": {
+    "identificationModule": {
+     "nctId": "NCT99750013",
+     "briefTitle": "Ratio fixture: Alzheimer Disease 13",
+     "officialTitle": "A Phase 3 Randomized Study of Maintenance Versus Tapered Donepezil in Mild to Moderate Alzheimer Disease"
+    },
+    "statusModule": {
+     "overallStatus": "COMPLETED",
+     "lastKnownStatus": "COMPLETED",
+     "statusVerifiedDate": "2024-08-01",
+     "startDateStruct": {
+      "date": "2019-01-15"
+     },
+     "primaryCompletionDateStruct": {
+      "date": "2023-05-31"
+     },
+     "completionDateStruct": {
+      "date": "2023-05-31"
+     },
+     "studyFirstPostDateStruct": {
+      "date": "2019-02-20"
+     },
+     "resultsFirstPostDateStruct": {
+      "date": "2024-10-05"
+     },
+     "lastUpdatePostDateStruct": {
+      "date": "2025-01-10"
+     }
+    },
+    "sponsorCollaboratorsModule": {
+     "leadSponsor": {
+      "name": "NeuroPharm Inc",
+      "class": "INDUSTRY"
+     },
+     "collaborators": [
+      {
+       "name": "Alzheimer Research Network",
+       "class": "NETWORK"
+      }
+     ]
+    },
+    "designModule": {
+     "studyType": "INTERVENTIONAL",
+     "phases": [
+      "PHASE3"
+     ],
+     "enrollmentInfo": {
+      "count": 146,
+      "type": "Actual"
+     }
+    },
+    "conditionsModule": {
+     "conditions": [
+      "Alzheimer Disease"
+     ]
+    },
+    "armsInterventionsModule": {
+     "interventions": [
+      {
+       "name": "Donepezil 10 mg maintenance",
+       "type": "Drug",
+       "description": "Continuous daily dose."
+      },
+      {
+       "name": "Placebo oral tablet",
+       "type": "Drug"
+      }
+     ]
+    },
+    "outcomesModule": {
+     "primaryOutcomes": [
+      {
+       "measure": "ADAS-Cog13 change from baseline",
+       "timeFrame": "78 weeks"
+      }
+     ]
+    },
+    "eligibilityModule": {
+     "healthyVolunteers": false,
+     "minimumAge": "55 Years",
+     "maximumAge": "90 Years",
+     "sex": "ALL",
+     "eligibilityCriteria": "Inclusion: probable Alzheimer disease (NINCDS-ADRDA). Exclusion: severe renal impairment."
+    },
+    "contactsLocationsModule": {
+     "locations": [
+      {
+       "facility": "Duke Memory Center",
+       "city": "Durham",
+       "state": "North Carolina",
+       "zip": "27710",
+       "country": "United States",
+       "status": "COMPLETED"
+      },
+      {
+       "facility": "UCSF Memory Clinic",
+       "city": "San Francisco",
+       "state": "CA",
+       "zip": "94143",
+       "country": "United States",
+       "status": "COMPLETED"
+      }
+     ]
+    }
+   },
+   "resultsSection": {
+    "baselineCharacteristicsModule": {
+     "groups": [
+      {
+       "id": "BG000",
+       "title": "Arm A"
+      },
+      {
+       "id": "BG001",
+       "title": "Arm B"
+      }
+     ],
+     "denoms": [],
+     "measures": [
+      {
+       "title": "Sex: Female, Male",
+       "paramType": "COUNT_OF_PARTICIPANTS",
+       "unitOfMeasure": "Participants",
+       "classes": [
+        {
+         "title": null,
+         "categories": [
+          {
+           "title": "Female",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "18"
+            },
+            {
+             "groupId": "BG001",
+             "value": "20"
+            }
+           ]
+          },
+          {
+           "title": "Male",
+           "measurements": [
+            {
+             "groupId": "BG000",
+             "value": "15"
+            },
+            {
+             "groupId": "BG001",
+             "value": "17"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "hasResults": true,
+   "derivedSection": {
+    "conditionBrowseModule": {
+     "meshes": [
+      {
+       "id": "D000544",
+       "term": "Alzheimer Disease"
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "totalCount": 10,
+ "_provenance": {
+  "note": "Synthetic fixture for tests/test_participation_prevalence.py; baseline-characteristics shapes cloned from tests/fixtures/bronze_snapshot_results"
+ },
+ "nextPageToken": null
+}

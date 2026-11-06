@@ -26,6 +26,7 @@ PAGES = [
     "dashboard/pages/8_Trial_Similarity.py",
     "dashboard/pages/9_Trial_Transparency.py",
     "dashboard/pages/10_Access_Rates.py",
+    "dashboard/pages/11_Participation_Prevalence.py",
 ]
 
 # What the first dataframe each page renders must hold, per profile, measured

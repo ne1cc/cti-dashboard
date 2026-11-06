@@ -32,6 +32,7 @@ PAGES = [
     "dashboard/pages/8_Trial_Similarity.py",
     "dashboard/pages/9_Trial_Transparency.py",
     "dashboard/pages/10_Access_Rates.py",
+    "dashboard/pages/11_Participation_Prevalence.py",
 ]
 DATA_SOURCE = DASHBOARD / "components" / "data.py"
 

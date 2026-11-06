@@ -6,6 +6,9 @@ Two sources, each reduced to a committed seed CSV (see ``docs/burden_sources.md`
   ``DIABETES`` and ``COGNITION`` measures, pulled from the data.cdc.gov Socrata API.
 * ``scp``: NCI/CDC State Cancer Profiles state-level lung and bronchus incidence
   (SEER + NPCR registries), pulled from the site's CSV export.
+* ``scp-demographics``: the same report's national (US) row filtered by sex and by
+  non-Hispanic race / Hispanic origin, the burden shares behind the
+  participation-to-prevalence ratio (issue #75).
 
 The parsers (``parse_places``, ``parse_scp``) are pure and tested on committed
 fixtures; only ``fetch_*`` touch the network. Example::
@@ -14,6 +17,8 @@ fixtures; only ``fetch_*`` touch the network. Example::
         --out dbt_clinical_trials/seeds/burden_places_county.csv
     python -m src.ingest.burden_extracts scp \
         --out dbt_clinical_trials/seeds/burden_scp_lung_state.csv
+    python -m src.ingest.burden_extracts scp-demographics \
+        --out dbt_clinical_trials/seeds/burden_demographic_share.csv
 """
 
 import argparse
@@ -35,6 +40,26 @@ SCP_URL = (
     "stateFIPS=00&areatype=state&cancer=047&race=00&sex=0&age=001&stage=999&year=0"
     "&type=incd&sortVariableName=rate&sortOrder=default&output=1"
 )
+
+# Burden-share groups (dimension, label, SCP race codes, SCP sex code). The SCP race
+# options are mutually exclusive (non-Hispanic races, or Hispanic of any race), so
+# "Not Hispanic or Latino" is the sum of the four non-Hispanic race reports.
+SCP_DEMOGRAPHIC_GROUPS: tuple[tuple[str, str, tuple[str, ...], str], ...] = (
+    ("sex", "Female", ("00",), "2"),
+    ("sex", "Male", ("00",), "1"),
+    ("ethnicity", "Hispanic or Latino", ("05",), "0"),
+    ("ethnicity", "Not Hispanic or Latino", ("07", "28", "38", "48"), "0"),
+)
+SCP_DEMOGRAPHIC_COLUMNS = [
+    "burden_source_id",
+    "dimension",
+    "group_label",
+    "annual_cases",
+    "scp_race_codes",
+    "scp_sex_code",
+    "period",
+    "geography",
+]
 
 PLACES_COLUMNS = [
     "state_code",
@@ -158,6 +183,48 @@ def fetch_scp() -> list[dict[str, Any]]:
     return parse_scp(resp.content.decode("latin-1"))
 
 
+def parse_scp_us_count(text: str) -> int:
+    """Average annual case count from the US aggregate row of an SCP incidence export.
+
+    Raises ValueError when the row is missing or its count is suppressed, so a
+    burden share is never built from a partial total.
+    """
+    for rec in csv.reader(text.splitlines()):
+        if len(rec) >= 9 and rec[1].strip() == "00000":
+            count = _clean(rec[8])
+            if re.fullmatch(r"\d+", count):
+                return int(count)
+            raise ValueError(f"US row count is not numeric: {count!r}")
+    raise ValueError("no US aggregate row in the SCP export")
+
+
+def _scp_url(race: str, sex: str) -> str:
+    return SCP_URL.replace("race=00", f"race={race}").replace("sex=0", f"sex={sex}")
+
+
+def fetch_scp_demographics() -> list[dict[str, Any]]:
+    rows = []
+    for dimension, label, races, sex in SCP_DEMOGRAPHIC_GROUPS:
+        total = 0
+        for race in races:
+            resp = requests.get(_scp_url(race, sex), timeout=_TIMEOUT)
+            resp.raise_for_status()
+            total += parse_scp_us_count(resp.content.decode("latin-1"))
+        rows.append(
+            {
+                "burden_source_id": "scp_lung_state",
+                "dimension": dimension,
+                "group_label": label,
+                "annual_cases": total,
+                "scp_race_codes": "+".join(races),
+                "scp_sex_code": sex,
+                "period": SCP_PERIOD,
+                "geography": "US (SEER+NPCR)",
+            }
+        )
+    return rows
+
+
 def write_csv(rows: list[dict[str, Any]], columns: list[str], out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w", encoding="utf-8", newline="") as f:
@@ -174,12 +241,16 @@ def main(argv: list[str] | None = None) -> int:
     places.add_argument("--out", type=Path, required=True)
     scp = sub.add_parser("scp")
     scp.add_argument("--out", type=Path, required=True)
+    scp_demo = sub.add_parser("scp-demographics")
+    scp_demo.add_argument("--out", type=Path, required=True)
     args = p.parse_args(argv)
     if args.source == "places":
         rows, cols = (
             fetch_places([s.strip() for s in args.states.split(",") if s.strip()]),
             PLACES_COLUMNS,
         )
+    elif args.source == "scp-demographics":
+        rows, cols = fetch_scp_demographics(), SCP_DEMOGRAPHIC_COLUMNS
     else:
         rows, cols = fetch_scp(), SCP_COLUMNS
     write_csv(rows, cols, args.out)

@@ -1,0 +1,5 @@
+burden_source_id,dimension,group_label,annual_cases,scp_race_codes,scp_sex_code,period,geography
+scp_lung_state,sex,Female,112010,00,2,2019-2023,US (SEER+NPCR)
+scp_lung_state,sex,Male,113084,00,1,2019-2023,US (SEER+NPCR)
+scp_lung_state,ethnicity,Hispanic or Latino,11780,05,0,2019-2023,US (SEER+NPCR)
+scp_lung_state,ethnicity,Not Hispanic or Latino,212478,07+28+38+48,0,2019-2023,US (SEER+NPCR)

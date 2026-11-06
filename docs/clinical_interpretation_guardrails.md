@@ -27,6 +27,9 @@ a *human feasibility review* is worth doing first.
 | "trial failed" / "recruitment failure" | "reported reason" / "sponsor-stated stop reason" |
 | "delinquent results" / "illegal non-compliance" | "no results posted as of [snapshot date]" / "results overdue under 12-month heuristic" |
 | "sponsor performance" / "compliance failure" | "results-posting rate with 95% confidence interval" |
+| "group X is underrepresented / overrepresented" | "participant share differs from share of estimated cases" |
+| "fair share" / "quota" / "target" / "gap to close" | "participation-to-burden ratio" (a description, not a benchmark) |
+| "bias" / "exclusion" in a sponsor's enrollment | "reported participants in the group, among trials that reported the variable" |
 
 ## Prohibited claims (never, in any output)
 1. Predictions of enrollment success, failure, or timelines.
@@ -52,6 +55,12 @@ a *human feasibility review* is worth doing first.
    Results-posting metrics are informational reporting benchmarks, not legal compliance findings.
 10. Comparative rankings of sponsors with small sample sizes ($n < 5$ evaluable trials)
     without explicitly disclosing wide confidence intervals and presenting them as unranked.
+11. Participation-to-prevalence wording that implies intent, quotas, causation, or sponsor
+    quality: "underrepresented/overrepresented *due to*", "excluded", "fair share",
+    "target", "bias", "discrimination", or a ratio near 1 described as "good" or a ratio
+    far from 1 described as "poor". A ratio describes a difference between reported
+    participation and estimated disease burden; it does not say why the difference exists
+    and is not a standard any trial or sponsor is expected to meet.
 
 ## Mechanical enforcement
 - `mart_feasibility_priority_queue.interpretation_note` travels with every
@@ -74,6 +83,14 @@ a *human feasibility review* is worth doing first.
   95% Wilson score confidence intervals and tags sponsors with $n < 5$ evaluable trials as
   `is_ranked = false`. The UI segregates small-sample sponsors into an unranked section,
   presents the conservative 12-month heuristic, and displays the legal limitation notice.
+- Participation-to-prevalence enforcement: `mart_participation_prevalence_ratio` carries
+  `interpretation_note` on every row and states the denominator in `denominator_label`.
+  A ratio exists only where `burden_denominator_available` is true; every other row is
+  labelled `participant_composition_only`. Cells with fewer than 3 reporting trials are
+  withheld (`suppressed_flag`: counts, shares and ratio are null) and cells with fewer
+  than 5 carry `low_n_flag`. Each ratio shows its 95% Wilson interval, the number of
+  trials and participants behind it, the share of trials that reported the variable,
+  the burden source and vintage, and the contributing NCT IDs.
 - Linkage to primary registry evidence: every figure and summary row links to its
   constituent ClinicalTrials.gov NCT IDs.
 

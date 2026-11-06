@@ -39,6 +39,12 @@ SECTIONS: dict[str, tuple[PageSpec, ...]] = {
             "pages/3_Geography_Trends.py", "Geography Trends", ":material/map:", "Geography_Trends"
         ),
         PageSpec("pages/10_Access_Rates.py", "Access Rates", ":material/percent:", "Access_Rates"),
+        PageSpec(
+            "pages/11_Participation_Prevalence.py",
+            "Participation vs Burden",
+            ":material/balance:",
+            "Participation_Prevalence",
+        ),
     ),
     "Inspect": (
         PageSpec(

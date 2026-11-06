@@ -94,6 +94,7 @@ SHARED_DIMS_WITH_PROFILE = ["dim_condition", "dim_sponsor", "dim_geography"]
 # pick that no earlier task's list mentioned.
 MARTS_WITH_PROFILE_SCOPED_WINDOWS = [
     "mart_baseline_demographics_coverage",
+    "mart_participation_prevalence_ratio",
     "mart_trial_activity",
     "mart_site_overlap",
     "mart_condition_geography_trends",
@@ -1584,7 +1585,7 @@ def test_marts_contracts_enforced(fixture_project_root: Path) -> None:
         if node["resource_type"] == "model"
         and node["original_file_path"].startswith("models/marts/")
     }
-    assert len(marts) == 26
+    assert len(marts) == 27
     for name, node in marts.items():
         assert node["contract"]["enforced"] is True, name
         assert {c["name"] for c in node["columns"].values()}, name
@@ -1626,7 +1627,7 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
     # Membership, not just cardinality: a pin on len() alone stays green if a
     # mart is renamed or dim_date's exclusion clause goes stale, because the set
     # keeps its size while iterating something else. Names taken from
-    # _marts.yml's 26 model blocks minus the global dimensions.
+    # _marts.yml's 27 model blocks minus the global dimensions.
     assert trial_grain == {
         "bridge_trial_condition",
         "bridge_trial_sponsor",
@@ -1643,6 +1644,7 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
         "mart_early_stop_transparency",
         "mart_feasibility_priority_queue",
         "mart_location_snapshot_audit",
+        "mart_participation_prevalence_ratio",
         "mart_recruiting_competition",
         "mart_results_posting_transparency",
         "mart_site_overlap",
