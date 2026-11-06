@@ -116,7 +116,7 @@ never zero: a county under 5,000 residents (`MIN_COUNTY_POPULATION`, a judgement
 shows only the counties in the `county_access_context` seed; the page, its caption and the
 CSV header state the county count and states from the rows, and every other county has no
 data (not zero). A county with no open site in range (or beyond 100 miles in the distance
-view) is drawn white, outside the Viridis scale, so it is never mistaken for a small value.
+view) is drawn burnt orange (visible on both the light and dark theme), outside the Viridis scale, so it is never mistaken for a small value.
 
 ## Performance
 

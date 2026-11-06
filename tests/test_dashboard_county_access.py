@@ -11,6 +11,7 @@ import io
 import json
 import shutil
 import sys
+import tomllib
 from pathlib import Path
 
 import pandas as pd
@@ -140,6 +141,36 @@ def test_small_in_range_county_is_not_drawn_like_a_county_with_no_site():
     viridis = {c for _, c in scale.colorscale}
     assert ca.NO_SITE_COLOR not in viridis and ca.INSUFFICIENT_COLOR not in viridis
     assert ca.NO_SITE_COLOR != ca.INSUFFICIENT_COLOR
+
+
+def _luminance(hex_colour):
+    channels = [int(hex_colour[i : i + 2], 16) / 255 for i in (1, 3, 5)]
+    r, g, b = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _contrast(a, b):
+    hi, lo = sorted((_luminance(a), _luminance(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def test_no_site_colour_is_visible_on_both_theme_backgrounds():
+    # A white fill on the white light theme read as unmapped ("no data") land.
+    theme = tomllib.loads((ROOT / ".streamlit" / "config.toml").read_text())["theme"]
+    for mode in ("light", "dark"):
+        assert _contrast(ca.NO_SITE_COLOR, theme[mode]["backgroundColor"]) >= 3.0, mode
+    assert ca.NO_SITE_COLOR.lower() not in {"#ffffff", ca.INSUFFICIENT_COLOR}
+    assert _contrast(ca.NO_SITE_COLOR, ca.INSUFFICIENT_COLOR) >= 2.0
+
+
+def test_population_colourbar_starts_at_zero_with_a_single_in_range_county():
+    # Only Baltimore County is in range at 25 mi: auto-range once gave 799.9996k..800.0004k ticks.
+    classified = ca.classify(_frame(), 25)
+    scale = ca.build_figure(classified, 25, ca.METRIC_POPULATION).data[0]
+    assert list(scale.locations) == ["24005"]
+    assert (scale.zmin, scale.zmax) == (0, 800_000)
+    empty = ca.build_figure(classified.assign(in_range=False), 25, ca.METRIC_POPULATION).data[0]
+    assert (empty.zmin, empty.zmax) == (0, 1.0)  # no in-range county: never a degenerate range
 
 
 def test_access_table_carries_the_hover_facts_as_text():

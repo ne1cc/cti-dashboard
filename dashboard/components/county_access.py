@@ -49,7 +49,9 @@ METRIC_POPULATION = "Population within N miles"
 METRIC_DISTANCE = "Distance to nearest open site"
 COLOR_SCALE = "Viridis"  # perceptually uniform and colour-blind safe
 INSUFFICIENT_COLOR = "#bdbdbd"
-NO_SITE_COLOR = "#ffffff"  # outside Viridis and apart from grey by luminance, so no site != low
+# Burnt orange: >= 3:1 against both theme backgrounds (white swatches vanish on the light page),
+# and far from Viridis and grey in colour-blind simulation, so "no site" != "low" != "no data".
+NO_SITE_COLOR = "#b35806"
 NO_SITE_100 = "no site within 100 mi"
 BEYOND_100_NAME = "100+ mi (no open site within 100 mi)"
 INSUFFICIENT_NAME = "Insufficient data (not zero)"
@@ -254,7 +256,7 @@ def _flat_trace(rows: pd.DataFrame, name: str, colour: str, miles: int) -> go.Ch
 def build_figure(classified: pd.DataFrame, miles: int, metric: str) -> go.Figure:
     """Choropleth of the chosen metric with two flat legend entries beside the scale.
 
-    Counties with no open site in range (white) and counties with insufficient data (grey)
+    Counties with no open site in range (burnt orange) and counties with insufficient data (grey)
     never take a colour from the scale, so "no site" cannot read as a small population.
     """
     shown = classified[classified["reason"] == ""]
@@ -269,13 +271,21 @@ def build_figure(classified: pd.DataFrame, miles: int, metric: str) -> go.Figure
         z, title = shown["nearest_site_miles"], "Miles to nearest open site"
         name, none_name = "Open site within 100 mi", BEYOND_100_NAME
     ranged = shown[has_site]
+    # zmin alone leaves zauto on, so one in-range county would get a ticks-around-its-value bar.
+    zmax = (
+        max(float(z[has_site].max()), 1.0)
+        if by_pop and has_site.any()
+        else 100.0
+        if not by_pop
+        else 1.0
+    )
     fig = go.Figure(
         go.Choropleth(
             geojson=county_geojson(classified["county_fips"].tolist()),
             locations=ranged["county_fips"],
             z=z[has_site],
             zmin=0,
-            zmax=None if by_pop else 100,
+            zmax=zmax,
             colorscale=COLOR_SCALE,
             reversescale=not by_pop,  # nearer is brighter in both views
             text=[_hover(r, miles) for _, r in ranged.iterrows()],
