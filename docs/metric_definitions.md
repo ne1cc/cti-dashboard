@@ -162,6 +162,22 @@ licences and per-family limits are in `docs/burden_sources.md`.
   It is flagged `coordinate_approximate`; the ZIP fallback is the primary
   approximate path.
 
+## Trial access by geography (`mart_trial_access_by_geo`, Issue #72)
+Per profile × MeSH node × county: whether the county's Census centroid is within 25, 50
+and 100 straight-line miles of an open site (`within_25mi` / `within_50mi` / `within_100mi`,
+site counts `sites_within_*mi`, `nearest_site_miles` capped at 100), beside the county's
+ACS population. An open site follows the distance-search rule above (site-level and
+trial-level status both `RECRUITING` / `NOT_YET_RECRUITING`). Coordinates are registry
+geoPoint, else Gazetteer ZIP, else city centroid, else excluded; `sites_exact`,
+`sites_zip_approx`, `sites_city_approx`, `sites_excluded`, `exact_coordinate_share` and the
+heuristic `coverage_confidence` (`high` / `medium` / `low` / `none`) report that mix on every
+row. `mart_trial_access_by_stratum` adds population-weighted shares
+(`share_within_*mi` = residents of counties within the ring ÷ residents) for `overall`,
+`ruca_group` (USDA RUCA 2020, county's dominant group) and `svi_quartile` (CDC/ATSDR SVI
+2022, Q1 least to Q4 most vulnerable). Distance is straight-line, not travel time, and a
+county is represented by its centroid; full method, sources, licence status and limits:
+`docs/access_methodology.md`.
+
 ## Registry Segments and Raw Feasibility Metrics (`mart_feasibility_priority_queue`)
 Purpose: **provide transparent, sortable raw registry signals for human feasibility review.** Not a forecast.
 

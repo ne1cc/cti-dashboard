@@ -1,0 +1,358 @@
+{
+  "_provenance": {
+    "note": "Synthetic fixture for tests/test_population_burden.py; cloned from tests/fixtures/condition_mesh with conditions, MeSH ids and sites rewritten"
+  },
+  "studies": [
+    {
+      "protocolSection": {
+        "identificationModule": {
+          "nctId": "NCT99720001",
+          "briefTitle": "Access fixture: Alzheimer recruiting"
+        },
+        "statusModule": {
+          "overallStatus": "RECRUITING",
+          "lastKnownStatus": "RECRUITING",
+          "statusVerifiedDate": "2026-07-01",
+          "startDateStruct": {
+            "date": "2025-02-01"
+          },
+          "primaryCompletionDateStruct": {
+            "date": "2027-06-30"
+          },
+          "completionDateStruct": {
+            "date": "2027-12-31"
+          },
+          "studyFirstPostDateStruct": {
+            "date": "2025-03-15"
+          },
+          "lastUpdatePostDateStruct": {
+            "date": "2026-07-15"
+          }
+        },
+        "sponsorCollaboratorsModule": {
+          "leadSponsor": {
+            "name": "NeuroPharm Inc",
+            "class": "INDUSTRY"
+          }
+        },
+        "designModule": {
+          "studyType": "INTERVENTIONAL",
+          "phases": [
+            "PHASE3"
+          ],
+          "enrollmentInfo": {
+            "count": 500,
+            "type": "Anticipated"
+          }
+        },
+        "conditionsModule": {
+          "conditions": [
+            "Alzheimer Disease"
+          ]
+        },
+        "armsInterventionsModule": {
+          "interventions": [
+            {
+              "name": "Donepezil 10mg",
+              "type": "Drug",
+              "description": "Once daily oral dose."
+            }
+          ]
+        },
+        "outcomesModule": {
+          "primaryOutcomes": [
+            {
+              "measure": "ADAS-Cog13 change from baseline",
+              "timeFrame": "78 weeks"
+            }
+          ]
+        },
+        "eligibilityModule": {
+          "healthyVolunteers": false,
+          "minimumAge": "55 Years",
+          "maximumAge": "85 Years",
+          "sex": "ALL"
+        },
+        "contactsLocationsModule": {
+          "locations": [
+            {
+              "facility": "Johns Hopkins Hospital",
+              "city": "Baltimore",
+              "state": "Maryland",
+              "country": "United States",
+              "status": "RECRUITING",
+              "zip": "21287",
+              "geoPoint": {
+                "lat": 39.2965,
+                "lon": -76.5922
+              }
+            },
+            {
+              "facility": "University of Vermont Medical Center",
+              "city": "Burlington",
+              "state": "Vermont",
+              "country": "United States",
+              "status": "RECRUITING",
+              "zip": "05401"
+            },
+            {
+              "facility": "Rhode Island Memory Clinic",
+              "city": "Providence",
+              "state": "Rhode Island",
+              "country": "United States",
+              "status": "NOT_YET_RECRUITING"
+            },
+            {
+              "facility": "Mystery Clinic",
+              "city": "Nowhere",
+              "state": "Delaware",
+              "country": "United States",
+              "status": "RECRUITING",
+              "zip": "00000"
+            },
+            {
+              "facility": "Bayhealth Old Site",
+              "city": "Dover",
+              "state": "Delaware",
+              "country": "United States",
+              "status": "COMPLETED",
+              "zip": "19901",
+              "geoPoint": {
+                "lat": 39.1582,
+                "lon": -75.5244
+              }
+            }
+          ]
+        }
+      },
+      "derivedSection": {
+        "conditionBrowseModule": {
+          "meshes": [
+            {
+              "id": "D000544",
+              "term": "Alzheimer Disease"
+            }
+          ],
+          "ancestors": [
+            {
+              "id": "D003704",
+              "term": "Dementia"
+            }
+          ]
+        }
+      },
+      "hasResults": false
+    },
+    {
+      "protocolSection": {
+        "identificationModule": {
+          "nctId": "NCT99720002",
+          "briefTitle": "Access fixture: Alzheimer suspended trial"
+        },
+        "statusModule": {
+          "overallStatus": "SUSPENDED",
+          "lastKnownStatus": "SUSPENDED",
+          "statusVerifiedDate": "2026-07-01",
+          "startDateStruct": {
+            "date": "2025-02-01"
+          },
+          "primaryCompletionDateStruct": {
+            "date": "2027-06-30"
+          },
+          "completionDateStruct": {
+            "date": "2027-12-31"
+          },
+          "studyFirstPostDateStruct": {
+            "date": "2025-03-15"
+          },
+          "lastUpdatePostDateStruct": {
+            "date": "2026-07-15"
+          }
+        },
+        "sponsorCollaboratorsModule": {
+          "leadSponsor": {
+            "name": "NeuroPharm Inc",
+            "class": "INDUSTRY"
+          }
+        },
+        "designModule": {
+          "studyType": "INTERVENTIONAL",
+          "phases": [
+            "PHASE3"
+          ],
+          "enrollmentInfo": {
+            "count": 500,
+            "type": "Anticipated"
+          }
+        },
+        "conditionsModule": {
+          "conditions": [
+            "Alzheimer Disease"
+          ]
+        },
+        "armsInterventionsModule": {
+          "interventions": [
+            {
+              "name": "Donepezil 10mg",
+              "type": "Drug",
+              "description": "Once daily oral dose."
+            }
+          ]
+        },
+        "outcomesModule": {
+          "primaryOutcomes": [
+            {
+              "measure": "ADAS-Cog13 change from baseline",
+              "timeFrame": "78 weeks"
+            }
+          ]
+        },
+        "eligibilityModule": {
+          "healthyVolunteers": false,
+          "minimumAge": "55 Years",
+          "maximumAge": "85 Years",
+          "sex": "ALL"
+        },
+        "contactsLocationsModule": {
+          "locations": [
+            {
+              "facility": "Newport Hospital",
+              "city": "Newport",
+              "state": "Rhode Island",
+              "country": "United States",
+              "status": "RECRUITING",
+              "zip": "02840",
+              "geoPoint": {
+                "lat": 41.4901,
+                "lon": -71.3128
+              }
+            }
+          ]
+        }
+      },
+      "derivedSection": {
+        "conditionBrowseModule": {
+          "meshes": [
+            {
+              "id": "D000544",
+              "term": "Alzheimer Disease"
+            }
+          ],
+          "ancestors": [
+            {
+              "id": "D003704",
+              "term": "Dementia"
+            }
+          ]
+        }
+      },
+      "hasResults": false
+    },
+    {
+      "protocolSection": {
+        "identificationModule": {
+          "nctId": "NCT99720003",
+          "briefTitle": "Access fixture: Lewy body recruiting"
+        },
+        "statusModule": {
+          "overallStatus": "RECRUITING",
+          "lastKnownStatus": "RECRUITING",
+          "statusVerifiedDate": "2026-07-01",
+          "startDateStruct": {
+            "date": "2025-02-01"
+          },
+          "primaryCompletionDateStruct": {
+            "date": "2027-06-30"
+          },
+          "completionDateStruct": {
+            "date": "2027-12-31"
+          },
+          "studyFirstPostDateStruct": {
+            "date": "2025-03-15"
+          },
+          "lastUpdatePostDateStruct": {
+            "date": "2026-07-15"
+          }
+        },
+        "sponsorCollaboratorsModule": {
+          "leadSponsor": {
+            "name": "NeuroPharm Inc",
+            "class": "INDUSTRY"
+          }
+        },
+        "designModule": {
+          "studyType": "INTERVENTIONAL",
+          "phases": [
+            "PHASE3"
+          ],
+          "enrollmentInfo": {
+            "count": 500,
+            "type": "Anticipated"
+          }
+        },
+        "conditionsModule": {
+          "conditions": [
+            "Alzheimer Disease"
+          ]
+        },
+        "armsInterventionsModule": {
+          "interventions": [
+            {
+              "name": "Donepezil 10mg",
+              "type": "Drug",
+              "description": "Once daily oral dose."
+            }
+          ]
+        },
+        "outcomesModule": {
+          "primaryOutcomes": [
+            {
+              "measure": "ADAS-Cog13 change from baseline",
+              "timeFrame": "78 weeks"
+            }
+          ]
+        },
+        "eligibilityModule": {
+          "healthyVolunteers": false,
+          "minimumAge": "55 Years",
+          "maximumAge": "85 Years",
+          "sex": "ALL"
+        },
+        "contactsLocationsModule": {
+          "locations": [
+            {
+              "facility": "Christiana Hospital",
+              "city": "Newark",
+              "state": "Delaware",
+              "country": "United States",
+              "status": "RECRUITING",
+              "zip": "19718",
+              "geoPoint": {
+                "lat": 39.6865,
+                "lon": -75.6935
+              }
+            }
+          ]
+        }
+      },
+      "derivedSection": {
+        "conditionBrowseModule": {
+          "meshes": [
+            {
+              "id": "D020961",
+              "term": "Lewy Body Disease"
+            }
+          ],
+          "ancestors": [
+            {
+              "id": "D003704",
+              "term": "Dementia"
+            }
+          ]
+        }
+      },
+      "hasResults": false
+    }
+  ],
+  "totalCount": 3
+}

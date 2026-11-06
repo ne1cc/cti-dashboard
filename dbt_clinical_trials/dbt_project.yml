@@ -60,6 +60,14 @@ seeds:
         state_fips: varchar
         population: bigint
         margin_of_error: bigint
+    county_access_context:
+      +column_types:
+        county_fips: varchar
+        state_fips: varchar
+        latitude: double
+        longitude: double
+        svi_rpl_themes: double
+        ruca_group_pop_share: double
     burden_places_county:
       +column_types:
         state_code: varchar
