@@ -37,3 +37,64 @@ seeds:
         description: Official U.S. Census Bureau dataset download URL.
         tests:
           - not_null
+
+  - name: acs_population
+    description: >
+      Census ACS 5-year population (vintage ACS 2020-2024; tables B01001 sex by
+      age and B03002 Hispanic or Latino origin by race) in long form. Built by
+      src/ingest/acs_population.py from the table-based summary files. Committed
+      subset: all states, DC and Puerto Rico; counties of DE, MD, RI, VT; four
+      ZCTAs. Widen the subset by re-running the ingest with more states.
+    columns:
+      - name: geo_level
+        tests:
+          - not_null
+          - accepted_values:
+              values: [state, county, zcta]
+      - name: geo_id
+        description: State FIPS (2), county FIPS (5) or ZCTA5 code.
+        tests: [not_null]
+      - name: population
+        description: ACS estimate; null when the Census reports it as unavailable.
+      - name: margin_of_error
+        description: 90% margin of error (root-sum-of-squares for derived bands).
+      - name: table_id
+        tests:
+          - accepted_values:
+              values: [B01001, B03002]
+      - name: vintage
+        tests: [not_null]
+
+  - name: burden_scp_lung_state
+    description: >
+      NCI/CDC State Cancer Profiles lung and bronchus incidence by state,
+      2019-2023, all races, both sexes, all ages, all stages. Pulled by
+      src/ingest/burden_extracts.py (scp). Denominator for NSCLC.
+    columns:
+      - name: state_fips
+        tests: [not_null, unique]
+      - name: annual_cases
+        description: Average annual count of new cases; empty when suppressed.
+
+  - name: burden_places_county
+    description: >
+      CDC PLACES 2025 release county estimates (crude prevalence, BRFSS 2023) for
+      DIABETES and COGNITION, for the states committed in the ACS county subset
+      (DE, MD, RI, VT). Pulled by src/ingest/burden_extracts.py (places).
+    columns:
+      - name: county_fips
+        tests: [not_null]
+      - name: measure_id
+        tests:
+          - accepted_values:
+              values: [DIABETES, COGNITION]
+
+  - name: condition_burden_map
+    description: >
+      MeSH descriptor to burden source. denominator_available is true only when a
+      confirmed, ingested source supports an estimated-case count for the condition.
+    columns:
+      - name: mesh_id
+        tests: [not_null, unique]
+      - name: denominator_available
+        tests: [not_null]

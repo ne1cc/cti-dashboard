@@ -349,6 +349,24 @@ def condition_geography_trends(profile_id: str) -> pd.DataFrame:
     )
 
 
+def access_rates(profile_id: str) -> pd.DataFrame:
+    """Fetch population- and burden-adjusted recruiting access for one profile.
+
+    Args:
+        profile_id: Indication profile id to scope the rates to.
+
+    Returns:
+        pd.DataFrame: Rows of ``mart_condition_access_rates`` (profile x MeSH
+            condition x state); empty when the mart is not built yet.
+    """
+    if not _table_exists("mart_condition_access_rates"):
+        return pd.DataFrame()
+    return query(
+        "select * from main_marts.mart_condition_access_rates where indication_profile_id = ?",
+        [profile_id],
+    )
+
+
 def site_overlap(profile_id: str) -> pd.DataFrame:
     """Fetch trial site overlap metrics for one profile's latest captured date.
 

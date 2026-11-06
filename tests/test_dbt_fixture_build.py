@@ -1582,7 +1582,7 @@ def test_marts_contracts_enforced(fixture_project_root: Path) -> None:
         if node["resource_type"] == "model"
         and node["original_file_path"].startswith("models/marts/")
     }
-    assert len(marts) == 22
+    assert len(marts) == 24
     for name, node in marts.items():
         assert node["contract"]["enforced"] is True, name
         assert {c["name"] for c in node["columns"].values()}, name
@@ -1618,11 +1618,13 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
     doc = yaml.safe_load(
         (project_root() / "dbt_clinical_trials/models/marts/_marts.yml").read_text(encoding="utf-8")
     )
-    trial_grain = {name for name in (m["name"] for m in doc["models"]) if name != "dim_date"}
+    # dim_date and dim_population are global reference spines with no profile column.
+    global_dims = {"dim_date", "dim_population"}
+    trial_grain = {m["name"] for m in doc["models"] if m["name"] not in global_dims}
     # Membership, not just cardinality: a pin on len() alone stays green if a
     # mart is renamed or dim_date's exclusion clause goes stale, because the set
     # keeps its size while iterating something else. Names taken from
-    # _marts.yml's 22 model blocks minus dim_date.
+    # _marts.yml's 24 model blocks minus the global dimensions.
     assert trial_grain == {
         "bridge_trial_condition",
         "bridge_trial_sponsor",
@@ -1633,6 +1635,7 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
         "fct_trial_site",
         "fct_trial_snapshot",
         "mart_baseline_demographics_coverage",
+        "mart_condition_access_rates",
         "mart_condition_geography_trends",
         "mart_data_reliability",
         "mart_early_stop_transparency",

@@ -1540,3 +1540,101 @@ models:
         data_type: VARCHAR
         description: Comma-separated list of evaluable contributing NCT IDs with posted results.
 
+  - name: dim_population
+    description: >
+      Census ACS 5-year population denominators (ACS 2020-2024; B01001, B03002) by
+      state, county and ZCTA with sex, age band and race/ethnicity. Committed
+      subset: all states/DC/PR, counties of DE, MD, RI, VT, and four ZCTAs.
+      Sex x age band is cross-tabulated; race_ethnicity is never combined with them.
+    contract:
+      enforced: true
+    columns:
+      - name: population_key
+        data_type: VARCHAR
+        tests: [not_null, unique]
+      - name: geo_level
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: geo_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: geo_name
+        data_type: VARCHAR
+      - name: state_fips
+        data_type: VARCHAR
+        description: Two-digit state FIPS; null for ZCTAs (they can cross state lines).
+      - name: state_code
+        data_type: VARCHAR
+        description: Postal code; null for ZCTAs.
+      - name: sex
+        data_type: VARCHAR
+        tests:
+          - accepted_values:
+              values: [all, male, female]
+      - name: age_band
+        data_type: VARCHAR
+        tests:
+          - accepted_values:
+              values: [all, 0-17, 18-44, 45-64, 65+]
+      - name: race_ethnicity
+        data_type: VARCHAR
+      - name: population
+        data_type: BIGINT
+      - name: margin_of_error
+        data_type: BIGINT
+      - name: table_id
+        data_type: VARCHAR
+      - name: vintage
+        data_type: VARCHAR
+        tests: [not_null]
+
+  - name: mart_condition_access_rates
+    description: >
+      Recruiting-trial access by MeSH condition node and U.S. state, always with an
+      explicit denominator. recruiting_trials_per_100k uses ACS residents;
+      recruiting_trials_per_1k_est_cases is populated only where
+      condition_burden_map confirms a burden source and the state has a value.
+      Otherwise burden_denominator_available is false and denominator_label says
+      "no burden denominator available". Grain: profile x mesh_id x state.
+    contract:
+      enforced: true
+    columns:
+      - name: indication_profile_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: mesh_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: condition_label
+        data_type: VARCHAR
+      - name: state_code
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: recruiting_trial_count
+        data_type: BIGINT
+      - name: population
+        data_type: BIGINT
+        description: ACS total resident population; null when the state has no estimate.
+      - name: population_source
+        data_type: VARCHAR
+      - name: population_vintage
+        data_type: VARCHAR
+      - name: recruiting_trials_per_100k
+        data_type: DOUBLE
+      - name: burden_source
+        data_type: VARCHAR
+        description: Burden source from condition_burden_map; null when the condition is unmapped.
+      - name: burden_measure
+        data_type: VARCHAR
+      - name: burden_vintage
+        data_type: VARCHAR
+      - name: burden_denominator_available
+        data_type: BOOLEAN
+        tests: [not_null]
+      - name: estimated_cases
+        data_type: DOUBLE
+      - name: recruiting_trials_per_1k_est_cases
+        data_type: DOUBLE
+      - name: denominator_label
+        data_type: VARCHAR
+        tests: [not_null]

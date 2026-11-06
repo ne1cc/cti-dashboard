@@ -1,0 +1,19 @@
+Incidence Rate Report by State
+
+"Lung & Bronchus (All Stages^), 2019-2023"
+
+"All Races (includes Hispanic), Both Sexes, All Ages"
+
+Sorted by Rate
+
+State,FIPS,"Age-Adjusted Incidence Rate([rate note]) - cases per 100,000","Lower 95% Confidence Interval","Upper 95% Confidence Interval","CI*Rank([rank note])","Lower CI (CI*Rank)","Upper CI (CI*Rank)",Average Annual Count,Recent Trend,"Recent 5-Year Trend ([trend note]) in Incidence Rates","Lower 95% Confidence Interval","Upper 95% Confidence Interval"
+"US (SEER+NPCR)(1)",00000,51.8 ,51.8, 51.9,N/A , N/A , N/A,225094,falling,-2.9 ,-3.4, -2.3
+"Kentucky(7)",21000,83.6 ,82.5, 84.7,1 , 1 , 1,5032,falling,-1.5 ,-1.9, -1.3
+"Maryland(2)",24000,48.7 ,48, 49.4,36 , 35 , 37,3864,falling,-2.0 ,-2.2, -1.7
+"Washington(1)",53000,46.7 ,46.1, 47.3,38 , 38 , 39,4500,falling,-4.2 ,-5.6, -2.6
+"Utah(7)",49000,24.4 ,23.6, 25.2,51 , 51 , 51,739,falling,-0.9 ,-1.1, -0.7
+"Puerto Rico(2)",72001,14.4 ,14, 14.9,N/A , N/A , N/A,773,falling,-2.4 ,-5.3, -1.5
+
+Notes:
+
+"(1) Source: SEER+NPCR"

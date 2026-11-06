@@ -190,6 +190,7 @@ exposed per arm through the Read API `arms` field, sourced from
 | dim_sponsor | sponsor_normalized | sponsor_key |
 | dim_geography | U.S. state | geography_key (county/metro columns reserved, null) |
 | dim_date | day, 1999 → +3y | date_day |
+| dim_population | ACS geography (state, county, ZCTA) × sex × age band × race/ethnicity | population_key (ACS 2020-2024 5-year, tables B01001/B03002) |
 
 ### Facts and bridges
 | Model | Grain |
@@ -206,6 +207,7 @@ exposed per arm through the Read API `arms` field, sourced from
 | mart_recruiting_competition | snapshot × segment (RECRUITING) | recruiting count, 30/90-day windows, HHI, `competition_signal_band` |
 | mart_site_overlap | snapshot × facility | multi-trial facilities, phase_mix |
 | mart_condition_geography_trends | month × condition_group × state | 3-month rolling baseline |
+| mart_condition_access_rates | profile × MeSH node × state | per-100k and (where a burden source exists) per-estimated-case rates; see `docs/burden_sources.md` |
 | mart_data_reliability | ingestion run | reconciliation + usability shares |
 | mart_feasibility_priority_queue | segment @ latest snapshot | segment-level recruiting trial counts, distinct sponsors, sponsor HHI, site overlap, and deterministic interpretation note |
 | mart_early_stop_transparency | profile × condition × sponsor class × year × status × why_stopped | stopped trial counts (TERMINATED, WITHDRAWN, SUSPENDED), verbatim sponsor reasons, contributing NCT IDs |
