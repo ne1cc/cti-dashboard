@@ -127,15 +127,9 @@ PROFILE_IDS = ("adrd", "oncology_nsclc", "full_catalog")
 _PROFILE_COMPARISON = re.compile(
     r"indication_profile_id\s*(?:=|!=|<>|<=|>=|<|>|\b(?:in|like)\b)", re.I
 )
-# Allowed: `= ?`, or the preset-derived scope -- the profiles whose `dim_condition`
-# rows carry the preset's keys, which are themselves bound through `unnest(?)`.
-_PROFILE_COMPARISON_BOUND = re.compile(
-    r"indication_profile_id\s*=\s*\?"
-    r"|indication_profile_id\s+in\s*\(\s*select\s+indication_profile_id\s+"
-    r"from\s+main_marts\.dim_condition\s+where\s+registry_condition_key\s+"
-    r"in\s*\(\s*select\s+unnest\(\?\)\s*\)\s*\)",
-    re.I,
-)
+# Allowed: `= ?` only. The preset's owning profile is bound; the keys narrow further
+# through `registry_condition_key in (select unnest(?))`, never through the profile column.
+_PROFILE_COMPARISON_BOUND = re.compile(r"indication_profile_id\s*=\s*\?", re.I)
 _PROFILE_ID_IN_TEXT = re.compile(
     r"(?<![A-Za-z0-9_])(?:" + "|".join(PROFILE_IDS) + r")(?![A-Za-z0-9_])"
 )

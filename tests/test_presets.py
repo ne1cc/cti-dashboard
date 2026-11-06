@@ -6,9 +6,11 @@ drops or adds a row relative to the profile-scoped marts fails here.
 """
 
 import json
+import shutil
 import sys
 from pathlib import Path
 
+import duckdb
 import pandas as pd
 import pytest
 import yaml
@@ -150,30 +152,118 @@ def _registry(directory: Path) -> ProfileRegistry:
     )
 
 
-def test_a_throwaway_preset_needs_only_a_yaml_file(tmp_path: Path) -> None:
-    """A profile YAML nobody wired into code or dbt is selectable and reads real rows.
+@pytest.fixture
+def warehouse_copy(
+    fixture_project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    """A private copy of the fixture warehouse the test may write to; readers point at it."""
+    import streamlit as st
 
-    The preset reuses the shipped ADRD taxonomy, so its nodes are group ids the fixture
-    warehouse already carries; nothing in `dashboard/`, `src/` or `dbt_clinical_trials/`
-    knows its id.
+    from src.config import get_config
+
+    root = tmp_path / "root"
+    shutil.copytree(fixture_project_root, root)
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(root))
+    get_config.cache_clear()
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    return root / "data/warehouse/clinical_trials.duckdb"
+
+
+@pytest.fixture
+def warehouse_with_second_adrd(warehouse_copy: Path) -> Path:
+    """`throwaway_adrd` is a refreshed profile reusing the ADRD taxonomy.
+
+    Every base table with a profile column gets the ADRD rows again under the new id
+    (trial keys suffixed, so they stay per-profile as md5(nct_id, profile) is). This is
+    what the warehouse holds once a YAML-only preset has been refreshed.
     """
-    _write_profile(tmp_path, "throwaway_adrd", "config/condition_taxonomy.yml")
-    [throwaway] = load_presets(_registry(tmp_path))
+    with duckdb.connect(str(warehouse_copy)) as con:
+        tables = con.execute(
+            "select c.table_schema, c.table_name from information_schema.columns c "
+            "join information_schema.tables t using (table_schema, table_name) "
+            "where c.column_name = 'indication_profile_id' and t.table_type = 'BASE TABLE' "
+            "and c.table_schema in ('main_marts', 'main_intermediate')"
+        ).fetchall()
+        for schema, table in tables:
+            cols = {r[0] for r in con.execute(f"describe {schema}.{table}").fetchall()}
+            swap = "'throwaway_adrd' as indication_profile_id"
+            if "trial_key" in cols:
+                swap += ", trial_key || '_t' as trial_key"
+            con.execute(
+                f"insert into {schema}.{table} select * replace ({swap}) "
+                f"from {schema}.{table} where indication_profile_id = 'adrd'"
+            )
+    return warehouse_copy
+
+
+PROFILE_FRAME_READERS = (
+    "priority_queue",
+    "recruiting_competition",
+    "condition_geography_trends",
+    "access_rates",
+    "participation_prevalence",
+    "site_overlap",
+    "sponsor_landscape",
+    "trial_explorer",
+    "data_reliability",
+    "early_stop_transparency",
+    "results_posting_transparency",
+)
+
+
+def _adrd_baseline_trials() -> int:
+    baseline = load_baseline()["dim_trial"]
+    pid = baseline["columns"].index("indication_profile_id")
+    return sum(1 for r in baseline["rows"] if r[pid] == "adrd")
+
+
+def _assert_reads_only(preset: Preset) -> None:
+    """Every reader returns this preset's profile alone, and no trial twice."""
+    data = _data()
+    for reader in PROFILE_FRAME_READERS:
+        frame = getattr(data, reader)(preset)
+        if "indication_profile_id" in frame.columns:
+            assert set(frame["indication_profile_id"]) <= {preset.profile_id}, reader
+    explorer = data.trial_explorer(preset)
+    assert explorer["nct_id"].is_unique
+    assert len(explorer) == data.preset_trial_count(preset) == _adrd_baseline_trials()
+    assert int(data.overview_metrics(preset)["total_trials"]) == len(explorer)
+
+
+def test_a_throwaway_preset_needs_only_a_yaml_file(
+    tmp_path: Path, warehouse_with_second_adrd: Path
+) -> None:
+    """A YAML nobody wired into code or dbt, once refreshed, reads its own rows.
+
+    The preset reuses the shipped ADRD taxonomy, so `dim_condition` now holds the same
+    node keys under `adrd` and `throwaway_adrd`. Each preset must read only its own
+    profile: the ADRD figures may not grow, and the new preset must not read ADRD's.
+    """
+    profiles = tmp_path / "profiles"
+    profiles.mkdir()
+    _write_profile(profiles, "throwaway_adrd", "config/condition_taxonomy.yml")
+    [throwaway] = load_presets(_registry(profiles))
     assert (throwaway.preset_id, throwaway.name) == ("throwaway_adrd", "Throwaway Preset")
     assert throwaway.registry_condition_keys == preset_for("adrd").registry_condition_keys
 
     data = _data()
-    assert len(data.trial_explorer(throwaway)) == len(data.trial_explorer(preset_for("adrd"))) > 0
-    assert len(data.priority_queue(throwaway)) == len(data.priority_queue(preset_for("adrd"))) > 0
-    # The profile-grain marts resolve through dim_condition by key, not by the new id.
-    assert len(data.data_reliability(throwaway)) == len(data.data_reliability(preset_for("adrd")))
-    assert (
-        data.overview_metrics(throwaway)["total_trials"]
-        == (data.overview_metrics(preset_for("adrd"))["total_trials"])
+    # Both profiles are really in the warehouse, or the checks below prove nothing.
+    profiles_present = set(
+        data.query("select distinct indication_profile_id from main_marts.dim_trial")[
+            "indication_profile_id"
+        ]
     )
+    assert {"adrd", "throwaway_adrd"} <= profiles_present
+    _assert_reads_only(preset_for("adrd"))
+    _assert_reads_only(throwaway)
+    assert set(data.data_reliability(throwaway)["indication_profile_id"]) == {"throwaway_adrd"}
+    assert len(data.priority_queue(throwaway)) == len(data.priority_queue(preset_for("adrd"))) > 0
 
 
-def test_a_narrower_preset_reads_a_subset_of_the_nodes(tmp_path: Path) -> None:
+def test_a_narrower_preset_reads_a_subset_of_the_nodes(
+    tmp_path: Path, warehouse_with_second_adrd: Path
+) -> None:
     """Keeping one group of the ADRD taxonomy narrows trial- and condition-grain readers."""
     taxonomy = yaml.safe_load((ROOT / "config/condition_taxonomy.yml").read_text())
     wanted = "alzheimers_disease"
@@ -182,7 +272,7 @@ def test_a_narrower_preset_reads_a_subset_of_the_nodes(tmp_path: Path) -> None:
     taxonomy_path.write_text(yaml.safe_dump(taxonomy))
     profiles = tmp_path / "profiles"
     profiles.mkdir()
-    _write_profile(profiles, "throwaway_alz", str(taxonomy_path))
+    _write_profile(profiles, "throwaway_adrd", str(taxonomy_path))
     [narrow] = load_presets(_registry(profiles))
     assert narrow.node_ids == (f"group:{wanted}", f"group:{taxonomy['default']['condition_group']}")
 
@@ -193,7 +283,80 @@ def test_a_narrower_preset_reads_a_subset_of_the_nodes(tmp_path: Path) -> None:
     assert set(queue["condition_group"]) <= kept
     assert len(queue) == int(full_queue["condition_group"].isin(kept).sum()) > 0
     assert len(queue) < len(full_queue)
+    assert set(queue["indication_profile_id"]) == {"throwaway_adrd"}
     assert data.preset_trial_count(narrow) < data.preset_trial_count(preset_for("adrd"))
+
+
+def test_a_preset_cannot_blend_profiles() -> None:
+    """The review repro: one ADRD group plus one NSCLC group in a single preset.
+
+    Nodes alone do not say which profile owns a row, so the readers bind the owning
+    profile too. The NSCLC node adds nothing to an ADRD preset: no NSCLC rows, no
+    trial counted once per profile.
+    """
+    mixed = Preset(
+        "adrd",
+        "Mixed",
+        ("group:alzheimers_disease", "group:other_thoracic_oncology"),
+        tuple(
+            registry_condition_key(n)
+            for n in ("group:alzheimers_disease", "group:other_thoracic_oncology")
+        ),
+        (),
+        "",
+        (),
+        (),
+    )
+    data = _data()
+    for reader in PROFILE_FRAME_READERS:
+        frame = getattr(data, reader)(mixed)
+        if "indication_profile_id" in frame.columns:
+            assert set(frame["indication_profile_id"]) <= {"adrd"}, reader
+    explorer = data.trial_explorer(mixed)
+    assert explorer["nct_id"].is_unique
+    assert set(explorer["indication_profile_id"]) == {"adrd"}
+    assert int(data.overview_metrics(mixed)["total_trials"]) == len(explorer)
+    assert len(explorer) <= _adrd_baseline_trials()
+
+
+def test_trials_without_a_condition_stay_in_their_profile(warehouse_copy: Path) -> None:
+    """A trial with no mapped condition has no bridge row; the #146 baseline counted it."""
+    with duckdb.connect(str(warehouse_copy)) as con:
+        [(trial_key, nct_id)] = con.execute(
+            "select trial_key, nct_id from main_marts.dim_trial "
+            "where indication_profile_id = 'adrd' order by nct_id limit 1"
+        ).fetchall()
+        con.execute(
+            "delete from main_marts.bridge_trial_condition where trial_key = ?", [trial_key]
+        )
+    data = _data()
+    for preset_id in PRESET_IDS:
+        preset = preset_for(preset_id)
+        want = (
+            _adrd_baseline_trials()
+            if preset_id == "adrd"
+            else int(
+                data.query(
+                    "select count(*) as n from main_marts.dim_trial "
+                    "where indication_profile_id = 'oncology_nsclc'"
+                ).iloc[0]["n"]
+            )
+        )
+        explorer = data.trial_explorer(preset)
+        assert len(explorer) == data.preset_trial_count(preset) == want
+        assert int(data.overview_metrics(preset)["total_trials"]) == want
+    assert nct_id in set(data.trial_explorer(preset_for("adrd"))["nct_id"])
+
+
+def test_a_preset_with_unknown_nodes_is_told_apart_from_an_unrefreshed_one() -> None:
+    """A refreshed profile whose nodes are all absent is a taxonomy problem, not a missing run."""
+    data = _data()
+    node = "group:no_such_group"
+    typo = Preset("adrd", "Typo", (node,), (registry_condition_key(node),), (), "", (), ())
+    assert data._nodes_missing(typo) is True
+    assert data._nodes_missing(preset_for("adrd")) is False
+    # No dim_condition rows for the profile at all: the "not yet refreshed" state.
+    assert data._nodes_missing(preset_for("full_catalog")) is False
 
 
 def test_every_shipped_profile_yields_a_preset() -> None:

@@ -1,14 +1,17 @@
 """Read-only DuckDB access for the dashboard (never writes to the warehouse).
 
-Every reader takes a `Preset` first and binds its `registry_condition_keys` as one
-`?` list parameter, in one of three shapes depending on what the table carries:
+Every reader takes a `Preset` first and always binds its owning profile
+(`preset.profile_id`) as `indication_profile_id = ?`, so a preset can never read
+another profile's rows or count a shared trial twice. The preset's
+`registry_condition_keys` narrow further as one `?` list parameter, in one of three
+shapes depending on what the table carries:
 
-- condition-grain marts (a `registry_condition_key` column): filter on the key;
-- trial-grain tables (`trial_key`): `trial_key in` the bridge rows for those keys,
-  which keeps the profile-scoped trial identity;
-- profile-grain marts (neither column): `indication_profile_id in` the profiles
-  that own those keys in `dim_condition`. These cannot be narrowed below the
-  profile until the marts re-key (#149).
+- condition-grain marts (a `registry_condition_key` column): profile and key;
+- trial-grain tables (`trial_key`): the profile's trials under those keys in
+  `bridge_trial_condition`, plus its trials with no bridge row (no mapped
+  condition), which the #146 baseline counted;
+- profile-grain marts (neither column): the owning profile only. These cannot be
+  narrowed below the profile until the marts re-key (#149).
 
 An unscoped query does not fail — it blends indications into one plausible
 number, which is what this file exists to make impossible.
@@ -67,11 +70,18 @@ def require_warehouse(preset: Preset | None = None) -> None:
         st.error("Warehouse not found. Build it first:\n\n```\nmake pipeline\n```")
         st.stop()
     if preset is not None and preset_trial_count(preset) == 0:
-        st.warning(
-            f"No trials recorded for `{preset.preset_id}` yet. The refresh has not "
-            "produced a successful run for this preset, so every figure below "
-            "is empty. That is a missing run, not a zero count."
-        )
+        if _nodes_missing(preset):
+            st.warning(
+                f"`{preset.preset_id}` has data, but none of its condition nodes "
+                "(the taxonomy's `group:` ids) are in the warehouse. Check the profile's "
+                "taxonomy for a renamed or misspelled group, then rebuild."
+            )
+        else:
+            st.warning(
+                f"No trials recorded for `{preset.preset_id}` yet. The refresh has not "
+                "produced a successful run for this preset, so every figure below "
+                "is empty. That is a missing run, not a zero count."
+            )
     elif preset is not None:
         _freshness_banner(preset.preset_id)
 
@@ -91,6 +101,27 @@ def _freshness_banner(profile_id: str) -> None:
 
 
 @st.cache_data(ttl=600)
+def _nodes_missing(preset: Preset) -> bool:
+    """True when the preset's profile is in the warehouse but none of its nodes are.
+
+    That is a taxonomy edit or typo, not "not yet refreshed". A profile with no
+    `dim_condition` rows at all is the refresh case and returns False.
+    """
+    if not _has_column("dim_condition", "registry_condition_key"):
+        return False
+    row = (
+        _connection()
+        .execute(
+            "select count(*) filter (where registry_condition_key in (select unnest(?))), "
+            "count(*) from main_marts.dim_condition where indication_profile_id = ?",
+            [_keys(preset), preset.profile_id],
+        )
+        .fetchone()
+    )
+    return bool(row and row[1] > 0 and row[0] == 0)
+
+
+@st.cache_data(ttl=600)
 def preset_trial_count(preset: Preset) -> int:
     """Count the trials recorded for one preset.
 
@@ -105,10 +136,11 @@ def preset_trial_count(preset: Preset) -> int:
     row = (
         _connection()
         .execute(
-            "select count(*) from main_marts.dim_trial where trial_key in ("
-            "select trial_key from main_marts.bridge_trial_condition "
-            "where registry_condition_key in (select unnest(?)))",
-            [_keys(preset)],
+            "select count(*) from main_marts.dim_trial where indication_profile_id = ? "
+            "and (trial_key in (select trial_key from main_marts.bridge_trial_condition "
+            "where registry_condition_key in (select unnest(?))) "
+            "or trial_key not in (select trial_key from main_marts.bridge_trial_condition))",
+            [preset.profile_id, _keys(preset)],
         )
         .fetchone()
     )
@@ -176,9 +208,9 @@ def priority_queue(preset: Preset) -> pd.DataFrame:
         st.stop()
     return query(
         "select * from main_marts.mart_feasibility_priority_queue"
-        " where registry_condition_key in (select unnest(?))"
+        " where indication_profile_id = ? and registry_condition_key in (select unnest(?))"
         " order by active_recruiting_trials desc, distinct_sponsors desc, priority_queue_key asc",
-        [_keys(preset)],
+        [preset.profile_id, _keys(preset)],
     )
 
 
@@ -217,12 +249,11 @@ def trials_for_segment(
         from main_marts.dim_trial d
         inner join main_marts.bridge_trial_condition c on c.trial_key = d.trial_key
         inner join main_marts.fct_trial_site s on s.trial_key = d.trial_key
-        where c.registry_condition_key in (select unnest(?))
+        where d.indication_profile_id = ?
+          and c.registry_condition_key in (select unnest(?))
           and s.snapshot_date = (
               select max(snapshot_date) from main_marts.fct_trial_site
-              where trial_key in (
-                  select trial_key from main_marts.bridge_trial_condition
-                  where registry_condition_key in (select unnest(?))))
+              where indication_profile_id = ?)
           and c.condition_group = ?
           {mesh_clause}
           and s.state_normalized = ?
@@ -233,7 +264,15 @@ def trials_for_segment(
     return _materialize(
         _connection()
         .execute(
-            sql, [_keys(preset), _keys(preset), condition_group, state_normalized, phase_normalized]
+            sql,
+            [
+                preset.profile_id,
+                _keys(preset),
+                preset.profile_id,
+                condition_group,
+                state_normalized,
+                phase_normalized,
+            ],
         )
         .df()
     )
@@ -318,10 +357,9 @@ def trial_similarity(preset: Preset, nct_id: str) -> pd.DataFrame:
         return pd.DataFrame()
     return query(
         "select * from main_marts.mart_trial_similarity"
-        " where indication_profile_id in (select indication_profile_id"
-        " from main_marts.dim_condition where registry_condition_key in (select unnest(?)))"
+        " where indication_profile_id = ?"
         " and nct_id_a = ? order by similarity_rank",
-        [_keys(preset), nct_id],
+        [preset.profile_id, nct_id],
     )
 
 
@@ -339,11 +377,11 @@ def recruiting_competition(preset: Preset) -> pd.DataFrame:
     # a shared max() would show the stale preset's newest date as if it had data.
     return query(
         "select * from main_marts.mart_recruiting_competition"
-        " where registry_condition_key in (select unnest(?))"
+        " where indication_profile_id = ? and registry_condition_key in (select unnest(?))"
         "   and snapshot_date = ("
         "     select max(snapshot_date) from main_marts.mart_recruiting_competition"
-        "     where registry_condition_key in (select unnest(?)))",
-        [_keys(preset), _keys(preset)],
+        "     where indication_profile_id = ? and registry_condition_key in (select unnest(?)))",
+        [preset.profile_id, _keys(preset), preset.profile_id, _keys(preset)],
     )
 
 
@@ -359,8 +397,9 @@ def condition_geography_trends(preset: Preset) -> pd.DataFrame:
     """
     return query(
         "select * from main_marts.mart_condition_geography_trends"
-        " where registry_condition_key in (select unnest(?)) order by activity_month",
-        [_keys(preset)],
+        " where indication_profile_id = ? and registry_condition_key in (select unnest(?))"
+        " order by activity_month",
+        [preset.profile_id, _keys(preset)],
     )
 
 
@@ -377,10 +416,8 @@ def access_rates(preset: Preset) -> pd.DataFrame:
     if not _table_exists("mart_condition_access_rates"):
         return pd.DataFrame()
     return query(
-        "select * from main_marts.mart_condition_access_rates"
-        " where indication_profile_id in (select indication_profile_id"
-        " from main_marts.dim_condition where registry_condition_key in (select unnest(?)))",
-        [_keys(preset)],
+        "select * from main_marts.mart_condition_access_rates where indication_profile_id = ?",
+        [preset.profile_id],
     )
 
 
@@ -399,9 +436,8 @@ def participation_prevalence(preset: Preset) -> pd.DataFrame:
         return pd.DataFrame()
     return query(
         "select * from main_marts.mart_participation_prevalence_ratio"
-        " where indication_profile_id in (select indication_profile_id"
-        " from main_marts.dim_condition where registry_condition_key in (select unnest(?)))",
-        [_keys(preset)],
+        " where indication_profile_id = ?",
+        [preset.profile_id],
     )
 
 
@@ -420,14 +456,12 @@ def site_overlap(preset: Preset) -> pd.DataFrame:
     """
     return query(
         "select * from main_marts.mart_site_overlap"
-        " where indication_profile_id in (select indication_profile_id"
-        "   from main_marts.dim_condition where registry_condition_key in (select unnest(?)))"
+        " where indication_profile_id = ?"
         "   and snapshot_date = ("
         "     select max(snapshot_date) from main_marts.fct_trial_snapshot"
-        "     where trial_key in (select trial_key from main_marts.bridge_trial_condition"
-        "       where registry_condition_key in (select unnest(?))))"
+        "     where indication_profile_id = ?)"
         " order by recruiting_trial_count desc, listed_trial_count desc",
-        [_keys(preset), _keys(preset)],
+        [preset.profile_id, preset.profile_id],
     )
 
 
@@ -460,13 +494,16 @@ def sponsor_landscape(preset: Preset) -> pd.DataFrame:
         left join main_marts.bridge_trial_sponsor s
             on d.trial_key = s.trial_key and s.lead_sponsor_flag
         where d.current_overall_status = 'RECRUITING'
-            and d.trial_key in (
-                select trial_key from main_marts.bridge_trial_condition
-                where registry_condition_key in (select unnest(?)))
+            and d.indication_profile_id = ?
+            and (d.trial_key in (
+                    select trial_key from main_marts.bridge_trial_condition
+                    where registry_condition_key in (select unnest(?)))
+                or d.trial_key not in (
+                    select trial_key from main_marts.bridge_trial_condition))
         group by 1, 2
         order by recruiting_trial_count desc, lead_sponsor
         """,
-        [_keys(preset)],
+        [preset.profile_id, _keys(preset)],
     )
 
 
@@ -505,17 +542,18 @@ def trial_explorer(preset: Preset) -> pd.DataFrame:
             on d.trial_key = s.trial_key
             and s.snapshot_date = (
                 select max(snapshot_date) from main_marts.fct_trial_site
-                where trial_key in (
-                    select trial_key from main_marts.bridge_trial_condition
-                    where registry_condition_key in (select unnest(?))))
+                where indication_profile_id = ?)
             and regexp_matches(s.state_normalized, '^[A-Z]{2}$')
-        where d.trial_key in (
-            select trial_key from main_marts.bridge_trial_condition
-            where registry_condition_key in (select unnest(?)))
+        where d.indication_profile_id = ?
+            and (d.trial_key in (
+                    select trial_key from main_marts.bridge_trial_condition
+                    where registry_condition_key in (select unnest(?)))
+                or d.trial_key not in (
+                    select trial_key from main_marts.bridge_trial_condition))
         group by all
         order by d.study_first_post_date desc nulls last, d.nct_id
         """,
-        [_keys(preset), _keys(preset)],
+        [preset.profile_id, preset.profile_id, _keys(preset)],
     )
 
 
@@ -531,10 +569,9 @@ def data_reliability(preset: Preset) -> pd.DataFrame:
     """
     return query(
         "select * from main_marts.mart_data_reliability"
-        " where indication_profile_id in (select indication_profile_id"
-        " from main_marts.dim_condition where registry_condition_key in (select unnest(?)))"
+        " where indication_profile_id = ?"
         " order by snapshot_date desc, ingestion_run_id desc",
-        [_keys(preset)],
+        [preset.profile_id],
     )
 
 
@@ -555,42 +592,35 @@ def overview_metrics(preset: Preset) -> dict[str, Any]:
             - ``latest_snapshot``: Date of this profile's most recent captured snapshot.
             - ``snapshot_count``: Number of distinct captured dates for this profile.
     """
-    # Seven `?` below, one per scope subquery: five over trial keys, two over profiles.
+    # Seven `?` below: the trial scope binds the profile and the keys, then five
+    # profile binds. Trials with no mapped condition have no bridge row; the
+    # baseline counted them, so the scope keeps them in the owning profile.
     row = query(
         """
-        select
-            (select count(*) from main_marts.dim_trial
-             where trial_key in (select trial_key from main_marts.bridge_trial_condition
-                                 where registry_condition_key in (select unnest(?))))
-                as total_trials,
-            (select count(*) from main_marts.dim_trial
-             where trial_key in (select trial_key from main_marts.bridge_trial_condition
+        with scoped as (
+            select current_overall_status from main_marts.dim_trial
+            where indication_profile_id = ?
+              and (trial_key in (select trial_key from main_marts.bridge_trial_condition
                                  where registry_condition_key in (select unnest(?)))
-               and current_overall_status = 'RECRUITING') as recruiting_trials,
+                   or trial_key not in (select trial_key from main_marts.bridge_trial_condition))
+        )
+        select
+            (select count(*) from scoped) as total_trials,
+            (select count(*) from scoped
+             where current_overall_status = 'RECRUITING') as recruiting_trials,
             (select count(*) from main_marts.dim_geography
-             where indication_profile_id in (
-                 select indication_profile_id from main_marts.dim_condition
-                 where registry_condition_key in (select unnest(?))))
-                as states_with_sites,
+             where indication_profile_id = ?) as states_with_sites,
             (select count(*) from main_marts.mart_site_overlap
-             where indication_profile_id in (
-                 select indication_profile_id from main_marts.dim_condition
-                 where registry_condition_key in (select unnest(?)))
+             where indication_profile_id = ?
                and snapshot_date = (
                  select max(snapshot_date) from main_marts.fct_trial_snapshot
-                 where trial_key in (select trial_key from main_marts.bridge_trial_condition
-                                     where registry_condition_key in (select unnest(?)))))
-                as listed_facilities,
+                 where indication_profile_id = ?)) as listed_facilities,
             (select max(snapshot_date) from main_marts.fct_trial_snapshot
-             where trial_key in (select trial_key from main_marts.bridge_trial_condition
-                                 where registry_condition_key in (select unnest(?))))
-                as latest_snapshot,
+             where indication_profile_id = ?) as latest_snapshot,
             (select count(distinct snapshot_date) from main_marts.fct_trial_snapshot
-             where trial_key in (select trial_key from main_marts.bridge_trial_condition
-                                 where registry_condition_key in (select unnest(?))))
-                as snapshot_count
+             where indication_profile_id = ?) as snapshot_count
         """,
-        [_keys(preset)] * 7,
+        [preset.profile_id, _keys(preset), *[preset.profile_id] * 5],
     ).iloc[0]
     res = {str(k): v for k, v in row.to_dict().items()}
     res["warehouse_runs"] = res.get("snapshot_count")
@@ -611,11 +641,10 @@ def audit_studies(preset: Preset, snapshot_ids: list[str]) -> pd.DataFrame:
         return _audit_unavailable()
     return query(
         "select * from main_marts.mart_study_snapshot_audit "
-        "where indication_profile_id in (select indication_profile_id "
-        "from main_marts.dim_condition where registry_condition_key in (select unnest(?))) "
+        "where indication_profile_id = ? "
         "and snapshot_id in (select unnest(?)) "
         "order by snapshot_date, snapshot_id, nct_id",
-        [_keys(preset), snapshot_ids],
+        [preset.profile_id, snapshot_ids],
     )
 
 
@@ -625,11 +654,10 @@ def audit_locations(preset: Preset, snapshot_ids: list[str]) -> pd.DataFrame:
         return _audit_unavailable()
     return query(
         "select * from main_marts.mart_location_snapshot_audit "
-        "where indication_profile_id in (select indication_profile_id "
-        "from main_marts.dim_condition where registry_condition_key in (select unnest(?))) "
+        "where indication_profile_id = ? "
         "and snapshot_id in (select unnest(?)) "
         "order by snapshot_id, nct_id, location_ordinal",
-        [_keys(preset), snapshot_ids],
+        [preset.profile_id, snapshot_ids],
     )
 
 
@@ -642,16 +670,14 @@ def audit_condition_mapping(preset: Preset) -> pd.DataFrame:
             "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, "
             "condition_group, mapping_source "
             "from main_intermediate.int_trial_condition_mapping "
-            "where indication_profile_id in (select indication_profile_id "
-            "from main_marts.dim_condition where registry_condition_key in (select unnest(?)))",
-            [_keys(preset)],
+            "where indication_profile_id = ?",
+            [preset.profile_id],
         )
     return query(
         "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, condition_group "
         "from main_intermediate.int_trial_condition_mapping "
-        "where indication_profile_id in (select indication_profile_id "
-        "from main_marts.dim_condition where registry_condition_key in (select unnest(?)))",
-        [_keys(preset)],
+        "where indication_profile_id = ?",
+        [preset.profile_id],
     )
 
 
@@ -676,9 +702,8 @@ def metric_audit_observations(preset: Preset, metric: str = "competition") -> pd
         return query(
             "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, snapshot_date "
             "from main_intermediate.int_current_trial_status "
-            "where indication_profile_id in (select indication_profile_id "
-            "from main_marts.dim_condition where registry_condition_key in (select unnest(?)))",
-            [_keys(preset)],
+            "where indication_profile_id = ?",
+            [preset.profile_id],
         )
     if metric in {"history", "recent_recruiting"}:
         return query(
@@ -686,33 +711,29 @@ def metric_audit_observations(preset: Preset, metric: str = "competition") -> pd
             "previous_status, lag(ingestion_run_id) over trial_window as predecessor_snapshot_id, "
             "lag(snapshot_date) over trial_window as predecessor_snapshot_date "
             "from main_intermediate.int_trial_status_history "
-            "where indication_profile_id in (select indication_profile_id "
-            "from main_marts.dim_condition where registry_condition_key in (select unnest(?))) "
+            "where indication_profile_id = ? "
             "window trial_window as (partition by indication_profile_id, "
             "nct_id order by snapshot_date)",
-            [_keys(preset)],
+            [preset.profile_id],
         )
     if metric in {"competition", "first_post_registered"}:
         return query(
             "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, snapshot_date "
             "from main_intermediate.int_trial_status_history "
-            "where indication_profile_id in (select indication_profile_id "
-            "from main_marts.dim_condition where registry_condition_key in (select unnest(?))) "
+            "where indication_profile_id = ? "
             "and snapshot_date = (select max(snapshot_date) from main_marts."
-            "mart_recruiting_competition where registry_condition_key in (select unnest(?)))",
-            [_keys(preset), _keys(preset)],
+            "mart_recruiting_competition where indication_profile_id = ? "
+            "and registry_condition_key in (select unnest(?)))",
+            [preset.profile_id, preset.profile_id, _keys(preset)],
         )
     if metric == "facility":
         return query(
             "select indication_profile_id, ingestion_run_id as snapshot_id, nct_id, snapshot_date "
             "from main_intermediate.int_trial_status_history "
-            "where indication_profile_id in (select indication_profile_id "
-            "from main_marts.dim_condition where registry_condition_key in (select unnest(?))) "
+            "where indication_profile_id = ? "
             "and snapshot_date = (select max(snapshot_date) from main_marts."
-            "fct_trial_snapshot where trial_key in (select trial_key "
-            "from main_marts.bridge_trial_condition "
-            "where registry_condition_key in (select unnest(?))))",
-            [_keys(preset), _keys(preset)],
+            "fct_trial_snapshot where indication_profile_id = ?)",
+            [preset.profile_id, preset.profile_id],
         )
     raise ValueError(f"Unknown audit metric: {metric}")
 
@@ -732,10 +753,9 @@ def early_stop_transparency(preset: Preset) -> pd.DataFrame:
         return pd.DataFrame()
     return query(
         "select * from main_marts.mart_early_stop_transparency "
-        "where indication_profile_id in (select indication_profile_id "
-        "from main_marts.dim_condition where registry_condition_key in (select unnest(?))) "
+        "where indication_profile_id = ? "
         "order by stopped_year desc nulls last, stopped_trial_count desc, condition_group",
-        [_keys(preset)],
+        [preset.profile_id],
     )
 
 
@@ -755,8 +775,7 @@ def results_posting_transparency(preset: Preset) -> pd.DataFrame:
         return pd.DataFrame()
     return query(
         "select * from main_marts.mart_results_posting_transparency "
-        "where indication_profile_id in (select indication_profile_id "
-        "from main_marts.dim_condition where registry_condition_key in (select unnest(?))) "
+        "where indication_profile_id = ? "
         "order by total_evaluable_trials desc, results_posted_rate desc nulls last, lead_sponsor",
-        [_keys(preset)],
+        [preset.profile_id],
     )

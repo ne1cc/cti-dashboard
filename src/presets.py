@@ -5,6 +5,9 @@ taxonomy) into the preset list the dashboard offers, so adding a preset is one
 YAML file and no code or pipeline change (epic #54, step 3).
 
 Contract:
+    - A preset belongs to exactly one profile (`profile_id`, its YAML id). Readers filter
+      on that profile as well as on the keys, because the marts are profile-grained
+      (`trial_key` is md5(nct_id, profile)) and two profiles may share a node id.
     - A preset's nodes are the `group:<slug>` ids of its taxonomy (every group plus
       the default group). `registry_condition_keys` are those ids hashed exactly as
       the dbt `generate_surrogate_key` macro hashes `registry_condition_key`.
@@ -43,6 +46,11 @@ class Preset:
     study_type: str
     statuses: tuple[str, ...]
     phases: tuple[str, ...]
+
+    @property
+    def profile_id(self) -> str:
+        """The owning profile (`preset_id`): the only `indication_profile_id` readers may touch."""
+        return self.preset_id
 
 
 def preset_from_profile(profile: IndicationProfile) -> Preset:
