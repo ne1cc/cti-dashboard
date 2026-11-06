@@ -21,9 +21,13 @@ ProfileRegistry supplements — it does not replace — those singletons.
 Adding a new indication
 ───────────────────────
 1. Create config/profiles/<indication_id>.yml (copy adrd.yml as a template).
-2. Add a condition taxonomy YAML if needed (reference it in the profile's
+2. List the MeSH descriptor label(s) that define it under `preset: mesh_terms:`.
+   A profile is a preset over the one registry-wide run (full_catalog): its
+   silver is selected locally from that run's pages by those labels plus the
+   `scope` study type / status filters (src/transform/preset_runs.py).
+3. Add a condition taxonomy YAML if needed (reference it in the profile's
    taxonomy: field).
-3. Run:  python -m src.cli orchestrate --max-pages 1   (smoke test).
+4. Run:  python -m src.cli orchestrate --max-pages 1   (smoke test).
    Then: make orchestrate                               (full run).
 No Python changes required.
 """
@@ -55,6 +59,10 @@ from src.utils.paths import project_root, resolve_path
 
 PROFILES_DIR = "config/profiles"
 SHARED_PATHS_FILE = "config/shared_paths.yml"
+
+# The one profile whose bronze run is the unit of ingest (issue #147): every
+# other refreshable profile is a preset over that run.
+REGISTRY_PROFILE_ID = "full_catalog"
 
 # User-facing profile names, normalized before any registry lookup. CLI users
 # historically typed `default`/`full-catalog`; config/profiles/*.yml are keyed by
@@ -121,6 +129,11 @@ class IndicationProfile:
                             REGISTRY_TAXONOMY (whole-registry profiles classify
                             nothing; conditions stay uncategorized).
         shared:             Shared medallion paths (silver, gold, duckdb).
+        mesh_terms:         The preset's MeSH node(s): descriptor labels from the
+                            profile's `preset.mesh_terms`. A trial belongs to the
+                            preset when any of its MeSH terms (direct or ancestor)
+                            equals one of them. Empty for the registry-wide
+                            profile, which is not a preset.
         orchestrate:        Membership in refreshable() — the multi-profile
                             orchestrate loop and the dashboard's scope selector.
                             The registry-wide profile sets False: its weekly
@@ -136,6 +149,7 @@ class IndicationProfile:
     taxonomy: ConditionTaxonomy | None
     shared: SharedPaths
     orchestrate: bool = True
+    mesh_terms: tuple[str, ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -210,6 +224,7 @@ def load_profile(
         taxonomy=taxonomy,
         shared=resolved_shared,
         orchestrate=bool(pmeta.get("orchestrate", True)),
+        mesh_terms=tuple(str(t) for t in (raw.get("preset") or {}).get("mesh_terms") or ()),
     )
 
 
@@ -227,9 +242,9 @@ class ProfileRegistry:
     Usage::
 
         registry = ProfileRegistry()
-        for profile in registry.refreshable():
-            run_ingestion(config=profile)
-            run_transform(profile=profile)
+        run_ingestion(config=registry.registry_wide())
+        for preset in registry.refreshable():
+            derive_preset_runs(registry.registry_wide(), preset)
     """
 
     def __init__(
@@ -294,6 +309,14 @@ class ProfileRegistry:
                 "refusing to refresh nothing."
             )
         return [profile for profile in profiles if profile.profile_id in requested]
+
+    def registry_wide(self) -> IndicationProfile:
+        """The registry-wide profile: the single ingest target of a refresh.
+
+        `refreshable()` lists the presets derived from its run; it is never in
+        that list (`orchestrate: false`).
+        """
+        return self.get(REGISTRY_PROFILE_ID)
 
     def get(self, profile_id: str) -> IndicationProfile:
         """Return the named profile, raising KeyError if not found."""

@@ -62,6 +62,7 @@ api:
     - protocolSection.outcomesModule
     - resultsSection.participantFlowModule
     - resultsSection.baselineCharacteristicsModule
+    - derivedSection.conditionBrowseModule  # MeSH terms: the registry run's preset selector (#147)
     - hasResults
   # No published numeric rate limit exists (no rate-limit response headers;
   # OpenAPI spec and NLM bulletins silent, checked 2026-10-30). ~50

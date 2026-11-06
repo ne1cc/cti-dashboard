@@ -141,7 +141,7 @@ def test_slim_fields_projection_consistent(registry: ProfileRegistry) -> None:
     assert full_cfg.api.fields == base_cfg.api.fields, (
         "full_catalog and project_config fields must match"
     )
-    assert adrd_cfg.api.fields is not None and len(adrd_cfg.api.fields) == 13
+    assert adrd_cfg.api.fields is not None and len(adrd_cfg.api.fields) == 14
     assert "hasResults" in adrd_cfg.api.fields
     assert "protocolSection.descriptionModule" in adrd_cfg.api.fields
 

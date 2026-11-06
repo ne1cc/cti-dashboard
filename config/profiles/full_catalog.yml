@@ -53,6 +53,7 @@ api:
     - protocolSection.outcomesModule
     - resultsSection.participantFlowModule
     - resultsSection.baselineCharacteristicsModule
+    - derivedSection.conditionBrowseModule  # MeSH terms: the registry run's preset selector (#147)
     - hasResults
   # Intentionally empty: no query.cond / filter.* — CTG default is "all studies".
   # `ingest --incremental-refresh` ANDs AREA[LastUpdatePostDate]RANGE[...] in

@@ -85,6 +85,7 @@ def run_ingestion(
     profile: str = "default",
     config: ProjectConfig | IndicationProfile | None = None,
     incremental_refresh: bool = False,
+    require_silver: bool = True,
 ) -> IngestionManifest:
     """Run a bronze ingestion snapshot.
 
@@ -97,6 +98,9 @@ def run_ingestion(
                 overlap). The run's bronze holds changed studies only; silver
                 upserts them onto the previous full snapshot. Requires a prior
                 successful full snapshot.
+        require_silver: An incremental base must have its own silver_trials. False
+                for the registry-wide orchestrate run, whose silver is derived per
+                preset (src/transform/preset_runs.py), never for the registry itself.
     """
     log = setup_logging()
 
@@ -138,7 +142,9 @@ def run_ingestion(
         params = client.build_params(condition=condition)
         updated_since: str | None = None
         if incremental_refresh:
-            updated_since = latest_snapshot_date(manifests_dir, cfg.paths.silver)
+            updated_since = latest_snapshot_date(
+                manifests_dir, cfg.paths.silver if require_silver else None
+            )
             if updated_since is None:
                 raise ValueError(
                     "Incremental refresh needs a previous successful snapshot to "

@@ -39,6 +39,10 @@ class IngestionManifest(BaseModel):
     # bronze as *changed studies only*, which silver upserts onto the previous
     # full snapshot (build_silver_entities.py). None on full snapshots.
     updated_since_utc: str | None = None
+    # Set on a preset's derived run (src/transform/preset_runs.py): the
+    # registry-wide run whose pages the preset's silver was selected from. The
+    # preset's own bronze tree holds the manifest but no pages for such a run.
+    source_run_id: str | None = None
 
 
 def new_run_id() -> str:
