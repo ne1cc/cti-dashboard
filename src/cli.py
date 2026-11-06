@@ -116,27 +116,27 @@ def build_parser() -> argparse.ArgumentParser:
     orchestrate = subparsers.add_parser(
         "orchestrate",
         help=(
-            "Discover the orchestrated indication profiles in config/profiles/ "
-            "(ingest_only: false, orchestrate: true — not the registry-wide "
-            "profile) and run ingest + transform for each. Refresh the registry "
-            "with 'ingest' or 'ingest --incremental-refresh'."
+            "Ingest the registry-wide run once, then derive each orchestrated "
+            "indication profile (ingest_only: false, orchestrate: true) as a "
+            "preset: its MeSH node(s) and default filters applied to that run. "
+            "The first run is a full snapshot; later runs refresh incrementally."
         ),
     )
     orchestrate.add_argument(
         "--profile",
         default=None,
-        help="Optional profile ID to orchestrate just one profile (default: all active profiles).",
+        help="Optional preset profile ID to derive just one (default: all active profiles).",
     )
     orchestrate.add_argument(
         "--full-refresh",
         action="store_true",
-        help="Force new ingestion snapshots for all profiles, ignoring incremental state.",
+        help="Force a new full registry snapshot, ignoring incremental state.",
     )
     orchestrate.add_argument(
         "--max-pages",
         type=_positive_int,
         default=None,
-        help="Optional page cap per profile (smoke test mode).",
+        help="Optional page cap for the registry run (smoke test mode).",
     )
 
     subparsers.add_parser(
@@ -234,10 +234,9 @@ def main(argv: list[str] | None = None) -> int:
 
         try:
             if args.update_schema_baseline:
-                # One baseline per profile tree (src/quality/schema_drift.py:55);
-                # updating only the default tree would freeze every other
-                # profile's baseline against a run it never made.
-                for indication_profile in get_registry().refreshable():
+                # One baseline per profile tree (src/quality/schema_drift.py:55). The
+                # registry-wide run owns the pages; a preset's derived run has none.
+                for indication_profile in [get_registry().registry_wide()]:
                     cfg = indication_profile.config
                     success = [
                         m
@@ -268,62 +267,81 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "orchestrate":
         from src.ingest.extract_studies import run_ingestion
         from src.quality.profiling import profile_run
-        from src.transform.build_silver_entities import run_transform
+        from src.transform.preset_runs import derive_preset_runs, registry_run_is_incremental
 
+        # One registry-wide run is the unit of ingest; each indication profile is
+        # a preset derived from it (src/transform/preset_runs.py).
         registry = get_registry()
+        registry_profile = registry.registry_wide()
         if args.profile:
             # Same contract as `transform` above: 2 = usage, 1 = data failure.
-            # An ingest_only profile is refused *here*, before the loop, because
-            # the branch that follows would hand it to run_transform, which has
-            # no place for unclassified bronze records in the shared silver tree
-            # (see src/transform/build_silver_entities.py). The registry-wide profile
-            # is not in the default loop (orchestrate: false), but naming it
-            # explicitly is allowed — that is exactly ingest+transform for the
-            # whole registry.
+            # The registry-wide profile is refused as a preset: it is the run
+            # itself, and orchestrate always ingests it. An ingest_only profile is
+            # refused too: it has no silver to derive.
             try:
-                profiles = [registry.get(normalize_profile_id(args.profile))]
+                presets = [registry.get(normalize_profile_id(args.profile))]
             except KeyError as exc:
                 log.error("Unknown profile: {}", exc)
                 return 2
-            if profiles[0].ingest_only:
+            if presets[0].profile_id == registry_profile.profile_id:
+                log.error(
+                    "Profile '{}' is the registry-wide run orchestrate always ingests; "
+                    "name an indication preset (or omit --profile for all of them).",
+                    presets[0].profile_id,
+                )
+                return 2
+            if presets[0].ingest_only:
                 log.error(
                     "Profile '{}' is ingest_only: it can never be transformed into the "
                     "shared silver tree. Use 'orchestrate' without --profile for the refreshable "
                     "profiles.",
-                    profiles[0].profile_id,
+                    presets[0].profile_id,
                 )
                 return 2
         else:
-            profiles = registry.refreshable()
-            if not profiles:
+            presets = registry.refreshable()
+            if not presets:
                 log.error("No refreshable profiles in the registry; refusing to report success.")
                 return 1
-        log.info("Orchestrating {} profile(s): {}", len(profiles), [p.profile_id for p in profiles])
+        log.info(
+            "Orchestrating the registry-wide run and {} preset(s): {}",
+            len(presets),
+            [p.profile_id for p in presets],
+        )
 
+        # 1. Ingest the registry once → a failed pull stops here: every preset
+        # would derive from the same missing pages.
+        try:
+            log.info("→ [{}] ingesting…", registry_profile.profile_id)
+            manifest = run_ingestion(
+                full_refresh=args.full_refresh,
+                max_pages=args.max_pages,
+                config=registry_profile,
+                incremental_refresh=registry_run_is_incremental(
+                    registry_profile, args.full_refresh
+                ),
+                require_silver=False,
+            )
+        except Exception as exc:
+            log.error("[{}] failed: {}", registry_profile.profile_id, exc)
+            return 1
+        if manifest.status == "failed":
+            log.error("[{}] ingestion failed: {}", registry_profile.profile_id, manifest.error)
+            return 1
+
+        # 2. Derive each preset → one preset's failure must not cost the others
+        # their silver; the exit code still reports it.
         failed: list[str] = []
-        for indication_profile in profiles:
-            pid = indication_profile.profile_id
+        for preset in presets:
+            pid = preset.profile_id
             try:
-                log.info("→ [{}] ingesting…", pid)
-                manifest = run_ingestion(
-                    full_refresh=args.full_refresh,
-                    max_pages=args.max_pages,
-                    config=indication_profile,
-                )
-                if manifest.status == "failed":
-                    log.error("[{}] ingestion failed: {}", pid, manifest.error)
-                    failed.append(pid)
-                    continue
-
-                log.info("→ [{}] transforming…", pid)
-                processed = run_transform(profile=indication_profile)
+                log.info("→ [{}] deriving from the registry run…", pid)
+                processed = derive_preset_runs(registry_profile, preset)
                 for run_id in processed:
-                    # The profile's own config, as `transform` does above: with
-                    # the default, profiling looks this run's manifest up in the
-                    # adrd bronze tree and finds nothing for every other profile.
-                    profile_run(run_id, config=indication_profile.config)
-                log.info("→ [{}] done ({} run(s) transformed).", pid, len(processed))
-
+                    # The preset's own config, as `transform` does above: profiling
+                    # looks the run's manifest up in that profile's bronze tree.
+                    profile_run(run_id, config=preset.config)
+                log.info("→ [{}] done ({} run(s) derived).", pid, len(processed))
             except Exception as exc:
                 log.error("[{}] failed: {}", pid, exc)
                 failed.append(pid)

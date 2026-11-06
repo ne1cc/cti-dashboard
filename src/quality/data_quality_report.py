@@ -156,7 +156,9 @@ def build_report(cfg: ProjectConfig | None = None, output_path: Path | None = No
     lines.append(f"**{len(checks) - failed}/{len(checks)} reconciliation checks passed.**")
 
     lines += ["", "## Schema drift", ""]
-    for indication_profile in get_registry().refreshable():
+    # Pages live only in the registry-wide run's tree; a preset's derived run
+    # reads them, so it has nothing of its own to compare.
+    for indication_profile in [get_registry().registry_wide()]:
         profile_cfg = indication_profile.config
         lines += [f"### {indication_profile.profile_id}", ""]
         success_runs = [

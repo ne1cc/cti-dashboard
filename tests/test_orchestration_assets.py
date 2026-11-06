@@ -59,7 +59,7 @@ def test_bronze_asset_emits_one_materialization_for_the_whole_fan_out(
     pinned by the `manifest_integrity` tests."""
     manifest = _success_manifest()
 
-    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
+    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None, **_):
         _write_manifest_for_every_profile(manifest)
         return manifest
 
@@ -75,19 +75,16 @@ def test_bronze_asset_emits_one_materialization_for_the_whole_fan_out(
 
 
 def test_bronze_asset_raises_on_failed_run(project_root_tmp, monkeypatch) -> None:
-    """One profile's failed pull must not stop the others from being attempted,
-    and the aggregate must name the profile that actually failed. The asset
-    collects and raises once (`src/orchestration/assets/bronze.py:56-60`,
-    `:73-74`), so a test that only asks "did the run go red" cannot tell that
-    apart from an abort inside the loop — or from any unrelated crash in the op."""
+    """A failed registry pull fails the asset and names the registry profile and
+    the manifest's own error, so it is not mistaken for an unrelated op crash.
+    It is a single run: one attempt per retry, never one per preset."""
     success = _success_manifest()
     failed = success.model_copy(update={"status": "failed", "error": "HTTP 500 on page 2"})
     seen: list[str] = []
 
-    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
-        pid = config.profile_id
-        seen.append(pid)
-        return failed if pid == "adrd" else success
+    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None, **_):
+        seen.append(config.profile_id)
+        return failed
 
     monkeypatch.setattr("src.orchestration.assets.bronze.run_ingestion", fake_run_ingestion)
     result = materialize(
@@ -100,84 +97,52 @@ def test_bronze_asset_raises_on_failed_run(project_root_tmp, monkeypatch) -> Non
     # DagsterMaxRetriesExceededError, which names the policy and not the failure.
     # The user exception is the leaf of dagster's cause chain.
     step_failures = result.get_step_failure_events()
-    assert len(step_failures) == 1, "one materialization, one aggregated failure"
-    error = step_failures[0].step_failure_data.error
-    while error.cause is not None:
-        error = error.cause
-    assert error.cls_name == "RuntimeError"
-    # The text the code really builds: "Ingestion failed for: " + "; ".join(
-    # f"{pid}: {manifest.error or 'no error detail'}"). Carrying the failed
-    # manifest's own error detail is what separates this from a crash that merely
-    # happened to occur mid-loop, and the profile that succeeded must not be
-    # dragged into the blame.
-    assert "Ingestion failed for: adrd: HTTP 500 on page 2" in error.message
-    assert "oncology_nsclc" not in error.message
-    # Collected, not aborted: the second profile was still attempted. The step
-    # retries this materialization, so `seen` holds the pair once per attempt.
-    profile_ids = _refreshable_profile_ids()
-    assert set(seen) == set(profile_ids)
-    assert seen[: len(profile_ids)] == profile_ids
-
-
-def test_bronze_asset_contains_a_raised_ingestion_error_and_attempts_the_rest(
-    project_root_tmp, monkeypatch
-) -> None:
-    """Manifest-status failures are collected; a *raised* error used to escape the
-    loop and abort the materialization, so a 500 on profile 1 cost profile 2 its
-    refresh — while `make orchestrate`, which wraps each profile in `try/except`,
-    refreshed it. Same graph, two different semantics for the same event, and the
-    Dagster path then retried profile 1 (a duplicate 602-page pull).
-
-    Both halves are required: profile 2 must still be attempted, and the run must
-    still go red naming profile 1. Containment without the aggregate raise is a
-    green refresh that silently skipped a profile."""
-    manifest = _success_manifest()
-    seen: list[str] = []
-
-    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
-        pid = config.profile_id
-        seen.append(pid)
-        if pid == "adrd":
-            raise RuntimeError("connection reset by peer after 3 retries")
-        return manifest
-
-    monkeypatch.setattr("src.orchestration.assets.bronze.run_ingestion", fake_run_ingestion)
-    result = materialize(
-        assets=[ctg_raw_pages],
-        run_config={"ops": {"ctg_raw_pages": {"config": IngestParams().model_dump()}}},
-        raise_on_error=False,
-    )
-    assert set(seen) == set(_refreshable_profile_ids()), (
-        "a raise on the first profile must not skip the remaining profiles: that is the whole "
-        "difference between this asset and src/cli.py's orchestrate loop"
-    )
-    assert not result.success
-    step_failures = result.get_step_failure_events()
     assert len(step_failures) == 1
     error = step_failures[0].step_failure_data.error
     while error.cause is not None:
         error = error.cause
     assert error.cls_name == "RuntimeError"
-    assert "Ingestion failed for: adrd: connection reset by peer after 3 retries" in error.message
-    assert "oncology_nsclc" not in error.message, "the profile that succeeded is not blamed"
+    assert "Ingestion for full_catalog ended failed: HTTP 500 on page 2" in error.message
+    assert set(seen) == {"full_catalog"}
 
 
-def test_silver_asset_contains_a_raised_transform_error_and_attempts_the_rest(
+def test_bronze_asset_refuses_a_partial_run(project_root_tmp, monkeypatch) -> None:
+    """A run stopped by max_pages is `partial`: presets derived from it would
+    silently shrink, so the asset must fail rather than report success."""
+    partial = _success_manifest().model_copy(update={"status": "partial"})
+
+    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None, **_):
+        return partial
+
+    monkeypatch.setattr("src.orchestration.assets.bronze.run_ingestion", fake_run_ingestion)
+    result = materialize(
+        assets=[ctg_raw_pages],
+        run_config={"ops": {"ctg_raw_pages": {"config": IngestParams(max_pages=1).model_dump()}}},
+        raise_on_error=False,
+    )
+    assert not result.success
+    error = result.get_step_failure_events()[0].step_failure_data.error
+    while error.cause is not None:
+        error = error.cause
+    assert "ended partial" in error.message
+
+
+def test_silver_asset_contains_a_raised_derive_error_and_attempts_the_rest(
     project_root_tmp, monkeypatch
 ) -> None:
-    """`silver_entities` had no containment at all: one profile raising took the
-    other's transform with it, and reported nothing about which one."""
+    """One preset raising must not cost the others their derivation, and the
+    run still goes red naming the preset that failed."""
     _patch_quiet_bronze(monkeypatch)
     seen: list[str] = []
 
-    def fake_run_transform(run_id=None, force=False, profile=None):
-        pid = profile.profile_id if profile else "<default>"
+    def fake_derive(registry_profile, preset):
+        pid = preset.profile_id
         seen.append(pid)
         if pid == "adrd":
             raise RuntimeError("Bronze pages missing for run 20260904T120000Z_abc12345")
         return ["20260904T120000Z_abc12346"]
 
-    monkeypatch.setattr("src.orchestration.assets.silver.run_transform", fake_run_transform)
+    monkeypatch.setattr("src.orchestration.assets.silver.derive_preset_runs", fake_derive)
     result = materialize(
         assets=[ctg_raw_pages, silver_entities],
         run_config={"ops": {"ctg_raw_pages": {"config": IngestParams().model_dump()}}},
@@ -204,13 +169,16 @@ def test_silver_asset_refuses_an_empty_registry(project_root_tmp, monkeypatch) -
     is the same green-over-nothing on the write side."""
 
     class EmptyRegistry:
+        def registry_wide(self):
+            return None
+
         def refreshable(self):
             return []
 
     monkeypatch.setattr("src.orchestration.assets.silver.get_registry", lambda: EmptyRegistry())
     monkeypatch.setattr(
-        "src.orchestration.assets.silver.run_transform",
-        lambda **kwargs: (_ for _ in ()).throw(AssertionError("must not run")),
+        "src.orchestration.assets.silver.derive_preset_runs",
+        lambda *a, **kwargs: (_ for _ in ()).throw(AssertionError("must not run")),
     )
     result = materialize(assets=[silver_entities], raise_on_error=False)
     assert not result.success
@@ -225,7 +193,7 @@ def test_silver_asset_refuses_an_empty_registry(project_root_tmp, monkeypatch) -
 def test_manifest_integrity_passes_on_success_run(project_root_tmp, monkeypatch) -> None:
     manifest = _success_manifest()
 
-    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
+    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None, **_):
         _write_manifest_for_every_profile(manifest)
         return manifest
 
@@ -244,7 +212,7 @@ def test_manifest_integrity_fails_when_counts_disagree(project_root_tmp, monkeyp
         update={"record_count": 3, "total_count_reported": 999}
     )
 
-    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
+    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None, **_):
         _write_manifest_for_every_profile(manifest)
         return manifest
 
@@ -262,7 +230,7 @@ def test_manifest_integrity_fails_when_counts_disagree(project_root_tmp, monkeyp
 def test_manifest_integrity_fails_with_no_success_runs(project_root_tmp, monkeypatch) -> None:
     manifest = _success_manifest()
 
-    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
+    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None, **_):
         return manifest  # returns, but never writes a manifest file
 
     monkeypatch.setattr("src.orchestration.assets.bronze.run_ingestion", fake_run_ingestion)
@@ -280,15 +248,15 @@ def _patch_quiet_bronze(monkeypatch) -> None:
     """Bronze runs but writes nothing: seeded state fully controls the check."""
     manifest = _success_manifest()
 
-    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
+    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None, **_):
         return manifest
 
     monkeypatch.setattr("src.orchestration.assets.bronze.run_ingestion", fake_run_ingestion)
 
 
 def _write_manifest_for_every_profile(manifest: IngestionManifest) -> None:
-    """manifest_integrity loops every refreshable profile now, so a test that
-    wants the gate green must seed all of them, not just the default tree.
+    """manifest_integrity checks the registry-wide profile and every refreshable
+    preset, so a test that wants the gate green must seed all of them.
 
     Each tree gets its own run id and counts, not the same payload stamped
     twice: identical manifests made tree selection unobservable by
@@ -298,7 +266,8 @@ def _write_manifest_for_every_profile(manifest: IngestionManifest) -> None:
     """
     from src.profiles import get_registry
 
-    for index, indication_profile in enumerate(get_registry().refreshable()):
+    registry = get_registry()
+    for index, indication_profile in enumerate([registry.registry_wide(), *registry.refreshable()]):
         per_profile = manifest.model_copy(
             update={
                 "ingestion_run_id": f"{manifest.ingestion_run_id[:-1]}{index}",
@@ -394,10 +363,10 @@ def test_silver_asset_materializes_processed_runs(project_root_tmp, monkeypatch)
     _seed_reconcilable_state()
     _patch_quiet_bronze(monkeypatch)
 
-    def fake_run_transform(run_id=None, force=False, profile=None):
+    def fake_derive(registry_profile, preset):
         return ["20260904T120000Z_abc12345"]
 
-    monkeypatch.setattr("src.orchestration.assets.silver.run_transform", fake_run_transform)
+    monkeypatch.setattr("src.orchestration.assets.silver.derive_preset_runs", fake_derive)
     result = materialize(
         assets=[ctg_raw_pages, silver_entities],
         run_config={"ops": {"ctg_raw_pages": {"config": IngestParams().model_dump()}}},
@@ -406,21 +375,15 @@ def test_silver_asset_materializes_processed_runs(project_root_tmp, monkeypatch)
     assert len(result.get_asset_materialization_events()) == 2
 
 
-def test_bronze_asset_refreshes_every_profile(project_root_tmp, monkeypatch) -> None:
-    """One materialization must cover everything `make pipeline` covers. Ingesting
-    ADRD only and calling itself a refresh is how a second profile silently ages
-    behind a green UI."""
-    from src.profiles import get_registry
-
+def test_bronze_asset_ingests_the_registry_once(project_root_tmp, monkeypatch) -> None:
+    """One materialization is one registry-wide run, not one per profile; the
+    job-level knobs reach it, and it reads the registry profile's own tree."""
     manifest = _success_manifest()
-    seen: list[tuple[str, bool, int | None]] = []
+    seen: list[dict] = []
 
-    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
-        pid = config.profile_id
-        seen.append((pid, full_refresh, max_pages))
-        # Distinct run id per profile: a fan-out that filed one profile's result
-        # under the other's key cannot pass if the payload were all identical.
-        return manifest.model_copy(update={"ingestion_run_id": f"run_for_{pid}"})
+    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None, **kwargs):
+        seen.append({"pid": config.profile_id, "full": full_refresh, "pages": max_pages, **kwargs})
+        return manifest.model_copy(update={"ingestion_run_id": "run_for_registry"})
 
     monkeypatch.setattr("src.orchestration.assets.bronze.run_ingestion", fake_run_ingestion)
     result = materialize(
@@ -428,8 +391,7 @@ def test_bronze_asset_refreshes_every_profile(project_root_tmp, monkeypatch) -> 
         run_config={
             "ops": {
                 # Non-default on purpose: `False`/`None` are what the asset would
-                # pass if it dropped the config, so only these values can tell
-                # "forwarded to every profile" from "decorative".
+                # pass if it dropped the config.
                 "ctg_raw_pages": {
                     "config": IngestParams(full_refresh=True, max_pages=7).model_dump()
                 }
@@ -437,29 +399,23 @@ def test_bronze_asset_refreshes_every_profile(project_root_tmp, monkeypatch) -> 
         },
     )
     assert result.success
-    ids = [pid for pid, _, _ in seen]
-    assert ids == [p.profile_id for p in get_registry().refreshable()]
-    # The line above passes when refreshable() is empty; this pin does not, and an
-    # empty registry is the failure worth catching in a test about scope.
-    profile_ids = _refreshable_profile_ids()
-    assert set(ids) == set(profile_ids)
-    # Both job-level knobs reach both profiles' `run_ingestion` calls.
-    assert set(seen) == {(pid, True, 7) for pid in profile_ids}
-    # The per-profile payload is the only operator-facing record of this fan-out.
-    runs = _materialization_payload(result, "ctg_raw_pages", "runs_by_profile")
-    assert set(runs) == set(profile_ids)
-    assert {pid: entry["ingestion_run_id"] for pid, entry in runs.items()} == {
-        "adrd": "run_for_adrd",
-        **{pid: f"run_for_{pid}" for pid in profile_ids if pid != "adrd"},
-    }, (
-        "each profile's entry must carry its own run: a mis-keyed fan-out report is "
-        "how one profile silently ages behind a green UI"
-    )
+    assert seen == [
+        {
+            "pid": "full_catalog",
+            "full": True,
+            "pages": 7,
+            "incremental_refresh": False,
+            "require_silver": False,
+        }
+    ]
+    run = _materialization_payload(result, "ctg_raw_pages", "registry_run")
+    assert run["profile"] == "full_catalog"
+    assert run["ingestion_run_id"] == "run_for_registry"
 
 
-def test_silver_asset_transforms_every_profile(project_root_tmp, monkeypatch) -> None:
-    """`profile=` is how run_transform picks its bronze tree. Called bare it
-    re-transforms ADRD and reports success for NSCLC."""
+def test_silver_asset_derives_every_preset(project_root_tmp, monkeypatch) -> None:
+    """Each refreshable preset is derived from the one registry-wide profile;
+    called with the wrong profile it would re-derive ADRD and report NSCLC."""
     from src.profiles import get_registry
 
     _patch_quiet_bronze(monkeypatch)
@@ -471,19 +427,19 @@ def test_silver_asset_transforms_every_profile(project_root_tmp, monkeypatch) ->
         "oncology_nsclc": ["20260904T120000Z_abc12346", "20260904T120000Z_abc12347"],
     }
 
-    def fake_run_transform(run_id=None, force=False, profile=None):
-        pid = profile.profile_id if profile else "<default>"
+    def fake_derive(registry_profile, preset):
+        assert registry_profile.profile_id == "full_catalog"
+        pid = preset.profile_id
         seen.append(pid)
         return list(processed.get(pid, []))
 
-    monkeypatch.setattr("src.orchestration.assets.silver.run_transform", fake_run_transform)
+    monkeypatch.setattr("src.orchestration.assets.silver.derive_preset_runs", fake_derive)
     result = materialize(
         assets=[ctg_raw_pages, silver_entities],
         run_config={"ops": {"ctg_raw_pages": {"config": IngestParams().model_dump()}}},
     )
     assert result.success
     assert seen == [p.profile_id for p in get_registry().refreshable()]
-    assert "<default>" not in seen
     # Bronze pins its scope with this set; without the same pin here the line
     # above is built with the very expression the asset loops, so a registry that
     # leaked the ingest_only profile would keep this test green.
@@ -513,10 +469,10 @@ def test_bronze_silver_check_passes_on_consistent_state(project_root_tmp, monkey
     _seed_reconcilable_state()
     _patch_quiet_bronze(monkeypatch)
 
-    def fake_run_transform(run_id=None, force=False, profile=None):
+    def fake_derive(registry_profile, preset):
         return ["20260904T120000Z_abc12345"]
 
-    monkeypatch.setattr("src.orchestration.assets.silver.run_transform", fake_run_transform)
+    monkeypatch.setattr("src.orchestration.assets.silver.derive_preset_runs", fake_derive)
     result = materialize_with_checks(
         assets=[ctg_raw_pages, silver_entities],
         asset_checks=[bronze_silver_reconciliation],
@@ -529,10 +485,10 @@ def test_bronze_silver_check_passes_on_consistent_state(project_root_tmp, monkey
 def test_bronze_silver_check_fails_when_silver_missing(project_root_tmp, monkeypatch) -> None:
     _patch_quiet_bronze(monkeypatch)
 
-    def fake_run_transform(run_id=None, force=False, profile=None):
+    def fake_derive(registry_profile, preset):
         return ["20260904T120000Z_abc12345"]
 
-    monkeypatch.setattr("src.orchestration.assets.silver.run_transform", fake_run_transform)
+    monkeypatch.setattr("src.orchestration.assets.silver.derive_preset_runs", fake_derive)
     result = materialize_with_checks(
         assets=[ctg_raw_pages, silver_entities],
         asset_checks=[bronze_silver_reconciliation],
@@ -587,7 +543,7 @@ def test_manifest_integrity_checks_each_profiles_own_tree(project_root_tmp, monk
 
     manifest = _success_manifest()
 
-    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None):
+    def fake_run_ingestion(full_refresh=False, max_pages=None, config=None, **_):
         _write_manifest_for_every_profile(manifest)
         return manifest
 
@@ -599,8 +555,9 @@ def test_manifest_integrity_checks_each_profiles_own_tree(project_root_tmp, monk
     )
     evaluation = check_evaluation(result, "manifest_integrity")
     assert evaluation is not None and evaluation.passed
-    profiles = get_registry().refreshable()
-    assert len(profiles) >= 2, "a one-profile tree cannot show tree selection"
+    registry = get_registry()
+    profiles = [registry.registry_wide(), *registry.refreshable()]
+    assert len(profiles) >= 3, "a one-profile tree cannot show tree selection"
     assert evaluation.metadata["profiles_checked"].value == len(profiles)
     details = evaluation.metadata["details"].value
     for index, indication_profile in enumerate(profiles):
@@ -630,10 +587,10 @@ def test_bronze_silver_gate_blames_the_profile_whose_data_is_short(
     assert len(run_ids) >= 2, "the victim must differ from the tree a collapsed gate reads"
     _patch_quiet_bronze(monkeypatch)
 
-    def fake_run_transform(run_id=None, force=False, profile=None):
+    def fake_derive(registry_profile, preset):
         return []
 
-    monkeypatch.setattr("src.orchestration.assets.silver.run_transform", fake_run_transform)
+    monkeypatch.setattr("src.orchestration.assets.silver.derive_preset_runs", fake_derive)
     victim = get_registry().refreshable()[-1]
     victim_run = run_ids[victim.profile_id]
     short_silver = victim.config.paths.silver / "silver_trials" / f"run_id={victim_run}.parquet"

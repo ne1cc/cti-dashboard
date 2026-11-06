@@ -615,6 +615,64 @@ def test_prune_all_reaches_every_profile_including_ingest_only(tmp_path, monkeyp
     assert len(list(catalog.config.paths.bronze_manifests.glob("manifest_*.json"))) == horizon
 
 
+class _PresetRegistry(_FakeRegistry):
+    def __init__(self, profiles: list, presets: list) -> None:
+        super().__init__(profiles)
+        self._presets = presets
+
+    def refreshable(self) -> list:
+        return list(self._presets)
+
+
+def _registry_with_derivations(tmp_path, monkeypatch, derived_from: list[str]):
+    """Three registry runs (no silver of their own) and an adrd preset that derived
+    from `derived_from`; returns (registry, registry-wide profile)."""
+    from src.profiles import load_profile
+
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(tmp_path))
+    _temp_config_tree(tmp_path)
+    adrd = load_profile(ADRD_PROFILE_YAML)
+    catalog = load_profile(FULL_CATALOG_PROFILE_YAML)
+    registry_ids = [f"2026090{i}T000000Z_reg{i:08d}" for i in range(1, 4)]
+    for run_id in registry_ids:
+        _mk_run(catalog.config, run_id, with_silver=False)
+    for n, source in enumerate(derived_from):
+        derived_id = f"2026091{n}T000000Z_pre{n:08d}"
+        _mk_run(adrd.config, derived_id)
+        manifest_path = adrd.config.paths.bronze_manifests / f"manifest_{derived_id}.json"
+        manifest = IngestionManifest.model_validate_json(manifest_path.read_text())
+        write_manifest(
+            adrd.config.paths.bronze_manifests,
+            manifest.model_copy(update={"source_run_id": registry_ids[source]}),
+        )
+    return _PresetRegistry([adrd, catalog], [adrd]), catalog
+
+
+def test_registry_pages_are_pruned_once_every_preset_derived_from_them(tmp_path, monkeypatch):
+    """A registry run has no silver of its own, so the silver-absent guard alone
+    kept its ~5 GB of pages for the snapshot depth (3 runs) instead of 1."""
+    registry, catalog = _registry_with_derivations(tmp_path, monkeypatch, derived_from=[0, 1, 2])
+
+    prune_all(registry)
+
+    pages = sorted(p.name for p in catalog.config.paths.bronze_api_responses.iterdir())
+    assert pages == ["run_id=20260903T000000Z_reg00000003"]
+    assert len(list(catalog.config.paths.bronze_manifests.glob("manifest_*.json"))) == 3
+
+
+def test_registry_pages_stay_until_every_preset_derived_from_them(tmp_path, monkeypatch):
+    """Run 2 was never derived: pruning its pages would make it unrecoverable."""
+    registry, catalog = _registry_with_derivations(tmp_path, monkeypatch, derived_from=[0])
+
+    prune_all(registry)
+
+    pages = sorted(p.name for p in catalog.config.paths.bronze_api_responses.iterdir())
+    assert pages == [
+        "run_id=20260902T000000Z_reg00000002",
+        "run_id=20260903T000000Z_reg00000003",
+    ]
+
+
 def test_prune_all_refuses_an_empty_registry(tmp_path, monkeypatch):
     """Same posture as orchestrate and init-data-dirs: an empty registry is a
     mis-mounted config/profiles/, not a prune that landed."""

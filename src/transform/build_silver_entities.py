@@ -16,8 +16,10 @@ text rows fall back (mapping_source text_fallback).
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
@@ -25,7 +27,7 @@ import pyarrow.parquet as pq
 from src.config import ProjectConfig, get_config
 from src.ingest.snapshot_manifest import IngestionManifest, load_manifests
 from src.transform.export_parquet import DEFAULT_FLUSH_ROWS, SilverRunWriter
-from src.transform.flatten_studies import flatten_study, iter_bronze_study_records
+from src.transform.flatten_studies import dig, flatten_study, iter_bronze_study_records
 from src.transform.normalize_conditions import get_taxonomy
 from src.transform.normalize_locations import get_geography_rules
 from src.transform.silver_stats import (
@@ -78,6 +80,18 @@ LEGACY_ENTITY_NAMES = (
     "silver_trial_locations",
     "silver_trial_outcomes",
 )
+
+
+@dataclass(frozen=True)
+class PresetSource:
+    """Where a preset's silver run is selected from (issue #147).
+
+    A preset has no pages of its own: its run reads the registry-wide run's
+    pages in `run_dir` and keeps the studies `select` accepts.
+    """
+
+    run_dir: Path
+    select: Callable[[dict[str, Any]], bool]
 
 
 class BronzeRebuildMismatch(ValueError):
@@ -254,10 +268,22 @@ def build_silver_for_run(
     manifest: IngestionManifest,
     cfg: ProjectConfig,
     profile: IndicationProfile | None = None,
+    source: PresetSource | None = None,
 ) -> dict[str, int]:
+    """Flatten one bronze run into the profile's silver entity files.
+
+    Contract:
+    - Returns per-entity row counts; writes silver + transform stats for the run.
+    - With `source`, the pages are the registry-wide run's and only the studies
+      `source.select` accepts are kept. `manifest.record_count` is then the
+      registry run's total (checked against the pages scanned); the transform
+      stats record the selected count as the run's `manifest_record_count`.
+    - Raises FileNotFoundError for missing pages, BronzeRebuildMismatch before
+      any write when a rebuild would shrink retained silver.
+    """
     log = setup_logging()
     run_id = manifest.ingestion_run_id
-    run_dir = cfg.paths.bronze_api_responses / f"run_id={run_id}"
+    run_dir = source.run_dir if source else cfg.paths.bronze_api_responses / f"run_id={run_id}"
     if not run_dir.exists():
         raise FileNotFoundError(f"Bronze pages missing for run {run_id}: {run_dir}")
 
@@ -285,6 +311,11 @@ def build_silver_for_run(
     duplicate_count = 0
     skipped_no_nct = 0
     study_count = 0
+    scanned = 0
+    # NCT ids of every study a preset pass scanned, selected or not: an incremental
+    # registry run that touched a study replaces its old row, even when the study
+    # no longer matches the preset (a dropped row must not be carried forward).
+    scanned_nct_ids: set[str] = set()
 
     # An incremental-refresh run holds changed studies only; silver must still
     # describe the complete registry state, so unchanged rows are carried
@@ -304,6 +335,12 @@ def build_silver_for_run(
     writer = SilverRunWriter(run_id, cfg.paths.silver, flush_rows=FLUSH_ROWS)
     try:
         for study, provenance in iter_bronze_study_records(run_dir):
+            scanned += 1
+            if source is not None:
+                if nct := dig(study, "protocolSection", "identificationModule", "nctId"):
+                    scanned_nct_ids.add(nct)
+                if not source.select(study):
+                    continue
             rows = flatten_study(
                 study,
                 run_id,
@@ -326,13 +363,25 @@ def build_silver_for_run(
             study_count += 1
             if study_count % PROGRESS_EVERY == 0:
                 log.info("Run {}: {} studies streamed.", run_id, study_count)
+        if source is not None:
+            # A lost registry page would silently shrink every preset, so the
+            # scan must reproduce the registry manifest before anything is
+            # written; the selected count then becomes this run's own total.
+            if scanned != manifest.record_count:
+                raise BronzeRebuildMismatch(
+                    f"Run {run_id}: registry run pages hold {scanned} studies but its "
+                    f"manifest records {manifest.record_count}; nothing was written."
+                )
+            manifest = manifest.model_copy(
+                update={"record_count": study_count + duplicate_count + skipped_no_nct}
+            )
         carried_counts: dict[str, int] = {}
         if carry_from is not None:
             carried_counts = _carry_forward_rows(
                 writer,
                 cfg,
                 carry_from,
-                {key[0] for key in seen_dedup_keys},
+                {key[0] for key in seen_dedup_keys} | scanned_nct_ids,
                 current_run_id=run_id,
                 snapshot_ts=snapshot_ts,
             )

@@ -3,6 +3,11 @@ profile:
   display_name: Prostate Cancer
   ingest_only: false
   taxonomy: config/condition_taxonomy_prostate.yml
+# Preset over the registry-wide run (issue #147): studies whose CTG-derived MeSH
+# terms (direct or ancestor) include one of these descriptor labels belong to this profile.
+preset:
+  mesh_terms:
+    - "Prostatic Neoplasms"
 api:
   base_url: https://clinicaltrials.gov/api/v2
   studies_endpoint: /studies

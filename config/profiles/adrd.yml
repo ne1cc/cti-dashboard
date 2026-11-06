@@ -19,6 +19,14 @@ profile:
   ingest_only: false
   taxonomy: config/condition_taxonomy.yml    # path relative to project root
 
+# Preset over the registry-wide run (issue #147): studies whose CTG-derived MeSH
+# terms (direct or ancestor) include one of these descriptor labels belong to this profile.
+preset:
+  mesh_terms:
+    - "Alzheimer Disease"
+    - "Dementia"
+    - "Lewy Body Disease"
+    - "Cognitive Dysfunction"
 api:
   base_url: https://clinicaltrials.gov/api/v2
   studies_endpoint: /studies
@@ -44,6 +52,7 @@ api:
     - protocolSection.outcomesModule
     - resultsSection.participantFlowModule
     - resultsSection.baselineCharacteristicsModule
+    - derivedSection.conditionBrowseModule  # MeSH terms: the registry run's preset selector (#147)
     - hasResults
   # No published numeric rate limit (checked 2026-10-30); 1.2s ≈ 50 req/min,
   # under the community consensus, with 429 backoff as backstop.

@@ -20,6 +20,11 @@ profile:
   ingest_only: false
   taxonomy: config/condition_taxonomy_nsclc.yml   # path relative to project root
 
+# Preset over the registry-wide run (issue #147): studies whose CTG-derived MeSH
+# terms (direct or ancestor) include one of these descriptor labels belong to this profile.
+preset:
+  mesh_terms:
+    - "Carcinoma, Non-Small-Cell Lung"
 api:
   base_url: https://clinicaltrials.gov/api/v2
   studies_endpoint: /studies

@@ -50,6 +50,7 @@ from loguru import logger
 
 from src.config import PathsConfig, RetentionConfig
 from src.ingest.snapshot_manifest import load_manifests
+from src.profiles import REGISTRY_PROFILE_ID
 
 if TYPE_CHECKING:
     from src.profiles import IndicationProfile, ProfileRegistry
@@ -111,11 +112,30 @@ def _prunable_run_ids(run_ids: Iterable[str], *, profile_id: str) -> list[str]:
     return safe
 
 
+def _runs_derived_by_every_preset(registry: ProfileRegistry) -> set[str]:
+    """Registry-wide run ids that every refreshable preset has derived silver from.
+
+    A registry run has no silver of its own (a preset's derived run gets a new run
+    id), so this is the registry profile's stand-in for "silver exists": once
+    every preset derived from a run, its raw pages are no longer needed.
+    """
+    derived = [
+        {
+            m.source_run_id
+            for m in load_manifests(preset.config.paths.bronze_manifests)
+            if m.status == "success" and m.source_run_id
+        }
+        for preset in registry.refreshable()
+    ]
+    return set.intersection(*derived) if derived else set()
+
+
 def prune_profile(
     profile: IndicationProfile,
     retention: RetentionConfig | None = None,
     *,
     dry_run: bool = False,
+    registry: ProfileRegistry | None = None,
 ) -> list[PrunedRun]:
     cfg = retention or profile.config.retention
     # Refused ahead of the coherence comparison below, because that comparison
@@ -166,6 +186,12 @@ def prune_profile(
         p.name.split("=", 1)[1].removesuffix(".parquet")
         for p in paths.silver.glob("*/run_id=*.parquet")
     }
+
+    # The registry-wide profile never writes silver; a run counts as having it
+    # once every preset derived from it. Without `registry` the guard keeps the
+    # pages (safe direction).
+    if registry is not None and profile.profile_id == REGISTRY_PROFILE_ID:
+        silver_runs |= _runs_derived_by_every_preset(registry)
 
     snapshot_victims = set(runs_to_prune(success_ids, cfg.snapshot_runs_to_keep))
     bronze_victims = set(runs_to_prune(success_ids, cfg.bronze_runs_to_keep))
@@ -304,7 +330,7 @@ def prune_all(registry: ProfileRegistry | None = None, *, dry_run: bool = False)
     removed: list[PrunedRun] = []
     for profile in profiles:
         try:
-            removed += prune_profile(profile, dry_run=dry_run)
+            removed += prune_profile(profile, dry_run=dry_run, registry=registry)
         except RetentionError:
             raise
         except Exception as exc:  # a missing dir on one profile must not stop the rest
