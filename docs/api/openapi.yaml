@@ -551,6 +551,12 @@ paths:
           $ref: '#/components/responses/429TooManyRequests'
         '500':
           $ref: '#/components/responses/500InternalError'
+        '503':
+          description: No verified successful refresh marker (missing, malformed, or latest attempt failed).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
 
 components:
   headers:
@@ -1806,10 +1812,14 @@ components:
 
     MetaFreshnessResponse:
       type: object
+      description: |
+        Built only from the refresh success marker (`.freshness.json`). Fields the marker does not
+        record (schema baseline, active-recruiting counts, quality percentages) are not exposed.
       required:
         - profiles
         - system_status
-        - data_dictionary_version
+        - last_success_at_utc
+        - reconciliation
         - checked_at_utc
       properties:
         profiles:
@@ -1818,14 +1828,29 @@ components:
             $ref: '#/components/schemas/ProfileFreshness'
         system_status:
           type: string
+          description: HEALTHY when the latest attempt succeeded and captures are fresh; STALE when a capture exceeds the age limit; DEGRADED when the latest attempt is still running.
           enum:
             - HEALTHY
             - STALE
             - DEGRADED
           example: 'HEALTHY'
-        data_dictionary_version:
+        last_success_at_utc:
           type: string
-          example: '2026-10-24'
+          format: date-time
+          description: When the latest verified refresh pipeline completed.
+          example: '2026-10-24T14:30:00Z'
+        reconciliation:
+          type: object
+          required:
+            - checks_total
+            - checks_failed
+          properties:
+            checks_total:
+              type: integer
+              example: 10
+            checks_failed:
+              type: integer
+              example: 0
         checked_at_utc:
           type: string
           format: date-time
@@ -1841,59 +1866,42 @@ components:
         - latest_ingestion_run_id
         - source_api
         - source_api_version
-        - schema_baseline_version
         - total_studies_tracked
-        - active_recruiting_studies
-        - last_reconciliation_status
-        - quality_summary
+        - row_counts
       properties:
         indication_profile_id:
           type: string
           example: 'adrd'
         latest_snapshot_id:
           type: string
-          example: '2026-07-31T140000_3f5a473e'
+          example: '20261020T120000Z_adrd'
         latest_snapshot_date:
           type: string
           format: date
-          example: '2026-07-31'
+          example: '2026-10-20'
         latest_snapshot_timestamp_utc:
           type: string
           format: date-time
-          example: '2026-07-31T14:00:00Z'
+          example: '2026-10-20T12:00:00Z'
         latest_ingestion_run_id:
           type: string
-          example: '2026-07-31T140000_3f5a473e'
+          example: '20261020T120000Z_adrd'
         source_api:
           type: string
           example: 'ClinicalTrials.gov API v2'
         source_api_version:
           type: string
-          example: 'v2.0'
-        schema_baseline_version:
-          type: string
-          example: '2026-07-24'
+          example: 'v2'
         total_studies_tracked:
           type: integer
+          description: Rows in `dim_trial` for this profile.
           example: 1482
-        active_recruiting_studies:
-          type: integer
-          example: 388
-        last_reconciliation_status:
-          type: string
-          example: 'PASS'
-        quality_summary:
-          $ref: '#/components/schemas/QualitySummary'
-
-    QualitySummary:
-      type: object
-      required:
-        - ok_records_percent
-        - quarantined_records_count
-      properties:
-        ok_records_percent:
-          type: number
-          example: 99.8
-        quarantined_records_count:
-          type: integer
-          example: 3
+        row_counts:
+          type: object
+          description: Warehouse mart row counts for this profile, keyed by table name.
+          additionalProperties:
+            type: integer
+          example:
+            dim_trial: 1482
+            fct_trial_snapshot: 1482
+            mart_trial_similarity: 900

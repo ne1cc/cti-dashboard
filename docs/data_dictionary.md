@@ -262,7 +262,7 @@ lineage is in [source-field-map.md](api/source-field-map.md).
 | `/v1/conditions` | GET | MeSH condition ontology and synonyms | `ConditionsListResponse`, `ConditionNode` | Autocomplete prefix matching and MeSH tree branch browsing. |
 | `/v1/trials/{nct_id}/related` | GET | NCT ID × candidate comparable study (top-25) | `RelatedTrialsResponse`, `RelatedTrialItem`, `ComparabilityFactors` | Deterministic comparability scoring from `mart_trial_similarity`; factor weight disclosure; explicit non-clinical disclaimer. |
 | `/v1/geo/access` | GET | State × condition group access snapshot | `GeoAccessResponse`, `TravelBurdenSummary`, `RegionalSiteCount` | Site density, sponsor concentration (HHI), and travel burden analytics. |
-| `/v1/meta/freshness` | GET | System and per-profile ingestion status | `MetaFreshnessResponse`, `ProfileFreshness`, `QualitySummary` | Ingestion run IDs, source versions, and data quality pass rates. |
+| `/v1/meta/freshness` | GET | System and per-profile ingestion status | `MetaFreshnessResponse`, `ProfileFreshness` | Ingestion run IDs, source version, mart row counts, and reconciliation result from the refresh marker. |
 
 ### Contract Rules
 1. **Error Standard**: All 4xx and 5xx responses strictly adhere to RFC 7807 Problem Details (`application/problem+json`).

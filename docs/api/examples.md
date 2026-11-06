@@ -558,41 +558,41 @@ Host: api.cti.example.org
   "profiles": [
     {
       "indication_profile_id": "adrd",
-      "latest_snapshot_id": "2026-07-31T140000_3f5a473e",
-      "latest_snapshot_date": "2026-07-31",
-      "latest_snapshot_timestamp_utc": "2026-07-31T14:00:00Z",
-      "latest_ingestion_run_id": "2026-07-31T140000_3f5a473e",
+      "latest_snapshot_id": "20261020T120000Z_adrd",
+      "latest_snapshot_date": "2026-10-20",
+      "latest_snapshot_timestamp_utc": "2026-10-20T12:00:00Z",
+      "latest_ingestion_run_id": "20261020T120000Z_adrd",
       "source_api": "ClinicalTrials.gov API v2",
-      "source_api_version": "v2.0",
-      "schema_baseline_version": "2026-07-24",
+      "source_api_version": "v2",
       "total_studies_tracked": 1482,
-      "active_recruiting_studies": 388,
-      "last_reconciliation_status": "PASS",
-      "quality_summary": {
-        "ok_records_percent": 99.8,
-        "quarantined_records_count": 3
+      "row_counts": {
+        "dim_trial": 1482,
+        "fct_trial_snapshot": 1482,
+        "mart_trial_similarity": 900
       }
     },
     {
       "indication_profile_id": "oncology_nsclc",
-      "latest_snapshot_id": "2026-07-31T150000_9b1e5275",
-      "latest_snapshot_date": "2026-07-31",
-      "latest_snapshot_timestamp_utc": "2026-07-31T15:00:00Z",
-      "latest_ingestion_run_id": "2026-07-31T150000_9b1e5275",
+      "latest_snapshot_id": "20261020T120000Z_oncology_nsclc",
+      "latest_snapshot_date": "2026-10-20",
+      "latest_snapshot_timestamp_utc": "2026-10-20T12:00:00Z",
+      "latest_ingestion_run_id": "20261020T120000Z_oncology_nsclc",
       "source_api": "ClinicalTrials.gov API v2",
-      "source_api_version": "v2.0",
-      "schema_baseline_version": "2026-07-24",
+      "source_api_version": "v2",
       "total_studies_tracked": 840,
-      "active_recruiting_studies": 210,
-      "last_reconciliation_status": "PASS",
-      "quality_summary": {
-        "ok_records_percent": 100.0,
-        "quarantined_records_count": 0
+      "row_counts": {
+        "dim_trial": 840,
+        "fct_trial_snapshot": 840,
+        "mart_trial_similarity": 0
       }
     }
   ],
   "system_status": "HEALTHY",
-  "data_dictionary_version": "2026-10-24",
+  "last_success_at_utc": "2026-10-24T14:30:00Z",
+  "reconciliation": {
+    "checks_total": 10,
+    "checks_failed": 0
+  },
   "checked_at_utc": "2026-10-24T14:50:00Z"
 }
 ```
