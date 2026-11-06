@@ -1638,3 +1638,177 @@ models:
       - name: denominator_label
         data_type: VARCHAR
         tests: [not_null]
+
+  - name: mart_participation_prevalence_ratio
+    description: >
+      Participation-to-prevalence ratio (issue #75): a group's share of reported baseline
+      participants divided by its share of the condition's disease burden, per profile,
+      MeSH condition, 5-year completion window, dimension (sex, ethnicity, race) and group.
+      A ratio exists only where condition_burden_map and burden_demographic_share both have a
+      comparable row; every other row is participant composition only. Cells with fewer than
+      3 reporting trials are suppressed and cells with fewer than 5 carry low_n_flag. Describes
+      a difference between participation and burden; implies nothing about intent, quotas,
+      causation or sponsor quality.
+    contract:
+      enforced: true
+    columns:
+      - name: ratio_key
+        data_type: VARCHAR
+        description: >
+          md5 of profile, mesh_id, window, dimension and group; the grain of the model.
+        tests: [unique, not_null]
+      - name: indication_profile_id
+        data_type: VARCHAR
+        description: >
+          Indication profile whose latest run produced the row.
+        tests: [not_null]
+      - name: mesh_id
+        data_type: VARCHAR
+        description: >
+          MeSH condition node (direct term or registry ancestor).
+        tests: [not_null]
+      - name: condition_label
+        data_type: VARCHAR
+        description: >
+          Condition name from dim_condition.
+      - name: window_start_year
+        data_type: BIGINT
+        description: >
+          First completion year of the 5-year window.
+        tests: [not_null]
+      - name: window_end_year
+        data_type: BIGINT
+        description: >
+          Last completion year of the window.
+      - name: time_window
+        data_type: VARCHAR
+        description: >
+          Window label, for example 2020-2024.
+        tests: [not_null]
+      - name: dimension
+        data_type: VARCHAR
+        description: >
+          sex, ethnicity or race.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [sex, ethnicity, race]
+      - name: group_label
+        data_type: VARCHAR
+        description: >
+          Group within the dimension (Female, Hispanic or Latino, White, ...). Unknown and unmapped categories are not groups.
+        tests: [not_null]
+      - name: trials_in_window_count
+        data_type: BIGINT
+        description: >
+          Completed trials with posted results for the condition and window, whether or not they report this variable.
+        tests: [not_null]
+      - name: trials_reporting_dimension_count
+        data_type: BIGINT
+        description: >
+          Of those, trials reporting the dimension in groups the mart can classify.
+        tests: [not_null]
+      - name: reporting_trials_share
+        data_type: DOUBLE
+        description: >
+          trials_reporting_dimension_count / trials_in_window_count.
+      - name: group_trial_count
+        data_type: BIGINT
+        description: >
+          Trials contributing participants to this group (trace via contributing_nct_ids).
+        tests: [not_null]
+      - name: group_participants
+        data_type: BIGINT
+        description: >
+          Participants in the group; null when suppressed_flag.
+      - name: dimension_participants
+        data_type: BIGINT
+        description: >
+          Participants across the dimension's classified groups; null when suppressed_flag.
+      - name: participation_share
+        data_type: DOUBLE
+        description: >
+          group_participants / dimension_participants; null when suppressed_flag.
+      - name: participation_share_ci_low
+        data_type: DOUBLE
+        description: >
+          95% Wilson lower bound of participation_share (participants treated as independent).
+      - name: participation_share_ci_high
+        data_type: DOUBLE
+        description: >
+          95% Wilson upper bound of participation_share.
+      - name: burden_share
+        data_type: DOUBLE
+        description: >
+          Group's share of estimated cases from burden_demographic_share; null without a comparable burden row.
+      - name: participation_prevalence_ratio
+        data_type: DOUBLE
+        description: >
+          participation_share / burden_share; null when suppressed or without a comparable burden row.
+      - name: ratio_ci_low
+        data_type: DOUBLE
+        description: >
+          participation_share_ci_low / burden_share (burden share treated as fixed).
+      - name: ratio_ci_high
+        data_type: DOUBLE
+        description: >
+          participation_share_ci_high / burden_share.
+      - name: low_n_flag
+        data_type: BOOLEAN
+        description: >
+          Fewer than 5 trials report the dimension (guardrail n < 5 rule).
+        tests: [not_null]
+      - name: suppressed_flag
+        data_type: BOOLEAN
+        description: >
+          Fewer than 3 trials report the dimension; participant counts, shares and ratio are withheld.
+        tests: [not_null]
+      - name: burden_denominator_available
+        data_type: BOOLEAN
+        description: >
+          True only when condition_burden_map confirms a source and burden_demographic_share has this dimension and group.
+        tests: [not_null]
+      - name: comparison_basis
+        data_type: VARCHAR
+        description: >
+          participation_vs_burden or participant_composition_only.
+        tests: [not_null]
+      - name: burden_source_id
+        data_type: VARCHAR
+        description: >
+          Key into condition_burden_map and burden_demographic_share.
+      - name: burden_source
+        data_type: VARCHAR
+        description: >
+          Burden source name.
+      - name: burden_measure
+        data_type: VARCHAR
+        description: >
+          What the burden counts (for example average annual new cases).
+      - name: burden_vintage
+        data_type: VARCHAR
+        description: >
+          Burden source release or period; applies to the whole table, not each window.
+      - name: burden_geography
+        data_type: VARCHAR
+        description: >
+          Geography of the burden shares (national for the committed extract).
+      - name: burden_group_annual_cases
+        data_type: INTEGER
+        description: >
+          The burden_demographic_share row behind burden_share: the group's estimated cases.
+      - name: denominator_label
+        data_type: VARCHAR
+        description: >
+          Plain-language statement of the denominator, or that none is available.
+        tests: [not_null]
+      - name: contributing_nct_ids
+        data_type: VARCHAR
+        description: >
+          Comma-separated NCT IDs behind the row.
+        tests: [not_null]
+      - name: interpretation_note
+        data_type: VARCHAR
+        description: >
+          Fixed wording guard that travels with every row.
+        tests: [not_null]

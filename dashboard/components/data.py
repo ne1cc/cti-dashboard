@@ -367,6 +367,26 @@ def access_rates(profile_id: str) -> pd.DataFrame:
     )
 
 
+def participation_prevalence(profile_id: str) -> pd.DataFrame:
+    """Fetch participation-to-prevalence rows for one profile.
+
+    Args:
+        profile_id: Indication profile id to scope the rows to.
+
+    Returns:
+        pd.DataFrame: Rows of ``mart_participation_prevalence_ratio`` (profile x MeSH
+            condition x completion window x dimension x group); empty when the mart
+            is not built yet.
+    """
+    if not _table_exists("mart_participation_prevalence_ratio"):
+        return pd.DataFrame()
+    return query(
+        "select * from main_marts.mart_participation_prevalence_ratio"
+        " where indication_profile_id = ?",
+        [profile_id],
+    )
+
+
 def site_overlap(profile_id: str) -> pd.DataFrame:
     """Fetch trial site overlap metrics for one profile's latest captured date.
 

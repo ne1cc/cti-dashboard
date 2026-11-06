@@ -131,6 +131,37 @@ states with no listing for the condition are absent.
 Neither rate measures patient access or clinical need. Sources, vintages,
 licences and per-family limits are in `docs/burden_sources.md`.
 
+## Participation-to-prevalence ratio (`mart_participation_prevalence_ratio`, Issue #75)
+Grain: profile × MeSH node × 5-year completion window × dimension (`sex`,
+`ethnicity`, `race`) × group. Scope: COMPLETED trials with posted results whose
+completion date falls in the window; participants come from the baseline
+characteristics counts of Issue #74, summed over arms.
+
+- `participation_share` = group participants ÷ participants classified in the
+  dimension. Participants of unknown or unmapped category are left out of the
+  denominator. A "Total"/"Overall" group is ignored when the trial also reports
+  its arms, and only the first measure per dimension is read.
+- `burden_share` = the group's average annual cases ÷ cases over the same groups
+  (`burden_demographic_share` seed). Present only when `condition_burden_map`
+  confirms a source and the seed has the same dimension and group.
+- `participation_prevalence_ratio` = `participation_share` ÷ `burden_share`; 1.0
+  means the two shares are equal. `ratio_ci_low`/`ratio_ci_high` divide the 95%
+  Wilson interval on `participation_share` by the fixed `burden_share`, so they
+  treat participants as independent and ignore trial-to-trial variation: read
+  them as a floor on the uncertainty.
+- `reporting_trials_share` = trials reporting the dimension ÷ completed trials
+  with results in the window.
+- Small cells: `suppressed_flag` (< 3 reporting trials) nulls participant counts,
+  shares and ratio; `low_n_flag` (< 5 reporting trials) marks values shown with
+  caution.
+- Rows without a comparable burden share (all race rows, every condition but
+  NSCLC today) have `comparison_basis = 'participant_composition_only'` and null
+  burden and ratio columns.
+- Burden vintage describes the whole seed, not each completion window.
+
+The ratio describes a difference between participation and burden. It says
+nothing about intent, quotas, causation, or sponsor quality (guardrail 11).
+
 ## Reliability metrics (`mart_data_reliability`)
 | Metric | Definition |
 |---|---|
