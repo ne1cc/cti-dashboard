@@ -122,6 +122,15 @@ Every grain in the three Gold sections below is additionally scoped by
 manifest's `profile` field through staging into every intermediate, dimension,
 fact, bridge and analytical mart.
 
+The column is kept on purpose, not as a leftover. Silver is still produced per
+profile and every preset reader binds the owning profile (issue #148), so a trial
+that belongs to two presets is one row per profile, never double-counted.
+Re-keying the marts on `nct_id` alone and dropping the column is a separate
+schema change (issue #164), not part of the shared-paths cleanup. Where the
+silver, gold and DuckDB files live is not a profile setting: it is the
+`SHARED_SILVER` / `SHARED_GOLD` / `SHARED_DUCKDB` constants in `src/profiles.py`
+(`data/silver`, `data/gold`, `data/warehouse/clinical_trials.duckdb`).
+
 ## Gold: intermediate (`main_intermediate`, views)
 | Model | Grain | Purpose |
 |---|---|---|

@@ -66,3 +66,16 @@ Limits (data and docs, no dbt change until #149):
   taxonomy group) gets its own warning on the page; one whose profile has no rows yet gets the
   "not yet refreshed" warning. A preset with only some nodes missing is not flagged: a group with no
   trials has no `dim_condition` row.
+
+## Step 4 (#149): shared paths and dead config out of YAML
+
+Re-scoped from "drop the old grain": `indication_profile_id` is still the live grain (silver is
+produced per profile and every preset reader binds the owning profile, step 3), so the column, every
+dbt model and mart, and `tests/fixtures/mart_baseline/` are untouched. Dropping the column and
+re-keying the marts on `nct_id` is #164. This step only moves the silver, gold and DuckDB paths into
+`SHARED_*` constants in `src/profiles.py`, deletes the YAML that held them, the three path keys
+every profile YAML declared and `src/profiles.py` overrode, and the `guardrails` block nothing read.
+
+| Step | Table / column | Expected difference | Why |
+|------|----------------|---------------------|-----|
+| 4 | none | none | No path value, column or row changes; `tests/test_mart_baseline.py` and `tests/test_presets.py` pass without regenerating the baseline. A live warehouse needs no rebuild. |
