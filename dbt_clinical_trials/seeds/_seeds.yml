@@ -65,6 +65,29 @@ seeds:
       - name: vintage
         tests: [not_null]
 
+  - name: county_access_context
+    description: >
+      One row per county (Issue #72): Census Gazetteer 2024 centroid, CDC/ATSDR SVI 2022
+      overall percentile rank (national, among counties) and the USDA ERS RUCA 2020
+      group holding most of the county's residents. Built by
+      src/ingest/access_context.py from the three source files. Committed subset: the
+      same counties as acs_population (DE, MD, RI, VT); widen both together.
+    columns:
+      - name: county_fips
+        tests: [not_null, unique]
+      - name: latitude
+        tests: [not_null]
+      - name: longitude
+        tests: [not_null]
+      - name: svi_rpl_themes
+        description: SVI overall percentile rank 0-1; empty when SVI did not compute one.
+      - name: ruca_group
+        tests:
+          - accepted_values:
+              values: [metropolitan, micropolitan, small_town, rural, not_coded]
+      - name: ruca_group_pop_share
+        description: Share of county residents in ruca_group; low values mean a mixed county.
+
   - name: burden_scp_lung_state
     description: >
       NCI/CDC State Cancer Profiles lung and bronchus incidence by state,
