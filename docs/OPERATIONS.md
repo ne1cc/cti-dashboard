@@ -514,7 +514,7 @@ IP: the container's run `20260905T191901Z_77632421` reported
   registry-wide pages never reach silver by accident. The dashboard does not
   blend the two: `dashboard/app.py` renders a preset selector and every read
   in `dashboard/components/data.py` takes the selected preset and filters on its
-  `registry_condition_key`s (`src/presets.py`), so trials from both presets in
+  owning profile and `registry_condition_key`s (`src/presets.py`), so trials from both presets in
   the shared `dim_trial` stay distinguishable.
   What is still single-profile by default is the manual entry point:
   `make ingest` sends the Makefile's `CONDITION` (`Alzheimer Disease`, the

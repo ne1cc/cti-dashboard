@@ -8,7 +8,7 @@ Every page renders the shared disclaimer banner via
 ## Shared components (`dashboard/components/`)
 | Module | Responsibility |
 |---|---|
-| data.py | cached read-only warehouse access; every reader takes the selected `Preset` first and scopes by `registry_condition_key`; `require_warehouse()` stops with build instructions if missing |
+| data.py | cached read-only warehouse access; every reader takes the selected `Preset` first and scopes by the preset's owning profile and `registry_condition_key`; `require_warehouse()` stops with build instructions if missing |
 | guardrails.py | disclaimer banner, snapshot-proxy note, footer |
 | filters.py | condition/state/phase sidebar multiselects with row-count caption |
 | profile.py | sidebar "Indication preset" selector (`render_preset_selector()` returns the `Preset`) with a "Default filters" caption; options come from `src/presets.py` (`config/profiles/*.yml`), not a warehouse query, so it renders before the first build |

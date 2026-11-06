@@ -36,18 +36,21 @@ measured**: a full registry pull is about 5 GB and was not run for this PR.
 A preset is a name, registry condition nodes and default filters, derived from the existing
 `config/profiles/*.yml` and its taxonomy by `src/presets.py`. Its nodes are the taxonomy's
 `group:<slug>` ids (every group plus the default group); their keys are `md5(node_id)`, the value
-dbt stores as `registry_condition_key`. Readers filter on those keys, not on `indication_profile_id`:
-condition-grain marts on `registry_condition_key`, trial-grain tables through
-`bridge_trial_condition`, and profile-grain marts through the `dim_condition` profiles that hold a
-key. Adding a preset is one YAML file (`tests/test_presets.py` proves it with a throwaway one).
+dbt stores as `registry_condition_key`. A preset also belongs to exactly one profile (its YAML id,
+`Preset.profile_id`), and every reader binds that profile as well as the keys: the key does not
+include the profile, and two profiles may share a node id, so keys alone would read both profiles'
+rows and count a shared trial twice. Condition-grain marts filter on profile and key, trial-grain
+tables on the profile's trials under those keys in `bridge_trial_condition` (plus its trials with
+no bridge row), and profile-grain marts on the profile. Adding a preset is one YAML file (`tests/test_presets.py` proves it with a throwaway one).
 `tests/test_presets.py` also holds the ADRD and NSCLC preset results to the #146 baseline, so the
 baseline is unchanged and not regenerated.
 
 | Step | Table / column | Expected difference | Why |
 |------|----------------|---------------------|-----|
-| 3 | ADRD and NSCLC dashboard results | none | The two groups' keys are disjoint, so a key scope returns exactly the profile's rows (ids and counts exact, rates within 1e-6). |
+| 3 | ADRD and NSCLC dashboard results | none | A profile-and-key scope returns exactly the profile's rows (ids and counts exact, rates within 1e-6). |
 | 3 | Sidebar | "Indication preset" list with a "Default filters" caption; the "additive / counted once" caption is gone | The caption described profile-stamped rows; a preset's nodes are not double-counted. |
 | 3 | `get_indication_profiles`, the pre-profile warehouse branch of `trial_explorer` | Removed | Presets come from config, and the key scope needs `bridge_trial_condition` and `dim_condition`. A warehouse built before the profile columns no longer renders. |
+| 3 | `refreshable_profiles()` (`dashboard/components/profile.py`) | Removed | `render_preset_selector()` reads `load_presets()`, which already lists the refreshable profiles. |
 
 Limits (data and docs, no dbt change until #149):
 
@@ -55,5 +58,11 @@ Limits (data and docs, no dbt change until #149):
   preset shares. `preset.mesh_terms` are descriptor labels and the marts carry no descriptor ids,
   so a MeSH-only preset shows data only where the marts carry its keys.
 - Profile-grain marts (reliability, transparency, audit) cannot be narrowed below the profile: a
-  preset reads every profile that holds one of its keys.
-- A trial with no conditions has no `bridge_trial_condition` row, so it is outside every preset.
+  preset reads its whole owning profile.
+- A trial with no mapped condition has no `bridge_trial_condition` row. It stays in its owning
+  profile's trial counts, Trial Explorer and sponsor landscape (as in the #146 baseline), for every
+  preset of that profile, including a narrower one, because no node excludes it.
+- A preset whose profile is in the warehouse but none of whose nodes are (a renamed or misspelled
+  taxonomy group) gets its own warning on the page; one whose profile has no rows yet gets the
+  "not yet refreshed" warning. A preset with only some nodes missing is not flagged: a group with no
+  trials has no `dim_condition` row.
