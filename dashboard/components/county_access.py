@@ -20,6 +20,8 @@ Limits:
       distance. The county seed covers only the states in ``county_access_context``.
     - Plotly hover tooltips cannot take keyboard focus; the same facts are in the table and
       the CSV below the map, which is the keyboard path.
+    - White (no open site in range) and grey (insufficient data) are flat legend entries
+      outside the Viridis scale, so neither can read as a small value.
     - shortcut: ``MIN_COUNTY_POPULATION`` is a judgement call about ACS 5-year noise, not a
       calibrated threshold; revisit it once the seed covers small counties.
 """
@@ -47,6 +49,10 @@ METRIC_POPULATION = "Population within N miles"
 METRIC_DISTANCE = "Distance to nearest open site"
 COLOR_SCALE = "Viridis"  # perceptually uniform and colour-blind safe
 INSUFFICIENT_COLOR = "#bdbdbd"
+NO_SITE_COLOR = "#ffffff"  # outside Viridis and apart from grey by luminance, so no site != low
+NO_SITE_100 = "no site within 100 mi"
+BEYOND_100_NAME = "100+ mi (no open site within 100 mi)"
+INSUFFICIENT_NAME = "Insufficient data (not zero)"
 GEOJSON = Path(__file__).resolve().parents[1] / "static" / "us_counties.geojson"
 METHODOLOGY = (
     "Straight-line (great-circle) miles from the county centroid to the nearest open site. "
@@ -152,22 +158,65 @@ def rural_gaps(frames: dict[str, pd.DataFrame]) -> pd.DataFrame:
     return merged[hit].sort_values(["state_code", "county_name"]).reset_index(drop=True)
 
 
+def _svi_label(quartile: Any) -> str:
+    return "unranked" if pd.isna(quartile) else f"Q{int(quartile)}"
+
+
+def _nearest_text(miles: Any) -> str:
+    return NO_SITE_100 if pd.isna(miles) else f"{miles:.1f} mi"
+
+
 def _hover(row: pd.Series, miles: int) -> str:
-    svi = "unranked" if pd.isna(row["svi_quartile"]) else f"Q{int(row['svi_quartile'])}"
     if row["reason"]:
         status = f"Insufficient data: {row['reason']}"
     else:
-        near = (
-            f"{row['nearest_site_miles']:.1f} mi"
-            if pd.notna(row["nearest_site_miles"])
-            else "none within 100 mi"
-        )
         status = (
-            f"Nearest open site: {near}<br>Within {miles} mi: {'yes' if row['in_range'] else 'no'}"
+            f"Nearest open site: {_nearest_text(row['nearest_site_miles'])}"
+            f"<br>Within {miles} mi: {'yes' if row['in_range'] else 'no'}"
         )
     return (
         f"{row['county_name']}, {row['state_code']}<br>Residents: {row['population']:,.0f}"
-        f"<br>RUCA: {row['ruca_group']} · SVI: {svi}<br>{status}"
+        f"<br>RUCA: {row['ruca_group']} · SVI: {_svi_label(row['svi_quartile'])}<br>{status}"
+    )
+
+
+def access_table(classified: pd.DataFrame, miles: int) -> pd.DataFrame:
+    """The hover facts as text columns: the keyboard-reachable twin of the map tooltips."""
+    insufficient = classified["reason"] != ""
+    within = np.select([insufficient, classified["in_range"]], ["insufficient data", "yes"], "no")
+    nearest = [
+        "insufficient data" if bad else _nearest_text(m)
+        for bad, m in zip(insufficient, classified["nearest_site_miles"], strict=True)
+    ]
+    return pd.DataFrame(
+        {
+            "county": classified["county_name"],
+            "state": classified["state_code"],
+            "rural-urban group (RUCA)": classified["ruca_group"],
+            "SVI quartile": classified["svi_quartile"].map(_svi_label),
+            "residents": classified["population"],
+            "nearest open site": nearest,
+            f"within {miles} mi": within,
+            "insufficient data": classified["reason"],
+        }
+    )
+
+
+def _and_join(items: list[str]) -> str:
+    return items[0] if len(items) < 2 else f"{', '.join(items[:-1])} and {items[-1]}"
+
+
+def scope_text(rows: pd.DataFrame) -> str:
+    """Coverage limit from the rows themselves: how many seeded counties, in which states."""
+    if rows.empty:
+        return (
+            "Coverage: only the seeded counties are mapped; "
+            "every other county has no data (not zero)."
+        )
+    states = sorted(rows["state_code"].dropna().unique())
+    return (
+        f"Coverage: only the {rows['county_fips'].nunique()} seeded counties in "
+        f"{_and_join(states)} are mapped; every other county and state has no data (not zero)."
     )
 
 
@@ -185,44 +234,59 @@ def county_geojson(fips: list[str]) -> dict[str, Any]:
     }
 
 
+def _flat_trace(rows: pd.DataFrame, name: str, colour: str, miles: int) -> go.Choropleth:
+    """One-colour legend entry for counties the scale cannot speak for."""
+    return go.Choropleth(
+        geojson=county_geojson(rows["county_fips"].tolist()),
+        locations=rows["county_fips"],
+        z=[0] * len(rows),
+        colorscale=[[0, colour], [1, colour]],
+        showscale=False,
+        showlegend=True,
+        name=name,
+        text=[_hover(r, miles) for _, r in rows.iterrows()],
+        hovertemplate="%{text}<extra></extra>",
+        marker_line_width=0.5,
+        marker_line_color="#444444",
+    )
+
+
 def build_figure(classified: pd.DataFrame, miles: int, metric: str) -> go.Figure:
-    """Choropleth of the chosen metric; insufficient-data counties are a separate grey trace."""
+    """Choropleth of the chosen metric with two flat legend entries beside the scale.
+
+    Counties with no open site in range (white) and counties with insufficient data (grey)
+    never take a colour from the scale, so "no site" cannot read as a small population.
+    """
     shown = classified[classified["reason"] == ""]
     gaps = classified[classified["reason"] != ""]
     by_pop = metric == METRIC_POPULATION
-    z = shown["residents_within"] if by_pop else shown["nearest_site_miles"].fillna(100.0)
-    title = f"Residents within {miles} mi" if by_pop else "Miles to nearest open site"
-    geojson = county_geojson(classified["county_fips"].tolist())
+    if by_pop:
+        has_site = shown["in_range"]
+        z, title = shown["residents_within"], f"Residents within {miles} mi"
+        name, none_name = f"Open site within {miles} mi", f"No open site within {miles} mi"
+    else:
+        has_site = shown["nearest_site_miles"].notna()
+        z, title = shown["nearest_site_miles"], "Miles to nearest open site"
+        name, none_name = "Open site within 100 mi", BEYOND_100_NAME
+    ranged = shown[has_site]
     fig = go.Figure(
         go.Choropleth(
-            geojson=geojson,
-            locations=shown["county_fips"],
-            z=z,
+            geojson=county_geojson(classified["county_fips"].tolist()),
+            locations=ranged["county_fips"],
+            z=z[has_site],
             zmin=0,
             zmax=None if by_pop else 100,
             colorscale=COLOR_SCALE,
             reversescale=not by_pop,  # nearer is brighter in both views
-            text=[_hover(r, miles) for _, r in shown.iterrows()],
+            text=[_hover(r, miles) for _, r in ranged.iterrows()],
             hovertemplate="%{text}<extra></extra>",
             colorbar={"title": {"text": title}},
-            name="Assessed counties",
+            name=name,
             marker_line_width=0.5,
         )
     )
-    fig.add_trace(
-        go.Choropleth(
-            geojson=geojson,
-            locations=gaps["county_fips"],
-            z=[0] * len(gaps),
-            colorscale=[[0, INSUFFICIENT_COLOR], [1, INSUFFICIENT_COLOR]],
-            showscale=False,
-            showlegend=True,
-            name="Insufficient data (not zero)",
-            text=[_hover(r, miles) for _, r in gaps.iterrows()],
-            hovertemplate="%{text}<extra></extra>",
-            marker_line_width=0.5,
-        )
-    )
+    fig.add_trace(_flat_trace(shown[~has_site], none_name, NO_SITE_COLOR, miles))
+    fig.add_trace(_flat_trace(gaps, INSUFFICIENT_NAME, INSUFFICIENT_COLOR, miles))
     fig.update_geos(fitbounds="locations", visible=False)
     fig.update_layout(margin={"l": 0, "r": 0, "t": 0, "b": 0}, legend={"orientation": "h"})
     return fig
@@ -260,7 +324,13 @@ def summary_text(summary: Summary, miles: int, states: list[str], vintage: str |
 
 
 def methodology_header(
-    condition: str, miles: int, metric: str, data_date: str, filters: str, summary: Summary
+    condition: str,
+    miles: int,
+    metric: str,
+    data_date: str,
+    filters: str,
+    summary: Summary,
+    scope: str,
 ) -> list[str]:
     """Comment lines that travel with the CSV."""
     return [
@@ -271,6 +341,7 @@ def methodology_header(
         f"Denominator: {summary.population:,} residents in {summary.counties} assessed "
         f"counties; {summary.insufficient} excluded as insufficient data "
         f"(population under {MIN_COUNTY_POPULATION:,} or no usable site coordinates)",
+        scope,
         f"Method: {METHODOLOGY}",
         "Blank nearest_site_miles with within_100mi=false means no open site within 100 miles.",
     ]
@@ -290,13 +361,14 @@ def to_csv(classified: pd.DataFrame, header: list[str]) -> str:
 def render_county_access(preset: Preset) -> None:
     """Draw the county section: controls, map(s), always-visible context, table and CSV."""
     st.subheader("County access to open trial sites")
-    st.info(MEANING)
     rows = data.county_access(preset)
+    scope = scope_text(rows)
+    st.info(f"{MEANING} {scope}")
     labels = sorted(rows["condition_label"].dropna().unique()) if not rows.empty else []
     if not labels:
         st.caption(
             "No county access rows for this preset yet. Rebuild the marts (`make pipeline`); "
-            "no county is shown as zero. " + METHODOLOGY
+            "no county is shown as zero. " + METHODOLOGY + " " + scope
         )
         return
     data_date = format_snapshot_date(data.county_access_data_date(preset))
@@ -342,20 +414,17 @@ def render_county_access(preset: Preset) -> None:
                 + summary_text(
                     summary, int(miles), sorted(frame["state_code"].dropna().unique()), vintage
                 )
+                + f" {scope}"
             )
             st.caption(coverage_text(frame))
-            st.dataframe(
-                classified[
-                    ["county_name", "state_code", "population", "nearest_site_miles", "reason"]
-                ].rename(columns={"reason": "insufficient data"}),
-                hide_index=True,
-                width="content",
-            )
+            st.dataframe(access_table(classified, int(miles)), hide_index=True, width="content")
             st.download_button(
                 "Download CSV",
                 to_csv(
                     classified,
-                    methodology_header(label, int(miles), metric, data_date, filters, summary),
+                    methodology_header(
+                        label, int(miles), metric, data_date, filters, summary, scope
+                    ),
                 ),
                 file_name=f"county_access_{label.lower().replace(' ', '_')}_{miles}mi.csv",
                 mime="text/csv",
@@ -368,4 +437,4 @@ def render_county_access(preset: Preset) -> None:
         st.caption("None among the counties shown (insufficient-data counties are not counted).")
     else:
         st.dataframe(gaps, hide_index=True, width="content")
-    st.caption(METHODOLOGY)
+    st.caption(f"{METHODOLOGY} {scope}")

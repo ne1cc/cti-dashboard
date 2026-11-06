@@ -9,11 +9,13 @@ quietly change.
 import csv
 import io
 import json
+import shutil
 import sys
 from pathlib import Path
 
 import pandas as pd
 import pytest
+import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "dashboard") not in sys.path:
@@ -104,21 +106,63 @@ def test_rural_gaps_compare_two_conditions():
 def test_figure_legend_and_scale_regression():
     classified = ca.classify(_frame(), 100)
     pop = ca.build_figure(classified, 100, ca.METRIC_POPULATION)
-    shown, grey = pop.data
+    shown, no_site, grey = pop.data
     assert shown.colorscale[0][1] == "#440154" and shown.colorscale[-1][1] == "#fde725"  # Viridis
     assert shown.colorbar.title.text == "Residents within 100 mi"
+    assert no_site.name == "No open site within 100 mi"
+    assert no_site.showlegend and not no_site.showscale
+    assert list(no_site.locations) == ["24001"]
     assert grey.name == "Insufficient data (not zero)"
     assert grey.showlegend and not grey.showscale
     assert list(grey.locations) == ["24999"]
     assert "Insufficient data: population under 5,000" in grey.text[0]
 
     dist = ca.build_figure(classified, 100, ca.METRIC_DISTANCE)
-    assert dist.data[0].colorbar.title.text == "Miles to nearest open site"
-    assert (dist.data[0].zmin, dist.data[0].zmax) == (0, 100)
-    assert max(dist.data[0].z) == 100  # beyond 100 miles is pinned to the scale end
-    assert "none within 100 mi" in dist.data[0].text[0]
-    only = {t.name for t in ca.build_figure(classified, 25, ca.METRIC_POPULATION).data}
-    assert only == {"Assessed counties", "Insufficient data (not zero)"}
+    scale, beyond, _ = dist.data
+    assert scale.colorbar.title.text == "Miles to nearest open site"
+    assert (scale.zmin, scale.zmax) == (0, 100)
+    assert max(scale.z) == 90.0  # nothing is drawn at 100 unless it is 100 miles away
+    assert beyond.name == "100+ mi (no open site within 100 mi)" and beyond.showlegend
+    assert list(beyond.locations) == ["24001"]
+    assert "no site within 100 mi" in beyond.text[0]
+    names = {t.name for t in ca.build_figure(classified, 25, ca.METRIC_POPULATION).data}
+    assert names == {"Open site within 25 mi", "No open site within 25 mi", grey.name}
+
+
+def test_small_in_range_county_is_not_drawn_like_a_county_with_no_site():
+    # The seeded Vermont case: a 6,000-resident county in range beside a ~800,000 metro one.
+    frame = _frame().assign(population=[60_000, 800_000, 260_000, 900, 6_000])
+    classified = ca.classify(frame, 100)
+    scale, no_site, _ = ca.build_figure(classified, 100, ca.METRIC_POPULATION).data
+    assert "24998" in scale.locations and "24998" not in no_site.locations
+    assert list(no_site.locations) == ["24001"]  # out of range: its own legend entry
+    assert no_site.colorscale[0][1] == ca.NO_SITE_COLOR
+    viridis = {c for _, c in scale.colorscale}
+    assert ca.NO_SITE_COLOR not in viridis and ca.INSUFFICIENT_COLOR not in viridis
+    assert ca.NO_SITE_COLOR != ca.INSUFFICIENT_COLOR
+
+
+def test_access_table_carries_the_hover_facts_as_text():
+    table = ca.access_table(ca.classify(_frame(), 50), 50).set_index("county")
+    assert list(table.columns) == [
+        "state", "rural-urban group (RUCA)", "SVI quartile", "residents", "nearest open site",
+        "within 50 mi", "insufficient data",
+    ]  # fmt: skip
+    allegany = table.loc["Allegany County"]
+    assert allegany["nearest open site"] == "no site within 100 mi"  # text, not an empty cell
+    assert (allegany["within 50 mi"], allegany["rural-urban group (RUCA)"]) == ("no", "rural")
+    assert (
+        allegany["SVI quartile"] == "Q2"
+        and table.loc["Unranked County", "SVI quartile"] == "unranked"
+    )
+    assert table.loc["Harford County", "nearest open site"] == "40.0 mi"
+    assert table.loc["Harford County", "within 50 mi"] == "yes"
+    tiny = table.loc["Tiny County"]
+    assert (
+        tiny["within 50 mi"] == "insufficient data"
+        and tiny["nearest open site"] == "insufficient data"
+    )
+    assert table.loc["Unranked County", "within 50 mi"] == "no"  # 90 mi is beyond 50
 
 
 def test_caption_content_regression():
@@ -138,11 +182,23 @@ def test_caption_content_regression():
     assert "not zero" in ca.MEANING
 
 
+def test_scope_text_names_states_and_county_count_from_the_data():
+    seeded = pd.concat([_frame(), _frame(label="Condition B")])  # same counties, two conditions
+    assert ca.scope_text(seeded) == (
+        "Coverage: only the 5 seeded counties in MD are mapped; "
+        "every other county and state has no data (not zero)."
+    )
+    kent = pd.DataFrame([_row("10001", "Kent County", 180_000, "metropolitan", 5.0, state="DE")])
+    two = pd.concat([_frame(), kent])
+    assert "6 seeded counties in DE and MD" in ca.scope_text(two)
+    assert "only the seeded counties" in ca.scope_text(pd.DataFrame())
+
+
 def test_csv_carries_methodology_header_and_parses():
     classified = ca.classify(_frame(), 100)
     header = ca.methodology_header(
         "Condition A", 100, ca.METRIC_DISTANCE, "Sep 1, 2026", "RUCA all; SVI all",
-        ca.summarize(classified),
+        ca.summarize(classified), ca.scope_text(_frame()),
     )  # fmt: skip
     text = ca.to_csv(classified, header)
     lines = text.splitlines()
@@ -150,6 +206,7 @@ def test_csv_carries_methodology_header_and_parses():
     assert any("Denominator: 1,150,000" in line for line in lines)
     assert any("data date: Sep 1, 2026" in line for line in lines)
     assert any("Method: Straight-line" in line for line in lines)
+    assert any("only the 5 seeded counties in MD" in line for line in lines)
     body = [line for line in lines if not line.startswith("#")]
     rows = list(csv.DictReader(io.StringIO("\n".join(body))))
     assert len(rows) == 5
@@ -204,9 +261,11 @@ def test_page_shows_context_and_compares_two_conditions(fixture_warehouse, monke
     frame = pd.concat([_frame("Condition A"), _frame("Condition B", far="small_town")])
     at = _page(monkeypatch, frame)
     assert not at.exception, at.exception
-    assert any(ca.MEANING == i.value for i in at.info)
+    scope = "only the 5 seeded counties in MD are mapped"
+    assert any(i.value.startswith(ca.MEANING) and scope in i.value for i in at.info)
     captions = [c.value for c in at.caption]
-    assert any(c.startswith("Data date:") and "Denominator:" in c for c in captions)
+    assert any(c.startswith("Data date:") and "Denominator:" in c and scope in c for c in captions)
+    assert any(c.startswith(ca.METHODOLOGY) and scope in c for c in captions)
     assert any(c.startswith("Site coverage:") for c in captions)
 
     next(s for s in at.selectbox if s.key == "county_compare").set_value("Condition B").run()
@@ -215,6 +274,8 @@ def test_page_shows_context_and_compares_two_conditions(fixture_warehouse, monke
     assert {"Condition A", "Condition B"} <= set(gaps.columns)
     allegany = gaps.set_index("county_name").loc["Allegany County"]
     assert allegany["Condition A"] == "no site within 100 mi"
+    table = next(d.value for d in at.dataframe if "within 100 mi" in d.value.columns)
+    assert "no site within 100 mi" in set(table["nearest open site"])
     csvs = [b for b in at.get("download_button") if b.key.startswith("county_csv_")]
     assert len(csvs) == 2  # one CSV per condition
 
@@ -226,7 +287,7 @@ def test_page_without_county_rows_still_explains_and_never_shows_zero(fixture_wa
         str(ROOT / "dashboard/pages/3_Geography_Trends.py"), default_timeout=60
     ).run()
     assert not at.exception, at.exception
-    assert any(ca.MEANING == i.value for i in at.info)
+    assert any(i.value.startswith(ca.MEANING) and "seeded counties" in i.value for i in at.info)
     assert any("no county is shown as zero" in c.value for c in at.caption)
 
 
@@ -236,3 +297,44 @@ def test_reader_is_profile_scoped_and_empty_mart_is_an_empty_frame(fixture_wareh
     frame = data.county_access(preset_for("adrd"))
     assert frame.empty and "mesh_id" in frame.columns
     assert data.county_access_data_date(preset_for("adrd")) is not None
+
+
+def test_reader_sql_runs_against_the_warehouse_mart(fixture_warehouse, tmp_path, monkeypatch):
+    """The reader's SQL and the component's columns, against the real mart table.
+
+    The fixture mart is empty, so a copy of the warehouse gets one row built from the
+    component's own column list. A mart column rename or a reader typo fails here, not at
+    runtime on a user's page.
+    """
+    import duckdb
+
+    from tests.preset_helpers import preset_for
+
+    copy = tmp_path / "warehouse.duckdb"
+    shutil.copyfile(data.warehouse_path(), copy)
+    with duckdb.connect(str(copy)) as con:
+        mart = "main_marts.mart_trial_access_by_geo"
+        present = {r[0] for r in con.execute(f"select * from {mart} limit 0").description}
+        assert set(COLUMNS) <= present, set(COLUMNS) - present
+        if con.execute(f"select count(*) from {mart}").fetchone()[0] == 0:
+            row = pd.DataFrame([_row("24001", "Allegany County", 60_000, "rural", None)])
+            row = row.assign(indication_profile_id=preset_for("adrd").profile_id)
+            con.register("seed_row", row)
+            columns = ", ".join(COLUMNS)
+            con.execute(f"insert into {mart} ({columns}) select {columns} from seed_row")
+    monkeypatch.setattr(data, "warehouse_path", lambda: copy)
+    st.cache_resource.clear()
+    st.cache_data.clear()
+
+    frame = data.county_access(preset_for("adrd"))
+    assert set(COLUMNS) <= set(frame.columns) and not frame.empty
+    assert set(frame["indication_profile_id"]) == {preset_for("adrd").profile_id}
+    classified = ca.classify(frame, 100)
+    ca.build_figure(classified, 100, ca.METRIC_POPULATION)
+    ca.access_table(classified, 100)
+    ca.to_csv(
+        classified,
+        ca.methodology_header(
+            "c", 100, "m", "d", "f", ca.summarize(classified), ca.scope_text(frame)
+        ),
+    )

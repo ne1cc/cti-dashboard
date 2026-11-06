@@ -113,7 +113,10 @@ miles, sorts last and is shown as "over 100 mi"). Two states are "insufficient d
 never zero: a county under 5,000 residents (`MIN_COUNTY_POPULATION`, a judgement about ACS
 5-year noise), and every county of a condition whose `coverage_confidence` is `none`
 (every ring flag would be a false "no"). Both are left out of the denominator. The map
-shows only the counties in the `county_access_context` seed.
+shows only the counties in the `county_access_context` seed; the page, its caption and the
+CSV header state the county count and states from the rows, and every other county has no
+data (not zero). A county with no open site in range (or beyond 100 miles in the distance
+view) is drawn white, outside the Viridis scale, so it is never mistaken for a small value.
 
 ## Performance
 
