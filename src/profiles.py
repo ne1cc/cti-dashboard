@@ -29,6 +29,7 @@ Adding a new indication
    taxonomy: field).
 4. Run:  python -m src.cli orchestrate --max-pages 1   (smoke test).
    Then: make orchestrate                               (full run).
+The dashboard offers the new profile as a preset (src/presets.py) with no further change.
 No Python changes required.
 """
 
