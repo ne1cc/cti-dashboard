@@ -59,6 +59,7 @@ from src.api.warehouse import (
 )
 from src.config import ApiConfig, HttpConfig
 from src.ingest.ctg_client import CTGClient
+from src.quality.freshness import status as freshness_status
 
 logger = logging.getLogger(__name__)
 if not logging.getLogger().handlers and not logger.handlers:
@@ -202,6 +203,7 @@ def apply_cache_headers_and_check_etag(
     payload_dict: dict[str, Any],
     snap_id: str,
     snap_ts: str,
+    cache_control: str = "public, max-age=300",
 ) -> Response | None:
     """Compute ETag, set response headers, and return 304 Response if client cache is fresh."""
     payload_str = json.dumps(payload_dict, sort_keys=True, separators=(",", ":"))
@@ -210,7 +212,7 @@ def apply_cache_headers_and_check_etag(
     response.headers["Data-Snapshot"] = snap_id
     response.headers["Data-Updated"] = snap_ts
     response.headers["ETag"] = etag
-    response.headers["Cache-Control"] = "public, max-age=300"
+    response.headers["Cache-Control"] = cache_control
 
     if check_etag_match(request.headers.get("if-none-match"), etag):
         return Response(status_code=304, headers=dict(response.headers))
@@ -506,6 +508,99 @@ def create_app(
             "circuit_breaker": metrics,
             "timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
+
+    @app.get("/v1/meta/freshness", tags=["Metadata"])
+    def meta_freshness(
+        request: Request,
+        response: Response,
+        indication_profile_id: str | None = Query(
+            default=None, description="Optional indication profile identifier filter."
+        ),
+    ) -> Any:
+        """Report refresh freshness from the `.freshness.json` success marker.
+
+        Contract:
+        - Returns MetaFreshnessResponse (200) for a verified marker, even when stale.
+        - Returns 503 problem when the marker is missing, malformed, unverifiable, or failed.
+        - Returns 422 problem when `indication_profile_id` is not in the marker.
+        """
+        # 1. Marker unreadable/unverified or latest attempt failed → not ready (never a 500)
+        result = freshness_status()
+        meta = result["metadata"]
+        if (
+            meta is None
+            or meta["attempt_status"] == "failed"
+            or any(e.startswith("Freshness unknown") for e in result["errors"])
+        ):
+            return create_problem_response(
+                503,
+                "Service Unavailable",
+                "No verified successful refresh is available.",
+                str(request.url),
+                code="FRESHNESS_UNAVAILABLE",
+            )
+        success = meta["last_success"]
+        profiles = success["profiles"]
+
+        # 2. Unknown profile filter → 422; a known filter drops other profiles' staleness
+        # errors from this single read, so the 503 gate above always covers what we return
+        errors = result["errors"]
+        if indication_profile_id is not None:
+            if indication_profile_id not in profiles:
+                return create_problem_response(
+                    422,
+                    "Unprocessable Entity",
+                    f"Unknown indication_profile_id '{indication_profile_id}'.",
+                    str(request.url),
+                    code="UNKNOWN_PROFILE",
+                )
+            errors = [
+                e
+                for e in errors
+                if " capture is stale " not in e or e.startswith(f"{indication_profile_id} ")
+            ]
+            profiles = {indication_profile_id: profiles[indication_profile_id]}
+
+        # 3. Verified marker with errors: running attempt → DEGRADED, otherwise only staleness
+        system_status = (
+            "HEALTHY"
+            if not errors
+            else "DEGRADED"
+            if meta["attempt_status"] != "success"
+            else "STALE"
+        )
+        payload = {
+            "profiles": [
+                {
+                    "indication_profile_id": pid,
+                    "latest_snapshot_id": cap["run_id"],
+                    "latest_snapshot_date": cap["captured_at_utc"][:10],
+                    "latest_snapshot_timestamp_utc": cap["captured_at_utc"],
+                    "latest_ingestion_run_id": cap["run_id"],
+                    "source_api": "ClinicalTrials.gov API v2",
+                    "source_api_version": success["source_api_version"],
+                    "total_studies_tracked": cap["row_counts"]["dim_trial"],
+                    "row_counts": cap["row_counts"],
+                }
+                for pid, cap in profiles.items()
+            ],
+            "system_status": system_status,
+            "last_success_at_utc": success["pipeline_completed_at_utc"],
+            "reconciliation": success["reconciliation"],
+            "checked_at_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+        newest = max(profiles.values(), key=lambda cap: cap["captured_at_utc"])
+        # Status must revalidate every time; the ETag omits the per-second checked_at_utc
+        # so If-None-Match can match while the underlying state is unchanged.
+        not_modified = apply_cache_headers_and_check_etag(
+            request,
+            response,
+            {k: v for k, v in payload.items() if k != "checked_at_utc"},
+            newest["run_id"],
+            success["pipeline_completed_at_utc"],
+            cache_control="private, no-cache",
+        )
+        return not_modified if not_modified is not None else payload
 
     @app.get("/v1/conditions", response_model=ConditionsListResponse, tags=["Conditions"])
     def list_conditions(
