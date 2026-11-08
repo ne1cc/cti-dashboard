@@ -259,6 +259,25 @@ def test_a_throwaway_preset_needs_only_a_yaml_file(
     assert len(data.priority_queue(throwaway)) == len(data.priority_queue(preset_for("adrd"))) > 0
 
 
+def test_shared_trials_keep_one_registry_identity_across_presets(
+    warehouse_with_second_adrd: Path,
+) -> None:
+    """A shared trial has one registry identity despite its two profile rows."""
+    with duckdb.connect(str(warehouse_with_second_adrd), read_only=True) as con:
+        rows = con.execute(
+            "select nct_id, count(distinct indication_profile_id), "
+            "count(distinct registry_trial_key), count(distinct trial_key) "
+            "from main_marts.dim_trial "
+            "where indication_profile_id in ('adrd', 'throwaway_adrd') "
+            "group by nct_id order by nct_id"
+        ).fetchall()
+    assert rows
+    assert all(
+        profiles == 2 and registry_keys == 1 and profile_keys == 2
+        for _, profiles, registry_keys, profile_keys in rows
+    )
+
+
 def test_a_narrower_preset_reads_a_subset_of_the_nodes(
     tmp_path: Path, warehouse_with_second_adrd: Path
 ) -> None:
