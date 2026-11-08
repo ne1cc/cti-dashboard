@@ -5,6 +5,7 @@ Reads the session two-profile fixture warehouse. Readers are checked against the
 drops or adds a row relative to the profile-scoped marts fails here.
 """
 
+import hashlib
 import json
 import shutil
 import sys
@@ -174,7 +175,8 @@ def warehouse_with_second_adrd(warehouse_copy: Path) -> Path:
 
     Every base table with a profile column gets the ADRD rows again under the new id
     (trial keys suffixed, so they stay per-profile as md5(nct_id, profile) is). This is
-    what the warehouse holds once a YAML-only preset has been refreshed.
+    what the warehouse holds once a YAML-only preset has been refreshed. This fixture
+    tests reader isolation only; shared_trial_project_root tests actual key generation.
     """
     with duckdb.connect(str(warehouse_copy)) as con:
         tables = con.execute(
@@ -260,22 +262,29 @@ def test_a_throwaway_preset_needs_only_a_yaml_file(
 
 
 def test_shared_trials_keep_one_registry_identity_across_presets(
-    warehouse_with_second_adrd: Path,
+    shared_trial_project_root: Path,
 ) -> None:
-    """A shared trial has one registry identity despite its two profile rows."""
-    with duckdb.connect(str(warehouse_with_second_adrd), read_only=True) as con:
+    """Independent transforms must produce the NCT hash for both non-null keys.
+
+    - Fails on missing profile rows, NULL keys or a profile-dependent dbt hash.
+    - Synthetic snapshots test identity only, not live-registry selection parity.
+    """
+    # 1. Read actual dbt output rather than the copied-row reader-isolation fixture.
+    warehouse = shared_trial_project_root / "data/warehouse/clinical_trials.duckdb"
+    with duckdb.connect(str(warehouse), read_only=True) as con:
         rows = con.execute(
-            "select nct_id, count(distinct indication_profile_id), "
-            "count(distinct registry_trial_key), count(distinct trial_key) "
-            "from main_marts.dim_trial "
-            "where indication_profile_id in ('adrd', 'throwaway_adrd') "
-            "group by nct_id order by nct_id"
+            "select nct_id, indication_profile_id, registry_trial_key, trial_key "
+            "from main_marts.dim_trial order by nct_id, indication_profile_id"
         ).fetchall()
-    assert rows
-    assert all(
-        profiles == 2 and registry_keys == 1 and profile_keys == 2
-        for _, profiles, registry_keys, profile_keys in rows
-    )
+    assert {nct_id for nct_id, *_ in rows} == {f"NCT{i:08d}" for i in range(1, 11)}
+    # 2. Check each row explicitly: count(distinct) alone silently ignores NULL.
+    for nct_id in sorted({row[0] for row in rows}):
+        shared = [row for row in rows if row[0] == nct_id]
+        assert len(shared) == 2
+        assert {row[1] for row in shared} == {"adrd", "oncology_nsclc"}
+        expected = hashlib.md5(nct_id.encode()).hexdigest()
+        assert [row[2] for row in shared] == [expected, expected]
+        assert len({row[3] for row in shared}) == 2
 
 
 def test_a_narrower_preset_reads_a_subset_of_the_nodes(

@@ -79,3 +79,143 @@ every profile YAML declared and `src/profiles.py` overrode, and the `guardrails`
 | Step | Table / column | Expected difference | Why |
 |------|----------------|---------------------|-----|
 | 4 | none | none | No path value, column or row changes; `tests/test_mart_baseline.py` and `tests/test_presets.py` pass without regenerating the baseline. A live warehouse needs no rebuild. |
+
+## #166: measured fixture evidence before registry-grain migration
+
+Measured on 2026-11-08 from #166 head `4c3317e` plus the review fixes. Production Python,
+SQL, configuration and committed baseline JSON are unchanged. These are synthetic fixture
+measurements, not a registry-wide before/after comparison.
+
+| Input / comparison | Measured result | Interpretation |
+|---|---|---|
+| Default two-profile fixture against #146 | 19 baseline marts, 329 rows; zero changed prior-column rows, zero row-count differences | `test_existing_mart_outputs_match_baseline` compares every baseline cell (exact IDs/counts/strings, 1e-6 relative floats). No baseline regeneration. |
+| Default ADRD/NSCLC preset readers against #146 | All 10 reader × preset comparisons pass, plus exact Trial Explorer IDs/counts | Covers priority, competition, geography, site overlap and reliability; does not establish live registry-selection equivalence. |
+| Independent shared-trial fixture | `dim_trial`: 20 profile rows, 10 distinct NCT IDs and 10 registry keys; every row equals `md5(nct_id)` | The same ten bronze studies are transformed independently through ADRD and NSCLC taxonomies. Identity is computed by production dbt, never copied from an existing dimension. |
+| Distinct snapshots in that fixture | `fct_trial_snapshot`: 30 rows on 3 dates; 10 registry identities. Reliability: 3 run rows, each with 10 trial rows and 10 distinct trials | ADRD has September 1 and 15 observations; NSCLC has September 8. A global latest-date filter would lose NSCLC's current rows. The extra history and reliability rows are deliberate input differences, not changes to production output for fixed input. |
+| Shared direct/ancestor MeSH nodes | NCT00000001 has one `D000544` and one `D001523` bridge row per profile | Neither shared identity nor the ancestor edge may fan out a profile's bridge. |
+| No raw condition and no derived MeSH | NCT00000010 remains as 2 profile dimension rows with `has_derived_mesh=false` and zero condition bridge rows | Current unmapped behavior is retained. This fixture directly transforms bronze; it does not pass through registry MeSH preset selection. |
+
+NCT00000001 deliberately changes fields between source observations:
+
+| Source run | Profile | Date (UTC) | Status | Enrollment | Lead sponsor | Current for profile |
+|---|---|---|---|---:|---|---|
+| `20260901T100000Z_shared0` | ADRD | 2026-09-01 | RECRUITING | 500 | NeuroPharm Inc | false |
+| `20260908T100000Z_shared1` | NSCLC | 2026-09-08 | ACTIVE_NOT_RECRUITING | 600 | Variant Sponsor | true |
+| `20260915T100000Z_shared2` | ADRD | 2026-09-15 | COMPLETED | 700 | Latest Sponsor | true |
+
+All three source payload hashes differ. The dimension exposes the last two rows as separate
+profile versions, including the older NSCLC fields; it must not borrow ADRD's newer values.
+No canonical conflict resolution is implemented here. The proposed version/field policy and
+exact phase 2–5 file inventory are in `docs/registry-grain-inventory.md`; unresolved authority,
+no-MeSH membership, report-denominator, API and configuration decisions remain gates.
+
+### Reproduce without changing a baseline or user data
+
+Run from the repository root. Both commands create fresh scratch fixture roots and use the
+actual transform/dbt path. The Python block compares every baseline row, then prints the
+shared-trial measurements above. It never invokes the baseline writer.
+
+```bash
+uv run pytest tests/test_presets.py tests/test_mart_baseline.py
+TASK_TMP=$(mktemp -d)
+uv run python - "$TASK_TMP" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+import duckdb
+
+from tests.fixture_warehouse import build_fixture_warehouse
+from tests.mart_baseline import cells_match, dump_marts, load_baseline
+from tests.preset_helpers import shared_trial_runs
+
+scratch = Path(sys.argv[1])
+base = build_fixture_warehouse(scratch / "base")
+baseline, actual = load_baseline(), dump_marts(base)
+changed, compared = 0, 0
+for name, expected in baseline.items():
+    indexes = [actual[name]["columns"].index(c) for c in expected["columns"]]
+    rows = sorted(
+        ([row[i] for i in indexes] for row in actual[name]["rows"]),
+        key=lambda row: json.dumps(row, sort_keys=True),
+    )
+    assert len(rows) == len(expected["rows"]), name
+    compared += len(rows)
+    changed += sum(
+        not all(cells_match(w, h) for w, h in zip(want, have, strict=True))
+        for want, have in zip(expected["rows"], rows, strict=True)
+    )
+print(f"baseline: {len(baseline)} marts, {compared} rows, {changed} changed")
+assert changed == 0
+shared = build_fixture_warehouse(scratch / "shared", runs=shared_trial_runs())
+with duckdb.connect(str(shared / "data/warehouse/clinical_trials.duckdb"), read_only=True) as con:
+    for label, sql in (
+        ("dimension", "select count(*), count(distinct nct_id), "
+         "count(distinct registry_trial_key) from main_marts.dim_trial"),
+        ("history", "select count(*), count(distinct snapshot_date), "
+         "count(distinct registry_trial_key) from main_marts.fct_trial_snapshot"),
+        ("unmapped", "select count(*) from main_marts.dim_trial d where not exists "
+         "(select 1 from main_marts.bridge_trial_condition b where b.trial_key=d.trial_key)"),
+        ("reliability", "select indication_profile_id, snapshot_date, trial_row_count, "
+         "distinct_trial_count from main_marts.mart_data_reliability order by snapshot_date"),
+        ("versions", "select indication_profile_id, snapshot_date, ingestion_run_id, "
+         "overall_status, enrollment_count, lead_sponsor_name, current_record_flag "
+         "from main_marts.fct_trial_snapshot where nct_id='NCT00000001' order by snapshot_date"),
+    ):
+        print(label, con.execute(sql).fetchall())
+PY
+```
+
+### Discrimination check: profile-dependent hash
+
+A separate temporary copy of the dbt project was mutated so `dim_trial.registry_trial_key`
+hashes `['c.nct_id', 'c.indication_profile_id']` instead of `['c.nct_id']`. Running only
+`test_shared_trials_keep_one_registry_identity_across_presets` against that copy failed at the
+per-row `[expected, expected]` assertion: **1 failed, 19 deselected**. The unchanged project
+passes. The same assertion requires both rows to be non-NULL and NCT-derived; a single non-NULL
+key plus a NULL no longer passes through `count(distinct)`. A separate private-warehouse
+check set the NSCLC key for NCT00000001 to NULL and directly invoked the same test assertion;
+it also raised `AssertionError`, without modifying a production model or the source fixture.
+
+Reproduce the mutation without editing the production model or sharing generated keys:
+
+```bash
+TASK_TMP=$(mktemp -d)
+uv run python - "$TASK_TMP" <<'PY'
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+repo, mutant = Path.cwd(), Path(sys.argv[1]) / "mutant"
+mutant.mkdir()
+for name in ("tests", "dbt_clinical_trials"):
+    shutil.copytree(
+        repo / name, mutant / name,
+        ignore=shutil.ignore_patterns("__pycache__", "target", "dbt_target", "logs"),
+    )
+for name in ("src", "dashboard", "config"):
+    (mutant / name).symlink_to(repo / name, target_is_directory=True)
+model = mutant / "dbt_clinical_trials/models/marts/dim_trial.sql"
+old = "generate_surrogate_key(['c.nct_id']) }} as registry_trial_key"
+new = "generate_surrogate_key(['c.nct_id', 'c.indication_profile_id']) }} as registry_trial_key"
+text = model.read_text()
+assert text.count(old) == 1
+model.write_text(text.replace(old, new))
+result = subprocess.run(
+    [sys.executable, "-m", "pytest", "tests/test_presets.py", "-k",
+     "shared_trials_keep_one_registry_identity_across_presets"],
+    cwd=mutant, capture_output=True, text=True,
+)
+print(result.stdout)
+print(result.stderr)
+assert result.returncode == 1
+assert "assert [row[2] for row in shared] == [expected, expected]" in result.stdout
+assert "1 failed, 19 deselected" in result.stdout
+PY
+```
+
+Remaining evidence gap: no full registry pull, retained live warehouse rebuild or matched live
+preset-set comparison was performed for #166. The earlier step 2 selection differences above
+remain unmeasured; the historical “about 4%” statement is not a measurement made by this PR.
+The synthetic results cannot approve replacing the baseline or dropping profile-grain reports.

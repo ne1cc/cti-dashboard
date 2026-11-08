@@ -17,3 +17,19 @@ row counts or removed columns fail.
 
 Regenerate only when a later step intentionally changes a mart output, and record the change in
 `docs/profile-retirement-expected-diffs.md` in the same PR.
+
+## #166 shared-trial and distinct-snapshot companion
+
+The committed JSON remains the original default fixture (19 marts, 329 rows).
+`tests/preset_helpers.py:shared_trial_runs` defines a separate synthetic input variant using
+this repository's `tests/fixtures/bronze_snapshot/page=00001.json`, not copied mart rows:
+
+- ADRD: September 1 and 15; NSCLC: September 8, over the same ten NCT IDs.
+- NCT00000001 has distinct status, enrollment and sponsor fields in each run, plus shared
+  direct/ancestor MeSH nodes; NCT00000010 has no raw condition or derived MeSH.
+- `shared_trial_project_root` in `tests/conftest.py` runs the real transform and dbt build.
+  The identity test requires both profile keys to equal `md5(nct_id)` and be non-NULL;
+  the snapshot test pins all three observations and each profile's current version.
+
+This companion is not a replacement baseline. Reproduction, measured results and a temporary
+profile-dependent-hash mutation check are in `docs/profile-retirement-expected-diffs.md`.
