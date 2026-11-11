@@ -589,6 +589,14 @@ def fixture_project_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.fixture(scope="session")
+def shared_trial_project_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Build independent shared-trial snapshots; raises on transform or dbt failure."""
+    from tests.preset_helpers import shared_trial_runs
+
+    return _build_fixture_root(tmp_path_factory, "shared_trials", shared_trial_runs())
+
+
+@pytest.fixture(scope="session")
 def demographics_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """The base warehouse plus the two DEMOGRAPHICS_ADRD runs (issue #74).
 

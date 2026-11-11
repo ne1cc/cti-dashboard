@@ -6,6 +6,7 @@ so new columns never trip it but a changed row, count or fan-out does.
 """
 
 import json
+from datetime import date
 from pathlib import Path
 
 import duckdb
@@ -108,3 +109,93 @@ def test_registry_condition_key_is_populated_and_matches_dim_condition(
             "and d.indication_profile_id = m.indication_profile_id)",
         )
         assert orphans == 0
+
+
+def test_shared_trial_versions_stay_with_their_profile_snapshot(
+    shared_trial_project_root: Path,
+) -> None:
+    """Pin version fields and provenance on distinct dates without changing the baseline.
+
+    - Fails on a global latest-snapshot filter or a join borrowing another version.
+    - These synthetic conflicts describe current behavior, not canonical resolution.
+    """
+    warehouse = shared_trial_project_root / "data/warehouse/clinical_trials.duckdb"
+    with duckdb.connect(str(warehouse), read_only=True) as con:
+        # 1. The older NSCLC observation remains current for its owning profile.
+        current = con.execute(
+            "select indication_profile_id, latest_seen_snapshot_date, "
+            "current_overall_status, enrollment_count, current_lead_sponsor, "
+            "active_in_latest_snapshot_flag "
+            "from main_marts.dim_trial where nct_id = 'NCT00000001' "
+            "order by indication_profile_id"
+        ).fetchall()
+        assert current == [
+            ("adrd", date(2026, 9, 15), "COMPLETED", 700, "Latest Sponsor", True),
+            (
+                "oncology_nsclc",
+                date(2026, 9, 8),
+                "ACTIVE_NOT_RECRUITING",
+                600,
+                "Variant Sponsor",
+                True,
+            ),
+        ]
+        # 2. History preserves each source run and its payload; nothing is coalesced.
+        history = con.execute(
+            "select indication_profile_id, snapshot_date, ingestion_run_id, "
+            "overall_status, enrollment_count, lead_sponsor_name, current_record_flag "
+            "from main_marts.fct_trial_snapshot where nct_id = 'NCT00000001' "
+            "order by snapshot_date"
+        ).fetchall()
+        assert history == [
+            (
+                "adrd",
+                date(2026, 9, 1),
+                "20260901T100000Z_shared0",
+                "RECRUITING",
+                500,
+                "NeuroPharm Inc",
+                False,
+            ),
+            (
+                "oncology_nsclc",
+                date(2026, 9, 8),
+                "20260908T100000Z_shared1",
+                "ACTIVE_NOT_RECRUITING",
+                600,
+                "Variant Sponsor",
+                True,
+            ),
+            (
+                "adrd",
+                date(2026, 9, 15),
+                "20260915T100000Z_shared2",
+                "COMPLETED",
+                700,
+                "Latest Sponsor",
+                True,
+            ),
+        ]
+        assert con.execute(
+            "select count(distinct record_hash) from main_marts.fct_trial_snapshot "
+            "where nct_id = 'NCT00000001'"
+        ).fetchone() == (3,)
+        # 3. Shared node keys do not duplicate bridge rows; unmapped trials survive.
+        assert con.execute(
+            "select indication_profile_id, node_id, count(*) "
+            "from main_marts.bridge_trial_condition where nct_id = 'NCT00000001' "
+            "and node_id in ('D000544', 'D001523') group by 1, 2 order by 1, 2"
+        ).fetchall() == [
+            ("adrd", "D000544", 1),
+            ("adrd", "D001523", 1),
+            ("oncology_nsclc", "D000544", 1),
+            ("oncology_nsclc", "D001523", 1),
+        ]
+        assert con.execute(
+            "select indication_profile_id, has_derived_mesh "
+            "from main_marts.dim_trial where nct_id = 'NCT00000010' "
+            "order by indication_profile_id"
+        ).fetchall() == [("adrd", False), ("oncology_nsclc", False)]
+        assert con.execute(
+            "select count(*) from main_marts.bridge_trial_condition where nct_id = 'NCT00000010'"
+        ).fetchone() == (0,)
