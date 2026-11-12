@@ -186,26 +186,37 @@ PAGE_GUIDANCE: dict[str, dict[str, Any]] = {
     "geography_trends": {
         "title": "Geography Trends: Geographic Distribution & Posting Activity",
         "what": (
-            "State-level distribution of actively recruiting clinical trial listings "
-            "and historical monthly listing counts for the selected diagnostic condition group."
+            "State- and territory-level distribution of actively recruiting clinical trial "
+            "listings, aggregate study–jurisdiction memberships, and historical monthly trends "
+            "for the selected diagnostic condition group."
         ),
         "why": (
-            "Choropleth map displays recruiting trial counts by normalized U.S. postal "
-            "state codes. Monthly trend lines aggregate newly posted or active listings "
-            "across snapshot dates."
+            "County access map displays travel distance to open trial sites. State table presents "
+            "jurisdiction counts, population-normalized rates, and rate provenance. Monthly trend "
+            "lines aggregate recruiting study–jurisdiction memberships across monthly snapshot "
+            "dates; multi-state studies contribute to each jurisdiction in which they appear."
         ),
         "how_to_verify": (
-            "Registry listings indicate where sponsors have registered trial locations, "
-            "not participant residence or referral draw. Verify geographic accessibility "
-            "and site participation directly on ClinicalTrials.gov."
+            "Registry listings indicate where sponsors have registered trial locations, not "
+            "participant residence, referral draw, or confirmed present-day local recruiting "
+            "activity. Multi-state trials appear in multiple jurisdictions; summed counts reflect "
+            "study–jurisdiction memberships rather than unique national studies. Verify geographic "
+            "accessibility and site participation directly on ClinicalTrials.gov."
         ),
         "what_it_shows": (
-            "State-level distribution of actively recruiting clinical trial listings."
+            "State- and territory-level distribution of actively recruiting trial listings and "
+            "aggregate study–jurisdiction memberships."
         ),
         "how_to_analyze": (
-            "Analyzes state-level concentrations and historical monthly posting activity."
+            "Analyzes jurisdiction-level concentrations, population-normalized rates, and "
+            "historical monthly study–jurisdiction memberships without treating sums as "
+            "deduplicated national study totals."
         ),
-        "cannot_show": "does not measure participant residence, patient access, or clinical need.",
+        "cannot_show": (
+            "does not measure participant residence, patient access, clinical need, "
+            "confirmed present-day local recruiting activity, or a deduplicated national trial "
+            "census."
+        ),
     },
     "site_overlap": {
         "title": "Site Overlap: Multi-Trial Facility Listings",
