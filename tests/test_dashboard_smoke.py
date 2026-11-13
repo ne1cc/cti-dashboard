@@ -352,6 +352,14 @@ def test_geography_trends_state_table_shows_rate_provenance(fixture_warehouse):
         for item in at.json
     )
 
+    # Card is labeled Recruiting study–jurisdiction memberships
+    membership_metric = next(
+        m for m in at.metric if m.label == "Recruiting study–jurisdiction memberships"
+    )
+    assert int(membership_metric.value) > 0
+    assert "study–jurisdiction memberships" in membership_metric.help
+    assert "unique national studies" in membership_metric.help
+
 
 def test_geography_legacy_warehouse_keeps_raw_counts(
     fixture_warehouse, monkeypatch: pytest.MonkeyPatch
@@ -418,6 +426,170 @@ def test_geography_missing_rates_caption_describes_top_twenty(
     assert "GU" not in at.dataframe[0].value["state_normalized"].tolist()
     assert any("table shows only the top 20" in caption.value.lower() for caption in at.caption)
     assert not any("remain listed" in caption.value.lower() for caption in at.caption)
+
+
+def test_geography_memberships_synthetic_scenario_two_states(
+    fixture_warehouse,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A synthetic scenario with one NCT in CA and NY displays 2 memberships, not 2 studies."""
+    import pandas as pd
+    from streamlit.testing.v1 import AppTest
+
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    from components import data
+
+    template = data.condition_geography_trends(preset_for("adrd")).iloc[[0]].copy()
+    row_ca = template.copy()
+    row_ca["state_normalized"] = "CA"
+    row_ca["recruiting_trial_count"] = 1
+
+    row_ny = template.copy()
+    row_ny["state_normalized"] = "NY"
+    row_ny["recruiting_trial_count"] = 1
+
+    synthetic_rows = pd.concat([row_ca, row_ny], ignore_index=True)
+    latest_month = str(template["activity_month"].iloc[0])
+
+    monkeypatch.setattr(data, "condition_geography_trends", lambda _: synthetic_rows.copy())
+    at = AppTest.from_file(
+        str(ROOT / "dashboard/pages/3_Geography_Trends.py"), default_timeout=60
+    ).run()
+    assert not at.exception, at.exception
+
+    # Metric card displays 2 memberships, names selected month, explains memberships
+    metric = next(m for m in at.metric if m.label == "Recruiting study–jurisdiction memberships")
+    assert int(metric.value) == 2
+    assert latest_month in metric.help
+    assert "study–jurisdiction memberships" in metric.help
+    assert "unique national studies" in metric.help
+    assert "not confirm present-day" in metric.help
+
+    # Audit trigger matches plain-language wording
+    audit_drawers = [p.proto.popover.label for p in at.get("popover")]
+    assert any(
+        "How this number is computed: Recruiting study–jurisdiction memberships" in lbl
+        for lbl in audit_drawers
+    )
+
+    # Context displayed_measure describes memberships and audit boundary in caption
+    assert any(
+        "Recruiting study–jurisdiction memberships" in c.value
+        and "distinct contributor union does not recalculate" in c.value
+        for c in at.caption
+    )
+
+
+def test_geography_monthly_trend_chart_membership_labels(
+    fixture_warehouse,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Historical chart shows membership counts by month without claiming present-day census."""
+    import pandas as pd
+    import streamlit as st
+    from streamlit.testing.v1 import AppTest
+
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    from components import data
+
+    captured_figs = []
+    original_plotly = st.plotly_chart
+
+    def capture_plotly(fig, *args, **kwargs):
+        captured_figs.append(fig)
+        return original_plotly(fig, *args, **kwargs)
+
+    monkeypatch.setattr(st, "plotly_chart", capture_plotly)
+
+    synthetic_rows = pd.DataFrame(
+        [
+            {
+                "indication_profile_id": "adrd",
+                "activity_month": "2026-08-01",
+                "condition_group": "alzheimers",
+                "state_normalized": "CA",
+                "latest_snapshot_date": "2026-08-15",
+                "trial_count": 1,
+                "recruiting_trial_count": 1,
+                "newly_registered_in_month": 0,
+                "sponsor_count": 1,
+                "recruiting_trials_per_100k": 0.0025,
+                "recruiting_growth_3m": None,
+                "observed_history_days": 60,
+                "population": 39000000,
+                "population_source": "U.S. Census Bureau",
+                "population_vintage": "Vintage 2024",
+            },
+            {
+                "indication_profile_id": "adrd",
+                "activity_month": "2026-09-01",
+                "condition_group": "alzheimers",
+                "state_normalized": "CA",
+                "latest_snapshot_date": "2026-09-15",
+                "trial_count": 2,
+                "recruiting_trial_count": 2,
+                "newly_registered_in_month": 1,
+                "sponsor_count": 1,
+                "recruiting_trials_per_100k": 0.0050,
+                "recruiting_growth_3m": None,
+                "observed_history_days": 90,
+                "population": 39000000,
+                "population_source": "U.S. Census Bureau",
+                "population_vintage": "Vintage 2024",
+            },
+        ]
+    )
+    monkeypatch.setattr(data, "condition_geography_trends", lambda _: synthetic_rows.copy())
+    at = AppTest.from_file(
+        str(ROOT / "dashboard/pages/3_Geography_Trends.py"), default_timeout=60
+    ).run()
+    assert not at.exception, at.exception
+
+    assert len(captured_figs) > 0
+    fig = captured_figs[0]
+    assert fig.layout.yaxis.title.text == "Study–jurisdiction memberships"
+    # Plotly truncates trace-name extras; the explanation must be in the main hover body.
+    hover_body = fig.data[0].hovertemplate.split("<extra>", 1)[0]
+    assert "Study–jurisdiction memberships" in hover_body
+    assert "Sum of state/territory counts" in hover_body
+    assert "multi-jurisdiction studies counted once per jurisdiction" in hover_body
+
+
+def test_geography_empty_input_retains_disclosure(
+    fixture_warehouse,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Empty condition input retains error/empty disclosure and is not relabeled national zero."""
+    import pandas as pd
+    from streamlit.testing.v1 import AppTest
+
+    if str(ROOT / "dashboard") not in sys.path:
+        sys.path.insert(0, str(ROOT / "dashboard"))
+    from components import data
+
+    empty_df = pd.DataFrame(
+        columns=[
+            "indication_profile_id",
+            "activity_month",
+            "condition_group",
+            "state_normalized",
+            "latest_snapshot_date",
+            "trial_count",
+            "recruiting_trial_count",
+            "newly_registered_in_month",
+            "sponsor_count",
+            "recruiting_trials_per_100k",
+        ]
+    )
+    monkeypatch.setattr(data, "condition_geography_trends", lambda _: empty_df)
+    at = AppTest.from_file(
+        str(ROOT / "dashboard/pages/3_Geography_Trends.py"), default_timeout=60
+    ).run()
+    assert not at.exception, at.exception
+    assert any("No condition group records available" in info.value for info in at.info)
+    assert not at.metric
 
 
 def test_data_reliability_page_no_calculator(fixture_warehouse):

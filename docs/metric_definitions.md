@@ -77,8 +77,21 @@ Facilities with no listed name are excluded from this mart only (identity
 required for overlap); they remain in silver and staging.
 
 ## Trend metrics (`mart_condition_geography_trends`)
-Month grain (snapshot month). `recruiting_trial_count_3m_avg` and
-`recruiting_growth_3m` use a 3-month `RANGE` window over the profile ×
+Grain: `indication_profile_id × condition_group × state_normalized × activity_month`
+(snapshot month). In the mart, `recruiting_trial_count` is `count(distinct nct_id) filter (overall_status = 'RECRUITING')`
+within each jurisdiction (states and territories) and month across snapshot observations.
+A multi-jurisdiction study contributes to each jurisdiction in which it is listed.
+Overall `RECRUITING` on an observation gates the recruiting count; this reflects registry
+status and does not confirm present-day recruiting activity at any specific local site.
+
+When the dashboard sums `recruiting_trial_count` across jurisdictions for the latest month
+(metric card) or by month (trend chart), this aggregate represents **recruiting study–jurisdiction memberships**,
+not nationally unique studies. The generic page includes reporting states and territories
+without assuming a strict 50-state scope, and has no exact phase filter.
+The audit panel inspects underlying count inputs and historical snapshot observations;
+its distinct contributor union does not recalculate or replace the summed membership total.
+
+`recruiting_trial_count_3m_avg` and `recruiting_growth_3m` use a 3-month `RANGE` window over the profile ×
 condition_group × state series. `recruiting_growth_3m` is **null unless the
 window's earliest observed `activity_month` sits at least three months back,
 the baseline snapshot date sits at least 3 calendar months back
@@ -100,6 +113,7 @@ equals the snapshot month — registrations, not transitions.
 
 | Metric | Definition |
 |---|---|
+| recruiting_trial_count | `count(distinct nct_id) filter (overall_status = 'RECRUITING')` per jurisdiction and month. When summed across jurisdictions (latest-month card or monthly trend line), this measures recruiting study–jurisdiction memberships, not unique national studies. |
 | recruiting_trials_per_100k | `100000.0 * recruiting_trial_count / population` (rounded to 4 decimals); null when population is missing or nonpositive |
 | population | Resident population from U.S. Census Bureau (Vintage 2024, July 1, 2024 estimates, `POPESTIMATE2024` from `NST-EST2024-ALLDATA.csv`); null for unmatched territories |
 | population_source | `U.S. Census Bureau` when population is present, else null |

@@ -46,8 +46,18 @@ scoped = trends[trends["condition_group"] == condition]
 
 latest_month = scoped["activity_month"].max()
 latest = scoped[scoped["activity_month"] == latest_month]
+latest_month_text = f" in {latest_month}" if pd.notna(latest_month) else ""
 
 geography_context = {
+    "displayed_measure": (
+        f"Recruiting study–jurisdiction memberships{latest_month_text} across reporting "
+        "states and territories. A multi-jurisdiction study is counted once per jurisdiction "
+        "per month, so summing across jurisdictions counts memberships and can exceed "
+        "unique national studies. Does not represent a national study census or confirmed "
+        "present-day local recruiting activity. The audit panel inspects underlying count inputs "
+        "and historical snapshot observations; its distinct contributor union does not "
+        "recalculate or replace the summed membership total."
+    ),
     "growth_window": (
         "Monthly counts are distinct NCT IDs across daily observations per "
         "profile/condition/state/month; recruiting requires RECRUITING on an "
@@ -59,7 +69,8 @@ geography_context = {
         "null with zero baseline or until the window's earliest observed month "
         "sits at least three months back, the baseline snapshot sits at least 3 "
         "calendar months back, and observed history spans at least 90 days — "
-        "'not enough history', never zero. State sums may repeat studies. "
+        "'not enough history', never zero. State sums count study–jurisdiction memberships "
+        "and may repeat multi-state studies. "
         "This panel audits window counts; deltas remain warehouse calculations."
     ),
     "population_normalization": (
@@ -92,9 +103,15 @@ with col1:
     )
 with col2:
     st.metric(
-        "Recruiting trials in condition",
+        "Recruiting study–jurisdiction memberships",
         int(latest["recruiting_trial_count"].sum()) if not latest.empty else 0,
-        help="Total actively recruiting study listings in the selected condition.",
+        help=(
+            "Actively recruiting study–jurisdiction memberships across states and territories"
+            f"{latest_month_text}. A study is counted once per jurisdiction and month and "
+            "can appear in multiple jurisdictions; this sums jurisdiction memberships rather "
+            "than unique national studies, and does not confirm present-day site "
+            "recruiting activity."
+        ),
     )
     render_provenance_drawer(
         preset,
@@ -104,7 +121,7 @@ with col2:
         states=scoped["state_normalized"].tolist(),
         context=geography_context,
         key="geography",
-        label="How this number is computed: Recruiting trials in condition",
+        label="How this number is computed: Recruiting study–jurisdiction memberships",
     )
 
 # The county map replaces the interim state-level per-100k / raw-count toggle (#51): it
@@ -199,6 +216,20 @@ if months > 1:
         x="activity_month",
         y="recruiting_trial_count",
         markers=True,
+        labels={
+            "activity_month": "Snapshot Month",
+            "recruiting_trial_count": "Study–jurisdiction memberships",
+        },
+    )
+    fig2.update_layout(yaxis_title="Study–jurisdiction memberships")
+    fig2.update_traces(
+        hovertemplate=(
+            "Snapshot Month: %{x}<br>"
+            "Study–jurisdiction memberships: %{y}<br>"
+            "Sum of state/territory counts;<br>"
+            "multi-jurisdiction studies counted once per jurisdiction"
+            "<extra></extra>"
+        )
     )
     st.plotly_chart(fig2, width="stretch")
 else:
