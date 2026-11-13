@@ -313,6 +313,7 @@ def test_examples_payload_schema_conformity(openapi_doc: dict[str, Any]) -> None
     schema_mappings = {
         "trials_search_success": "TrialsListResponse",
         "trials_search_empty": "TrialsListResponse",
+        "trials_search_live_postfiltered_empty": "TrialsListResponse",
         "trial_detail_success": "TrialDetail",
         "trial_detail_unknown_criteria": "TrialDetail",
         "conditions_autocomplete": "ConditionsListResponse",
@@ -575,3 +576,176 @@ def test_meta_freshness_missing_malformed_or_failed_marker_is_503_problem(
     assert resp.status_code == 503
     assert resp.headers["content-type"].startswith("application/problem+json")
     jsonschema.validate(instance=resp.json(), schema=schema)
+
+
+def test_openapi_server_base_composition(openapi_doc: dict[str, Any]) -> None:
+    """Server base URLs must compose cleanly with /v1 paths without doubling /v1."""
+    from urllib.parse import urlsplit
+
+    servers = openapi_doc.get("servers", [])
+    assert isinstance(servers, list) and len(servers) >= 2
+    by_url = {entry["url"]: entry for entry in servers if isinstance(entry, dict)}
+
+    local_base = "http://localhost:8000"
+    placeholder_base = "https://api.cti.example.org"
+    assert local_base in by_url
+    assert placeholder_base in by_url
+    assert "placeholder" in by_url[placeholder_base].get("description", "").lower()
+
+    for url in by_url:
+        parsed = urlsplit(url)
+        assert parsed.scheme in {"http", "https"}
+        assert not parsed.path.rstrip("/").endswith("/v1"), (
+            f"Server URL {url!r} must not include '/v1' because paths already start with '/v1'"
+        )
+
+    paths = openapi_doc.get("paths", {})
+    assert "/v1/trials" in paths and "get" in paths["/v1/trials"]
+    assert "/v1/trials/{nct_id}" in paths and "get" in paths["/v1/trials/{nct_id}"]
+
+    search_url = f"{local_base.rstrip('/')}/v1/trials"
+    detail_tmpl = "/v1/trials/{nct_id}".replace("{nct_id}", "NCT00000001")
+    detail_url = f"{local_base.rstrip('/')}{detail_tmpl}"
+    assert search_url == "http://localhost:8000/v1/trials"
+    assert detail_url == "http://localhost:8000/v1/trials/NCT00000001"
+    assert "/v1/v1" not in search_url
+    assert "/v1/v1" not in detail_url
+
+    placeholder_search = f"{placeholder_base.rstrip('/')}/v1/trials"
+    assert placeholder_search == "https://api.cti.example.org/v1/trials"
+    assert "/v1/v1" not in placeholder_search
+
+
+def test_selected_search_and_detail_get_handlers_with_composed_paths(
+    openapi_doc: dict[str, Any], tmp_path: Path
+) -> None:
+    """Composed local paths reach implemented warehouse & mocked-live GET handlers."""
+    from copy import deepcopy
+    from unittest.mock import MagicMock
+    from urllib.parse import urlsplit
+
+    from fastapi.testclient import TestClient
+
+    from src.api.app import APIContainer, create_app
+    from src.ingest.ctg_client import CTGClient
+    from tests.test_api_warehouse import _init_fixture_database
+
+    servers = {entry["url"]: entry for entry in openapi_doc["servers"]}
+    local_base = next(url for url in servers if "localhost" in url)
+    paths = openapi_doc["paths"]
+    assert "/v1/trials" in paths and "/v1/trials/{nct_id}" in paths
+
+    composed_search = f"{local_base.rstrip('/')}/v1/trials"
+    detail_path_tmpl = "/v1/trials/{nct_id}".replace("{nct_id}", "NCT00000001")
+    composed_detail = f"{local_base.rstrip('/')}{detail_path_tmpl}"
+    assert composed_search == "http://localhost:8000/v1/trials"
+    assert composed_detail == "http://localhost:8000/v1/trials/NCT00000001"
+    search_path = urlsplit(composed_search).path
+    detail_path = urlsplit(composed_detail).path
+
+    schemas = openapi_doc["components"]["schemas"]
+    trials_schema = _dereference_schema(openapi_doc, schemas["TrialsListResponse"])
+    detail_schema = _dereference_schema(openapi_doc, schemas["TrialDetail"])
+
+    # 1. Warehouse backend with explicitly isolated SQLite cache path
+    db_path = tmp_path / "contract_composed.duckdb"
+    _init_fixture_database(db_path)
+    wh_container = APIContainer(
+        warehouse_path=db_path,
+        cache_path=tmp_path / "warehouse_cache.sqlite",
+    )
+    with TestClient(create_app(container=wh_container)) as wh_client:
+        wh_search = wh_client.get(search_path, params={"status": "RECRUITING"})
+        assert wh_search.status_code == 200
+        assert wh_search.headers["Data-Snapshot"] != "live-api"
+        assert wh_search.headers["Cache-Control"] == "public, max-age=300"
+        assert "stale-while-revalidate" not in wh_search.headers["Cache-Control"]
+        assert "ratelimit-limit" not in {k.lower() for k in wh_search.headers}
+        wh_payload = wh_search.json()
+        jsonschema.validate(instance=wh_payload, schema=trials_schema)
+        assert wh_payload["items"]
+        assert all(item["overall_status"] == "RECRUITING" for item in wh_payload["items"])
+
+        # Warehouse conditional 304 requires If-None-Match against prior ETag
+        wh_304 = wh_client.get(
+            search_path,
+            params={"status": "RECRUITING"},
+            headers={"If-None-Match": wh_search.headers["ETag"]},
+        )
+        assert wh_304.status_code == 304
+
+        wh_detail = wh_client.get(detail_path)
+        assert wh_detail.status_code == 200
+        wh_detail_data = wh_detail.json()
+        jsonschema.validate(instance=wh_detail_data, schema=detail_schema)
+        assert wh_detail_data["nct_id"] == "NCT00000001"
+        assert wh_detail_data["overall_status"] == "RECRUITING"
+
+    # 2. Mocked-live backend with stubbed CTGClient and isolated cache path (zero network calls)
+    fixtures_dir = Path(__file__).parent / "fixtures" / "api"
+    live_search_fixture = json.loads((fixtures_dir / "live_search.json").read_text("utf-8"))
+    live_detail_fixture = deepcopy(
+        json.loads((fixtures_dir / "live_detail.json").read_text("utf-8"))
+    )
+    live_detail_fixture["protocolSection"]["identificationModule"]["nctId"] = "NCT00000001"
+
+    stub_ctg = MagicMock(spec=CTGClient)
+    stub_ctg.fetch_studies.return_value = (live_search_fixture, json.dumps(live_search_fixture))
+    stub_ctg.fetch_study.return_value = (live_detail_fixture, json.dumps(live_detail_fixture))
+
+    live_container = APIContainer(
+        ctg_client=stub_ctg,
+        cache_path=tmp_path / "live_cache.sqlite",
+    )
+    with TestClient(create_app(container=live_container)) as live_client:
+        live_search = live_client.get(
+            search_path, params={"cond": "Alzheimer Disease", "status": "RECRUITING"}
+        )
+        assert live_search.status_code == 200
+        assert live_search.headers["Data-Snapshot"] == "live-api"
+        assert live_search.headers["X-Cache-Status"] == "MISS"
+        assert live_search.headers["Cache-Control"] == "public, max-age=300"
+        assert "stale-while-revalidate" not in live_search.headers["Cache-Control"]
+        assert "ratelimit-limit" not in {k.lower() for k in live_search.headers}
+        jsonschema.validate(instance=live_search.json(), schema=trials_schema)
+
+        # Live repeat returns 200 HIT even when If-None-Match is sent
+        live_repeat = live_client.get(
+            search_path,
+            params={"cond": "Alzheimer Disease", "status": "RECRUITING"},
+            headers={"If-None-Match": live_search.headers["ETag"]},
+        )
+        assert live_repeat.status_code == 200
+        assert live_repeat.headers["X-Cache-Status"] == "HIT"
+        assert stub_ctg.fetch_studies.call_count == 1
+
+        live_detail = live_client.get(detail_path)
+        assert live_detail.status_code == 200
+        assert live_detail.headers["Data-Snapshot"] == "live-api"
+        live_detail_data = live_detail.json()
+        jsonschema.validate(instance=live_detail_data, schema=detail_schema)
+        assert live_detail_data["nct_id"] == "NCT00000001"
+        stub_ctg.fetch_study.assert_called_once_with("NCT00000001")
+
+
+def test_walkthrough_examples_headers_and_references() -> None:
+    """Repaired search/detail walkthrough avoids unimplemented headers and links evidence."""
+    content = EXAMPLES_PATH.read_text(encoding="utf-8")
+    walkthrough_end = content.index("## 3. Conditions Autocomplete")
+    walkthrough = content[:walkthrough_end]
+
+    http_blocks = re.findall(r"```http\s*([\s\S]*?)```", walkthrough)
+    assert len(http_blocks) >= 4
+    http_text = "\n".join(http_blocks)
+
+    assert "http://localhost:8000/v1/trials" in walkthrough
+    assert "http://localhost:8000/v1/trials/NCT00000001" in walkthrough
+    assert "status=RECRUITING" in walkthrough
+    assert "stale-while-revalidate" not in http_text
+    for header in ("RateLimit-Limit:", "RateLimit-Remaining:", "RateLimit-Reset:"):
+        assert header not in http_text
+    assert "overallStatus" in walkthrough
+    assert "source-field-map.md" in walkthrough
+    assert "feasibility_case_study.md" in walkthrough
+    assert "20261003T080013Z_c1b234b8" in walkthrough
+    assert "/v1/geo/access" in walkthrough

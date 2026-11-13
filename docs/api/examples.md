@@ -1,6 +1,11 @@
 # Read API Request and Response Examples
 
-This document provides representative, production-grade request and response payloads for all endpoints defined in [OpenAPI Specification](file:///docs/api/openapi.yaml).
+This document provides **synthetic and illustrative** request and response examples for endpoints declared in [OpenAPI Specification](openapi.yaml). Payloads in Sections 1–2 are synthetic fixtures rather than production observations. Local verification composes against `http://localhost:8000` (for example, `http://localhost:8000/v1/trials` and `http://localhost:8000/v1/trials/NCT00000001`, with no doubled `/v1`). `https://api.cti.example.org` is an **illustrative placeholder only** — it is not a deployed gateway and must never be contacted.
+
+Three execution paths remain distinct across the project:
+- **Warehouse API backend** (`CTI_WAREHOUSE_PATH` set; see [Warehouse Serving Engine](serving.md)): DuckDB Gold/staging queries, keyset cursor pagination, and `If-None-Match` -> `304 Not Modified`.
+- **Mocked-live API backend** (no `CTI_WAREHOUSE_PATH`; see [Live Backend](live-backend.md)): single-page upstream query + in-memory post-filtering/sorting + 6-hour SQLite cache (`X-Cache-Status: HIT|MISS|STALE`, synchronous stale-if-error).
+- **Batch / recorded landscape evidence** ([October 3, 2026 Feasibility Case Study](../feasibility_case_study.md)): direct DuckDB/audit reads (`docs/evidence/`); no API endpoint is required for every dashboard chart.
 
 All example responses conform strictly to:
 - **ADR 0061**: Dual delivery surfaces (server-rendered patient app + analyst workbench).
@@ -12,28 +17,32 @@ All example responses conform strictly to:
 
 ## 1. Clinical Trials Search (`GET /v1/trials`)
 
-### 1.1 Success: Condition, Status, and Geographic Radius Search
+### 1.1 Selected Walkthrough — Warehouse Backend (`status=RECRUITING`, Local Base Composition)
+
+> **Data & Backend Label:** **Synthetic / Illustrative — Warehouse Backend** (`CTI_WAREHOUSE_PATH` configured).
+> **Base Composition:** `http://localhost:8000` + `/v1/trials` -> `http://localhost:8000/v1/trials` (no doubled `/v1`).
+> **Status Filter Note:** Always pass `status=RECRUITING` explicitly when recruiting-only matches are intended. When `status` is omitted, the **live** backend defaults to `RECRUITING|NOT_YET_RECRUITING|ACTIVE_NOT_RECRUITING|ENROLLING_BY_INVITATION`, whereas the **warehouse** backend applies no status filter.
 
 **Request:**
 ```http
 GET /v1/trials?cond=Alzheimer+Disease&status=RECRUITING&lat=37.7749&lon=-122.4194&radius_mi=50&min_age=65&limit=2 HTTP/1.1
-Host: api.cti.example.org
+Host: localhost:8000
 Accept: application/json
 ```
 
-**Response Headers:**
+**Response Headers (Warehouse Backend — Implemented Behavior):**
 ```http
 HTTP/1.1 200 OK
 Content-Type: application/json
 Data-Snapshot: 2026-07-31T140000_3f5a473e
 Data-Updated: 2026-07-31T14:02:18Z
 ETag: W/"9f8a3c2e1b4a"
-Cache-Control: public, max-age=300, stale-while-revalidate=3600
-RateLimit-Limit: 120
-RateLimit-Remaining: 118
-RateLimit-Reset: 45
+Cache-Control: public, max-age=300
+X-Request-ID: 8b9e6c43-1f2a-4c9b-9d10-000000000001
 ```
+*(No `RateLimit-*` or `stale-while-revalidate` headers are emitted by the implemented handlers. Sending a subsequent warehouse `GET` with `If-None-Match: W/"9f8a3c2e1b4a"` returns `304 Not Modified` with an empty body while preserving these cache headers.)*
 
+**Response Body (Synthetic / Illustrative — Warehouse Backend):**
 <!-- example: trials_search_success -->
 ```json
 {
@@ -114,17 +123,25 @@ RateLimit-Reset: 45
 }
 ```
 
+**Opaque Cursor Continuation (`next_cursor`):**
+Clients treat `pagination.next_cursor` as an opaque string and pass it back unchanged as `cursor`:
+```http
+GET /v1/trials?cond=Alzheimer+Disease&status=RECRUITING&lat=37.7749&lon=-122.4194&radius_mi=50&min_age=65&limit=2&cursor=eyJvZmZzZXQiOjIsImxpbWl0IjoyLCJzb3J0IjoiZGlzdGFuY2UifQ== HTTP/1.1
+Host: localhost:8000
+Accept: application/json
+```
+
 ---
 
-### 1.2 Empty Result Set (Narrow Filter Criteria)
+### 1.2 Empty Result Set (Synthetic / Illustrative — Warehouse Backend)
 
 **Request:**
 ```http
 GET /v1/trials?cond=Huntington+Disease&status=RECRUITING&lat=37.7749&lon=-122.4194&radius_mi=5 HTTP/1.1
-Host: api.cti.example.org
+Host: localhost:8000
 ```
 
-**Response:**
+**Response (Synthetic / Illustrative — Warehouse Backend):**
 <!-- example: trials_search_empty -->
 ```json
 {
@@ -141,17 +158,78 @@ Host: api.cti.example.org
 
 ---
 
+### 1.3 Post-Filtered Empty Page & Cursor Continuation (Synthetic / Illustrative — Mocked-Live Backend)
+
+> **Data & Backend Label:** **Synthetic / Illustrative — Mocked-Live Backend** (no `CTI_WAREHOUSE_PATH`; stubbed/cached upstream registry path).
+
+In the live backend, `eligibility`, `phase`, `std_age_group`, `sponsor_class`, `sort`, and the recruiting-site radius post-filter run **in memory on a single fetched upstream page**. Therefore:
+- `items: []` with `has_more: true` requires **cursor continuation** (`cursor=<next_cursor>`), not an exhausted-search conclusion.
+- `total_count: null` means **unknown** (because post-filtering or malformed-study omissions occurred), **not** zero.
+- `intervention_type` and `updated_since` remain unsupported on the live backend and return `422` `UNSUPPORTED_FILTER`.
+- Repeating this request within the 6-hour SQLite cache TTL returns `200 OK` with `X-Cache-Status: HIT` (live routes do not implement `If-None-Match` -> `304`). The 6-hour TTL is a freshness window before attempting an upstream refresh, **not** a maximum stale age: if refresh fails, synchronous `stale_if_error` returns `200 OK` with `X-Cache-Status: STALE`, `Cache-Control: no-cache`, and `Warning: 110 "Response is Stale"`.
+
+**Request:**
+```http
+GET /v1/trials?cond=Alzheimer+Disease&status=RECRUITING&phase=PHASE3&min_age=65&limit=20 HTTP/1.1
+Host: localhost:8000
+Accept: application/json
+```
+
+**Response Headers (Mocked-Live Backend — Implemented Behavior):**
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+Data-Snapshot: live-api
+Data-Updated: 2026-07-31T14:02:18Z
+ETag: W/"4b7e21d90c3a81f2"
+Cache-Control: public, max-age=300
+X-Cache-Status: MISS
+X-Request-ID: 8b9e6c43-1f2a-4c9b-9d10-000000000002
+```
+
+**Response Body (Synthetic / Illustrative — Mocked-Live Backend):**
+<!-- example: trials_search_live_postfiltered_empty -->
+```json
+{
+  "items": [],
+  "pagination": {
+    "next_cursor": "eyJwYWdlIjoyfQ==",
+    "prev_cursor": null,
+    "limit": 20,
+    "total_count": null,
+    "has_more": true
+  }
+}
+```
+
+---
+
 ## 2. Trial Protocol Detail (`GET /v1/trials/{nct_id}`)
 
-### 2.1 Success: Full Protocol with Calculated Proximity and ADR 0065 Deep Link
+### 2.1 Selected Walkthrough — Full Protocol, ADR 0065 Deep Link, and Provenance Clocks
+
+> **Data & Backend Label:** **Synthetic / Illustrative — Warehouse Backend** (same payload shape on the live backend, with `Data-Snapshot: live-api`).
+> **Base Composition:** `http://localhost:8000` + `/v1/trials/{nct_id}` substitutes `nct_id` directly (for example, `http://localhost:8000/v1/trials/NCT04245644` below, or `http://localhost:8000/v1/trials/NCT00000001` in the synthetic warehouse contract fixture).
 
 **Request:**
 ```http
 GET /v1/trials/NCT04245644?lat=37.7749&lon=-122.4194 HTTP/1.1
-Host: api.cti.example.org
+Host: localhost:8000
+Accept: application/json
 ```
 
-**Response:**
+**Response Headers (Warehouse Backend — Implemented Behavior):**
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+Data-Snapshot: 2026-07-31T140000_3f5a473e
+Data-Updated: 2026-07-31T14:02:18Z
+ETag: W/"7c1d9e4a2b60"
+Cache-Control: public, max-age=300
+X-Request-ID: 8b9e6c43-1f2a-4c9b-9d10-000000000003
+```
+
+**Response Body (Synthetic / Illustrative — Warehouse Backend):**
 <!-- example: trial_detail_success -->
 ```json
 {
@@ -392,6 +470,27 @@ When a study's protocol does not state age limits, `minimum_age_years` and `maxi
   }
 }
 ```
+
+---
+
+### 2.3 Provenance Clocks, Field-to-Evidence Trace (`overallStatus`), and Boundaries
+
+**Three distinct provenance clocks** appear across headers and `TrialDetail`:
+1. **Capture / snapshot clock:** `Data-Snapshot` header and `provenance.snapshot_id` / `snapshot_date` / `snapshot_timestamp_utc` identify the warehouse snapshot (`live-api` on the live backend).
+2. **Retrieval / cache clock:** `Data-Updated` header and `provenance.retrieved_at_utc` record when CTI fetched or cached the study JSON.
+3. **Source-update clock:** `dates.last_update_post_date` and `status_verified_date` reflect sponsor-reported updates on ClinicalTrials.gov, independent of CTI capture or cache timing.
+
+**Field-to-evidence trace (`overallStatus`):**
+- **Upstream source:** `protocolSection.statusModule.overallStatus` in ClinicalTrials.gov API v2 (see [Source Field Traceability Matrix](source-field-map.md)).
+- **Live API path:** `src/api/live.py` (`normalize_study_summary` / `normalize_study_detail`) maps `statusModule.overallStatus` (defaulting missing values to `"UNKNOWN"`) into `overall_status`; `build_upstream_search_params` defaults omitted `status` to `RECRUITING|NOT_YET_RECRUITING|ACTIVE_NOT_RECRUITING|ENROLLING_BY_INVITATION`.
+- **Batch & warehouse path:** `src/transform/flatten_studies.py` (`flatten_study` -> `silver_trials.overall_status`; `trial_quality_flags` flags `missing_overall_status`) flows through `dbt_clinical_trials/models/staging/stg_trials.sql` (`overall_status`) into `dbt_clinical_trials/models/marts/dim_trial.sql` (`current_overall_status`) and `src/api/sql/search.sql` (which filters `overall_status` only when `$status IS NOT NULL`). Downstream, `dbt_clinical_trials/models/marts/mart_study_snapshot_audit.sql` computes `confirmed_recruiting_flag` (`overall_status = 'RECRUITING'`) and `dashboard/components/audit.py` enforces `row.overall_status == "RECRUITING"` under `competition-audit-v2`.
+- **Recorded / historical landscape evidence ([October 3, 2026 Feasibility Case Study](../feasibility_case_study.md)):** Run `20261003T080013Z_c1b234b8` (source commit `aff62f7`, rules `competition-audit-v2`) records **57** rows (**50** states, 1 national union, 6 additional jurisdictions), **221** study–state memberships, **18** national contributors, a **35**-study recruiting denominator, and **274** broader cohort studies (18 national contributors + 239 `not_confirmed_recruiting` exclusions + 17 `unsupported_geography` exclusions).
+
+**Explicit capability and cohort boundaries:**
+- **Batch/evidence vs. API:** The October 3 case study reads frozen DuckDB/audit artifacts directly; no API endpoint is required for every dashboard chart.
+- **Phase matching:** API `phase=PHASE3` matches `/` phase tokens (including combined strings such as `PHASE2/PHASE3`) in both `src/api/live.py` and `src/api/sql/search.sql`. The API example does **not** claim to reproduce the case study's exact-`PHASE3` cohort or 50-state union.
+- **Live `/related`:** Calling `GET /v1/trials/{nct_id}/related` without a warehouse returns `200 OK` with `related_trials: []` because pairwise similarity requires `mart_trial_similarity`; an empty list on the live backend indicates unsupported backend capability, not proof that no comparable studies exist.
+- **Unimplemented `/v1/geo/access`:** Section 5 below documents the OpenAPI schema shape for `GET /v1/geo/access`, which has no implemented FastAPI handler in `src/api/app.py` and is explicitly outside this executable walkthrough (its implement/defer/remove policy remains pending).
 
 ---
 

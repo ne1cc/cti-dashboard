@@ -20,10 +20,10 @@ info:
     url: https://opensource.org/licenses/MIT
 
 servers:
-  - url: https://api.cti.example.org/v1
-    description: Production API Gateway
-  - url: http://localhost:8000/v1
+  - url: http://localhost:8000
     description: Local Development / Test Instance
+  - url: https://api.cti.example.org
+    description: Illustrative Placeholder Base URL (not a deployed or operating public gateway)
 
 tags:
   - name: Trials
