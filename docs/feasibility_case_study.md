@@ -221,7 +221,154 @@ Nine category checks cover seven distinct studies; all passed:
 
 ## Reproduce and inspect
 
-From the repository root, with the approved auditability models available:
+To avoid conflating read-only evidence inspection with pipeline execution, three
+distinct tasks are separated below:
+1. **Inspect committed evidence** (offline, read-only, Python standard library).
+2. **Recalculate from an authorized retained run** (requires retained bronze/source data, warehouse build, and matching historical code/config).
+3. **Acquire a new capture** (explicitly new work against the current registry; not an October 3 reproduction).
+
+### Reviewer handoff checklist
+
+Before conducting or reviewing an inspection session, verify each element of the frozen package:
+
+- [ ] **Stakeholder question & memo:** Bounded descriptive review of Phase 3 Alzheimer's disease recruiting listings across 50 U.S. states; gaps identified without inferring recruitment prospects or recommending sites.
+- [ ] **Captured run & snapshot:** `snapshot_date=2026-10-03`, `run_id=20261003T080013Z_c1b234b8`, evaluation UTC `2026-10-03T08:05:25.755288+00:00`.
+- [ ] **Source commit & rule hashes:** Original commit `aff62f7caea2bd08c11a28ec90085e2abe7444f5`, rule version `competition-audit-v2`. Rule SHA-256 digests are recorded in audit metadata (`config/geography_rules.yml`, `config/condition_taxonomy.yml`, historical score weights, `dashboard/components/audit.py`, and dbt models). Current rule hashes are not historical configuration archives.
+- [ ] **Exact cohort & denominators:** ADRD profile, `alzheimers_disease` condition group, exactly `PHASE3` (excludes combined strings like `PHASE2/PHASE3`), overall `RECRUITING`.
+  - **Recruiting denominator:** Exactly 35 captured recruiting studies.
+  - **Broader eligible cohort:** 274 total condition/phase studies in the retained audit cohort (18 national contributors + 239 not-confirmed-recruiting exclusions + 17 unsupported-geography exclusions = 274).
+  - **Study–jurisdiction memberships:** 50 states sum to 221 study–state memberships.
+  - **National distinct union:** 18 unique studies across the 50 states (18/35 = 51.43% recruiting coverage).
+- [ ] **Committed CSV results:** `docs/evidence/feasibility_case_study_results.csv` has 57 rows (50 states, 1 national union, and 6 supplementary jurisdictions: DC, PR, GU, VI, AS, MP). Every row records `eligible_recruiting_cohort = 35`.
+- [ ] **Audit package streaming:** `docs/evidence/feasibility_case_study_audit.jsonl.xz` contains 1 manifest line and 57 audit lines. Expanded repeated arrays total ~1.1 GB; stream line by line using standard `lzma` without full extraction.
+- [ ] **Boundary & non-equivalence notes:**
+  - *Recruiting unknowns vs. wider-status unknowns:* Recruiting studies have 0 unresolved state memberships in this cohort. Broader audits retain missing geography for excluded non-recruiting studies (36 in the national cohort).
+  - *D.C. and territories:* DC and the five territories are tracked separately and excluded from the 50-state national union.
+  - *Generic view differences:* The generic monthly Geography Trends view (which sums monthly jurisdiction memberships without an exact phase filter, across all reporting jurisdictions) and token-inclusive API phase filters do *not* reproduce this exact cohort.
+  - *Empty denominator rule:* If an evaluated cohort has 0 recruiting studies, the cohort share is an **undefined share** (division by zero), not 0% completeness.
+- [ ] **Human validation status:** A second reviewer can stream the audit, select a state audit (e.g. California `CA`), identify its contributing NCT IDs and source registry links (`https://clinicaltrials.gov/study/<NCT_ID>`), note at least one data caveat (e.g. overall status does not verify site-level recruitment, or facility names do not resolve unique entities), and formulate a qualified next investigation (e.g. protocol comparability, local site capability). Human evaluation and operational benefits remain **NOT VERIFIED** until an actual live session.
+
+---
+
+### Task 1: Inspect committed evidence (offline, standard library only)
+
+This task requires only Python's standard library (`csv`, `json`, `lzma`, `pathlib`) and the committed repository files. It does **not** perform network requests, install dependencies, import application packages, create a warehouse, extract the full 1.1 GB uncompressed JSONL, or write any files.
+
+From the repository root:
+
+```python
+import csv
+import json
+import lzma
+from pathlib import Path
+
+root = Path("docs/evidence")
+csv_path = root / "feasibility_case_study_results.csv"
+xz_path = root / "feasibility_case_study_audit.jsonl.xz"
+
+# Missing or corrupt evidence raises an immediate exception; no zeros or blanks are fabricated.
+if not csv_path.exists() or not xz_path.exists():
+    raise FileNotFoundError("Committed evidence files are unavailable.")
+
+# 1. Inspect CSV summary results
+with csv_path.open() as f:
+    rows = list(csv.DictReader(f))
+
+states = [r for r in rows if r["jurisdiction_type"] == "state"]
+national = next(r for r in rows if r["jurisdiction"] == "national_50_states")
+memberships = sum(int(r["contributing_studies"]) for r in states)
+national_contributors = int(national["contributing_studies"])
+recruiting_denominator = int(national["eligible_recruiting_cohort"])
+
+assert len(rows) == 57
+assert len(states) == 50
+assert memberships == 221
+assert national_contributors == 18
+assert recruiting_denominator == 35
+
+# 2. Stream audit package line-by-line (manifest, national audit, and selected state)
+with lzma.open(xz_path, "rt") as f:
+    manifest = json.loads(next(f))
+    national_audit = json.loads(next(f))
+
+    ca_audit = None
+    for line in f:
+        record = json.loads(line)
+        if record.get("jurisdiction") == "CA":
+            ca_audit = record
+            break
+
+audit_summary = national_audit["audit"]["summary"]
+audit_meta = national_audit["audit"]["metadata"]
+
+print(f"Snapshot Date: {manifest['snapshot_date']}")
+print(f"Run ID: {audit_meta['snapshot_ids'][0]}")
+print(f"Source Commit: {manifest['source_code_commit']}")
+print(f"Cohort: {audit_meta['profile_id']} / {audit_meta['filters']['conditions'][0]} / {audit_meta['filters']['phases'][0]}")
+print(f"Rows: {len(rows)} (50 states, 1 national union, 6 additional jurisdictions)")
+print(f"Study-State Memberships: {memberships}")
+print(f"National Contributors: {national_contributors}")
+print(f"Recruiting Denominator: {recruiting_denominator}")
+print(f"Broader Eligible Studies: {audit_summary['eligible_studies']}")
+print(f"National Exclusions: {audit_summary['exclusions']}")
+
+if ca_audit:
+    ca_contributors = ca_audit["audit"]["contributors"]
+    print(f"CA Contributing Studies ({len(ca_contributors)}): {ca_contributors}")
+    print(f"Sample Registry Link: https://clinicaltrials.gov/study/{ca_contributors[0]}")
+```
+
+**Expected output:**
+```text
+Snapshot Date: 2026-10-03
+Run ID: 20261003T080013Z_c1b234b8
+Source Commit: aff62f7caea2bd08c11a28ec90085e2abe7444f5
+Cohort: adrd / alzheimers_disease / PHASE3
+Rows: 57 (50 states, 1 national union, 6 additional jurisdictions)
+Study-State Memberships: 221
+National Contributors: 18
+Recruiting Denominator: 35
+Broader Eligible Studies: 274
+National Exclusions: {'not_confirmed_recruiting': 239, 'unsupported_geography': 17}
+CA Contributing Studies (15): ['NCT03860857', 'NCT05511363', 'NCT05641688', 'NCT05980949', 'NCT06126224', 'NCT06585787', 'NCT06937229', 'NCT06947941', 'NCT06976203', 'NCT06976216', 'NCT07011732', 'NCT07011745', 'NCT07177352', 'NCT07602582', 'NCT07717411']
+Sample Registry Link: https://clinicaltrials.gov/study/NCT03860857
+```
+
+**Failure handling:**
+- If an input file is missing or corrupted, standard library readers raise `FileNotFoundError`, `lzma.LZMAError`, or `json.JSONDecodeError`. No synthetic or zeroed outputs are fabricated. Missing raw bronze pages or historical rule bytes prevents a source-level recalculation claim, but committed evidence files remain fully inspectable offline.
+- When exercising missing-file or corruption handling, test only against a nonexistent path or a temporary synthetic file; **never delete or rename committed evidence files**.
+
+---
+
+### Task 2: Recalculate from an authorized retained run
+
+Source-level recalculation is **not** achieved by reading saved artifacts. It requires separate authorization, access to the retained bronze snapshot, the exact matching source code and configuration, and a built local DuckDB warehouse.
+
+**Permission & data boundaries:**
+- `docs/evidence/build_feasibility_case_study.py` is **not** a generally safe disposable-data command: its paths are hardcoded to `data/warehouse/clinical_trials.duckdb` and write directly to `docs/evidence/`. Do not run it without explicit scope authorization.
+- Active rule hashes in current code are not historical configuration storage. If taxonomy, score weights, geography mappings, or dbt SQL models have changed since commit `aff62f7caea2bd08c11a28ec90085e2abe7444f5`, re-running the builder will drift from the frozen evidence.
+- If raw bronze pages have been pruned under local retention policies, raw-record lineage references will no longer resolve to original payloads.
+
+When authorized, with the retained run in the local DuckDB warehouse and matching code checked out:
+
+```bash
+uv run python docs/evidence/build_feasibility_case_study.py \
+  --snapshot-date 2026-10-03 \
+  --evaluation-time 2026-10-03T08:05:25.755288+00:00
+```
+
+---
+
+### Task 3: Acquire a new capture (new work)
+
+Pulling current data from ClinicalTrials.gov is **explicitly new work**, not a reproduction of the October 3, 2026 values. Clinical trials advance, locations change, and registries update continuously.
+
+**Permission & operational boundaries:**
+- Ingestion requires outbound network access to the ClinicalTrials.gov API, local storage writes, and pipeline dependency installation. Ingestion must **never** be placed in the read-only evidence inspection path.
+- A new pipeline run must **not** overwrite the frozen historical artifacts in `docs/evidence/`.
+- If a new capture or filtered cohort contains zero recruiting studies, the recruiting denominator is 0; jurisdiction cohort shares must be reported as **undefined shares** (division by zero), not 0% completeness.
+
+To run an authorized new capture and transform into a fresh local warehouse:
 
 ```bash
 uv sync --all-groups --frozen
@@ -231,39 +378,7 @@ uv run python -m src.cli transform --profile adrd
 make dbt-deps
 make dbt-run
 make dbt-test
-uv run python docs/evidence/build_feasibility_case_study.py
 ```
-
-A new registry pull produces a new captured dataset and may change results. To
-reproduce this case from its retained source run, retain the run and corresponding
-rule files and use the recorded time/date:
-
-```bash
-uv run python docs/evidence/build_feasibility_case_study.py \
-  --snapshot-date 2026-10-03 \
-  --evaluation-time 2026-10-03T08:05:25.755288+00:00
-```
-
-To inspect a state audit without loading the whole expanded package:
-
-```python
-import json
-import lzma
-
-with lzma.open("docs/evidence/feasibility_case_study_audit.jsonl.xz", "rt") as evidence:
-    for line in evidence:
-        record = json.loads(line)
-        if record.get("jurisdiction") == "CA":
-            print(record["audit"]["summary"])
-            print(record["audit"]["contributors"])
-            break
-```
-
-Raw pages and the warehouse remain local and are not committed. After configured
-bronze pruning, raw references may stop resolving. Rule hashes alone do not archive
-historical configuration bytes; retained source plus the corresponding code/config
-is required for source-level reproduction. The package preserves captured audit
-evidence for inspection, with its source-retention limits explicitly recorded.
 
 See the [project brief](project_brief.md), [metric definitions](metric_definitions.md)
 and [interpretation guardrails](clinical_interpretation_guardrails.md).
