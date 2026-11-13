@@ -233,7 +233,7 @@ Before conducting or reviewing an inspection session, verify each element of the
 
 - [ ] **Stakeholder question & memo:** Bounded descriptive review of Phase 3 Alzheimer's disease recruiting listings across 50 U.S. states; gaps identified without inferring recruitment prospects or recommending sites.
 - [ ] **Captured run & snapshot:** `snapshot_date=2026-10-03`, `run_id=20261003T080013Z_c1b234b8`, evaluation UTC `2026-10-03T08:05:25.755288+00:00`.
-- [ ] **Source commit & rule hashes:** Original commit `aff62f7caea2bd08c11a28ec90085e2abe7444f5`, rule version `competition-audit-v2`. Rule SHA-256 digests are recorded in audit metadata (`config/geography_rules.yml`, `config/condition_taxonomy.yml`, historical score weights, `dashboard/components/audit.py`, and dbt models). Current rule hashes are not historical configuration archives.
+- [ ] **Source commit & rule hashes:** Original commit `aff62f7caea2bd08c11a28ec90085e2abe7444f5`, rule version `competition-audit-v2`. Rule SHA-256 digests are recorded in audit metadata (`config/geography_rules.yml`, `config/condition_taxonomy.yml`, historical score weights path config/score_weights.yml, `dashboard/components/audit.py`, and dbt models; rule scope: *"Active configuration; historical configuration identity is not recorded."*). Current rule hashes are not historical configuration archives (checkout `42da3c5` contains matching rule bytes and the builder script).
 - [ ] **Exact cohort & denominators:** ADRD profile, `alzheimers_disease` condition group, exactly `PHASE3` (excludes combined strings like `PHASE2/PHASE3`), overall `RECRUITING`.
   - **Recruiting denominator:** Exactly 35 captured recruiting studies.
   - **Broader eligible cohort:** 274 total condition/phase studies in the retained audit cohort (18 national contributors + 239 not-confirmed-recruiting exclusions + 17 unsupported-geography exclusions = 274).
@@ -246,7 +246,7 @@ Before conducting or reviewing an inspection session, verify each element of the
   - *D.C. and territories:* DC and the five territories are tracked separately and excluded from the 50-state national union.
   - *Generic view differences:* The generic monthly Geography Trends view (which sums monthly jurisdiction memberships without an exact phase filter, across all reporting jurisdictions) and token-inclusive API phase filters do *not* reproduce this exact cohort.
   - *Empty denominator rule:* If an evaluated cohort has 0 recruiting studies, the cohort share is an **undefined share** (division by zero), not 0% completeness.
-- [ ] **Human validation status:** A second reviewer can stream the audit, select a state audit (e.g. California `CA`), identify its contributing NCT IDs and source registry links (`https://clinicaltrials.gov/study/<NCT_ID>`), note at least one data caveat (e.g. overall status does not verify site-level recruitment, or facility names do not resolve unique entities), and formulate a qualified next investigation (e.g. protocol comparability, local site capability). Human evaluation and operational benefits remain **NOT VERIFIED** until an actual live session.
+- [ ] **Human validation status:** A second reviewer can stream the audit, select a state audit (e.g. California `CA`), identify its contributing NCT IDs and source registry links (reading saved `registry_url` from each study record, e.g. `https://clinicaltrials.gov/study/<NCT_ID>`), note at least one data caveat (e.g. overall status does not verify site-level recruitment, or facility names do not resolve unique entities), and formulate a qualified next investigation (e.g. protocol comparability, local site capability). Human evaluation and operational benefits remain **NOT VERIFIED** until an actual live session.
 
 ---
 
@@ -256,7 +256,8 @@ This task requires only Python's standard library (`csv`, `json`, `lzma`, `pathl
 
 From the repository root:
 
-```python
+```bash
+python3 -I - <<'PY'
 import csv
 import json
 import lzma
@@ -298,6 +299,9 @@ with lzma.open(xz_path, "rt") as f:
             ca_audit = record
             break
 
+if ca_audit is None:
+    raise LookupError("CA audit record unavailable in evidence package")
+
 audit_summary = national_audit["audit"]["summary"]
 audit_meta = national_audit["audit"]["metadata"]
 
@@ -312,10 +316,12 @@ print(f"Recruiting Denominator: {recruiting_denominator}")
 print(f"Broader Eligible Studies: {audit_summary['eligible_studies']}")
 print(f"National Exclusions: {audit_summary['exclusions']}")
 
-if ca_audit:
-    ca_contributors = ca_audit["audit"]["contributors"]
-    print(f"CA Contributing Studies ({len(ca_contributors)}): {ca_contributors}")
-    print(f"Sample Registry Link: https://clinicaltrials.gov/study/{ca_contributors[0]}")
+ca_contributors = ca_audit["audit"]["contributors"]
+sample_study = next((s for s in ca_audit["audit"]["studies"] if s.get("nct_id") == ca_contributors[0]), {})
+sample_url = sample_study.get("registry_url") or f"https://clinicaltrials.gov/study/{ca_contributors[0]}"
+print(f"CA Contributing Studies ({len(ca_contributors)}): {ca_contributors}")
+print(f"Sample Registry Link: {sample_url}")
+PY
 ```
 
 **Expected output:**
@@ -335,7 +341,7 @@ Sample Registry Link: https://clinicaltrials.gov/study/NCT03860857
 ```
 
 **Failure handling:**
-- If an input file is missing or corrupted, standard library readers raise `FileNotFoundError`, `lzma.LZMAError`, or `json.JSONDecodeError`. No synthetic or zeroed outputs are fabricated. Missing raw bronze pages or historical rule bytes prevents a source-level recalculation claim, but committed evidence files remain fully inspectable offline.
+- Any uncaught exception or non-zero exit means the evidence is unavailable; no synthetic or zeroed outputs are fabricated. Standard library readers, consistency assertions, and lookups raise `FileNotFoundError`, `lzma.LZMAError`, `json.JSONDecodeError`, `EOFError` (e.g. truncated archive), `StopIteration` (e.g. empty file or stream), `AssertionError` (e.g. summary count mismatch), or `LookupError` (e.g. missing jurisdiction record). Missing raw bronze pages or historical rule bytes prevents a source-level recalculation claim, but committed evidence files remain fully inspectable offline.
 - When exercising missing-file or corruption handling, test only against a nonexistent path or a temporary synthetic file; **never delete or rename committed evidence files**.
 
 ---
@@ -345,11 +351,11 @@ Sample Registry Link: https://clinicaltrials.gov/study/NCT03860857
 Source-level recalculation is **not** achieved by reading saved artifacts. It requires separate authorization, access to the retained bronze snapshot, the exact matching source code and configuration, and a built local DuckDB warehouse.
 
 **Permission & data boundaries:**
-- `docs/evidence/build_feasibility_case_study.py` is **not** a generally safe disposable-data command: its paths are hardcoded to `data/warehouse/clinical_trials.duckdb` and write directly to `docs/evidence/`. Do not run it without explicit scope authorization.
-- Active rule hashes in current code are not historical configuration storage. If taxonomy, score weights, geography mappings, or dbt SQL models have changed since commit `aff62f7caea2bd08c11a28ec90085e2abe7444f5`, re-running the builder will drift from the frozen evidence.
+- `docs/evidence/build_feasibility_case_study.py` is **not** a generally safe disposable-data command: its warehouse path is resolved from the repository root (`ROOT / "data/warehouse/clinical_trials.duckdb"`) and execution overwrites both `docs/evidence/` files (`feasibility_case_study_audit.jsonl.xz` and `feasibility_case_study_results.csv`) in place. Do not run it in the review checkout; require a separate disposable clone or worktree. Compare regenerated files against the committed SHA-256 digests rather than committing them.
+- Active rule hashes in current code are not historical configuration storage. If taxonomy, historical score weights (path config/score_weights.yml in metadata), geography mappings, or dbt SQL models have changed since commit `aff62f7caea2bd08c11a28ec90085e2abe7444f5`, re-running the builder may drift from the frozen evidence. Commit `aff62f7caea2bd08c11a28ec90085e2abe7444f5` predates the builder itself; checkout `42da3c5` contains matching rule/config/model bytes and adds the builder script.
 - If raw bronze pages have been pruned under local retention policies, raw-record lineage references will no longer resolve to original payloads.
 
-When authorized, with the retained run in the local DuckDB warehouse and matching code checked out:
+When authorized, in a separate disposable clone or worktree with the retained run in the local DuckDB warehouse and checkout `42da3c5`:
 
 ```bash
 uv run python docs/evidence/build_feasibility_case_study.py \
@@ -368,7 +374,7 @@ Pulling current data from ClinicalTrials.gov is **explicitly new work**, not a r
 - A new pipeline run must **not** overwrite the frozen historical artifacts in `docs/evidence/`.
 - If a new capture or filtered cohort contains zero recruiting studies, the recruiting denominator is 0; jurisdiction cohort shares must be reported as **undefined shares** (division by zero), not 0% completeness.
 
-To run an authorized new capture and transform into a fresh local warehouse:
+To run an authorized new capture and transform into a local warehouse (new run added to repository-root `data/`):
 
 ```bash
 uv sync --all-groups --frozen
