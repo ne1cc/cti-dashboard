@@ -226,8 +226,9 @@ if months > 1:
         hovertemplate=(
             "Snapshot Month: %{x}<br>"
             "Study–jurisdiction memberships: %{y}<br>"
-            "<extra>Sum of state/territory counts; "
-            "multi-jurisdiction studies counted once per jurisdiction</extra>"
+            "Sum of state/territory counts;<br>"
+            "multi-jurisdiction studies counted once per jurisdiction"
+            "<extra></extra>"
         )
     )
     st.plotly_chart(fig2, width="stretch")

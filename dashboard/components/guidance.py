@@ -191,7 +191,8 @@ PAGE_GUIDANCE: dict[str, dict[str, Any]] = {
             "for the selected diagnostic condition group."
         ),
         "why": (
-            "County access map displays travel distance to open trial sites. State table presents "
+            "County access map shows straight-line distance from county centroids to the nearest "
+            "registry-listed open trial site. State table presents "
             "jurisdiction counts, population-normalized rates, and rate provenance. Monthly trend "
             "lines aggregate recruiting study–jurisdiction memberships across monthly snapshot "
             "dates; multi-state studies contribute to each jurisdiction in which they appear."

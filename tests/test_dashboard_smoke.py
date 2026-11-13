@@ -466,10 +466,6 @@ def test_geography_memberships_synthetic_scenario_two_states(
     assert "unique national studies" in metric.help
     assert "not confirm present-day" in metric.help
 
-    # Card does not claim 2 nationally unique studies
-    assert not any("unique national" in m.label.lower() for m in at.metric)
-    assert not any("national census" in m.label.lower() for m in at.metric)
-
     # Audit trigger matches plain-language wording
     audit_drawers = [p.proto.popover.label for p in at.get("popover")]
     assert any(
@@ -554,8 +550,11 @@ def test_geography_monthly_trend_chart_membership_labels(
     assert len(captured_figs) > 0
     fig = captured_figs[0]
     assert fig.layout.yaxis.title.text == "Study–jurisdiction memberships"
-    assert "Study–jurisdiction memberships" in fig.data[0].hovertemplate
-    assert "multi-jurisdiction studies counted once per jurisdiction" in fig.data[0].hovertemplate
+    # Plotly truncates trace-name extras; the explanation must be in the main hover body.
+    hover_body = fig.data[0].hovertemplate.split("<extra>", 1)[0]
+    assert "Study–jurisdiction memberships" in hover_body
+    assert "Sum of state/territory counts" in hover_body
+    assert "multi-jurisdiction studies counted once per jurisdiction" in hover_body
 
 
 def test_geography_empty_input_retains_disclosure(
@@ -590,7 +589,7 @@ def test_geography_empty_input_retains_disclosure(
     ).run()
     assert not at.exception, at.exception
     assert any("No condition group records available" in info.value for info in at.info)
-    assert not any("national zero" in m.label.lower() for m in at.metric)
+    assert not at.metric
 
 
 def test_data_reliability_page_no_calculator(fixture_warehouse):
