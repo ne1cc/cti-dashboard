@@ -1954,3 +1954,219 @@ models:
       - name: access_basis
         data_type: VARCHAR
         tests: [not_null]
+
+  - name: dim_registry_trial
+    description: One row per NCT ID across the whole registry (current record from latest snapshot).
+    contract:
+      enforced: true
+    columns:
+      - name: registry_trial_key
+        data_type: VARCHAR
+        description: Registry-wide trial identity (md5 of nct_id).
+        tests: [not_null, unique]
+      - name: nct_id
+        data_type: VARCHAR
+        tests: [not_null, unique]
+      - name: registry_url
+        data_type: VARCHAR
+        description: Public ClinicalTrials.gov record URL derived from the NCT ID.
+        tests: [not_null]
+      - name: current_brief_title
+        data_type: VARCHAR
+      - name: current_overall_status
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: current_phase
+        data_type: VARCHAR
+      - name: current_study_type
+        data_type: VARCHAR
+      - name: current_lead_sponsor
+        data_type: VARCHAR
+      - name: current_lead_sponsor_normalized
+        data_type: VARCHAR
+      - name: start_date
+        data_type: DATE
+      - name: primary_completion_date
+        data_type: DATE
+      - name: completion_date
+        data_type: DATE
+      - name: study_first_post_date
+        data_type: DATE
+      - name: enrollment_count
+        data_type: INTEGER
+      - name: enrollment_type
+        data_type: VARCHAR
+      - name: current_has_results_flag
+        data_type: BOOLEAN
+      - name: record_quality_flag
+        data_type: VARCHAR
+      - name: first_seen_snapshot_date
+        data_type: DATE
+      - name: latest_seen_snapshot_date
+        data_type: DATE
+      - name: active_in_latest_snapshot_flag
+        data_type: BOOLEAN
+      - name: minimum_age_raw
+        data_type: VARCHAR
+      - name: maximum_age_raw
+        data_type: VARCHAR
+      - name: min_age_years
+        data_type: DOUBLE
+      - name: max_age_years
+        data_type: DOUBLE
+      - name: std_age_groups
+        data_type: VARCHAR[]
+      - name: sex_eligibility
+        data_type: VARCHAR
+      - name: gender_based
+        data_type: BOOLEAN
+      - name: gender_description
+        data_type: VARCHAR
+      - name: accepts_healthy_volunteers
+        data_type: BOOLEAN
+      - name: current_intervention_model
+        data_type: VARCHAR
+      - name: current_masking
+        data_type: VARCHAR
+      - name: has_placebo_arm
+        data_type: BOOLEAN
+      - name: why_stopped
+        data_type: VARCHAR
+      - name: brief_summary
+        data_type: VARCHAR
+      - name: primary_outcome_time_frame
+        data_type: VARCHAR
+      - name: age_bounds_valid_flag
+        data_type: BOOLEAN
+      - name: age_bounds_contradictory_flag
+        data_type: BOOLEAN
+      - name: has_unspecified_min_age
+        data_type: BOOLEAN
+      - name: has_unspecified_max_age
+        data_type: BOOLEAN
+      - name: healthy_volunteers_unknown_flag
+        data_type: BOOLEAN
+      - name: sex_eligibility_unknown_flag
+        data_type: BOOLEAN
+      - name: has_derived_mesh
+        data_type: BOOLEAN
+      - name: ingestion_run_id
+        data_type: VARCHAR
+
+  - name: dim_registry_condition
+    description: One row per condition node across the whole registry (canonical registry grain).
+    contract:
+      enforced: true
+    columns:
+      - name: registry_condition_key
+        data_type: VARCHAR
+        tests: [not_null, unique]
+      - name: node_id
+        data_type: VARCHAR
+        tests: [not_null, unique]
+      - name: condition_normalized
+        data_type: VARCHAR
+      - name: condition_display_name
+        data_type: VARCHAR
+      - name: condition_group
+        data_type: VARCHAR
+      - name: mesh_id
+        data_type: VARCHAR
+      - name: is_ancestor
+        data_type: BOOLEAN
+      - name: mapping_source
+        data_type: VARCHAR
+      - name: dementia_relevance_flag
+        data_type: BOOLEAN
+      - name: mapping_confidence
+        data_type: VARCHAR
+      - name: trial_count
+        data_type: BIGINT
+
+  - name: bridge_registry_trial_condition
+    description: One row per registry trial x condition node from each trial's latest snapshot.
+    contract:
+      enforced: true
+    columns:
+      - name: registry_trial_condition_key
+        data_type: VARCHAR
+        tests: [not_null, unique]
+      - name: registry_trial_key
+        data_type: VARCHAR
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_registry_trial')
+              field: registry_trial_key
+      - name: registry_condition_key
+        data_type: VARCHAR
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_registry_condition')
+              field: registry_condition_key
+      - name: nct_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: node_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: condition_group
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: mesh_id
+        data_type: VARCHAR
+      - name: is_ancestor
+        data_type: BOOLEAN
+        tests: [not_null]
+      - name: mapping_source
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: dementia_relevance_flag
+        data_type: BOOLEAN
+      - name: mapping_confidence
+        data_type: VARCHAR
+      - name: source_condition_count
+        data_type: BIGINT
+
+  - name: bridge_preset_trial
+    description: Snapshot-aware preset trial bridge with explicit unassigned scope.
+    contract:
+      enforced: true
+    columns:
+      - name: preset_trial_key
+        data_type: VARCHAR
+        tests: [not_null, unique]
+      - name: preset_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: nct_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: registry_trial_key
+        data_type: VARCHAR
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_registry_trial')
+              field: registry_trial_key
+      - name: ingestion_run_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: snapshot_date
+        data_type: DATE
+        tests: [not_null]
+      - name: snapshot_timestamp_utc
+        data_type: TIMESTAMP
+      - name: is_unassigned
+        data_type: BOOLEAN
+        tests: [not_null]
+      - name: membership_scope
+        data_type: VARCHAR
+        tests:
+          - not_null
+          - accepted_values:
+              values: [preset, unassigned]
+      - name: current_record_flag
+        data_type: BOOLEAN
+        tests: [not_null]
