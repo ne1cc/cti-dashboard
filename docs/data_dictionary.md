@@ -224,6 +224,8 @@ exposed per arm through the Read API `arms` field, sourced from
 | dim_geography | U.S. state | geography_key (county/metro columns reserved, null) |
 | dim_date | day, 1999 → +3y | date_day |
 | dim_population | ACS geography (state, county, ZCTA) × sex × age band × race/ethnicity | population_key (ACS 2020-2024 5-year, tables B01001/B03002) |
+| dim_registry_trial | NCT ID (canonical latest observation across registry) | registry_trial_key |
+| dim_registry_condition | node_id (MeSH or taxonomy group node) | registry_condition_key |
 
 ### Facts and bridges
 | Model | Grain |
@@ -232,6 +234,8 @@ exposed per arm through the Read API `arms` field, sourced from
 | fct_trial_site | NCT × facility × snapshot date |
 | bridge_trial_condition | NCT × condition_group (current) |
 | bridge_trial_sponsor | NCT × sponsor × role (current) |
+| bridge_registry_trial_condition | NCT ID × condition node (`node_id`, `registry_condition_key`) |
+| bridge_preset_trial | preset_id × NCT ID × snapshot date (snapshot-aware preset membership + explicit unassigned scope) |
 
 ### Analytical marts
 | Model | Grain | Highlights |
