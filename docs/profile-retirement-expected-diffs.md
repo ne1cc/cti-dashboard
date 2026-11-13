@@ -231,3 +231,16 @@ Phase 2 builds the canonical registry silver streams (nine entities) and staging
 | Phase 2 | `stg_registry_*` staging models | 10 new models in staging | Views over canonical registry silver and manifests providing `registry_trial_key`. |
 | Phase 2 | `assert_registry_observation_integrity` | New singular test | Enforces canonical observation uniqueness and child entity referential integrity. |
 
+## Phase 3 (#169): parallel dimensions, membership and compatibility
+
+Phase 3 builds the parallel registry dimensions (`dim_registry_trial`, `dim_registry_condition`, `bridge_registry_trial_condition`) and snapshot-aware preset membership bridge (`bridge_preset_trial`) alongside existing legacy profile dimensions. Existing marts and profile models remain untouched, preserving the baseline.
+
+| Step | Table / column | Expected difference | Why |
+|------|----------------|---------------------|-----|
+| Phase 3 | Profile dimensions and baseline marts | none | Parallel additive architecture; existing legacy models (`dim_trial`, `dim_condition`, etc.) and baseline fixtures remain completely unchanged and pass. |
+| Phase 3 | `dim_registry_trial` | New mart table | Canonical registry trial dimension keyed on `registry_trial_key = md5(nct_id)` at grain `nct_id`. Version-clocked by `started_at_utc`. |
+| Phase 3 | `dim_registry_condition` | New mart table | Canonical registry condition dimension keyed on `registry_condition_key` at grain `node_id`. Aggregated across MeSH and taxonomy group nodes. |
+| Phase 3 | `bridge_registry_trial_condition` | New mart table | Canonical bridge connecting `registry_trial_key` and `nct_id` to condition `node_id` and `registry_condition_key`. |
+| Phase 3 | `bridge_preset_trial` | New mart table | Snapshot-aware preset trial membership bridge at grain `preset_id` × `nct_id` × `snapshot_date`. Includes explicit `unassigned` membership scope for unmapped/no-MeSH trials. Counts each trial once per preset and once in the registry union. |
+| Phase 3 | `assert_preset_membership_integrity` | New singular test | Enforces preset trial uniqueness, single current record per preset/trial, mutual exclusivity between assigned presets and unassigned scope, registry completeness against `dim_registry_trial`, and referential validity. |
+

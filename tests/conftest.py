@@ -203,6 +203,7 @@ def _build_fixture_root(
     *,
     session_timezone: str | None = None,
     dbt_vars: dict[str, object] | None = None,
+    extra_profile_yamls: dict[str, str] | None = None,
 ) -> Path:
     """Bronze->silver->gold for `runs`, then one `dbt build`; returns the scratch root."""
     root = tmp_path_factory.mktemp(name)
@@ -214,6 +215,7 @@ def _build_fixture_root(
             runs=runs,
             session_timezone=session_timezone,
             dbt_vars=dbt_vars,
+            extra_profile_yamls=extra_profile_yamls,
         )
         return root
     finally:
@@ -591,9 +593,14 @@ def fixture_project_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
 @pytest.fixture(scope="session")
 def shared_trial_project_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """Build independent shared-trial snapshots; raises on transform or dbt failure."""
-    from tests.preset_helpers import shared_trial_runs
+    from tests.preset_helpers import shared_trial_extra_profiles, shared_trial_runs
 
-    return _build_fixture_root(tmp_path_factory, "shared_trials", shared_trial_runs())
+    return _build_fixture_root(
+        tmp_path_factory,
+        "shared_trials",
+        shared_trial_runs(),
+        extra_profile_yamls=shared_trial_extra_profiles(),
+    )
 
 
 @pytest.fixture(scope="session")

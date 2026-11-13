@@ -176,6 +176,7 @@ def prepare_fixture_root(
     runs: list[FixtureRun] | None = None,
     *,
     session_timezone: str | None = None,
+    extra_profile_yamls: dict[str, str] | None = None,
 ) -> Path:
     """Prepares directory structure, config, bronze, and silver data without running dbt.
 
@@ -199,6 +200,9 @@ def prepare_fixture_root(
         for taxonomy in (REPO_ROOT / "config").glob("condition_taxonomy*.yml"):
             shutil.copy(taxonomy, root / "config" / taxonomy.name)
         shutil.copytree(REPO_ROOT / "config" / "profiles", root / "config" / "profiles")
+        if extra_profile_yamls:
+            for fname, content in extra_profile_yamls.items():
+                (root / "config" / "profiles" / fname).write_text(content, encoding="utf-8")
 
         from src.config import load_config
         from src.ingest.snapshot_manifest import (
@@ -217,6 +221,11 @@ def prepare_fixture_root(
                 root / "config/profiles/oncology_nsclc.yml", shared=shared
             ),
         }
+        for run in runs:
+            if run.profile not in profiles:
+                profiles[run.profile] = load_profile(
+                    root / f"config/profiles/{run.profile}.yml", shared=shared
+                )
 
         fixtures_dir = Path(__file__).parent / "fixtures"
 
@@ -284,7 +293,7 @@ def prepare_fixture_root(
             )
             write_manifest(profile_cfg.paths.bronze_manifests, manifest)
             write_summary(profile_cfg.paths.bronze_manifests, manifest)
-            transform_result = run_transform(profile=profiles[run.profile])
+            transform_result = run_transform(profile=profiles[run.profile], run_id=run.run_id)
             assert transform_result == [run.run_id], f"Transform failed for {run.run_id}"
             if run.final_status != "success":
                 manifest.status = run.final_status
@@ -358,9 +367,15 @@ def build_fixture_warehouse(
     *,
     session_timezone: str | None = None,
     dbt_vars: dict[str, object] | None = None,
+    extra_profile_yamls: dict[str, str] | None = None,
 ) -> Path:
     """Prepares fixture root and executes dbt build."""
-    prepare_fixture_root(root, runs=runs, session_timezone=session_timezone)
+    prepare_fixture_root(
+        root,
+        runs=runs,
+        session_timezone=session_timezone,
+        extra_profile_yamls=extra_profile_yamls,
+    )
     build_dbt_fixture(root, dbt_vars=dbt_vars)
     return root
 

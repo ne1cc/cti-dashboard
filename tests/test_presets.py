@@ -287,6 +287,170 @@ def test_shared_trials_keep_one_registry_identity_across_presets(
         assert len({row[3] for row in shared}) == 2
 
 
+def test_bridge_preset_trial_membership_and_scopes(
+    shared_trial_project_root: Path,
+) -> None:
+    """Preset membership counts each trial once per preset and once in the registry union.
+
+    Tests shared-node, no-MeSH, and distinct-snapshot cases.
+    """
+    warehouse = shared_trial_project_root / "data/warehouse/clinical_trials.duckdb"
+    with duckdb.connect(str(warehouse), read_only=True) as con:
+        # 1. Snapshot currency case:
+        # In shared_trial_runs(), all 10 trials run through 2026-09-15.
+        # Verify current_record_flag selects the latest snapshot_date per trial
+        # and marks earlier runs false.
+        nct1_current_dates = set(
+            con.execute(
+                "select distinct strftime(snapshot_date, '%Y-%m-%d') "
+                "from main_marts.bridge_preset_trial "
+                "where nct_id = 'NCT00000001' and current_record_flag = true"
+            ).fetchall()
+        )
+        assert nct1_current_dates == {("2026-09-15",)}
+
+        nct1_stale_dates = set(
+            con.execute(
+                "select distinct strftime(snapshot_date, '%Y-%m-%d') "
+                "from main_marts.bridge_preset_trial "
+                "where nct_id = 'NCT00000001' and current_record_flag = false"
+            ).fetchall()
+        )
+        assert nct1_stale_dates == {("2026-09-01",), ("2026-09-08",)}
+
+        # 2. Shared-node case: one MeSH node ('Alzheimer Disease', D000544) shared
+        # by two trials (NCT00000001, NCT00000002) and by two presets (adrd, shared_preset).
+        shared_trials = con.execute(
+            "select preset_id, nct_id, is_unassigned, membership_scope "
+            "from main_marts.bridge_preset_trial "
+            "where nct_id in ('NCT00000001', 'NCT00000002') and current_record_flag = true "
+            "order by nct_id, preset_id"
+        ).fetchall()
+        assert [(r[0], r[1], r[2], r[3]) for r in shared_trials] == [
+            ("adrd", "NCT00000001", False, "preset"),
+            ("shared_preset", "NCT00000001", False, "preset"),
+            ("adrd", "NCT00000002", False, "preset"),
+            ("shared_preset", "NCT00000002", False, "preset"),
+        ]
+
+        # 3. No-MeSH / unmapped case: NCT00000010
+        # NCT00000010 deliberately has no condition/MeSH.
+        # It must NOT be in adrd or oncology_nsclc, but MUST be in unassigned.
+        unmapped_preset_rows = con.execute(
+            "select preset_id, nct_id, is_unassigned, membership_scope "
+            "from main_marts.bridge_preset_trial "
+            "where nct_id = 'NCT00000010' and current_record_flag = true"
+        ).fetchall()
+        assert len(unmapped_preset_rows) == 1
+        assert unmapped_preset_rows[0] == ("unassigned", "NCT00000010", True, "unassigned")
+
+        # 4. Each trial counted once per preset:
+        # Check uniqueness of (preset_id, nct_id) among current records
+        dup_check = con.execute(
+            "select preset_id, nct_id, count(*) as c "
+            "from main_marts.bridge_preset_trial "
+            "where current_record_flag = true "
+            "group by preset_id, nct_id having count(*) > 1"
+        ).fetchall()
+        assert not dup_check
+
+        # 5. Registry union: each trial counted once in registry union
+        # dim_registry_trial has exactly one row per NCT ID (all 10 trials NCT00000001..NCT00000010)
+        reg_trials = con.execute(
+            "select nct_id, registry_trial_key from main_marts.dim_registry_trial"
+        ).fetchall()
+        assert len(reg_trials) == 10
+        assert {r[0] for r in reg_trials} == {f"NCT{i:08d}" for i in range(1, 11)}
+
+        # And union of distinct NCT IDs across bridge_preset_trial equals dim_registry_trial
+        bridge_union_trials = set(
+            con.execute(
+                "select distinct nct_id from main_marts.bridge_preset_trial "
+                "where current_record_flag = true"
+            ).fetchall()
+        )
+        assert bridge_union_trials == {(r[0],) for r in reg_trials}
+
+        # 6. Check bridge_registry_trial_condition and dim_registry_condition:
+        # NCT00000001 links to condition nodes (D000544 and ancestor D001523)
+        nct1_conditions = con.execute(
+            "select b.node_id, d.mapping_source, d.condition_display_name "
+            "from main_marts.bridge_registry_trial_condition b "
+            "join main_marts.dim_registry_condition d "
+            "  on b.registry_condition_key = d.registry_condition_key "
+            "where b.nct_id = 'NCT00000001'"
+        ).fetchall()
+        assert any("D000544" in r[0] for r in nct1_conditions)
+        # NCT00000010 has no conditions in bridge
+        assert (
+            con.execute(
+                "select count(*) from main_marts.bridge_registry_trial_condition "
+                "where nct_id = 'NCT00000010'"
+            ).fetchone()[0]
+            == 0
+        )
+
+
+def test_bridge_preset_trial_distinct_snapshots(tmp_path: Path) -> None:
+    """Distinct-snapshot case: each trial's currency tracks its own latest snapshot."""
+    from dataclasses import replace
+    from datetime import UTC, datetime
+
+    from tests.fixture_warehouse import (
+        AddedStudy,
+        base_adrd_run,
+        base_nsclc_run,
+        build_fixture_warehouse,
+    )
+
+    run1 = replace(
+        base_adrd_run(),
+        started_at=datetime(2026, 9, 1, 10, tzinfo=UTC),
+        run_id="20260901T100000Z_run1",
+        added=(
+            AddedStudy(
+                nct_id="NCT00000088",
+                clone_of="NCT00000001",
+                overall_status="RECRUITING",
+                condition="Alzheimer Disease",
+            ),
+        ),
+    )
+    run2 = replace(
+        base_nsclc_run(),
+        started_at=datetime(2026, 9, 8, 10, tzinfo=UTC),
+        run_id="20260908T100000Z_run2",
+    )
+    root = tmp_path / "distinct_snapshots_root"
+    build_fixture_warehouse(root, runs=[run1, run2])
+
+    warehouse = root / "data/warehouse/clinical_trials.duckdb"
+    with duckdb.connect(str(warehouse), read_only=True) as con:
+        # NCT00000088 only exists on 2026-09-01: its current record is on 2026-09-01
+        nct88_current = con.execute(
+            "select distinct strftime(snapshot_date, '%Y-%m-%d') "
+            "from main_marts.bridge_preset_trial "
+            "where nct_id = 'NCT00000088' and current_record_flag = true"
+        ).fetchall()
+        assert nct88_current == [("2026-09-01",)]
+
+        # NCT00000001 exists on both dates: its current record is on 2026-09-08
+        nct1_current = con.execute(
+            "select distinct strftime(snapshot_date, '%Y-%m-%d') "
+            "from main_marts.bridge_preset_trial "
+            "where nct_id = 'NCT00000001' and current_record_flag = true"
+        ).fetchall()
+        assert nct1_current == [("2026-09-08",)]
+
+        # And NCT00000001 on 2026-09-01 is marked historical
+        nct1_stale = con.execute(
+            "select distinct strftime(snapshot_date, '%Y-%m-%d') "
+            "from main_marts.bridge_preset_trial "
+            "where nct_id = 'NCT00000001' and current_record_flag = false"
+        ).fetchall()
+        assert nct1_stale == [("2026-09-01",)]
+
+
 def test_a_narrower_preset_reads_a_subset_of_the_nodes(
     tmp_path: Path, warehouse_with_second_adrd: Path
 ) -> None:
@@ -372,6 +536,49 @@ def test_trials_without_a_condition_stay_in_their_profile(warehouse_copy: Path) 
         assert len(explorer) == data.preset_trial_count(preset) == want
         assert int(data.overview_metrics(preset)["total_trials"]) == want
     assert nct_id in set(data.trial_explorer(preset_for("adrd"))["nct_id"])
+
+
+def test_same_timestamp_conflicting_payloads_fails_build(tmp_path: Path) -> None:
+    """Ties on started_at_utc with conflicting payloads must fail the build.
+
+    Identical payloads coalesce without error.
+    """
+    from dataclasses import replace
+
+    from tests.fixture_warehouse import (
+        base_adrd_run,
+        build_dbt_fixture,
+        build_fixture_warehouse,
+        prepare_fixture_root,
+    )
+
+    base = base_adrd_run()
+    # 1. Identical payloads at same started_at_utc coalesce without failure
+    run1 = replace(base, run_id="20260901T100000Z_run1")
+    run2 = replace(base, run_id="20260901T100000Z_run2")
+    coalesce_root = tmp_path / "coalesce_root"
+    build_fixture_warehouse(coalesce_root, runs=[run1, run2])
+
+    # 2. Conflicting payloads at same started_at_utc fail with NCT ID, run IDs and hashes
+    conflict_run2 = replace(
+        base,
+        run_id="20260901T100000Z_run2",
+        status_overrides={"NCT00000001": "COMPLETED"},
+    )
+    conflict_root = tmp_path / "conflict_root"
+    from src.transform.build_silver_entities import CanonicalConflictError
+
+    try:
+        prepare_fixture_root(conflict_root, runs=[run1, conflict_run2])
+        with pytest.raises(RuntimeError) as exc_info:
+            build_dbt_fixture(conflict_root)
+        err_msg = str(exc_info.value)
+        assert "assert_no_same_timestamp_conflicts" in err_msg
+        assert "NCT00000001" in err_msg
+    except CanonicalConflictError as exc:
+        err_msg = str(exc)
+        assert "NCT00000001" in err_msg
+        assert "20260901T100000Z_run2" in err_msg
 
 
 def test_a_preset_with_unknown_nodes_is_told_apart_from_an_unrefreshed_one() -> None:
