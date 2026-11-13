@@ -10,35 +10,11 @@ with current_trials as (
     from {{ ref('dim_registry_trial') }}
 ),
 
-group_nodes as (
-    select
-        c.nct_id,
-        'group:' || c.condition_group as node_id,
-        c.condition_group,
-        cast(null as varchar) as mesh_id,
-        false as is_ancestor,
-        c.mapping_source,
-        c.dementia_relevance_flag,
-        c.mapping_confidence,
-        count(distinct c.condition_raw) as source_condition_count
-    from {{ ref('stg_registry_trial_conditions') }} c
-    inner join current_trials t
-        on c.ingestion_run_id = t.ingestion_run_id
-        and c.nct_id = t.nct_id
-    where c.condition_normalized is not null
-    group by
-        c.nct_id,
-        c.condition_group,
-        c.mapping_source,
-        c.dementia_relevance_flag,
-        c.mapping_confidence
-),
-
 mesh_nodes as (
     select
         m.nct_id,
         m.mesh_id as node_id,
-        m.mesh_term as condition_group,
+        max(m.mesh_term) as condition_group,
         m.mesh_id,
         bool_and(m.is_ancestor) as is_ancestor,
         'mesh' as mapping_source,
@@ -51,14 +27,7 @@ mesh_nodes as (
         and m.nct_id = t.nct_id
     group by
         m.nct_id,
-        m.mesh_id,
-        m.mesh_term
-),
-
-nodes as (
-    select * from group_nodes
-    union all
-    select * from mesh_nodes
+        m.mesh_id
 )
 
 select
@@ -74,4 +43,4 @@ select
     dementia_relevance_flag,
     mapping_confidence,
     source_condition_count
-from nodes
+from mesh_nodes
