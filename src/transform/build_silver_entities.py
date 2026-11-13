@@ -133,7 +133,9 @@ def _human_list(items: list[str]) -> str:
     return ", ".join(items[:-1]) + " and " + items[-1]
 
 
-def _already_transformed(cfg: ProjectConfig, run_id: str) -> bool:
+def _already_transformed(
+    cfg: ProjectConfig, run_id: str, entities: tuple[str, ...] = ALL_ENTITY_NAMES
+) -> bool:
     """Every entity file exists AND the run's transform stats exist.
 
     Stats are removed before the first file swap and the fresh stats are
@@ -146,12 +148,15 @@ def _already_transformed(cfg: ProjectConfig, run_id: str) -> bool:
     if not stats_path(cfg, run_id).exists():
         return False
     return all(
-        (cfg.paths.silver / entity / f"run_id={run_id}.parquet").exists() for entity in ENTITY_NAMES
+        (cfg.paths.silver / entity / f"run_id={run_id}.parquet").exists() for entity in entities
     )
 
 
 def previous_snapshot_id(
-    cfg: ProjectConfig, current_run_id: str, manifests: list[IngestionManifest] | None = None
+    cfg: ProjectConfig,
+    current_run_id: str,
+    manifests: list[IngestionManifest] | None = None,
+    entities: tuple[str, ...] = ENTITY_NAMES,
 ) -> str | None:
     """Run id of the newest completed snapshot that silver already holds.
 
@@ -166,7 +171,7 @@ def previous_snapshot_id(
         if m.status == "success"
         and m.ingestion_run_id != current_run_id
         and (current_manifest is None or m.started_at_utc < current_manifest.started_at_utc)
-        and _already_transformed(cfg, m.ingestion_run_id)
+        and _already_transformed(cfg, m.ingestion_run_id, entities=entities)
     ]
     if not candidates:
         return None
@@ -186,8 +191,11 @@ def _carry_forward_rows(
     entities: tuple[str, ...] = ENTITY_NAMES,
 ) -> dict[str, int]:
     """Append rows of the previous snapshot whose NCT IDs this incremental run
-    did not touch, rewritten with the current run metadata. Returns per-entity
-    carried row counts."""
+    did not touch. For registry entities, only snapshot_id (containing snapshot)
+    is updated, preserving original ingestion_run_id and source started_at_utc /
+    snapshot_timestamp_utc provenance. For profile entities, ingestion_run_id,
+    snapshot_id, and snapshot_timestamp_utc are updated to current run metadata.
+    Returns per-entity carried row counts."""
     log = setup_logging()
     import pyarrow as pa
 
@@ -196,6 +204,11 @@ def _carry_forward_rows(
     for entity in entities:
         prev_path = cfg.paths.silver / entity / f"run_id={prev_run_id}.parquet"
         if not prev_path.exists():
+            if entity.startswith("registry_"):
+                raise ValueError(
+                    f"Previous snapshot {prev_run_id} lacks registry entity file for '{entity}'; "
+                    "full rebuild required."
+                )
             continue
         parquet_file = pq.ParquetFile(prev_path)
         total_carried = 0
@@ -206,11 +219,15 @@ def _carry_forward_rows(
                 continue
             kept_table = pa.Table.from_batches([kept_batch])
             schema = kept_table.schema
-            for col_name, new_val in [
-                ("ingestion_run_id", current_run_id),
-                ("snapshot_id", current_run_id),
-                ("snapshot_timestamp_utc", snapshot_ts),
-            ]:
+            if entity.startswith("registry_"):
+                rewrite_cols = [("snapshot_id", current_run_id)]
+            else:
+                rewrite_cols = [
+                    ("ingestion_run_id", current_run_id),
+                    ("snapshot_id", current_run_id),
+                    ("snapshot_timestamp_utc", snapshot_ts),
+                ]
+            for col_name, new_val in rewrite_cols:
                 idx = schema.get_field_index(col_name)
                 if idx != -1:
                     field = schema.field(idx)
@@ -236,7 +253,8 @@ def _has_existing_silver(cfg: ProjectConfig, run_id: str) -> bool:
     Used to detect an overwrite: close() would replace these retained files.
     """
     return any(
-        (cfg.paths.silver / entity / f"run_id={run_id}.parquet").exists() for entity in ENTITY_NAMES
+        (cfg.paths.silver / entity / f"run_id={run_id}.parquet").exists()
+        for entity in ALL_ENTITY_NAMES
     )
 
 
@@ -334,18 +352,26 @@ def build_silver_for_run(
     # describe the complete registry state, so unchanged rows are carried
     # forward from the previous snapshot. Resolve it before opening the
     # writer so a missing base fails loudly without leaving artifacts.
+    target_entities = ENTITY_NAMES if source is not None else ALL_ENTITY_NAMES
     updated_since = manifest.updated_since_utc
     carry_from: str | None = None
     if updated_since:
-        carry_from = previous_snapshot_id(cfg, run_id)
+        carry_from = previous_snapshot_id(cfg, run_id, entities=ENTITY_NAMES)
         if carry_from is None:
             raise ValueError(
                 f"Run {run_id} is an incremental refresh (updated_since_utc="
-                f"{updated_since}) but no previous snapshot with silver "
-                "exists; run a full ingestion and transform first."
+                f"{updated_since}) but no previous snapshot with complete silver "
+                "exists; full rebuild required."
             )
+        if source is None:
+            for reg_entity in REGISTRY_ENTITY_NAMES:
+                reg_path = cfg.paths.silver / reg_entity / f"run_id={carry_from}.parquet"
+                if not reg_path.exists():
+                    raise ValueError(
+                        f"Previous snapshot {carry_from} lacks registry entity file for "
+                        f"'{reg_entity}'; full rebuild required."
+                    )
 
-    target_entities = ENTITY_NAMES if source is not None else ALL_ENTITY_NAMES
     writer = SilverRunWriter(
         run_id, cfg.paths.silver, flush_rows=FLUSH_ROWS, entities=target_entities
     )

@@ -3,6 +3,7 @@
 select
     {{ generate_surrogate_key(['nct_id']) }} as registry_trial_key,
     ingestion_run_id,
+    snapshot_id,
     nct_id,
     mesh_id,
     mesh_term,
