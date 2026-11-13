@@ -110,11 +110,35 @@ taken from the participant-denominated `denoms` entry when one exists.
 
 ---
 
+## Canonical Registry Silver (parallel streams, issue #168)
+
+Nine canonical registry streams write alongside profile silver files under `data/silver/registry_*/run_id=<id>.parquet`. They mirror the profile silver schema exactly except `indication_profile_id` is removed:
+- `registry_trials`
+- `registry_trial_conditions` (conditions mapped to group `unmapped` with source `text_fallback`)
+- `registry_trial_condition_mesh`
+- `registry_trial_interventions`
+- `registry_trial_arms`
+- `registry_trial_sponsors`
+- `registry_trial_locations`
+- `registry_trial_outcomes`
+- `registry_trial_baseline_demographics`
+
+Registry observations have grain `(nct_id, run_id)` with registry surrogate key `registry_trial_key = md5(nct_id)`.
+
+---
+
 ## Gold: staging (`main_staging`, views)
-Typed 1:1 reads of silver plus `stg_trial_snapshots` (manifest rows) and
-`stg_trial_contacts` — **deliberately empty** (`where 1=0`) privacy
-guardrail (enforcing ADR 0065: official registry contact link plus site list,
-with zero contact information stored or exposed by design).
+Typed 1:1 reads of silver plus `stg_trial_snapshots` (manifest rows), `stg_trial_contacts` (deliberately empty privacy guardrail), and the 10 parallel registry staging models (`stg_registry_*`):
+- `stg_registry_trials`
+- `stg_registry_trial_conditions`
+- `stg_registry_trial_condition_mesh`
+- `stg_registry_trial_interventions`
+- `stg_registry_trial_arms`
+- `stg_registry_trial_sponsors`
+- `stg_registry_trial_locations`
+- `stg_registry_trial_outcomes`
+- `stg_registry_trial_baseline_demographics`
+- `stg_registry_trial_snapshots`
 
 Every grain in the three Gold sections below is additionally scoped by
 `indication_profile_id`: the multi-indication migration made the trial grain

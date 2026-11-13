@@ -525,6 +525,11 @@ IP: the container's run `20260905T191901Z_77632421` reported
   What is still single-profile by default is the manual entry point:
   `make ingest` sends the Makefile's `CONDITION` (`Alzheimer Disease`, the
   `adrd` profile). Use `make orchestrate` for the configured profiles.
+- **Warehouse grain upgrade note (Phase 2):** Live deployments upgrading
+  from the single-profile grain to include canonical registry silver and staging
+  require a full warehouse rebuild (`make pipeline` or `dbt build --full-refresh`)
+  to populate parallel canonical staging models. Existing marts and profile-scoped
+  silver streams remain unaffected.
 - This app is a **portfolio demonstration**, not clinical decision
   support.
 

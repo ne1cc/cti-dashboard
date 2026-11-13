@@ -53,6 +53,27 @@ sources:
           are kept exactly as sponsors reported them (combined race/ethnicity
           tables may carry the label in either field); OMB mapping happens in
           staging via the omb_race_ethnicity_mapping seed.
+      - name: registry_trials
+        description: >
+          One row per NCT ID + ingestion run at canonical registry grain (no indication profile).
+      - name: registry_trial_conditions
+        description: >
+          One row per NCT ID + raw condition + run at registry grain, with unmapped condition groups.
+      - name: registry_trial_condition_mesh
+        description: >
+          One row per NCT ID + MeSH browse identity + run at registry grain.
+      - name: registry_trial_interventions
+        description: One row per NCT ID + intervention + run at registry grain.
+      - name: registry_trial_arms
+        description: One row per NCT ID + arm group + run at registry grain.
+      - name: registry_trial_sponsors
+        description: One row per NCT ID + sponsor/collaborator + run at registry grain.
+      - name: registry_trial_locations
+        description: One row per NCT ID + location ordinal + run at registry grain.
+      - name: registry_trial_outcomes
+        description: One row per NCT ID + outcome + run at registry grain.
+      - name: registry_trial_baseline_demographics
+        description: One row per NCT ID + demographic measurement + run at registry grain.
 
   - name: bronze
     description: >

@@ -219,3 +219,15 @@ Remaining evidence gap: no full registry pull, retained live warehouse rebuild o
 preset-set comparison was performed for #166. The earlier step 2 selection differences above
 remain unmeasured; the historical “about 4%” statement is not a measurement made by this PR.
 The synthetic results cannot approve replacing the baseline or dropping profile-grain reports.
+
+## Phase 2 (#168): parallel canonical silver and staging
+
+Phase 2 builds the canonical registry silver streams (nine entities) and staging models (`stg_registry_*`) alongside existing profile silver and staging models. Existing marts and profile models remain untouched, preserving the baseline.
+
+| Step | Table / column | Expected difference | Why |
+|------|----------------|---------------------|-----|
+| Phase 2 | Profile silver and marts | none | Parallel additive architecture; existing models and baseline fixtures remain completely unchanged and pass. |
+| Phase 2 | `registry_trials` and other `registry_*` silver tables | New parallel entity files under `data/silver/registry_*/run_id=<id>.parquet` | Canonical registry observations without indication profile scoping. |
+| Phase 2 | `stg_registry_*` staging models | 10 new models in staging | Views over canonical registry silver and manifests providing `registry_trial_key`. |
+| Phase 2 | `assert_registry_observation_integrity` | New singular test | Enforces canonical observation uniqueness and child entity referential integrity. |
+
