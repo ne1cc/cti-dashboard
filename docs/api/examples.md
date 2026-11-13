@@ -35,12 +35,12 @@ Accept: application/json
 HTTP/1.1 200 OK
 Content-Type: application/json
 Data-Snapshot: 2026-07-31T140000_3f5a473e
-Data-Updated: 2026-07-31T14:02:18Z
-ETag: W/"9f8a3c2e1b4a"
+Data-Updated: 2026-07-31T14:00:00Z
+ETag: W/"9f8a3c2e1b4a7d10"
 Cache-Control: public, max-age=300
 X-Request-ID: 8b9e6c43-1f2a-4c9b-9d10-000000000001
 ```
-*(No `RateLimit-*` or `stale-while-revalidate` headers are emitted by the implemented handlers. Sending a subsequent warehouse `GET` with `If-None-Match: W/"9f8a3c2e1b4a"` returns `304 Not Modified` with an empty body while preserving these cache headers.)*
+*(No `RateLimit-*` or `stale-while-revalidate` headers are emitted by the implemented handlers. Sending a subsequent warehouse `GET` with `If-None-Match: W/"9f8a3c2e1b4a7d10"` returns `304 Not Modified` with an empty body while preserving these cache headers.)*
 
 **Response Body (Synthetic / Illustrative — Warehouse Backend):**
 <!-- example: trials_search_success -->
@@ -166,7 +166,7 @@ In the live backend, `eligibility`, `phase`, `std_age_group`, `sponsor_class`, `
 - `items: []` with `has_more: true` requires **cursor continuation** (`cursor=<next_cursor>`), not an exhausted-search conclusion.
 - `total_count: null` means **unknown** (because post-filtering or malformed-study omissions occurred), **not** zero.
 - `intervention_type` and `updated_since` remain unsupported on the live backend and return `422` `UNSUPPORTED_FILTER`.
-- Repeating this request within the 6-hour SQLite cache TTL returns `200 OK` with `X-Cache-Status: HIT` (live routes do not implement `If-None-Match` -> `304`). The 6-hour TTL is a freshness window before attempting an upstream refresh, **not** a maximum stale age: if refresh fails, synchronous `stale_if_error` returns `200 OK` with `X-Cache-Status: STALE`, `Cache-Control: no-cache`, and `Warning: 110 "Response is Stale"`.
+- Repeating this request within the 6-hour SQLite cache TTL returns `200 OK` with `X-Cache-Status: HIT` (live routes do not implement `If-None-Match` -> `304`). The 6-hour TTL is a freshness window before attempting an upstream refresh, **not** a maximum stale age: if the upstream refresh hits an outage (timeout, connection error, 429/5xx, or open breaker), synchronous `stale_if_error` returns `200 OK` with `X-Cache-Status: STALE`, `Cache-Control: no-cache`, and `Warning: 110 "Response is Stale"`.
 
 **Request:**
 ```http
@@ -223,8 +223,8 @@ Accept: application/json
 HTTP/1.1 200 OK
 Content-Type: application/json
 Data-Snapshot: 2026-07-31T140000_3f5a473e
-Data-Updated: 2026-07-31T14:02:18Z
-ETag: W/"7c1d9e4a2b60"
+Data-Updated: 2026-07-31T14:00:00Z
+ETag: W/"7c1d9e4a2b60f318"
 Cache-Control: public, max-age=300
 X-Request-ID: 8b9e6c43-1f2a-4c9b-9d10-000000000003
 ```
@@ -476,8 +476,8 @@ When a study's protocol does not state age limits, `minimum_age_years` and `maxi
 ### 2.3 Provenance Clocks, Field-to-Evidence Trace (`overallStatus`), and Boundaries
 
 **Three distinct provenance clocks** appear across headers and `TrialDetail`:
-1. **Capture / snapshot clock:** `Data-Snapshot` header and `provenance.snapshot_id` / `snapshot_date` / `snapshot_timestamp_utc` identify the warehouse snapshot (`live-api` on the live backend).
-2. **Retrieval / cache clock:** `Data-Updated` header and `provenance.retrieved_at_utc` record when CTI fetched or cached the study JSON.
+1. **Capture / snapshot clock:** `Data-Snapshot` header and `provenance.snapshot_id` / `snapshot_date` / `snapshot_timestamp_utc` identify the warehouse snapshot (`live-api` on the live backend). On the warehouse backend, the `Data-Updated` header carries this snapshot/capture timestamp (`snap_ts` from `apply_cache_headers_and_check_etag` in `src/api/app.py`), matching `provenance.snapshot_timestamp_utc`.
+2. **Retrieval / cache clock:** `provenance.retrieved_at_utc` records the per-study retrieval timestamp when CTI fetched the study JSON. On the live backend, the `Data-Updated` header records the cache retrieval time (`entry.created_at` from `set_live_response_headers` in `src/api/app.py`).
 3. **Source-update clock:** `dates.last_update_post_date` and `status_verified_date` reflect sponsor-reported updates on ClinicalTrials.gov, independent of CTI capture or cache timing.
 
 **Field-to-evidence trace (`overallStatus`):**
@@ -489,7 +489,7 @@ When a study's protocol does not state age limits, `minimum_age_years` and `maxi
 **Explicit capability and cohort boundaries:**
 - **Batch/evidence vs. API:** The October 3 case study reads frozen DuckDB/audit artifacts directly; no API endpoint is required for every dashboard chart.
 - **Phase matching:** API `phase=PHASE3` matches `/` phase tokens (including combined strings such as `PHASE2/PHASE3`) in both `src/api/live.py` and `src/api/sql/search.sql`. The API example does **not** claim to reproduce the case study's exact-`PHASE3` cohort or 50-state union.
-- **Live `/related`:** Calling `GET /v1/trials/{nct_id}/related` without a warehouse returns `200 OK` with `related_trials: []` because pairwise similarity requires `mart_trial_similarity`; an empty list on the live backend indicates unsupported backend capability, not proof that no comparable studies exist.
+- **Live `/related`:** Calling `GET /v1/trials/{nct_id}/related` without a warehouse returns `200 OK` with `related_trials: []` because the live backend does not compute similarity (there is no registry-wide discovery without a warehouse in the `/related` handler in `src/api/app.py`; related trials come from the warehouse path in `src/api/sql/related.sql`). An empty list on the live backend indicates unsupported backend capability, not proof that no comparable studies exist.
 - **Unimplemented `/v1/geo/access`:** Section 5 below documents the OpenAPI schema shape for `GET /v1/geo/access`, which has no implemented FastAPI handler in `src/api/app.py` and is explicitly outside this executable walkthrough (its implement/defer/remove policy remains pending).
 
 ---

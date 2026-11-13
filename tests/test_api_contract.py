@@ -586,10 +586,10 @@ def test_openapi_server_base_composition(openapi_doc: dict[str, Any]) -> None:
     assert isinstance(servers, list) and len(servers) >= 2
     by_url = {entry["url"]: entry for entry in servers if isinstance(entry, dict)}
 
-    local_base = "http://localhost:8000"
-    placeholder_base = "https://api.cti.example.org"
-    assert local_base in by_url
-    assert placeholder_base in by_url
+    local_base = next(url for url in by_url if "localhost" in url)
+    placeholder_base = next(url for url in by_url if "cti.example.org" in url)
+    assert local_base == "http://localhost:8000"
+    assert placeholder_base == "https://api.cti.example.org"
     assert "placeholder" in by_url[placeholder_base].get("description", "").lower()
 
     for url in by_url:
@@ -602,22 +602,24 @@ def test_openapi_server_base_composition(openapi_doc: dict[str, Any]) -> None:
     paths = openapi_doc.get("paths", {})
     assert "/v1/trials" in paths and "get" in paths["/v1/trials"]
     assert "/v1/trials/{nct_id}" in paths and "get" in paths["/v1/trials/{nct_id}"]
+    search_key = next(key for key in paths if key == "/v1/trials")
+    detail_key = next(key for key in paths if key == "/v1/trials/{nct_id}")
 
-    search_url = f"{local_base.rstrip('/')}/v1/trials"
-    detail_tmpl = "/v1/trials/{nct_id}".replace("{nct_id}", "NCT00000001")
+    search_url = f"{local_base.rstrip('/')}{search_key}"
+    detail_tmpl = detail_key.replace("{nct_id}", "NCT00000001")
     detail_url = f"{local_base.rstrip('/')}{detail_tmpl}"
     assert search_url == "http://localhost:8000/v1/trials"
     assert detail_url == "http://localhost:8000/v1/trials/NCT00000001"
     assert "/v1/v1" not in search_url
     assert "/v1/v1" not in detail_url
 
-    placeholder_search = f"{placeholder_base.rstrip('/')}/v1/trials"
+    placeholder_search = f"{placeholder_base.rstrip('/')}{search_key}"
     assert placeholder_search == "https://api.cti.example.org/v1/trials"
     assert "/v1/v1" not in placeholder_search
 
 
 def test_selected_search_and_detail_get_handlers_with_composed_paths(
-    openapi_doc: dict[str, Any], tmp_path: Path
+    openapi_doc: dict[str, Any], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Composed local paths reach implemented warehouse & mocked-live GET handlers."""
     from copy import deepcopy
@@ -682,6 +684,7 @@ def test_selected_search_and_detail_get_handlers_with_composed_paths(
         assert wh_detail_data["overall_status"] == "RECRUITING"
 
     # 2. Mocked-live backend with stubbed CTGClient and isolated cache path (zero network calls)
+    monkeypatch.delenv("CTI_WAREHOUSE_PATH", raising=False)
     fixtures_dir = Path(__file__).parent / "fixtures" / "api"
     live_search_fixture = json.loads((fixtures_dir / "live_search.json").read_text("utf-8"))
     live_detail_fixture = deepcopy(
@@ -718,6 +721,7 @@ def test_selected_search_and_detail_get_handlers_with_composed_paths(
         assert live_repeat.status_code == 200
         assert live_repeat.headers["X-Cache-Status"] == "HIT"
         assert stub_ctg.fetch_studies.call_count == 1
+        assert stub_ctg.fetch_studies.call_args.args[0]["filter.overallStatus"] == "RECRUITING"
 
         live_detail = live_client.get(detail_path)
         assert live_detail.status_code == 200
