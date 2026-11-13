@@ -1,5 +1,7 @@
 """Parquet export for silver entities: data/silver/<entity>/run_id=<id>.parquet."""
 
+from __future__ import annotations
+
 import os
 import types
 from pathlib import Path
@@ -242,6 +244,38 @@ ENTITY_ARROW_SCHEMAS: dict[str, pa.Schema] = {
     for entity, cols in ENTITY_COLUMNS.items()
 }
 
+REGISTRY_ENTITY_NAMES: tuple[str, ...] = (
+    "registry_trials",
+    "registry_trial_conditions",
+    "registry_trial_condition_mesh",
+    "registry_trial_interventions",
+    "registry_trial_arms",
+    "registry_trial_sponsors",
+    "registry_trial_locations",
+    "registry_trial_outcomes",
+    "registry_trial_baseline_demographics",
+)
+
+REGISTRY_ENTITY_COLUMNS: dict[str, list[str]] = {
+    entity_name.replace("silver_", "registry_"): [
+        col for col in cols if col != "indication_profile_id"
+    ]
+    for entity_name, cols in ENTITY_COLUMNS.items()
+}
+
+REGISTRY_ENTITY_ARROW_SCHEMAS: dict[str, pa.Schema] = {
+    entity: pa.schema(
+        [pa.field(col, _NON_STRING_ARROW_TYPES.get(col, pa.string())) for col in cols]
+    )
+    for entity, cols in REGISTRY_ENTITY_COLUMNS.items()
+}
+
+ALL_ENTITY_COLUMNS: dict[str, list[str]] = {**ENTITY_COLUMNS, **REGISTRY_ENTITY_COLUMNS}
+ALL_ENTITY_ARROW_SCHEMAS: dict[str, pa.Schema] = {
+    **ENTITY_ARROW_SCHEMAS,
+    **REGISTRY_ENTITY_ARROW_SCHEMAS,
+}
+
 DEFAULT_FLUSH_ROWS = 50_000
 
 
@@ -262,17 +296,27 @@ class SilverRunWriter:
     dbt globs or _already_transformed to see.
     """
 
-    def __init__(self, run_id: str, silver_dir: Path, flush_rows: int = DEFAULT_FLUSH_ROWS):
+    def __init__(
+        self,
+        run_id: str,
+        silver_dir: Path,
+        flush_rows: int = DEFAULT_FLUSH_ROWS,
+        entities: tuple[str, ...] | list[str] | None = None,
+    ):
         self.run_id = run_id
         self.silver_dir = silver_dir
         self.flush_rows = flush_rows
-        self.row_counts: dict[str, int] = {name: 0 for name in ENTITY_ARROW_SCHEMAS}
-        self._buffers: dict[str, list[dict[str, Any]]] = {name: [] for name in ENTITY_ARROW_SCHEMAS}
+        target_entities = (
+            tuple(entities) if entities is not None else tuple(ENTITY_ARROW_SCHEMAS.keys())
+        )
+        self.entities = target_entities
+        self.row_counts: dict[str, int] = {name: 0 for name in target_entities}
+        self._buffers: dict[str, list[dict[str, Any]]] = {name: [] for name in target_entities}
         self._writers: dict[str, pq.ParquetWriter] = {}
         self._tmp_paths: dict[str, Path] = {}
         self._closed = False
 
-    def __enter__(self) -> "SilverRunWriter":
+    def __enter__(self) -> SilverRunWriter:
         return self
 
     def __exit__(
@@ -290,7 +334,7 @@ class SilverRunWriter:
 
     def add_rows(self, rows_by_entity: dict[str, list[dict[str, Any]]]) -> None:
         for entity, rows in rows_by_entity.items():
-            if not rows:
+            if not rows or entity not in self.entities:
                 continue
             buffer = self._buffers[entity]
             buffer.extend(rows)
@@ -302,27 +346,28 @@ class SilverRunWriter:
         unchanged rows forward from the previous snapshot). Column order and
         types must be compatible with the entity schema; extra or missing
         columns are reconciled by cast against it."""
-        schema = ENTITY_ARROW_SCHEMAS[entity]
+        schema = ALL_ENTITY_ARROW_SCHEMAS[entity]
         table = table.cast(schema)
         if table.num_rows == 0:
             return
         self._writer(entity).write_table(table)
-        self.row_counts[entity] += table.num_rows
+        self.row_counts[entity] = self.row_counts.get(entity, 0) + table.num_rows
 
     def close(self) -> dict[str, int]:
         if self._closed:
             return dict(self.row_counts)
-        for entity in ENTITY_ARROW_SCHEMAS:
+        for entity in self.entities:
             self._flush(entity)
             if entity in self._writers:
                 self._writers[entity].close()
-        for entity in ENTITY_ARROW_SCHEMAS:
+        for entity in self.entities:
             final_path = self._final_path(entity)
+            schema = ALL_ENTITY_ARROW_SCHEMAS[entity]
             if entity in self._tmp_paths:
                 os.replace(self._tmp_paths[entity], final_path)
             else:
                 tmp_path = self._tmp_path(entity)
-                pq.write_table(ENTITY_ARROW_SCHEMAS[entity].empty_table(), tmp_path)
+                pq.write_table(schema.empty_table(), tmp_path)
                 os.replace(tmp_path, final_path)
         self._closed = True
         return dict(self.row_counts)
@@ -344,7 +389,8 @@ class SilverRunWriter:
         if not rows:
             return
         writer = self._writer(entity)
-        writer.write_table(_table_from_rows(rows, ENTITY_ARROW_SCHEMAS[entity]))
+        schema = ALL_ENTITY_ARROW_SCHEMAS[entity]
+        writer.write_table(_table_from_rows(rows, schema))
         self.row_counts[entity] += len(rows)
         self._buffers[entity] = []
 
@@ -352,9 +398,8 @@ class SilverRunWriter:
         if entity not in self._writers:
             tmp_path = self._tmp_path(entity)
             self._tmp_paths[entity] = tmp_path
-            self._writers[entity] = pq.ParquetWriter(
-                tmp_path, ENTITY_ARROW_SCHEMAS[entity], compression="snappy"
-            )
+            schema = ALL_ENTITY_ARROW_SCHEMAS[entity]
+            self._writers[entity] = pq.ParquetWriter(tmp_path, schema, compression="snappy")
         return self._writers[entity]
 
     def _tmp_path(self, entity: str) -> Path:
@@ -370,7 +415,7 @@ class SilverRunWriter:
 def export_entity(
     rows: list[dict[str, Any]], entity_name: str, run_id: str, silver_dir: Path
 ) -> tuple[Path, int]:
-    with SilverRunWriter(run_id, silver_dir) as writer:
+    with SilverRunWriter(run_id, silver_dir, entities=(entity_name,)) as writer:
         writer.add_rows({entity_name: rows})
         counts = writer.close()
     return silver_dir / entity_name / f"run_id={run_id}.parquet", counts[entity_name]

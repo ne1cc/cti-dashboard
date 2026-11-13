@@ -63,6 +63,8 @@ def test_cli_prepare_only(tmp_path: Path) -> None:
     # Silver Parquet files should exist
     silver_trials = list((target / "data" / "silver" / "silver_trials").glob("*.parquet"))
     assert len(silver_trials) >= 1
+    registry_trials = list((target / "data" / "silver" / "registry_trials").glob("*.parquet"))
+    assert len(registry_trials) >= 1
 
     # Warehouse DuckDB file should NOT exist under prepare-only
     duckdb_file = target / "data" / "warehouse" / "clinical_trials.duckdb"

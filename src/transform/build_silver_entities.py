@@ -26,7 +26,11 @@ import pyarrow.parquet as pq
 
 from src.config import ProjectConfig, get_config
 from src.ingest.snapshot_manifest import IngestionManifest, load_manifests
-from src.transform.export_parquet import DEFAULT_FLUSH_ROWS, SilverRunWriter
+from src.transform.export_parquet import (
+    DEFAULT_FLUSH_ROWS,
+    REGISTRY_ENTITY_NAMES,
+    SilverRunWriter,
+)
 from src.transform.flatten_studies import dig, flatten_study, iter_bronze_study_records
 from src.transform.normalize_conditions import get_taxonomy
 from src.transform.normalize_locations import get_geography_rules
@@ -36,6 +40,7 @@ from src.transform.silver_stats import (
     stats_path,
     write_transform_stats,
 )
+from src.utils.hashing import sha256_json
 from src.utils.logging import setup_logging
 
 if TYPE_CHECKING:
@@ -56,6 +61,13 @@ ENTITY_NAMES = (
     "silver_trial_outcomes",
     "silver_trial_baseline_demographics",
 )
+
+ALL_ENTITY_NAMES = ENTITY_NAMES + REGISTRY_ENTITY_NAMES
+
+
+class CanonicalConflictError(ValueError):
+    """Raised when canonical registry observations conflict per the approved conflict policy."""
+
 
 PRE_UPGRADE_ENTITY_NAMES = (
     "silver_trials",
@@ -171,6 +183,7 @@ def _carry_forward_rows(
     seen_nct_ids: set[str],
     current_run_id: str,
     snapshot_ts: str,
+    entities: tuple[str, ...] = ENTITY_NAMES,
 ) -> dict[str, int]:
     """Append rows of the previous snapshot whose NCT IDs this incremental run
     did not touch, rewritten with the current run metadata. Returns per-entity
@@ -180,7 +193,7 @@ def _carry_forward_rows(
 
     carried: dict[str, int] = {}
     value_set = pa.array(sorted(seen_nct_ids), type=pa.string())
-    for entity in ENTITY_NAMES:
+    for entity in entities:
         prev_path = cfg.paths.silver / entity / f"run_id={prev_run_id}.parquet"
         if not prev_path.exists():
             continue
@@ -332,7 +345,11 @@ def build_silver_for_run(
                 "exists; run a full ingestion and transform first."
             )
 
-    writer = SilverRunWriter(run_id, cfg.paths.silver, flush_rows=FLUSH_ROWS)
+    target_entities = ENTITY_NAMES if source is not None else ALL_ENTITY_NAMES
+    writer = SilverRunWriter(
+        run_id, cfg.paths.silver, flush_rows=FLUSH_ROWS, entities=target_entities
+    )
+    seen_nct_payloads: dict[str, str] = {}
     try:
         for study, provenance in iter_bronze_study_records(run_dir):
             scanned += 1
@@ -348,17 +365,25 @@ def build_silver_for_run(
                 taxonomy,
                 geography,
                 indication_profile_id=profile_id,
+                include_registry=(source is None),
                 **provenance,
             )
             nct_id = rows["silver_trials"][0]["nct_id"]
             if not nct_id:
                 skipped_no_nct += 1  # already quarantined at ingestion
                 continue
-            dedup_key = (nct_id, profile_id)
-            if dedup_key in seen_dedup_keys:
+            source_json_hash = rows["silver_trials"][0]["source_json_hash"]
+            if nct_id in seen_nct_payloads:
+                prev_hash = seen_nct_payloads[nct_id]
+                if prev_hash != source_json_hash:
+                    raise CanonicalConflictError(
+                        f"Conflicting payload hashes for {nct_id} in run {run_id}: "
+                        f"{prev_hash} vs {source_json_hash}"
+                    )
                 duplicate_count += 1
                 continue
-            seen_dedup_keys.add(dedup_key)
+            seen_nct_payloads[nct_id] = source_json_hash
+            seen_dedup_keys.add((nct_id, profile_id))
             writer.add_rows(rows)
             study_count += 1
             if study_count % PROGRESS_EVERY == 0:
@@ -375,6 +400,62 @@ def build_silver_for_run(
             manifest = manifest.model_copy(
                 update={"record_count": study_count + duplicate_count + skipped_no_nct}
             )
+        else:
+            # Source runs write canonical registry silver; check for equal source
+            # timestamps with conflicting payloads across runs per the conflict policy.
+            manifests = load_manifests(cfg.paths.bronze_manifests)
+            same_ts_manifests = [
+                m
+                for m in manifests
+                if m.status == "success"
+                and m.ingestion_run_id != run_id
+                and m.started_at_utc == manifest.started_at_utc
+            ]
+            for m in same_ts_manifests:
+                other_run_id = m.ingestion_run_id
+                found_match = False
+                for candidate in ("registry_trials", "silver_trials"):
+                    other_silver = cfg.paths.silver / candidate / f"run_id={other_run_id}.parquet"
+                    if other_silver.exists():
+                        other_table = pq.read_table(
+                            other_silver, columns=["nct_id", "source_json_hash"]
+                        )
+                        other_lookup = dict(
+                            zip(
+                                other_table.column("nct_id").to_pylist(),
+                                other_table.column("source_json_hash").to_pylist(),
+                                strict=True,
+                            )
+                        )
+                        for nct, h in seen_nct_payloads.items():
+                            if nct in other_lookup and other_lookup[nct] != h:
+                                other_h = other_lookup[nct]
+                                raise CanonicalConflictError(
+                                    f"Conflicting observations for {nct} at "
+                                    f"timestamp {snapshot_ts}: run {run_id} ({h}) "
+                                    f"vs run {other_run_id} ({other_h})"
+                                )
+                        found_match = True
+                        break
+                if not found_match:
+                    other_bronze_dir = cfg.paths.bronze_api_responses / f"run_id={other_run_id}"
+                    if other_bronze_dir.exists():
+                        for other_study, _ in iter_bronze_study_records(other_bronze_dir):
+                            other_nct = dig(
+                                other_study,
+                                "protocolSection",
+                                "identificationModule",
+                                "nctId",
+                            )
+                            if other_nct and other_nct in seen_nct_payloads:
+                                other_hash = sha256_json(other_study)
+                                if other_hash != seen_nct_payloads[other_nct]:
+                                    cur_h = seen_nct_payloads[other_nct]
+                                    raise CanonicalConflictError(
+                                        f"Conflicting observations for {other_nct} at "
+                                        f"timestamp {snapshot_ts}: run {run_id} ({cur_h}) "
+                                        f"vs run {other_run_id} ({other_hash})"
+                                    )
         carried_counts: dict[str, int] = {}
         if carry_from is not None:
             carried_counts = _carry_forward_rows(
@@ -384,6 +465,7 @@ def build_silver_for_run(
                 {key[0] for key in seen_dedup_keys} | scanned_nct_ids,
                 current_run_id=run_id,
                 snapshot_ts=snapshot_ts,
+                entities=target_entities,
             )
 
         # An incomplete bronze rebuild (a lost page, truncated records, or lost
@@ -482,7 +564,7 @@ def build_silver_for_run(
         )
 
     row_counts: dict[str, int] = {}
-    for entity in ENTITY_NAMES:
+    for entity in target_entities:
         path = cfg.paths.silver / entity / f"run_id={run_id}.parquet"
         row_counts[entity] = counts[entity]
         log.info("Run {}: wrote {} rows -> {}", run_id, counts[entity], path)

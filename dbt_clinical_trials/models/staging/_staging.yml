@@ -246,3 +246,98 @@ models:
 
   - name: stg_trial_contacts
     description: Deliberately empty (privacy guardrail) — contacts are never extracted.
+
+  - name: stg_registry_trial_snapshots
+    description: One row per ingestion run for canonical registry-wide snapshots.
+    columns:
+      - name: ingestion_run_id
+        tests: [not_null, unique]
+
+  - name: stg_registry_trials
+    description: One row per NCT ID per ingestion run at canonical registry grain.
+    columns:
+      - name: registry_trial_key
+        tests: [not_null]
+      - name: nct_id
+        tests: [not_null]
+      - name: ingestion_run_id
+        tests: [not_null]
+      - name: source_json_hash
+        tests: [not_null]
+
+  - name: stg_registry_trial_conditions
+    description: One row per NCT ID + raw condition + run at registry grain.
+    columns:
+      - name: registry_trial_key
+        tests: [not_null]
+      - name: nct_id
+        tests: [not_null]
+      - name: condition_group
+        tests: [not_null]
+      - name: mapping_confidence
+        tests:
+          - accepted_values:
+              values: [high, medium, low]
+      - name: mapping_source
+        tests:
+          - accepted_values:
+              values: [yaml_overlay, text_fallback]
+
+  - name: stg_registry_trial_condition_mesh
+    description: One row per NCT ID + MeSH browse identity + run at registry grain.
+    columns:
+      - name: registry_trial_key
+        tests: [not_null]
+      - name: nct_id
+        tests: [not_null]
+      - name: mesh_id
+        tests: [not_null]
+
+  - name: stg_registry_trial_interventions
+    description: One row per NCT ID + intervention + run at registry grain.
+    columns:
+      - name: registry_trial_key
+        tests: [not_null]
+      - name: nct_id
+        tests: [not_null]
+
+  - name: stg_registry_trial_arms
+    description: One row per NCT ID + arm group + run at registry grain.
+    columns:
+      - name: registry_trial_key
+        tests: [not_null]
+      - name: nct_id
+        tests: [not_null]
+
+  - name: stg_registry_trial_sponsors
+    description: One row per NCT ID + sponsor/collaborator + run at registry grain.
+    columns:
+      - name: registry_trial_key
+        tests: [not_null]
+      - name: nct_id
+        tests: [not_null]
+
+  - name: stg_registry_trial_locations
+    description: One row per NCT ID + location ordinal + run at registry grain.
+    columns:
+      - name: registry_trial_key
+        tests: [not_null]
+      - name: nct_id
+        tests: [not_null]
+
+  - name: stg_registry_trial_outcomes
+    description: One row per NCT ID + outcome + run at registry grain.
+    columns:
+      - name: registry_trial_key
+        tests: [not_null]
+      - name: nct_id
+        tests: [not_null]
+
+  - name: stg_registry_trial_baseline_demographics
+    description: One row per NCT ID + demographic measurement + run at registry grain.
+    columns:
+      - name: registry_trial_key
+        tests: [not_null]
+      - name: nct_id
+        tests: [not_null]
+

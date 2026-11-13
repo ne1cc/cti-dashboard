@@ -268,6 +268,7 @@ def flatten_study(
     retrieved_at_utc: str | None = None,
     raw_page_reference: str | None = None,
     raw_study_ordinal: int | None = None,
+    include_registry: bool = False,
 ) -> dict[str, list[dict[str, Any]]]:
     """One study → rows for each silver entity.
 
@@ -499,7 +500,7 @@ def flatten_study(
                 }
             )
 
-    return {
+    res = {
         "silver_trials": [trial],
         "silver_trial_conditions": conditions,
         "silver_trial_condition_mesh": condition_mesh,
@@ -510,6 +511,100 @@ def flatten_study(
         "silver_trial_outcomes": outcomes,
         "silver_trial_baseline_demographics": _baseline_demographics_rows(study, base),
     }
+
+    if include_registry:
+        registry_base = {
+            "ingestion_run_id": ingestion_run_id,
+            "nct_id": nct_id,
+            "source_json_hash": source_json_hash,
+            "snapshot_id": ingestion_run_id,
+            "retrieved_at_utc": retrieved_at_utc,
+            "raw_page_reference": raw_page_reference,
+            "raw_study_ordinal": raw_study_ordinal,
+        }
+
+        registry_trial = {k: v for k, v in trial.items() if k != "indication_profile_id"}
+
+        registry_conditions = [
+            {
+                **registry_base,
+                "condition_raw": condition_raw,
+                "condition_normalized": normalize_text(condition_raw),
+                "condition_group": UNMAPPED_CONDITION_GROUP,
+                "dementia_relevance_flag": False,
+                "mapping_confidence": "low",
+                "mapping_source": "text_fallback",
+            }
+            for condition_raw in dig(protocol, "conditionsModule", "conditions") or []
+        ]
+
+        registry_condition_mesh = [
+            {
+                **registry_base,
+                "mesh_id": mesh["id"],
+                "mesh_term": mesh["term"],
+                "is_ancestor": mesh["is_ancestor"],
+                "branch": None,
+            }
+            for mesh in extract_condition_mesh(study)
+        ]
+
+        registry_interventions = [
+            {k: v for k, v in row.items() if k != "indication_profile_id"} for row in interventions
+        ]
+        registry_arms = [
+            {k: v for k, v in row.items() if k != "indication_profile_id"} for row in arms
+        ]
+        registry_sponsors = [
+            {k: v for k, v in row.items() if k != "indication_profile_id"} for row in sponsors
+        ]
+        registry_locations = [
+            {k: v for k, v in row.items() if k != "indication_profile_id"} for row in locations
+        ]
+        registry_outcomes = [
+            {k: v for k, v in row.items() if k != "indication_profile_id"} for row in outcomes
+        ]
+        registry_demographics = _baseline_demographics_rows(study, registry_base)
+
+        res.update(
+            {
+                "registry_trials": [registry_trial],
+                "registry_trial_conditions": registry_conditions,
+                "registry_trial_condition_mesh": registry_condition_mesh,
+                "registry_trial_interventions": registry_interventions,
+                "registry_trial_arms": registry_arms,
+                "registry_trial_sponsors": registry_sponsors,
+                "registry_trial_locations": registry_locations,
+                "registry_trial_outcomes": registry_outcomes,
+                "registry_trial_baseline_demographics": registry_demographics,
+            }
+        )
+
+    return res
+
+
+def flatten_registry_study(
+    study: dict[str, Any],
+    ingestion_run_id: str,
+    snapshot_timestamp_utc: str,
+    geography: GeographyRules,
+    retrieved_at_utc: str | None = None,
+    raw_page_reference: str | None = None,
+    raw_study_ordinal: int | None = None,
+) -> dict[str, list[dict[str, Any]]]:
+    """One study -> rows for each registry entity (canonical observation, unmapped conditions)."""
+    full = flatten_study(
+        study,
+        ingestion_run_id,
+        snapshot_timestamp_utc,
+        taxonomy=None,
+        geography=geography,
+        retrieved_at_utc=retrieved_at_utc,
+        raw_page_reference=raw_page_reference,
+        raw_study_ordinal=raw_study_ordinal,
+        include_registry=True,
+    )
+    return {k: v for k, v in full.items() if k.startswith("registry_")}
 
 
 def iter_bronze_studies(run_dir: Path) -> Iterator[dict[str, Any]]:

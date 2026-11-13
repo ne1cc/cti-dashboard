@@ -79,3 +79,37 @@
         {%- endif -%}
     {%- endif -%}
 {% endmacro %}
+
+
+{% macro validate_registry_mesh_extraction_integrity() %}
+    {%- if execute -%}
+        {#- Identify extraction state per run for registry entities.
+            Every registry run must write a registry_trial_condition_mesh file. -#}
+        {%- set check_sql -%}
+        with condition_runs as (
+            select distinct regexp_extract(file, 'run_id=([^.]+)\\.parquet', 1) as run_id
+            from glob('data/silver/registry_trial_conditions/*.parquet')
+        ),
+        mesh_runs as (
+            select distinct regexp_extract(file, 'run_id=([^.]+)\\.parquet', 1) as run_id
+            from glob('data/silver/registry_trial_condition_mesh/*.parquet')
+        )
+        select c.run_id
+        from condition_runs c
+        left join mesh_runs m on c.run_id = m.run_id
+        where m.run_id is null
+        {%- endset -%}
+        {%- set missing = run_query(check_sql) -%}
+        {%- if missing and missing.rows | length > 0 -%}
+            {%- set bad_runs = [] -%}
+            {%- for row in missing.rows -%}
+                {%- do bad_runs.append(row[0]) -%}
+            {%- endfor -%}
+            {{ exceptions.raise_compiler_error(
+                "Missing registry_trial_condition_mesh file for run(s): "
+                ~ bad_runs | join(', ')
+            ) }}
+        {%- endif -%}
+    {%- endif -%}
+{% endmacro %}
+

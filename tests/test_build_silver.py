@@ -17,12 +17,13 @@ from src.quality.profiling import profile_run
 from src.transform import build_silver_entities
 from src.transform.build_silver_entities import (
     BronzeRebuildMismatch,
+    CanonicalConflictError,
     _already_transformed,
     _legacy_run_without_bronze,
     build_silver_for_run,
     run_transform,
 )
-from src.transform.export_parquet import ENTITY_COLUMNS
+from src.transform.export_parquet import ENTITY_COLUMNS, REGISTRY_ENTITY_NAMES
 from src.transform.silver_stats import stats_path
 from src.utils.dates import utc_now
 
@@ -302,8 +303,11 @@ def test_run_transform_fails_on_mixed_runs_when_one_lacks_silver(tmp_path: Path)
 
 
 def _rewind_to_pre_upgrade_shape(cfg: ProjectConfig, run_id: str) -> None:
-    """Drop the mesh entity file so the run looks pre-upgrade (implicit upgrade path)."""
-    (cfg.paths.silver / "silver_trial_condition_mesh" / f"run_id={run_id}.parquet").unlink()
+    """Drop the mesh entity file and registry files to look pre-upgrade."""
+    mesh_path = cfg.paths.silver / "silver_trial_condition_mesh" / f"run_id={run_id}.parquet"
+    mesh_path.unlink(missing_ok=True)
+    for reg_entity in REGISTRY_ENTITY_NAMES:
+        (cfg.paths.silver / reg_entity / f"run_id={run_id}.parquet").unlink(missing_ok=True)
 
 
 def _retained_silver_bytes(cfg: ProjectConfig, run_id: str) -> dict[Path, bytes]:
@@ -708,6 +712,145 @@ def test_implicit_upgrade_aborts_when_no_retained_reference_is_readable(
         build_silver_entities.run_transform(config=cfg, force=force)
     assert _retained_silver_bytes(cfg, run_id) == before
     assert list(cfg.paths.silver.glob("*/run_id=*.parquet.tmp")) == []
+
+
+def test_duplicate_source_coalesces_without_duplicate_observation(tmp_path: Path):
+    """Duplicate studies with identical payloads coalesce into one canonical observation."""
+    cfg = make_config(tmp_path)
+    run_id = "r_dup_source"
+    run_dir = cfg.paths.bronze_api_responses / f"run_id={run_id}"
+    study = make_study("NCT00000001")
+    write_bronze_page(run_dir, 1, [study, study])
+    manifest = make_manifest(run_id, record_count=2)
+
+    counts = build_silver_for_run(manifest, cfg)
+    assert counts["silver_trials"] == 1
+    assert counts["registry_trials"] == 1
+    reg_df = pd.read_parquet(cfg.paths.silver / "registry_trials" / f"run_id={run_id}.parquet")
+    assert len(reg_df) == 1
+    assert reg_df["nct_id"].iloc[0] == "NCT00000001"
+
+
+def test_same_run_conflicting_payload_fails_with_nct_run_and_hashes(tmp_path: Path):
+    """Conflicting payloads for the same NCT within a run fail with NCT, run ID, and hashes."""
+    cfg = make_config(tmp_path)
+    run_id = "r_conflict_intra"
+    run_dir = cfg.paths.bronze_api_responses / f"run_id={run_id}"
+    s1 = {"protocolSection": {"identificationModule": {"nctId": "NCT00000001", "briefTitle": "A"}}}
+    s2 = {"protocolSection": {"identificationModule": {"nctId": "NCT00000001", "briefTitle": "B"}}}
+    write_bronze_page(run_dir, 1, [s1, s2])
+    manifest = make_manifest(run_id, record_count=2)
+
+    with pytest.raises(CanonicalConflictError) as exc_info:
+        build_silver_for_run(manifest, cfg)
+    err = str(exc_info.value)
+    assert "NCT00000001" in err
+    assert run_id in err
+    assert "Conflicting payload hashes" in err
+
+
+def test_same_timestamp_conflicting_payload_fails_across_runs(tmp_path: Path):
+    """Equal timestamps with conflicting payloads across runs fail with NCT, run IDs, hashes."""
+    cfg = make_config(tmp_path)
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+    ts = utc_now()
+
+    # Run 1
+    r1 = "r_conflict_ts_1"
+    d1 = cfg.paths.bronze_api_responses / f"run_id={r1}"
+    s1 = {
+        "protocolSection": {
+            "identificationModule": {"nctId": "NCT00000099", "briefTitle": "Version 1"}
+        }
+    }
+    write_bronze_page(d1, 1, [s1])
+    m1 = IngestionManifest(
+        ingestion_run_id=r1,
+        query_hash="h1",
+        endpoint="https://ctg.test/api/v2/studies",
+        params={},
+        status="success",
+        started_at_utc=ts,
+        ended_at_utc=ts,
+        record_count=1,
+    )
+    write_manifest(cfg.paths.bronze_manifests, m1)
+    build_silver_for_run(m1, cfg)
+
+    # Run 2 with same started_at_utc but conflicting payload for NCT00000099
+    r2 = "r_conflict_ts_2"
+    d2 = cfg.paths.bronze_api_responses / f"run_id={r2}"
+    s2 = {
+        "protocolSection": {
+            "identificationModule": {"nctId": "NCT00000099", "briefTitle": "Version 2"}
+        }
+    }
+    write_bronze_page(d2, 1, [s2])
+    m2 = IngestionManifest(
+        ingestion_run_id=r2,
+        query_hash="h2",
+        endpoint="https://ctg.test/api/v2/studies",
+        params={},
+        status="success",
+        started_at_utc=ts,
+        ended_at_utc=ts,
+        record_count=1,
+    )
+    write_manifest(cfg.paths.bronze_manifests, m2)
+
+    with pytest.raises(CanonicalConflictError) as exc_info:
+        build_silver_for_run(m2, cfg)
+    err = str(exc_info.value)
+    assert "NCT00000099" in err
+    assert r1 in err
+    assert r2 in err
+    assert "Conflicting observations" in err
+
+
+def test_shared_node_and_no_mesh_studies(tmp_path: Path):
+    """Studies with and without MeSH terms both transform into canonical silver without error."""
+    cfg = make_config(tmp_path)
+    run_id = "r_mesh_variations"
+    run_dir = cfg.paths.bronze_api_responses / f"run_id={run_id}"
+
+    # Study 1: has MeSH terms (shared node)
+    s1 = {
+        "protocolSection": {
+            "identificationModule": {"nctId": "NCT00000101", "briefTitle": "Trial With MeSH"},
+            "conditionsModule": {"conditions": ["Alzheimer Disease"]},
+        },
+        "derivedSection": {
+            "conditionBrowseModule": {
+                "meshes": [{"id": "D000544", "term": "Alzheimer Disease"}],
+                "ancestors": [{"id": "D001927", "term": "Brain Diseases"}],
+            }
+        },
+    }
+    # Study 2: no MeSH browse module (unmapped/no-MeSH)
+    s2 = {
+        "protocolSection": {
+            "identificationModule": {"nctId": "NCT00000102", "briefTitle": "Trial Without MeSH"},
+            "conditionsModule": {"conditions": ["Rare Unmapped Condition"]},
+        }
+    }
+    write_bronze_page(run_dir, 1, [s1, s2])
+    manifest = make_manifest(run_id, record_count=2)
+    counts = build_silver_for_run(manifest, cfg)
+
+    assert counts["registry_trials"] == 2
+    assert counts["registry_trial_conditions"] == 2
+    # s1 contributed 2 MeSH rows (1 direct, 1 ancestor), s2 contributed 0
+    assert counts["registry_trial_condition_mesh"] == 2
+
+    mesh_file = cfg.paths.silver / "registry_trial_condition_mesh" / f"run_id={run_id}.parquet"
+    mesh_df = pd.read_parquet(mesh_file)
+    assert set(mesh_df["mesh_id"].tolist()) == {"D000544", "D001927"}
+    assert set(mesh_df["nct_id"].tolist()) == {"NCT00000101"}
+
+    cond_file = cfg.paths.silver / "registry_trial_conditions" / f"run_id={run_id}.parquet"
+    cond_df = pd.read_parquet(cond_file)
+    assert set(cond_df["condition_group"].tolist()) == {"unmapped"}
+    assert set(cond_df["mapping_source"].tolist()) == {"text_fallback"}
 
 
 def test_build_silver_still_transforms_a_named_profile_with_a_taxonomy(tmp_path: Path):
