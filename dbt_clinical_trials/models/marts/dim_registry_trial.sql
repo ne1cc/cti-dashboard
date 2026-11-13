@@ -31,23 +31,28 @@ trial_timeline as (
     group by nct_id
 ),
 
-latest_run_per_trial as (
+distinct_latest_runs as (
     select
         t.nct_id,
-        max(t.ingestion_run_id) as max_ingestion_run_id
+        min(t.ingestion_run_id) as ingestion_run_id,
+        t.started_at_utc,
+        t.source_json_hash
     from trials_with_snapshots t
     inner join trial_timeline l
         on t.nct_id = l.nct_id
         and t.started_at_utc = l.max_started_at_utc
-    group by t.nct_id
+    group by
+        t.nct_id,
+        t.started_at_utc,
+        t.source_json_hash
 ),
 
 latest_trials as (
     select t.*
     from trials_with_snapshots t
-    inner join latest_run_per_trial lr
-        on t.nct_id = lr.nct_id
-        and t.ingestion_run_id = lr.max_ingestion_run_id
+    inner join distinct_latest_runs r
+        on t.nct_id = r.nct_id
+        and t.ingestion_run_id = r.ingestion_run_id
 ),
 
 global_max_snapshot as (
@@ -57,11 +62,7 @@ global_max_snapshot as (
 
 mesh_extracted_runs as (
     select distinct regexp_extract(file, 'run_id=([^.]+)\.parquet', 1) as ingestion_run_id
-    from (
-        select file from glob('data/silver/registry_trial_condition_mesh/*.parquet')
-        union all
-        select file from glob('data/silver/silver_trial_condition_mesh/*.parquet')
-    )
+    from glob('data/silver/registry_trial_condition_mesh/*.parquet')
 ),
 
 current_mesh as (

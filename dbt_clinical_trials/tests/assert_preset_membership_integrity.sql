@@ -36,9 +36,9 @@ select
 from {{ ref('bridge_preset_trial') }} u
 inner join {{ ref('bridge_preset_trial') }} a
     on u.nct_id = a.nct_id
-    and u.snapshot_date = a.snapshot_date
     and u.is_unassigned
     and not a.is_unassigned
+    and (u.snapshot_date = a.snapshot_date or (u.current_record_flag and a.current_record_flag))
 group by u.nct_id
 
 union all
