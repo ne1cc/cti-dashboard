@@ -2,17 +2,34 @@
 
 [![CI](https://github.com/ne1cc/cti-dashboard/actions/workflows/ci.yml/badge.svg)](https://github.com/ne1cc/cti-dashboard/actions/workflows/ci.yml)
 
-**Live demo:** [cti-trials.duckdns.org](https://cti-trials.duckdns.org)
+**Live demo:** [cti-trials.duckdns.org](https://cti-trials.duckdns.org) · an hourly workflow checks that it is up and that its data is fresh, and opens an issue when it is not.
 
-**An open, multi-stakeholder clinical trial access and intelligence platform providing transparent discovery and competition analytics over public ClinicalTrials.gov registry data.**
+**An open, multi-stakeholder clinical trial access and intelligence platform over public ClinicalTrials.gov registry data. No paywall and no black-box score: every number traces to NCT IDs you can open.**
 
-The platform serves patients, caregivers, researchers, and feasibility analysts through open registry analytics. Clinical trial participants can search for active trials near them with clear privacy-first contact guidance (ADR 0061, ADR 0065). Research teams and analysts can explore trial activity, sponsor concentration, site overlap, and geographic trends across multiple therapeutic indications without unvalidated paywalls or black-box algorithms.
+Three audiences, one warehouse:
 
-Analyst feasibility workflows and business case models are preserved as exploratory hypotheses (ADR 0082, archived in [`docs/archive/business_case.md`](docs/archive/business_case.md)). The primary focus is open access trial discovery, reproducible public registry intelligence, and transparent data quality.
+- **Patients and caregivers** search for recruiting trials near a ZIP code, read plain-language trial pages, and print a shortlist to take to an appointment. Contact guidance is privacy-first (ADR 0061, ADR 0065).
+- **Researchers and feasibility analysts** compare competition, sponsor concentration, site overlap, geographic access, early stops and result posting across twelve disease presets or the whole registry.
+- **Developers** get a read API (OpenAPI 3.1) over the same DuckDB/Parquet warehouse.
 
-This project turns public **ClinicalTrials.gov API v2** records into an inspectable study landscape with contributing NCT IDs, coverage caveats, and an exportable audit. Users can select an indication profile, phase, and captured snapshot to compare distinct study counts, inspect underlying facilities, and evaluate competition metrics.
+Counts describe registry listings under the rules shown on screen. They do not establish patient availability, recruitment prospects, or site performance.
 
-Counts describe registry listings under displayed rules; they do not establish patient availability, recruitment prospects, or site performance.
+## What you can try
+
+| Surface | What it does | Where |
+|---|---|---|
+| **Patient trial finder** | Search by condition, ZIP and radius; filter by age, sex and status; open a plain-language page per trial (arms, placebo, masking, why it stopped, outcome timing); keep a client-side shortlist with a printable appointment reference; mobile layout. | `/` on the API app |
+| **Dashboard, Overview** | Pick an **indication preset**, phase and captured snapshot; every page below follows that scope. | Streamlit `dashboard/app.py` |
+| **Registry Segments** | Raw sortable segment metrics (recruiting trials, sponsor HHI, site overlap). No composite score (ADR 0077). | page 1 |
+| **Competition Landscape**, **Sponsor Landscape**, **Site Overlap** | Who is recruiting where, how concentrated the sponsors are (HHI is suppressed below the minimum sponsor count), and which sites several trials share. | pages 2, 5, 4 |
+| **Geography Trends** | State choropleth, population-adjusted per 100k residents (Census Vintage 2024) with a raw-count toggle, plus a **county access map**: which counties have a recruiting site within 25, 50 or 100 miles. | page 3 |
+| **Access Rates** and **Participation vs Burden** | Recruiting trials per 100k residents or per 1,000 estimated cases for a MeSH condition; each group's share of reported trial participants against its share of disease burden (needs posted baseline demographics). | pages 10, 11 |
+| **Data Reliability** and **Trial Transparency** | Run confidence, reconciliation and ingestion diagnostics; early-stopped trials and results posting. | pages 6, 9 |
+| **Trial Explorer** and **Trial Similarity** | Browse and drill into a trial; similar precedents ranked from a MeSH-blocked candidate pool using weights in `config/similarity_weights.yml`. | pages 7, 8 |
+| **Provenance drawer** | Open **Data coverage and caveats** on any page: exact filters, run IDs, contributing NCT IDs, exclusions, and a downloadable `competition-audit-v2` JSON. | every page |
+| **Read API** | `GET /v1/trials`, `/v1/trials/{nct_id}`, `/v1/trials/{nct_id}/related`, `/v1/conditions` (consumer-friendly autocomplete with MeSH mapping), `/v1/geo/access`, `/v1/meta/freshness`. Keyset pagination, ETags, RFC 7807 errors, per-client rate limit on live routes. | [`docs/api/`](docs/api/) |
+
+Run the dashboard in five minutes with synthetic data below, or start the finder and API as described under [Patient finder and API](#patient-finder-and-api).
 
 ## 5-minute quickstart (synthetic fixture data)
 
@@ -49,6 +66,93 @@ that dataset, rather than the current live demo.
 
 ---
 
+## Patient finder and API
+
+One FastAPI app serves both the server-rendered patient finder and the read API:
+
+```bash
+make gazetteer                                  # one-time: Census ZIP/place centroids into data/reference/
+uv run uvicorn src.api.app:create_app --factory # then open http://localhost:8000/
+```
+
+- **Live mode (default):** with no warehouse configured, searches go to ClinicalTrials.gov API v2 with a SQLite response cache, a circuit breaker and a per-client rate limit. A recruiting-site radius filter runs on each page, so a page can hold fewer than `limit` results; see [`docs/api/live-backend.md`](docs/api/live-backend.md).
+- **Warehouse mode:** `export CTI_WAREHOUSE_PATH=data/warehouse/clinical_trials.duckdb` serves the same contract from read-only DuckDB connections ([`docs/api/serving.md`](docs/api/serving.md)).
+- **Finder pages:** `/` (search), `/trials` (results), `/trials/{nct_id}` (plain-language detail), `/shortlist` (printable). Query strings are stripped from access logs, and contact details are scrubbed from API payloads.
+- **Contract:** [`docs/api/openapi.yaml`](docs/api/openapi.yaml), worked requests in [`docs/api/examples.md`](docs/api/examples.md), source-field mapping in [`docs/api/source-field-map.md`](docs/api/source-field-map.md).
+- **Freshness:** `GET /v1/meta/freshness` reports ingestion run timestamps, latest snapshot IDs, reconciliation status and record-quality distributions, and answers 503 when there is no verified successful refresh marker. The hourly uptime workflow separately checks the dashboard's health endpoint and its published `freshness.json`.
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Source
+        CTG[ClinicalTrials.gov API v2]
+    end
+    subgraph Bronze["Bronze (immutable)"]
+        RAW[Raw JSON pages<br/>per run + page]
+        MAN[Ingestion manifests]
+    end
+    subgraph Silver["Silver (normalized)"]
+        ENT[Flattened entities<br/>Parquet]
+    end
+    subgraph Gold["Gold (dimensional)"]
+        DBT[dbt models in DuckDB<br/>dims, facts, marts]
+    end
+    subgraph Delivery
+        APP[Streamlit dashboard]
+        API[FastAPI read API<br/>and patient finder]
+        MEMO[Executive memo]
+    end
+    CTG -->|paginated ingest,<br/>retries, run_id| RAW
+    CTG --> MAN
+    RAW -->|flatten + normalize| ENT
+    ENT -->|dbt staging → marts| DBT
+    DBT --> APP
+    DBT --> API
+    DBT --> MEMO
+```
+
+Dagster orchestrates the weekly refresh (ingest → silver → dbt → checks). Full detail: [`docs/architecture.md`](docs/architecture.md).
+
+## Data Model
+
+```mermaid
+erDiagram
+    dim_trial ||--o{ fct_trial_snapshot : "nct_id"
+    dim_trial ||--o{ fct_trial_site : "nct_id"
+    dim_trial ||--o{ bridge_trial_condition : "nct_id"
+    dim_trial ||--o{ bridge_trial_sponsor : "nct_id"
+    dim_condition ||--o{ bridge_trial_condition : "condition_key"
+    dim_sponsor ||--o{ bridge_trial_sponsor : "sponsor_key"
+    dim_geography ||--o{ fct_trial_site : "state"
+    dim_date ||--o{ fct_trial_snapshot : "snapshot_date"
+    fct_trial_snapshot }o--|| mart_feasibility_priority_queue : "aggregated into"
+```
+
+The marts on top of these tables include competition, geography trends, site overlap, trial access by county and stratum, access rates, participation vs burden, baseline-demographics coverage, early-stop and results-posting transparency, trial similarity, and Change Radar trial change events.
+
+## Presets, registry-wide ingestion and what is changing
+
+**One registry-wide run, many presets.** The pipeline snapshots the whole ClinicalTrials.gov registry once (all conditions, worldwide, about 600k studies) using an API `fields` projection (ADR 0083) that cuts a study's bronze payload from about 17.3 KB to about 8.3 KB, around 5 GB for the full registry. Each **indication preset** is then derived from that run locally by matching MeSH terms and the preset's study-type and status filters, so adding a preset is one YAML file in `config/profiles/`.
+
+- **Twelve presets ship:** ADRD (the default), Parkinson's disease, multiple sclerosis, heart failure, type 2 diabetes, rheumatoid arthritis, NSCLC, and breast, colorectal, melanoma, ovarian and prostate cancer. Taxonomy groups live in `config/condition_taxonomy*.yml`; a condition is identified by its registry MeSH node, with optional YAML overlays.
+- **ADRD scope:** United States, interventional studies, all eight overall statuses (so stopped studies power why-stopped and feasibility-risk views), EARLY_PHASE1 to PHASE4. Total counts span all eight statuses; active-competition metrics (`recruiting_trial_count`, `new_recruiting_30d/90d`, `sponsor_hhi`) isolate `RECRUITING` studies only.
+- **Commands:** `make ingest-registry` (full snapshot), `make ingest-registry-incremental` (only studies updated since the last run, upserted by NCT ID), `make transform-registry` (registry silver), `make orchestrate` (ingest once, derive every preset), `make orchestrate-full-refresh` (new full snapshot). Bare `python -m src.cli ingest` is registry-wide; `--profile <id>` and `--condition` stay available for a single indication.
+- **Trade-offs are written down:** studies with no derived MeSH (about 4% of the registry) match no preset. [`docs/profile-retirement-expected-diffs.md`](docs/profile-retirement-expected-diffs.md) lists every expected difference from the old per-profile pull.
+
+**In progress: retiring the per-profile grain (#164).** Silver and marts are still keyed by indication profile. The staged plan, now filed as phases 2–5 (#168 to #173, then #164), moves them to a registry-wide grain with presets as read-time filters. The approved conflict policy (version clock, duplicate handling, field conflicts, report denominators) is in [`docs/registry-grain-inventory.md`](docs/registry-grain-inventory.md), and a shared-identity test already pins that two profiles' rows for one trial resolve to one registry identity (`md5(nct_id)`).
+
+## Quality bar
+
+- **Tests:** at the #167 merge, 1,456 pytest tests passed (13 skipped) at 93% coverage with an enforced 71% floor, and a fixture warehouse build ran 364 dbt models and tests with zero errors. CI runs lint, format, mypy, pytest and the dbt build on Python 3.12 for every PR.
+- **Baseline parity:** `tests/fixtures/mart_baseline/` pins ADRD and NSCLC mart outputs; a change that alters a pinned column or row has to be listed and measured before the baseline moves.
+- **Guardrails:** language that implies patient eligibility, recruitment failure, site quality or sponsor performance is prohibited ([`docs/clinical_interpretation_guardrails.md`](docs/clinical_interpretation_guardrails.md)).
+- **Workflow:** changes ship as issue-driven PRs with a Verification section holding real command output, an independent AI review, and a retrospective comment.
+
+---
+
 ## Decision Workflow and Operational Output
 
 Agree on scope → compare the captured landscape → inspect contributors and gaps → export evidence → prepare a research shortlist and questions for further review.
@@ -77,76 +181,6 @@ evidence preparation; stakeholder adoption and business improvement remain unmea
 
 ---
 
-## Architecture
-
-```mermaid
-flowchart LR
-    subgraph Source
-        CTG[ClinicalTrials.gov API v2]
-    end
-    subgraph Bronze["Bronze (immutable)"]
-        RAW[Raw JSON pages<br/>per run + page]
-        MAN[Ingestion manifests]
-    end
-    subgraph Silver["Silver (normalized)"]
-        ENT[Flattened entities<br/>Parquet]
-    end
-    subgraph Gold["Gold (dimensional)"]
-        DBT[dbt models in DuckDB<br/>dims, facts, marts]
-    end
-    subgraph Delivery
-        APP[Streamlit dashboard]
-        MEMO[Executive memo]
-    end
-    CTG -->|paginated ingest,<br/>retries, run_id| RAW
-    CTG --> MAN
-    RAW -->|flatten + normalize| ENT
-    ENT -->|dbt staging → marts| DBT
-    DBT --> APP
-    DBT --> MEMO
-```
-
-Full detail: [`docs/architecture.md`](docs/architecture.md).
-
-## Data Model
-
-```mermaid
-erDiagram
-    dim_trial ||--o{ fct_trial_snapshot : "nct_id"
-    dim_trial ||--o{ fct_trial_site : "nct_id"
-    dim_trial ||--o{ bridge_trial_condition : "nct_id"
-    dim_trial ||--o{ bridge_trial_sponsor : "nct_id"
-    dim_condition ||--o{ bridge_trial_condition : "condition_key"
-    dim_sponsor ||--o{ bridge_trial_sponsor : "sponsor_key"
-    dim_geography ||--o{ fct_trial_site : "state"
-    dim_date ||--o{ fct_trial_snapshot : "snapshot_date"
-    fct_trial_snapshot }o--|| mart_feasibility_priority_queue : "aggregated into"
-```
-
-## Project Scope and Indication Profiles
-
-- **Therapeutic area:** Alzheimer's disease and related dementias (config-driven taxonomy).
-- **Geography:** United States (all raw records preserved; U.S.-only in marts).
-- **Study type:** Interventional (`AREA[StudyType]INTERVENTIONAL`).
-- **Statuses:** All 8 overall statuses: `RECRUITING`, `ACTIVE_NOT_RECRUITING`, `NOT_YET_RECRUITING`, `COMPLETED`, `TERMINATED`, `WITHDRAWN`, `SUSPENDED`, `ENROLLING_BY_INVITATION`. Defined authoritatively in `config/profiles/adrd.yml` and referenced by `config/project_config.yml` (`default_profile: adrd`).
-- **Downstream implications of the 8-status scope:**
-  - **Tracked trial totals:** Total trial counts (`dim_trial`, `trial_count`, warehouse trials) reflect the entire interventional landscape across all 8 statuses, rather than only active/completed studies.
-  - **Stopped studies & feasibility risk:** Studies that stopped early (`TERMINATED`, `WITHDRAWN`, `SUSPENDED`) are ingested and retained, powering why-stopped and feasibility risk analyses.
-  - **Similarity candidate pool vs. recruiting competition:** The candidate pool for trial similarity scoring spans all 8 statuses to identify relevant precedents across past and stopped trials, while active competition metrics (`recruiting_trial_count`, `new_recruiting_30d/90d`, and `sponsor_hhi`) strictly isolate confirmed currently-recruiting studies (`overall_status = 'RECRUITING'`).
-- **Phases:** EARLY_PHASE1 – PHASE4 where available.
-- **Cadence:** Weekly snapshots; history accrues from this project's own runs.
-
-### Registry-Wide Ingestion & Transform
-
-The platform supports snapshotting the **entire** ClinicalTrials.gov registry — all conditions, worldwide, no status/type filter (~600k+ studies) — using a minimal API `fields` projection (ADR 0083) that cuts per-study bronze payload size from ~17.3 KB to ~8.30 KB (8,496 B) (~5.18 GB estimated full registry).
-
-- **No profile required:** Bare `python -m src.cli ingest` (or `make ingest-registry`) snapshots the entire registry.
-- **Transformable silver:** `python -m src.cli transform` builds full-registry silver Parquet using `REGISTRY_TAXONOMY` (mapping conditions to `uncategorized`).
-- **Weekly incremental refresh:** `python -m src.cli ingest --incremental-refresh` (or `make ingest-registry-incremental`) fetches only studies modified on or after the previous successful run (`AREA[LastUpdatePostDate]RANGE`), which silver upserts by NCT ID onto the prior full snapshot.
-- **Indication profiles:** Specific indications (`adrd`, `oncology_nsclc`, etc.) continue to run with explicit `--profile <id>` (or `make orchestrate`). Combining `--condition` with `full_catalog` is rejected as the profile encompasses all conditions.
-
----
-
 ## Setup and Development
 
 Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), `make`.
@@ -171,7 +205,7 @@ Copy [`.env.example`](.env.example) to `.env`. No API keys are needed — the AP
 make ingest                      # python -m src.cli ingest --condition "Alzheimer Disease"
 ```
 
-For the opt-in full-catalog profile instead, see [Optional: Full-Catalog Ingestion](#optional-full-catalog-ingestion).
+For the registry-wide run and the presets derived from it, see [Presets, registry-wide ingestion and what is changing](#presets-registry-wide-ingestion-and-what-is-changing).
 
 Run `make ingest` weekly (cron, systemd timer, or GitHub Actions). New runs get a unique `ingestion_run_id`; incremental ingestion reuses a successful matching query within the configured window (24 hours by default). `make full-refresh` forces a complete re-pull. See [incremental reuse](docs/source_documentation.md#incremental-reuse) for the exact eligibility rule.
 
@@ -306,14 +340,24 @@ For complete drill-through specifications, provenance requirements, and analytic
 | [`docs/competitive_positioning.md`](docs/competitive_positioning.md) | positioning as an open feasibility workbench vs. commercial platforms |
 | [`docs/archive/development_log.md`](docs/archive/development_log.md) | historical step-by-step build record (Phases 1–7) |
 | [`docs/archive/platform_updates_2026-09-04.md`](docs/archive/platform_updates_2026-09-04.md) | historical architecture and tooling updates |
+| [`docs/access_methodology.md`](docs/access_methodology.md) | county trial-access mart: what counts as an open site, coordinate sources, coverage tiers |
+| [`docs/burden_sources.md`](docs/burden_sources.md) | disease-burden sources behind access rates and participation vs burden |
+| [`docs/api/`](docs/api/) | OpenAPI contract, serving engine, live backend, examples and source-field map |
+| [`docs/registry-grain-inventory.md`](docs/registry-grain-inventory.md) | registry-grain migration plan, conflict policy and per-phase file inventory (#164) |
+| [`docs/profile-retirement-expected-diffs.md`](docs/profile-retirement-expected-diffs.md) | every expected output difference from retiring the per-profile grain |
+| [`docs/condition_mesh_coverage.md`](docs/condition_mesh_coverage.md) | MeSH condition identity and coverage |
+| [`docs/density_proxy_test.md`](docs/density_proxy_test.md) | falsification test of the recruiting-density proxy |
+| [`docs/decisions/`](docs/decisions/) | architecture decision records (ADRs) |
 
 ## Roadmap
 
-1. MVP: ClinicalTrials.gov-only pipeline, marts, dashboard (Phases 1–7).
-2. ACS population layer for population-adjusted density.
-3. CDC/ATSDR SVI county-level access-barrier context.
-4. Optional oncology module via NCI CTS API.
-5. Warehouse portability (BigQuery/Snowflake) and orchestration (Dagster/Airflow).
+**Shipped:** registry-wide slim ingestion and MeSH-based presets; population denominators and county access; participation vs burden; Change Radar events; early-stop and results-posting transparency; read API with live and warehouse modes; patient finder with ZIP search, plain-language trial pages and shortlist; hourly uptime and freshness alerts.
+
+**In progress:** retiring the per-profile grain in staged PRs (#168 to #173, then #164), with baseline parity at every step.
+
+**Waiting on people:** a five-person usability study of the patient finder (#70; the kit is in the repo).
+
+**Later:** an optional oncology module via the NCI CTS API; warehouse portability (BigQuery/Snowflake).
 
 ---
 
