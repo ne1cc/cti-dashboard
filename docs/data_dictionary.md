@@ -114,7 +114,7 @@ taken from the participant-denominated `denoms` entry when one exists.
 
 Nine canonical registry streams write alongside profile silver files under `data/silver/registry_*/run_id=<id>.parquet`. They mirror the profile silver schema exactly except `indication_profile_id` is removed:
 - `registry_trials`
-- `registry_trial_conditions` (conditions mapped to group `unmapped` with source `text_fallback`)
+- `registry_trial_conditions` (raw and normalized condition text without taxonomy overlay claims; overlay columns `condition_group`, `dementia_relevance_flag`, `mapping_confidence`, `mapping_source` are NULL)
 - `registry_trial_condition_mesh`
 - `registry_trial_interventions`
 - `registry_trial_arms`
@@ -123,7 +123,7 @@ Nine canonical registry streams write alongside profile silver files under `data
 - `registry_trial_outcomes`
 - `registry_trial_baseline_demographics`
 
-Registry observations have grain `(nct_id, run_id)` with registry surrogate key `registry_trial_key = md5(nct_id)`.
+Registry observations have grain `(snapshot_id, nct_id)` (where `snapshot_id` is the containing snapshot run ID, preserving original `ingestion_run_id` source provenance on carried rows) with registry surrogate key `registry_trial_key = md5(nct_id)`.
 
 ---
 

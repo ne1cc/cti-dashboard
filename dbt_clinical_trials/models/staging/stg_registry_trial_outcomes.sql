@@ -2,6 +2,7 @@
 select
     {{ generate_surrogate_key(['nct_id']) }} as registry_trial_key,
     ingestion_run_id,
+    snapshot_id,
     nct_id,
     outcome_type,
     cast(outcome_index as integer) as outcome_index,

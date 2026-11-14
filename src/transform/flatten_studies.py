@@ -530,10 +530,10 @@ def flatten_study(
                 **registry_base,
                 "condition_raw": condition_raw,
                 "condition_normalized": normalize_text(condition_raw),
-                "condition_group": UNMAPPED_CONDITION_GROUP,
-                "dementia_relevance_flag": False,
-                "mapping_confidence": "low",
-                "mapping_source": "text_fallback",
+                "condition_group": None,
+                "dementia_relevance_flag": None,
+                "mapping_confidence": None,
+                "mapping_source": None,
             }
             for condition_raw in dig(protocol, "conditionsModule", "conditions") or []
         ]

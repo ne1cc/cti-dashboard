@@ -2370,3 +2370,101 @@ def test_trends_growth_segment_grain_absent_on_last_baseline_snapshot(
         " order by state_normalized",
     )
     assert rows == [("ME", 0.0), ("NC", None)]
+
+
+def test_assert_registry_observation_integrity_with_carried_rows(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Carried registry rows from incremental runs must pass integrity checks,
+
+    while true duplicates on (snapshot_id, nct_id) must fail assert_registry_observation_integrity.
+    """
+    import subprocess
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from src.config import load_config
+    from src.ingest.snapshot_manifest import IngestionManifest, write_manifest
+    from src.transform.build_silver_entities import build_silver_for_run
+    from tests.fixture_warehouse import REPO_ROOT, _clear_caches, prepare_fixture_root
+    from tests.test_build_silver import make_study, write_bronze_page
+
+    root = tmp_path_factory.mktemp("registry_carry_integrity")
+    prepare_fixture_root(root, runs=[])
+
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(root))
+    _clear_caches()
+    cfg = load_config()
+
+    t1 = datetime(2026, 10, 1, 10, 0, tzinfo=UTC)
+    t2 = datetime(2026, 10, 8, 10, 0, tzinfo=UTC)
+
+    # 1. Base full run (r1): NCT00000001 and NCT00000002
+    r1 = "run_full_prov"
+    m1 = IngestionManifest(
+        ingestion_run_id=r1,
+        query_hash="h1",
+        endpoint=cfg.api.studies_url,
+        params={},
+        status="success",
+        record_count=2,
+        started_at_utc=t1,
+        ended_at_utc=t1,
+    )
+    write_manifest(cfg.paths.bronze_manifests, m1)
+    d1 = cfg.paths.bronze_api_responses / f"run_id={r1}"
+    s1 = make_study("NCT00000001")
+    s1["protocolSection"]["conditionsModule"] = {"conditions": ["Condition 1"]}
+    s2 = make_study("NCT00000002")
+    s2["protocolSection"]["conditionsModule"] = {"conditions": ["Condition 2"]}
+    write_bronze_page(d1, 1, [s1, s2])
+    build_silver_for_run(m1, cfg)
+
+    # 2. Incremental run (r2): updates NCT1, adds NCT3; NCT2 carried forward from r1
+    r2 = "run_inc_prov"
+    m2 = IngestionManifest(
+        ingestion_run_id=r2,
+        query_hash="h2",
+        endpoint=cfg.api.studies_url,
+        params={},
+        status="success",
+        record_count=2,
+        started_at_utc=t2,
+        ended_at_utc=t2,
+        updated_since_utc="2026-10-01",
+    )
+    write_manifest(cfg.paths.bronze_manifests, m2)
+    d2 = cfg.paths.bronze_api_responses / f"run_id={r2}"
+    s3 = make_study("NCT00000003")
+    s3["protocolSection"]["conditionsModule"] = {"conditions": ["Condition 3"]}
+    write_bronze_page(d2, 1, [s1, s3])
+    build_silver_for_run(m2, cfg)
+
+    assert (cfg.paths.silver / "registry_trials" / f"run_id={r1}.parquet").exists()
+    assert (cfg.paths.silver / "registry_trials" / f"run_id={r2}.parquet").exists()
+
+    build_cmd = [
+        sys.executable,
+        "-m",
+        "dbt.cli.main",
+        "build",
+        "--project-dir",
+        str(REPO_ROOT / "dbt_clinical_trials"),
+        "--profiles-dir",
+        str(root),
+        "-s",
+        "+assert_registry_observation_integrity",
+    ]
+    res = subprocess.run(build_cmd, cwd=root, capture_output=True, text=True)
+    assert res.returncode == 0, f"dbt build failed unexpectedly:\n{res.stdout}\n{res.stderr}"
+
+    # 3. Inject a true duplicate on (snapshot_id, nct_id) into r2
+    trials_path = cfg.paths.silver / "registry_trials" / f"run_id={r2}.parquet"
+    table = pq.read_table(trials_path)
+    dup_row = table.slice(0, 1)
+    pq.write_table(pa.concat_tables([table, dup_row]), trials_path)
+
+    dup_res = subprocess.run(build_cmd, cwd=root, capture_output=True, text=True)
+    assert dup_res.returncode != 0
+    assert "FAIL 1 assert_registry_observation_integrity" in dup_res.stdout

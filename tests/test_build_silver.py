@@ -26,6 +26,7 @@ from src.transform.build_silver_entities import (
 from src.transform.export_parquet import ENTITY_COLUMNS, REGISTRY_ENTITY_NAMES
 from src.transform.silver_stats import stats_path
 from src.utils.dates import utc_now
+from src.utils.hashing import sha256_json
 
 
 def make_config(tmp_path: Path) -> ProjectConfig:
@@ -738,6 +739,8 @@ def test_same_run_conflicting_payload_fails_with_nct_run_and_hashes(tmp_path: Pa
     run_dir = cfg.paths.bronze_api_responses / f"run_id={run_id}"
     s1 = {"protocolSection": {"identificationModule": {"nctId": "NCT00000001", "briefTitle": "A"}}}
     s2 = {"protocolSection": {"identificationModule": {"nctId": "NCT00000001", "briefTitle": "B"}}}
+    h1 = sha256_json(s1)
+    h2 = sha256_json(s2)
     write_bronze_page(run_dir, 1, [s1, s2])
     manifest = make_manifest(run_id, record_count=2)
 
@@ -747,6 +750,8 @@ def test_same_run_conflicting_payload_fails_with_nct_run_and_hashes(tmp_path: Pa
     assert "NCT00000001" in err
     assert run_id in err
     assert "Conflicting payload hashes" in err
+    assert h1 in err
+    assert h2 in err
 
 
 def test_same_timestamp_conflicting_payload_fails_across_runs(tmp_path: Path):
@@ -763,6 +768,7 @@ def test_same_timestamp_conflicting_payload_fails_across_runs(tmp_path: Path):
             "identificationModule": {"nctId": "NCT00000099", "briefTitle": "Version 1"}
         }
     }
+    h1 = sha256_json(s1)
     write_bronze_page(d1, 1, [s1])
     m1 = IngestionManifest(
         ingestion_run_id=r1,
@@ -785,6 +791,7 @@ def test_same_timestamp_conflicting_payload_fails_across_runs(tmp_path: Path):
             "identificationModule": {"nctId": "NCT00000099", "briefTitle": "Version 2"}
         }
     }
+    h2 = sha256_json(s2)
     write_bronze_page(d2, 1, [s2])
     m2 = IngestionManifest(
         ingestion_run_id=r2,
@@ -805,6 +812,56 @@ def test_same_timestamp_conflicting_payload_fails_across_runs(tmp_path: Path):
     assert r1 in err
     assert r2 in err
     assert "Conflicting observations" in err
+    assert h1 in err
+    assert h2 in err
+
+
+def test_same_timestamp_identical_payload_coalesces_without_error(tmp_path: Path):
+    """Equal timestamps with identical payloads across runs coalesce without error."""
+    cfg = make_config(tmp_path)
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+    ts = utc_now()
+
+    # Run 1
+    r1 = "r_identical_ts_1"
+    d1 = cfg.paths.bronze_api_responses / f"run_id={r1}"
+    s1 = {
+        "protocolSection": {
+            "identificationModule": {"nctId": "NCT00000099", "briefTitle": "Identical Version"}
+        }
+    }
+    write_bronze_page(d1, 1, [s1])
+    m1 = IngestionManifest(
+        ingestion_run_id=r1,
+        query_hash="h1",
+        endpoint="https://ctg.test/api/v2/studies",
+        params={},
+        status="success",
+        started_at_utc=ts,
+        ended_at_utc=ts,
+        record_count=1,
+    )
+    write_manifest(cfg.paths.bronze_manifests, m1)
+    counts1 = build_silver_for_run(m1, cfg)
+    assert counts1["registry_trials"] == 1
+
+    # Run 2 with same started_at_utc and identical payload
+    r2 = "r_identical_ts_2"
+    d2 = cfg.paths.bronze_api_responses / f"run_id={r2}"
+    write_bronze_page(d2, 1, [s1])
+    m2 = IngestionManifest(
+        ingestion_run_id=r2,
+        query_hash="h2",
+        endpoint="https://ctg.test/api/v2/studies",
+        params={},
+        status="success",
+        started_at_utc=ts,
+        ended_at_utc=ts,
+        record_count=1,
+    )
+    write_manifest(cfg.paths.bronze_manifests, m2)
+    counts2 = build_silver_for_run(m2, cfg)
+    assert counts2["registry_trials"] == 1
 
 
 def test_shared_node_and_no_mesh_studies(tmp_path: Path):
@@ -849,8 +906,281 @@ def test_shared_node_and_no_mesh_studies(tmp_path: Path):
 
     cond_file = cfg.paths.silver / "registry_trial_conditions" / f"run_id={run_id}.parquet"
     cond_df = pd.read_parquet(cond_file)
-    assert set(cond_df["condition_group"].tolist()) == {"unmapped"}
-    assert set(cond_df["mapping_source"].tolist()) == {"text_fallback"}
+    # Registry conditions must NOT fabricate taxonomy overlay values
+    assert cond_df["condition_group"].isna().all()
+    assert cond_df["mapping_source"].isna().all()
+    assert cond_df["dementia_relevance_flag"].isna().all()
+    assert cond_df["mapping_confidence"].isna().all()
+
+
+def test_shared_node_across_two_trials_and_two_presets(tmp_path: Path):
+    """A MeSH node shared across two trials matches across two distinct presets."""
+    from src.transform.preset_runs import preset_selector
+
+    cfg = make_config(tmp_path)
+    run_id = "r_shared_node_presets"
+    run_dir = cfg.paths.bronze_api_responses / f"run_id={run_id}"
+
+    # Trial 1: direct MeSH D000544 ("Alzheimer Disease"), ancestor D001927 ("Brain Diseases")
+    s1 = {
+        "protocolSection": {
+            "identificationModule": {"nctId": "NCT00000201", "briefTitle": "Alzheimer Trial 1"},
+            "designModule": {"studyType": "INTERVENTIONAL"},
+            "statusModule": {"overallStatus": "RECRUITING"},
+            "conditionsModule": {"conditions": ["Alzheimer Disease"]},
+        },
+        "derivedSection": {
+            "conditionBrowseModule": {
+                "meshes": [{"id": "D000544", "term": "Alzheimer Disease"}],
+                "ancestors": [{"id": "D001927", "term": "Brain Diseases"}],
+            }
+        },
+    }
+    # Trial 2: different trial sharing same direct MeSH D000544 and ancestor D001927
+    s2 = {
+        "protocolSection": {
+            "identificationModule": {"nctId": "NCT00000202", "briefTitle": "Alzheimer Trial 2"},
+            "designModule": {"studyType": "INTERVENTIONAL"},
+            "statusModule": {"overallStatus": "RECRUITING"},
+            "conditionsModule": {"conditions": ["Dementia, Alzheimer Type"]},
+        },
+        "derivedSection": {
+            "conditionBrowseModule": {
+                "meshes": [{"id": "D000544", "term": "Alzheimer Disease"}],
+                "ancestors": [{"id": "D001927", "term": "Brain Diseases"}],
+            }
+        },
+    }
+    # Trial 3: unmapped study with no MeSH browse module
+    s3 = {
+        "protocolSection": {
+            "identificationModule": {"nctId": "NCT00000203", "briefTitle": "No-MeSH Trial"},
+            "designModule": {"studyType": "INTERVENTIONAL"},
+            "statusModule": {"overallStatus": "RECRUITING"},
+            "conditionsModule": {"conditions": ["Rare Unclassified Syndrome"]},
+        }
+    }
+    write_bronze_page(run_dir, 1, [s1, s2, s3])
+    manifest = make_manifest(run_id, record_count=3)
+    counts = build_silver_for_run(manifest, cfg)
+
+    assert counts["registry_trials"] == 3
+    assert counts["registry_trial_conditions"] == 3
+    # s1 and s2 each contributed 2 MeSH rows; s3 contributed 0
+    assert counts["registry_trial_condition_mesh"] == 4
+
+    mesh_df = pd.read_parquet(
+        cfg.paths.silver / "registry_trial_condition_mesh" / f"run_id={run_id}.parquet"
+    )
+    # The D000544 node is shared across two trials
+    d544_rows = mesh_df[mesh_df["mesh_id"] == "D000544"]
+    assert set(d544_rows["nct_id"].tolist()) == {"NCT00000201", "NCT00000202"}
+
+    # Evaluate against two presets:
+    # Preset 1: matches direct term "Alzheimer Disease"
+    # Preset 2: matches ancestor term "Brain Diseases"
+    adrd_profile = get_registry().get("adrd")
+    preset1 = dataclasses.replace(adrd_profile, mesh_terms=["Alzheimer Disease"])
+    preset2 = dataclasses.replace(adrd_profile, mesh_terms=["Brain Diseases"])
+
+    sel1 = preset_selector(preset1)
+    sel2 = preset_selector(preset2)
+
+    # Both presets match Trial 1 and Trial 2 via the shared nodes
+    assert sel1(s1) is True
+    assert sel1(s2) is True
+    assert sel1(s3) is False
+
+    assert sel2(s1) is True
+    assert sel2(s2) is True
+    assert sel2(s3) is False
+
+
+def test_registry_carry_forward_keeps_original_provenance(tmp_path: Path):
+    """Incremental carry-forward preserves source run and started_at_utc on registry entities."""
+    from datetime import UTC, datetime
+
+    cfg = make_config(tmp_path)
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+
+    t1 = datetime(2026, 10, 1, 10, 0, tzinfo=UTC)
+    t2 = datetime(2026, 10, 8, 10, 0, tzinfo=UTC)
+
+    # Base full run (r1): NCT1 and NCT2
+    r1 = "run_full_prov"
+    m1 = IngestionManifest(
+        ingestion_run_id=r1,
+        query_hash="h1",
+        endpoint=cfg.api.studies_url,
+        params={},
+        status="success",
+        record_count=2,
+        started_at_utc=t1,
+        ended_at_utc=t1,
+    )
+    write_manifest(cfg.paths.bronze_manifests, m1)
+    d1 = cfg.paths.bronze_api_responses / f"run_id={r1}"
+    s1 = make_study("NCT00000001")
+    s1["protocolSection"]["conditionsModule"] = {"conditions": ["Condition 1"]}
+    s2 = make_study("NCT00000002")
+    s2["protocolSection"]["conditionsModule"] = {"conditions": ["Condition 2"]}
+    write_bronze_page(d1, 1, [s1, s2])
+    build_silver_for_run(m1, cfg)
+
+    # Incremental run (r2): updates NCT1, adds NCT3; NCT2 is carried forward
+    r2 = "run_inc_prov"
+    m2 = IngestionManifest(
+        ingestion_run_id=r2,
+        query_hash="h2",
+        endpoint=cfg.api.studies_url,
+        params={},
+        status="success",
+        record_count=2,
+        started_at_utc=t2,
+        ended_at_utc=t2,
+        updated_since_utc="2026-10-01",
+    )
+    write_manifest(cfg.paths.bronze_manifests, m2)
+    d2 = cfg.paths.bronze_api_responses / f"run_id={r2}"
+    s3 = make_study("NCT00000003")
+    s3["protocolSection"]["conditionsModule"] = {"conditions": ["Condition 3"]}
+    write_bronze_page(d2, 1, [s1, s3])
+    counts = build_silver_for_run(m2, cfg)
+
+    assert counts["registry_trials"] == 3
+    assert counts["silver_trials"] == 3
+
+    # Check registry_trials: carried NCT2 keeps original source run r1 and t1 timestamp;
+    # snapshot_id is r2
+    reg_df = pd.read_parquet(cfg.paths.silver / "registry_trials" / f"run_id={r2}.parquet")
+    nct2_reg = reg_df[reg_df["nct_id"] == "NCT00000002"].iloc[0]
+    assert nct2_reg["ingestion_run_id"] == r1
+    assert nct2_reg["snapshot_id"] == r2
+    assert nct2_reg["snapshot_timestamp_utc"] == t1.isoformat()
+    # Original bronze provenance is preserved from r1
+    assert nct2_reg["source_json_hash"] == sha256_json(s2)
+    assert nct2_reg["raw_page_reference"] == "run_id=run_full_prov/page=00001.json"
+    assert nct2_reg["raw_study_ordinal"] == 1
+
+    # New / updated rows in registry_trials have r2 metadata
+    nct1_reg = reg_df[reg_df["nct_id"] == "NCT00000001"].iloc[0]
+    nct3_reg = reg_df[reg_df["nct_id"] == "NCT00000003"].iloc[0]
+    assert nct1_reg["ingestion_run_id"] == r2
+    assert nct1_reg["snapshot_id"] == r2
+    assert nct1_reg["snapshot_timestamp_utc"] == t2.isoformat()
+    assert nct3_reg["ingestion_run_id"] == r2
+    assert nct3_reg["snapshot_id"] == r2
+    assert nct3_reg["snapshot_timestamp_utc"] == t2.isoformat()
+
+    # Check registry_trial_conditions: carried NCT2 keeps r1 ingestion_run_id and has snapshot_id r2
+    reg_cond_df = pd.read_parquet(
+        cfg.paths.silver / "registry_trial_conditions" / f"run_id={r2}.parquet"
+    )
+    nct2_cond = reg_cond_df[reg_cond_df["nct_id"] == "NCT00000002"].iloc[0]
+    assert nct2_cond["ingestion_run_id"] == r1
+    assert nct2_cond["snapshot_id"] == r2
+    assert nct2_cond["source_json_hash"] == sha256_json(s2)
+
+    # Check profile silver_trials: profile silver still rewrites carried rows (unchanged)
+    silver_df = pd.read_parquet(cfg.paths.silver / "silver_trials" / f"run_id={r2}.parquet")
+    nct2_silver = silver_df[silver_df["nct_id"] == "NCT00000002"].iloc[0]
+    assert nct2_silver["ingestion_run_id"] == r2
+    assert nct2_silver["snapshot_id"] == r2
+    assert nct2_silver["snapshot_timestamp_utc"] == t2.isoformat()
+
+    # Union full run (r1) plus incremental run (r2) and assert uniqueness on (snapshot_id, nct_id)
+    reg_df_r1 = pd.read_parquet(cfg.paths.silver / "registry_trials" / f"run_id={r1}.parquet")
+    reg_df_r2 = pd.read_parquet(cfg.paths.silver / "registry_trials" / f"run_id={r2}.parquet")
+    union_reg = pd.concat([reg_df_r1, reg_df_r2], ignore_index=True)
+    assert len(union_reg) == 5  # 2 from r1 + 3 from r2
+    # (snapshot_id, nct_id) key must be strictly unique in the union
+    assert union_reg.groupby(["snapshot_id", "nct_id"]).size().max() == 1
+    # NCT00000002 appears exactly once per snapshot without intra-snapshot duplicates
+    assert (union_reg["nct_id"] == "NCT00000002").sum() == 2
+
+
+def test_incremental_registry_fails_when_previous_snapshot_lacks_registry_base(tmp_path: Path):
+    """Incremental registry build fails loudly when previous snapshot lacks registry files.
+
+    Two older runs:
+    r0: full run with complete profile silver and registry silver.
+    r1: full run with complete profile silver, but registry files deleted.
+    r2: incremental run; previous_snapshot_id must pick r1 (not skip to r0), and fail loudly.
+    """
+    from datetime import UTC, datetime
+
+    cfg = make_config(tmp_path)
+    cfg.paths.bronze_manifests.mkdir(parents=True, exist_ok=True)
+
+    t0 = datetime(2026, 9, 20, 10, 0, tzinfo=UTC)
+    t1 = datetime(2026, 10, 1, 10, 0, tzinfo=UTC)
+    t2 = datetime(2026, 10, 8, 10, 0, tzinfo=UTC)
+
+    # Base run 0 (r0): full run with complete profile and registry silver
+    r0 = "run_base_complete_r0"
+    m0 = IngestionManifest(
+        ingestion_run_id=r0,
+        query_hash="h0",
+        endpoint=cfg.api.studies_url,
+        params={},
+        status="success",
+        record_count=1,
+        started_at_utc=t0,
+        ended_at_utc=t0,
+    )
+    write_manifest(cfg.paths.bronze_manifests, m0)
+    d0 = cfg.paths.bronze_api_responses / f"run_id={r0}"
+    write_bronze_page(d0, 1, [make_study("NCT00000000")])
+    build_silver_for_run(m0, cfg)
+
+    # Base run 1 (r1): full run with profile silver, but delete registry files
+    r1 = "run_base_missing_reg_r1"
+    m1 = IngestionManifest(
+        ingestion_run_id=r1,
+        query_hash="h1",
+        endpoint=cfg.api.studies_url,
+        params={},
+        status="success",
+        record_count=1,
+        started_at_utc=t1,
+        ended_at_utc=t1,
+    )
+    write_manifest(cfg.paths.bronze_manifests, m1)
+    d1 = cfg.paths.bronze_api_responses / f"run_id={r1}"
+    write_bronze_page(d1, 1, [make_study("NCT00000001")])
+    build_silver_for_run(m1, cfg)
+
+    # Delete registry parquet files for r1 so only profile silver remains
+    for reg_entity in REGISTRY_ENTITY_NAMES:
+        (cfg.paths.silver / reg_entity / f"run_id={r1}.parquet").unlink()
+
+    # Verify that previous_snapshot_id returns r1 (newest completed snapshot with profile silver),
+    # and does NOT skip r1 to fall back to r0
+    assert build_silver_entities.previous_snapshot_id(cfg, "run_inc") == r1
+
+    # Incremental run (r2)
+    r2 = "run_inc_missing_reg"
+    m2 = IngestionManifest(
+        ingestion_run_id=r2,
+        query_hash="h2",
+        endpoint=cfg.api.studies_url,
+        params={},
+        status="success",
+        record_count=1,
+        started_at_utc=t2,
+        ended_at_utc=t2,
+        updated_since_utc="2026-10-01",
+    )
+    write_manifest(cfg.paths.bronze_manifests, m2)
+    d2 = cfg.paths.bronze_api_responses / f"run_id={r2}"
+    write_bronze_page(d2, 1, [make_study("NCT00000002")])
+
+    # Incremental registry build must fail loudly on r1, not skip to r0
+    with pytest.raises(
+        ValueError,
+        match=rf"Previous snapshot {r1} lacks registry entity file for '.*'; full rebuild required",
+    ):
+        build_silver_for_run(m2, cfg)
 
 
 def test_build_silver_still_transforms_a_named_profile_with_a_taxonomy(tmp_path: Path):
@@ -1050,8 +1380,10 @@ def test_previous_snapshot_id_finds_newest_snapshot(tmp_path: Path):
     )
     write_manifest(cfg.paths.bronze_manifests, m2)
     stats_path(cfg, "run2").write_text("{}")
-    for entity in build_silver_entities.ENTITY_NAMES:
-        (cfg.paths.silver / entity / "run_id=run2.parquet").touch()
+    for entity in build_silver_entities.ALL_ENTITY_NAMES:
+        p = cfg.paths.silver / entity
+        p.mkdir(parents=True, exist_ok=True)
+        (p / "run_id=run2.parquet").touch()
 
     # 3. Incremental snapshot without silver yet: ignored
     m_inc = IngestionManifest(
@@ -1069,8 +1401,10 @@ def test_previous_snapshot_id_finds_newest_snapshot(tmp_path: Path):
 
     # When silver exists for run_inc, it becomes the newest candidate
     stats_path(cfg, "run_inc").write_text("{}")
-    for entity in build_silver_entities.ENTITY_NAMES:
-        (cfg.paths.silver / entity / "run_id=run_inc.parquet").touch()
+    for entity in build_silver_entities.ALL_ENTITY_NAMES:
+        p = cfg.paths.silver / entity
+        p.mkdir(parents=True, exist_ok=True)
+        (p / "run_id=run_inc.parquet").touch()
     assert previous_snapshot_id(cfg, "run_current") == "run_inc"
 
 
