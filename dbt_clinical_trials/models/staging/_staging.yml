@@ -254,13 +254,15 @@ models:
         tests: [not_null, unique]
 
   - name: stg_registry_trials
-    description: One row per NCT ID per ingestion run at canonical registry grain.
+    description: One row per NCT ID per snapshot (snapshot_id) at canonical registry grain.
     columns:
       - name: registry_trial_key
         tests: [not_null]
       - name: nct_id
         tests: [not_null]
       - name: ingestion_run_id
+        tests: [not_null]
+      - name: snapshot_id
         tests: [not_null]
       - name: source_json_hash
         tests: [not_null]
@@ -273,7 +275,6 @@ models:
       - name: nct_id
         tests: [not_null]
       - name: condition_group
-        tests: [not_null]
       - name: mapping_confidence
         tests:
           - accepted_values:

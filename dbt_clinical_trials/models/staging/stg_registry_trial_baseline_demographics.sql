@@ -6,6 +6,7 @@ with raw as (
     select
         {{ generate_surrogate_key(['nct_id']) }} as registry_trial_key,
         ingestion_run_id,
+        snapshot_id,
         retrieved_at_utc,
         raw_page_reference,
         cast(raw_study_ordinal as bigint) as raw_study_ordinal,
@@ -138,6 +139,7 @@ mapped as (
 select
     registry_trial_key,
     ingestion_run_id,
+    snapshot_id,
     nct_id,
     source_json_hash,
     raw_page_reference,

@@ -1,5 +1,6 @@
--- One row per ingestion run for registry-wide snapshots.
--- Filters for registry-wide profiles (full_catalog) or retains source manifest identity.
+-- One row per ingestion run for canonical registry-wide snapshots.
+-- Retains source manifest identity without filtering on profile or status;
+-- filtering to successful, complete snapshots (policy item 2) lands in phase 3.
 select
     ingestion_run_id,
     query_hash,

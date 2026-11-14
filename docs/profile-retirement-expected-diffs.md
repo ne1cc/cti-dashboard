@@ -227,6 +227,7 @@ Phase 2 builds the canonical registry silver streams (nine entities) and staging
 | Step | Table / column | Expected difference | Why |
 |------|----------------|---------------------|-----|
 | Phase 2 | Profile silver and marts | none | Parallel additive architecture; existing models and baseline fixtures remain completely unchanged and pass. |
+| Phase 2 | Intra-run deduplication (all builds) | Conflicting duplicate NCT payloads in a single run raise `CanonicalConflictError` | Matches conflict policy item 3: intra-run conflicting payloads fail loudly across all builds including profile-only and derived-preset builds (previously kept first payload). Identical duplicate payloads continue to coalesce without error. |
 | Phase 2 | `registry_trials` and other `registry_*` silver tables | New parallel entity files under `data/silver/registry_*/run_id=<id>.parquet` | Canonical registry observations without indication profile scoping. |
 | Phase 2 | `stg_registry_*` staging models | 10 new models in staging | Views over canonical registry silver and manifests providing `registry_trial_key`. |
 | Phase 2 | `assert_registry_observation_integrity` | New singular test | Enforces canonical observation uniqueness and child entity referential integrity. |
