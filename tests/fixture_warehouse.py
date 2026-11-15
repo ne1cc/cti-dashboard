@@ -70,14 +70,15 @@ class FixtureRun:
     profile: str  # registry profile_id
     run_id: str
     started_at: datetime
-    condition: str
+    condition: str | None
     fixture_dir: str
     page: str = "page=00001.json"
     manifest_profile: str | None = None  # None -> same as `profile`
     status_overrides: dict[str, str] = field(default_factory=dict)
     added: tuple[AddedStudy, ...] = ()
-    study_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
+    study_overrides: dict[str, dict[str, Any] | None] = field(default_factory=dict)
     retrieved_at: str | None = None
+    updated_since: str | None = None
     final_status: str = "success"
 
     @property
@@ -176,6 +177,7 @@ def prepare_fixture_root(
     runs: list[FixtureRun] | None = None,
     *,
     session_timezone: str | None = None,
+    extra_profile_yamls: dict[str, str] | None = None,
 ) -> Path:
     """Prepares directory structure, config, bronze, and silver data without running dbt.
 
@@ -199,6 +201,9 @@ def prepare_fixture_root(
         for taxonomy in (REPO_ROOT / "config").glob("condition_taxonomy*.yml"):
             shutil.copy(taxonomy, root / "config" / taxonomy.name)
         shutil.copytree(REPO_ROOT / "config" / "profiles", root / "config" / "profiles")
+        if extra_profile_yamls:
+            for fname, content in extra_profile_yamls.items():
+                (root / "config" / "profiles" / fname).write_text(content, encoding="utf-8")
 
         from src.config import load_config
         from src.ingest.snapshot_manifest import (
@@ -217,6 +222,11 @@ def prepare_fixture_root(
                 root / "config/profiles/oncology_nsclc.yml", shared=shared
             ),
         }
+        for run in runs:
+            if run.profile not in profiles:
+                profiles[run.profile] = load_profile(
+                    root / f"config/profiles/{run.profile}.yml", shared=shared
+                )
 
         fixtures_dir = Path(__file__).parent / "fixtures"
 
@@ -272,7 +282,7 @@ def prepare_fixture_root(
                 query_hash=f"fixturequeryhash{index:02d}",
                 endpoint="https://clinicaltrials.gov/api/v2/studies",
                 condition=run.condition,
-                params={"query.cond": run.condition},
+                params={"query.cond": run.condition} if run.condition else {},
                 mode="incremental",
                 profile=run.effective_manifest_profile,
                 status="success",
@@ -281,10 +291,11 @@ def prepare_fixture_root(
                 page_count=1,
                 record_count=record_count,
                 total_count_reported=record_count,
+                updated_since_utc=run.updated_since,
             )
             write_manifest(profile_cfg.paths.bronze_manifests, manifest)
             write_summary(profile_cfg.paths.bronze_manifests, manifest)
-            transform_result = run_transform(profile=profiles[run.profile])
+            transform_result = run_transform(profile=profiles[run.profile], run_id=run.run_id)
             assert transform_result == [run.run_id], f"Transform failed for {run.run_id}"
             if run.final_status != "success":
                 manifest.status = run.final_status
@@ -322,6 +333,8 @@ def build_dbt_fixture(
     *,
     dbt_vars: dict[str, object] | None = None,
     target_path: Path | None = None,
+    select: tuple[str, ...] = (),
+    exclude: tuple[str, ...] = (),
 ) -> None:
     """Runs dbt build against the prepared fixture root."""
     build_command = [
@@ -336,6 +349,10 @@ def build_dbt_fixture(
         "--target-path",
         str(target_path or (root / "dbt_target")),
     ]
+    if select:
+        build_command += ["--select", *select]
+    if exclude:
+        build_command += ["--exclude", *exclude]
     if dbt_vars:
         build_command += ["--vars", json.dumps(dbt_vars)]
     result = subprocess.run(
@@ -358,9 +375,15 @@ def build_fixture_warehouse(
     *,
     session_timezone: str | None = None,
     dbt_vars: dict[str, object] | None = None,
+    extra_profile_yamls: dict[str, str] | None = None,
 ) -> Path:
     """Prepares fixture root and executes dbt build."""
-    prepare_fixture_root(root, runs=runs, session_timezone=session_timezone)
+    prepare_fixture_root(
+        root,
+        runs=runs,
+        session_timezone=session_timezone,
+        extra_profile_yamls=extra_profile_yamls,
+    )
     build_dbt_fixture(root, dbt_vars=dbt_vars)
     return root
 
