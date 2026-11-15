@@ -381,7 +381,10 @@ class DataProvenance(BaseModel):
     source_json_hash: str = Field(..., description="SHA-256 digest of contact-scrubbed study JSON")
     record_quality_flag: str = Field(..., description="Quality gate classification (e.g. ok)")
     retrieved_at_utc: str | None = Field(default=None, description="Retrieval timestamp (ISO UTC)")
-    indication_profile_id: str = Field(..., description="Indication profile ID")
+    indication_profile_id: str = Field(
+        ...,
+        description="Preset / indication profile compatibility identifier",
+    )
 
 
 class TrialDetail(BaseModel):

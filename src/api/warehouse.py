@@ -1,7 +1,9 @@
 """DuckDB read-only warehouse connection manager and query adapter for the read API.
 
 Conforms strictly to ADR 0065 (contact privacy guardrails: zero coordinator/investigator PII)
-and Issue #59 architecture specifications.
+and Issue #59 architecture specifications. Reads canonical registry-grain warehouse tables
+(`registry_trial_key = md5(nct_id)`); a live warehouse built on the legacy profile grain
+requires a full rebuild before cutover.
 Clean separation: never imports dashboard.components.data or touches Streamlit state.
 """
 
@@ -58,20 +60,333 @@ DETAIL_SQL_PATH = SQL_DIR / "detail.sql"
 RELATED_SQL_PATH = SQL_DIR / "related.sql"
 
 REQUIRED_TABLES = (
-    "dim_trial",
-    "fct_trial_snapshot",
-    "fct_trial_site",
-    "stg_trials",
-    "stg_trial_locations",
-    "stg_trial_sponsors",
-    "stg_trial_conditions",
-    "stg_trial_interventions",
-    "stg_trial_arms",
+    "dim_registry_trial",
+    "fct_registry_trial_snapshot",
+    "fct_registry_trial_site",
+    "stg_registry_trials",
+    "stg_registry_trial_locations",
+    "stg_registry_trial_sponsors",
+    "stg_registry_trial_conditions",
+    "stg_registry_trial_interventions",
+    "stg_registry_trial_arms",
 )
+
+# Compatibility fallback ONLY for pre-cutover profile-only dbt fixtures
+# (e.g. similarity_equivalence_root before phase 5 rebuilds them at full-catalog grain)
+# where dim_registry_trial is empty while dim_trial is populated.
+_LEGACY_RELATED_SQL = """
+WITH weights AS (
+    SELECT
+        MAX(CASE WHEN component = 'same_condition' THEN weight END) AS w_same_condition,
+        MAX(CASE WHEN component = 'same_phase' THEN weight END) AS w_same_phase,
+        MAX(CASE WHEN component = 'geography_overlap' THEN weight END) AS w_geography_overlap,
+        MAX(CASE WHEN component = 'intervention_type_overlap' THEN weight END)
+            AS w_intervention_type_overlap,
+        MAX(CASE WHEN component = 'study_design_match' THEN weight END) AS w_study_design_match,
+        MAX(CASE WHEN component = 'eligibility_compatible' THEN weight END)
+            AS w_eligibility_compatible,
+        MAX(CASE WHEN component = 'enrollment_band_match' THEN weight END)
+            AS w_enrollment_band_match
+    FROM similarity_score_weights
+),
+target AS (
+    SELECT
+        st.nct_id,
+        st.phase_normalized,
+        st.study_type,
+        st.allocation,
+        st.primary_purpose,
+        st.enrollment_count,
+        CASE
+            WHEN st.enrollment_count IS NULL THEN NULL
+            WHEN st.enrollment_count < 50 THEN 'small'
+            WHEN st.enrollment_count <= 200 THEN 'medium'
+            ELSE 'large'
+        END AS enrollment_band,
+        st.healthy_volunteers,
+        COALESCE(st.sex, 'ALL') AS sex,
+        st.minimum_age_years,
+        st.maximum_age_years
+    FROM stg_trials st
+    WHERE UPPER(st.nct_id) = UPPER($nct_id)
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY st.nct_id
+        ORDER BY st.snapshot_timestamp_utc DESC, st.ingestion_run_id DESC
+    ) = 1
+),
+target_conditions AS (
+    SELECT DISTINCT tc.condition_group
+    FROM stg_trial_conditions tc
+    WHERE UPPER(tc.nct_id) = UPPER($nct_id)
+      AND tc.condition_group IS NOT NULL
+),
+target_mesh AS (
+    SELECT DISTINCT m.mesh_id, m.is_ancestor
+    FROM stg_trial_condition_mesh m
+    WHERE UPPER(m.nct_id) = UPPER($nct_id)
+      AND m.mesh_id IS NOT NULL
+),
+target_interventions AS (
+    SELECT DISTINCT ti.intervention_type
+    FROM stg_trial_interventions ti
+    WHERE UPPER(ti.nct_id) = UPPER($nct_id)
+      AND ti.intervention_type IS NOT NULL
+),
+target_states AS (
+    SELECT DISTINCT s.state_normalized
+    FROM fct_trial_site s
+    WHERE UPPER(s.nct_id) = UPPER($nct_id)
+      AND s.state_normalized IS NOT NULL
+),
+condition_group_matches AS (
+    SELECT DISTINCT tc.nct_id, 1 AS has_same_condition
+    FROM stg_trial_conditions tc
+    INNER JOIN target_conditions tcond
+        ON tc.condition_group = tcond.condition_group
+    WHERE UPPER(tc.nct_id) != UPPER($nct_id)
+),
+mesh_matches AS (
+    SELECT DISTINCT
+        m.nct_id,
+        CASE WHEN NOT tm.is_ancestor AND NOT m.is_ancestor THEN 2 ELSE 1 END AS mesh_match_depth
+    FROM stg_trial_condition_mesh m
+    INNER JOIN target_mesh tm
+        ON m.mesh_id = tm.mesh_id
+    WHERE UPPER(m.nct_id) != UPPER($nct_id)
+      AND NOT (tm.is_ancestor AND m.is_ancestor)
+),
+candidate_pool AS (
+    SELECT
+        nct_id,
+        MAX(has_same_condition) AS has_same_condition,
+        MAX(mesh_match_depth) AS mesh_match_depth
+    FROM (
+        SELECT nct_id, has_same_condition, 0 AS mesh_match_depth FROM condition_group_matches
+        UNION ALL
+        SELECT nct_id, 0 AS has_same_condition, mesh_match_depth FROM mesh_matches
+    )
+    GROUP BY nct_id
+),
+candidate_trials AS (
+    SELECT
+        cp.nct_id,
+        cp.has_same_condition,
+        st.phase_normalized,
+        st.study_type,
+        st.allocation,
+        st.primary_purpose,
+        st.enrollment_count,
+        CASE
+            WHEN st.enrollment_count IS NULL THEN NULL
+            WHEN st.enrollment_count < 50 THEN 'small'
+            WHEN st.enrollment_count <= 200 THEN 'medium'
+            ELSE 'large'
+        END AS enrollment_band,
+        st.healthy_volunteers,
+        COALESCE(st.sex, 'ALL') AS sex,
+        st.minimum_age_years,
+        st.maximum_age_years,
+        CASE WHEN st.phase_normalized = tg.phase_normalized THEN 1 ELSE 0 END AS phase_match,
+        cp.has_same_condition AS cond_match,
+        cp.mesh_match_depth
+    FROM candidate_pool cp
+    INNER JOIN stg_trials st
+        ON cp.nct_id = st.nct_id
+    CROSS JOIN target tg
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY cp.nct_id
+        ORDER BY st.snapshot_timestamp_utc DESC, st.ingestion_run_id DESC
+    ) = 1
+),
+capped_candidates AS (
+    SELECT *
+    FROM candidate_trials
+    ORDER BY phase_match DESC, cond_match DESC, mesh_match_depth DESC, nct_id ASC
+    LIMIT 250
+),
+candidate_dim AS (
+    SELECT
+        dt.nct_id,
+        dt.current_brief_title AS brief_title,
+        dt.current_overall_status AS overall_status,
+        dt.current_phase AS phase,
+        dt.current_lead_sponsor AS lead_sponsor,
+        COALESCE(dt.registry_url, 'https://clinicaltrials.gov/study/' || dt.nct_id) AS registry_url
+    FROM dim_trial dt
+    INNER JOIN capped_candidates cc ON dt.nct_id = cc.nct_id
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY dt.nct_id
+        ORDER BY dt.latest_seen_snapshot_date DESC
+    ) = 1
+),
+scored AS (
+    SELECT
+        cc.nct_id,
+        cd.brief_title,
+        cd.overall_status,
+        cd.phase,
+        cd.lead_sponsor,
+        cd.registry_url,
+
+        cc.has_same_condition AS same_condition,
+        w.w_same_condition AS weight_same_condition,
+        ROUND(w.w_same_condition * cc.has_same_condition, 4) AS weighted_same_condition,
+
+        CASE WHEN cc.phase_normalized = tg.phase_normalized THEN 1 ELSE 0 END AS same_phase,
+        w.w_same_phase AS weight_same_phase,
+        ROUND(
+            w.w_same_phase
+            * (CASE WHEN cc.phase_normalized = tg.phase_normalized THEN 1 ELSE 0 END),
+            4
+        ) AS weighted_same_phase,
+
+        CASE WHEN EXISTS (
+            SELECT 1 FROM fct_trial_site s
+            INNER JOIN target_states ts ON s.state_normalized = ts.state_normalized
+            WHERE s.nct_id = cc.nct_id
+        ) THEN 1 ELSE 0 END AS geography_overlap,
+        w.w_geography_overlap AS weight_geography_overlap,
+        ROUND(w.w_geography_overlap * (CASE WHEN EXISTS (
+            SELECT 1 FROM fct_trial_site s
+            INNER JOIN target_states ts ON s.state_normalized = ts.state_normalized
+            WHERE s.nct_id = cc.nct_id
+        ) THEN 1 ELSE 0 END), 4) AS weighted_geography_overlap,
+
+        CASE WHEN EXISTS (
+            SELECT 1 FROM stg_trial_interventions i
+            INNER JOIN target_interventions ti ON i.intervention_type = ti.intervention_type
+            WHERE i.nct_id = cc.nct_id
+        ) THEN 1 ELSE 0 END AS intervention_type_overlap,
+        w.w_intervention_type_overlap AS weight_intervention_type_overlap,
+        ROUND(w.w_intervention_type_overlap * (CASE WHEN EXISTS (
+            SELECT 1 FROM stg_trial_interventions i
+            INNER JOIN target_interventions ti ON i.intervention_type = ti.intervention_type
+            WHERE i.nct_id = cc.nct_id
+        ) THEN 1 ELSE 0 END), 4) AS weighted_intervention_type_overlap,
+
+        CASE WHEN cc.study_type = tg.study_type
+              AND cc.allocation = tg.allocation
+              AND cc.primary_purpose = tg.primary_purpose
+             THEN 1 ELSE 0 END AS study_design_match,
+        w.w_study_design_match AS weight_study_design_match,
+        ROUND(w.w_study_design_match * (
+            CASE WHEN cc.study_type = tg.study_type
+                  AND cc.allocation = tg.allocation
+                  AND cc.primary_purpose = tg.primary_purpose
+                 THEN 1 ELSE 0 END
+        ), 4) AS weighted_study_design_match,
+
+        CASE WHEN (cc.sex = tg.sex OR cc.sex = 'ALL' OR tg.sex = 'ALL')
+              AND cc.healthy_volunteers = tg.healthy_volunteers
+              AND (
+                  tg.minimum_age_years IS NULL
+                  OR cc.maximum_age_years IS NULL
+                  OR tg.minimum_age_years <= cc.maximum_age_years
+              )
+              AND (
+                  cc.minimum_age_years IS NULL
+                  OR tg.maximum_age_years IS NULL
+                  OR cc.minimum_age_years <= tg.maximum_age_years
+              )
+             THEN 1 ELSE 0 END AS eligibility_compatible,
+        w.w_eligibility_compatible AS weight_eligibility_compatible,
+        ROUND(w.w_eligibility_compatible * (
+            CASE WHEN (cc.sex = tg.sex OR cc.sex = 'ALL' OR tg.sex = 'ALL')
+                  AND cc.healthy_volunteers = tg.healthy_volunteers
+                  AND (
+                      tg.minimum_age_years IS NULL
+                      OR cc.maximum_age_years IS NULL
+                      OR tg.minimum_age_years <= cc.maximum_age_years
+                  )
+                  AND (
+                      cc.minimum_age_years IS NULL
+                      OR tg.maximum_age_years IS NULL
+                      OR cc.minimum_age_years <= tg.maximum_age_years
+                  )
+                 THEN 1 ELSE 0 END
+        ), 4) AS weighted_eligibility_compatible,
+
+        CASE WHEN cc.enrollment_band = tg.enrollment_band THEN 1 ELSE 0 END
+            AS enrollment_band_match,
+        w.w_enrollment_band_match AS weight_enrollment_band_match,
+        ROUND(
+            w.w_enrollment_band_match
+            * (CASE WHEN cc.enrollment_band = tg.enrollment_band THEN 1 ELSE 0 END),
+            4
+        ) AS weighted_enrollment_band_match,
+
+        tg.phase_normalized AS target_phase,
+        tg.enrollment_band AS target_enrollment_band
+    FROM capped_candidates cc
+    INNER JOIN candidate_dim cd ON cc.nct_id = cd.nct_id
+    CROSS JOIN target tg
+    CROSS JOIN weights w
+),
+computed AS (
+    SELECT
+        s.*,
+        ROUND(
+            weighted_same_condition +
+            weighted_same_phase +
+            weighted_geography_overlap +
+            weighted_intervention_type_overlap +
+            weighted_study_design_match +
+            weighted_eligibility_compatible +
+            weighted_enrollment_band_match
+        , 4) AS similarity_score,
+        CONCAT_WS('; ',
+            CASE WHEN s.same_condition = 1 THEN 'shared condition mapping' END,
+            CASE WHEN s.same_phase = 1 THEN 'same phase (' || s.target_phase || ')' END,
+            CASE WHEN s.geography_overlap = 1 THEN 'overlapping U.S. states' END,
+            CASE WHEN s.intervention_type_overlap = 1 THEN 'shared intervention type' END,
+            CASE WHEN s.study_design_match = 1
+                THEN 'matching study type, allocation, and primary purpose' END,
+            CASE WHEN s.eligibility_compatible = 1 THEN 'compatible eligibility criteria' END,
+            CASE WHEN s.enrollment_band_match = 1
+                THEN 'similar enrollment size (' || s.target_enrollment_band || ')' END
+        ) AS similarity_explanation
+    FROM scored s
+)
+SELECT
+    nct_id,
+    brief_title,
+    overall_status,
+    phase,
+    lead_sponsor,
+    similarity_score,
+    ROW_NUMBER() OVER (ORDER BY similarity_score DESC, nct_id ASC) AS similarity_rank,
+    same_condition,
+    weight_same_condition,
+    weighted_same_condition,
+    same_phase,
+    weight_same_phase,
+    weighted_same_phase,
+    geography_overlap,
+    weight_geography_overlap,
+    weighted_geography_overlap,
+    intervention_type_overlap,
+    weight_intervention_type_overlap,
+    weighted_intervention_type_overlap,
+    study_design_match,
+    weight_study_design_match,
+    weighted_study_design_match,
+    eligibility_compatible,
+    weight_eligibility_compatible,
+    weighted_eligibility_compatible,
+    enrollment_band_match,
+    weight_enrollment_band_match,
+    weighted_enrollment_band_match,
+    similarity_explanation,
+    registry_url
+FROM computed
+WHERE ($min_score IS NULL OR similarity_score >= $min_score)
+QUALIFY similarity_rank <= $limit
+ORDER BY similarity_rank;
+"""
 
 
 def _escape_like(text: str) -> str:
-    """Make LIKE wildcards literal; the SQL declares ESCAPE '\'."""
+    """Make LIKE wildcards literal; the SQL declares ESCAPE '\\'."""
     return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
@@ -141,9 +456,11 @@ class DuckDBConnectionPool:
             }
             candidates = [
                 "main_marts",
+                "main_intermediate",
                 "main_staging",
                 "main_seeds",
                 "marts",
+                "intermediate",
                 "staging",
                 "seeds",
                 "main",
@@ -156,27 +473,97 @@ class DuckDBConnectionPool:
             # (empty when reference files are missing) so queries stay bindable.
             register_gazetteer_views(conn, self.gazetteer_dir)
 
-            # Ensure stg_trial_condition_mesh view exists so queries remain bindable
-            # even on legacy warehouses or test fixtures missing MeSH tables.
+            # Ensure optional registry views exist so SQL remains bindable on
+            # minimal test fixtures that omit MeSH, manifest, or preset bridges.
             existing_tables = {
-                row[0]
+                row[0].lower()
                 for row in conn.execute(
-                    "SELECT table_name FROM information_schema.tables "
-                    "WHERE table_name = 'stg_trial_condition_mesh';"
+                    "SELECT DISTINCT lower(table_name) FROM information_schema.tables;"
                 ).fetchall()
             }
-            if not existing_tables:
+            if "stg_registry_trial_condition_mesh" not in existing_tables:
                 conn.execute("""
-                    CREATE TEMP VIEW stg_trial_condition_mesh AS
+                    CREATE TEMP VIEW stg_registry_trial_condition_mesh AS
                     SELECT
+                        cast(null as varchar) as registry_trial_key,
                         cast(null as varchar) as ingestion_run_id,
-                        cast(null as varchar) as indication_profile_id,
+                        cast(null as varchar) as snapshot_id,
                         cast(null as varchar) as nct_id,
                         cast(null as varchar) as mesh_id,
                         cast(null as varchar) as mesh_term,
                         cast(null as boolean) as is_ancestor,
                         cast(null as varchar) as branch,
                         cast(null as varchar) as source_json_hash
+                    WHERE false;
+                """)
+            if "stg_registry_trial_snapshots" not in existing_tables:
+                conn.execute("""
+                    CREATE TEMP VIEW stg_registry_trial_snapshots AS
+                    SELECT
+                        cast(null as varchar) as ingestion_run_id,
+                        cast(null as varchar) as query_hash,
+                        cast(null as varchar) as condition,
+                        cast(null as varchar) as mode,
+                        cast(null as varchar) as status,
+                        cast(null as timestamp) as started_at_utc,
+                        cast(null as timestamp) as ended_at_utc,
+                        cast(null as date) as snapshot_date,
+                        cast(null as integer) as page_count,
+                        cast(null as integer) as record_count,
+                        cast(null as integer) as total_count_reported,
+                        cast(null as integer) as quarantined_record_count,
+                        cast(null as varchar) as profile,
+                        cast(null as varchar) as error
+                    WHERE false;
+                """)
+            if "bridge_preset_trial" not in existing_tables:
+                conn.execute("""
+                    CREATE TEMP VIEW bridge_preset_trial AS
+                    SELECT
+                        cast(null as varchar) as preset_trial_key,
+                        cast(null as varchar) as preset_id,
+                        cast(null as varchar) as nct_id,
+                        cast(null as varchar) as registry_trial_key,
+                        cast(null as varchar) as snapshot_id,
+                        cast(null as varchar) as ingestion_run_id,
+                        cast(null as date) as snapshot_date,
+                        cast(null as timestamp) as snapshot_timestamp_utc,
+                        cast(null as boolean) as is_unassigned,
+                        cast(null as varchar) as membership_scope,
+                        cast(null as boolean) as current_record_flag
+                    WHERE false;
+                """)
+            if "bridge_registry_trial_condition" not in existing_tables:
+                conn.execute("""
+                    CREATE TEMP VIEW bridge_registry_trial_condition AS
+                    SELECT
+                        cast(null as varchar) as registry_trial_condition_key,
+                        cast(null as varchar) as registry_trial_key,
+                        cast(null as varchar) as registry_condition_key,
+                        cast(null as varchar) as nct_id,
+                        cast(null as varchar) as node_id,
+                        cast(null as varchar) as condition_group,
+                        cast(null as varchar) as mesh_id,
+                        cast(null as boolean) as is_ancestor,
+                        cast(null as varchar) as mapping_source,
+                        cast(null as boolean) as dementia_relevance_flag,
+                        cast(null as varchar) as mapping_confidence,
+                        cast(null as bigint) as source_condition_count
+                    WHERE false;
+                """)
+            if "int_registry_preset_condition_mapping" not in existing_tables:
+                conn.execute("""
+                    CREATE TEMP VIEW int_registry_preset_condition_mapping AS
+                    SELECT
+                        cast(null as varchar) as preset_id,
+                        cast(null as varchar) as snapshot_id,
+                        cast(null as date) as snapshot_date,
+                        cast(null as varchar) as nct_id,
+                        cast(null as varchar) as condition_group,
+                        cast(null as boolean) as dementia_relevance_flag,
+                        cast(null as varchar) as mapping_confidence,
+                        cast(null as varchar) as mapping_source,
+                        cast(null as bigint) as source_condition_count
                     WHERE false;
                 """)
             return conn
@@ -297,13 +684,16 @@ class DuckDBWarehouseManager:
                         f"Warehouse missing required tables: {', '.join(sorted(missing_tables))}"
                     )
 
-                # 2. Extract snapshot metadata and trials count strictly from real schema
+                # 2. Extract snapshot metadata and trials count from canonical registry grain
                 meta_query = """
                 SELECT
-                    st.snapshot_id,
-                    CAST(COALESCE(st.snapshot_date, dt.max_date) AS VARCHAR) AS snapshot_date,
+                    COALESCE(st.snapshot_id, st.ingestion_run_id) AS snapshot_id,
+                    CAST(
+                        COALESCE(st.manifest_snapshot_date, st.snapshot_date, dt.max_date)
+                        AS VARCHAR
+                    ) AS snapshot_date,
                     strftime(
-                        timezone('UTC', st.snapshot_timestamp_utc),
+                        timezone('UTC', COALESCE(st.started_at_utc, st.snapshot_timestamp_utc)),
                         '%Y-%m-%dT%H:%M:%SZ'
                     ) AS snapshot_timestamp_utc,
                     dt.trial_count
@@ -311,16 +701,33 @@ class DuckDBWarehouseManager:
                     SELECT
                         COUNT(DISTINCT nct_id) AS trial_count,
                         MAX(latest_seen_snapshot_date) AS max_date
-                    FROM dim_trial
+                    FROM dim_registry_trial
                 ) dt
                 CROSS JOIN (
                     SELECT
-                        snapshot_id,
-                        snapshot_date,
-                        snapshot_timestamp_utc
-                    FROM stg_trials
-                    WHERE snapshot_timestamp_utc IS NOT NULL
-                    ORDER BY snapshot_timestamp_utc DESC, ingestion_run_id DESC
+                        st.snapshot_id,
+                        st.ingestion_run_id,
+                        st.snapshot_date,
+                        sm.snapshot_date AS manifest_snapshot_date,
+                        st.snapshot_timestamp_utc,
+                        sm.started_at_utc
+                    FROM stg_registry_trials st
+                    LEFT JOIN stg_registry_trial_snapshots sm
+                        ON COALESCE(st.snapshot_id, st.ingestion_run_id) = sm.ingestion_run_id
+                    WHERE st.snapshot_timestamp_utc IS NOT NULL
+                      AND (
+                          NOT EXISTS (SELECT 1 FROM stg_registry_trial_snapshots)
+                          OR (
+                              sm.ingestion_run_id IS NOT NULL
+                              AND sm.status = 'success'
+                              AND sm.profile IN ('full_catalog', 'full-catalog', 'default')
+                              AND (sm.condition IS NULL OR trim(sm.condition) = '')
+                          )
+                      )
+                    ORDER BY
+                        COALESCE(sm.started_at_utc, st.snapshot_timestamp_utc) DESC,
+                        st.snapshot_timestamp_utc DESC,
+                        COALESCE(st.snapshot_id, st.ingestion_run_id) DESC
                     LIMIT 1
                 ) st;
                 """
@@ -751,19 +1158,47 @@ class DuckDBWarehouseManager:
         """
         canonical_nct = nct_id.strip().upper()
         with self.pool.connection() as conn:
-            # Check target trial existence
-            exists_dim = conn.execute(
-                "SELECT 1 FROM dim_trial WHERE upper(nct_id) = ?", [canonical_nct]
-            ).fetchone()
-            if exists_dim is None:
-                exists_stg = conn.execute(
-                    "SELECT 1 FROM stg_trials WHERE upper(nct_id) = ?", [canonical_nct]
+            reg_row = conn.execute("SELECT EXISTS (SELECT 1 FROM dim_registry_trial);").fetchone()
+            has_registry_rows = bool(reg_row[0]) if reg_row else False
+
+            use_legacy = False
+            if not has_registry_rows:
+                has_legacy_table = bool(
+                    conn.execute(
+                        "SELECT 1 FROM information_schema.tables "
+                        "WHERE lower(table_name) = 'dim_trial' LIMIT 1;"
+                    ).fetchone()
+                )
+                if has_legacy_table:
+                    legacy_row = conn.execute("SELECT EXISTS (SELECT 1 FROM dim_trial);").fetchone()
+                    use_legacy = bool(legacy_row[0]) if legacy_row else False
+
+            if use_legacy:
+                exists_dim = conn.execute(
+                    "SELECT 1 FROM dim_trial WHERE upper(nct_id) = ?", [canonical_nct]
                 ).fetchone()
-                if exists_stg is None:
-                    return None
+                if exists_dim is None:
+                    exists_stg = conn.execute(
+                        "SELECT 1 FROM stg_trials WHERE upper(nct_id) = ?", [canonical_nct]
+                    ).fetchone()
+                    if exists_stg is None:
+                        return None
+                related_sql = _LEGACY_RELATED_SQL
+            else:
+                exists_dim = conn.execute(
+                    "SELECT 1 FROM dim_registry_trial WHERE upper(nct_id) = ?", [canonical_nct]
+                ).fetchone()
+                if exists_dim is None:
+                    exists_stg = conn.execute(
+                        "SELECT 1 FROM stg_registry_trials WHERE upper(nct_id) = ?",
+                        [canonical_nct],
+                    ).fetchone()
+                    if exists_stg is None:
+                        return None
+                related_sql = self._related_sql
 
             cursor = conn.execute(
-                self._related_sql,
+                related_sql,
                 {
                     "nct_id": canonical_nct,
                     "min_score": min_score,

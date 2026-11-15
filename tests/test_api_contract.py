@@ -753,3 +753,46 @@ def test_walkthrough_examples_headers_and_references() -> None:
     assert "feasibility_case_study.md" in walkthrough
     assert "20261003T080013Z_c1b234b8" in walkthrough
     assert "/v1/geo/access" in walkthrough
+
+
+def test_meta_freshness_prefers_dim_registry_trial_row_count(
+    openapi_doc: dict[str, Any], freshness_client: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When dim_registry_trial is present in row_counts, /v1/meta/freshness prefers it."""
+    now = datetime.now(UTC)
+    captured = (now - timedelta(days=1)).isoformat()
+    marker = {
+        "schema_version": 1,
+        "attempt_at_utc": now.isoformat(),
+        "attempt_status": "success",
+        "error": None,
+        "last_success": {
+            "pipeline_completed_at_utc": (now - timedelta(seconds=1)).isoformat(),
+            "source_api_version": "v2",
+            "source_release_at_utc": None,
+            "profiles": {
+                pid: {
+                    "run_id": "20261020T120000Z_p",
+                    "captured_at_utc": captured,
+                    "row_counts": {
+                        "dim_trial": 3,
+                        "dim_registry_trial": 42,
+                        "fct_trial_snapshot": 3,
+                        "mart_trial_similarity": 0,
+                    },
+                }
+                for pid in ("adrd", "oncology_nsclc")
+            },
+            "reconciliation": {"checks_total": 10, "checks_failed": 0},
+        },
+    }
+    monkeypatch.setattr("src.api.app.freshness_status", lambda: {"metadata": marker, "errors": []})
+
+    schema = _dereference_schema(
+        openapi_doc, openapi_doc["components"]["schemas"]["MetaFreshnessResponse"]
+    )
+    resp = freshness_client.get("/v1/meta/freshness")
+    assert resp.status_code == 200
+    body = resp.json()
+    jsonschema.validate(instance=body, schema=schema, format_checker=jsonschema.FormatChecker())
+    assert all(p["total_studies_tracked"] == 42 for p in body["profiles"])

@@ -514,7 +514,8 @@ def create_app(
         request: Request,
         response: Response,
         indication_profile_id: str | None = Query(
-            default=None, description="Optional indication profile identifier filter."
+            default=None,
+            description="Optional preset / indication profile identifier filter.",
         ),
     ) -> Any:
         """Report refresh freshness from the `.freshness.json` success marker.
@@ -579,7 +580,9 @@ def create_app(
                     "latest_ingestion_run_id": cap["run_id"],
                     "source_api": "ClinicalTrials.gov API v2",
                     "source_api_version": success["source_api_version"],
-                    "total_studies_tracked": cap["row_counts"]["dim_trial"],
+                    "total_studies_tracked": cap["row_counts"].get(
+                        "dim_registry_trial", cap["row_counts"].get("dim_trial", 0)
+                    ),
                     "row_counts": cap["row_counts"],
                 }
                 for pid, cap in profiles.items()
@@ -621,7 +624,7 @@ def create_app(
         ),
         indication_profile_id: str | None = Query(
             default=None,
-            description="Filter scoped to an active indication profile (e.g. adrd).",
+            description="Filter scoped to an active preset / indication profile (e.g. adrd).",
         ),
         limit: int = Query(
             default=20,

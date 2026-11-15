@@ -451,6 +451,7 @@ def normalize_study_detail(
             }
         ),
         retrieved_at_utc=now.isoformat(),
+        # Preserved as the public provenance compatibility identifier for live responses.
         indication_profile_id="live",
     )
 

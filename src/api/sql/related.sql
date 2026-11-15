@@ -1,6 +1,7 @@
--- On-demand pairwise trial comparability query with MeSH-ancestor + phase blocking.
--- Evaluates objective study design comparability factors against target trial $nct_id.
--- Bounded by candidate blocking and hard per-trial cap (Issue #55).
+-- On-demand pairwise trial comparability query with MeSH-ancestor + phase blocking
+-- at canonical registry grain. Evaluates objective study design comparability
+-- factors against target trial $nct_id, keeping preset condition groups keyed
+-- by (preset_id, condition_group) and bounded by candidate blocking (Issue #55).
 
 WITH weights AS (
     SELECT
@@ -13,9 +14,10 @@ WITH weights AS (
         MAX(CASE WHEN component = 'enrollment_band_match' THEN weight END) AS w_enrollment_band_match
     FROM similarity_score_weights
 ),
-target AS (
+active_trials AS (
     SELECT
         st.nct_id,
+        COALESCE(st.snapshot_id, st.ingestion_run_id) AS effective_run_key,
         st.phase_normalized,
         st.study_type,
         st.allocation,
@@ -31,49 +33,114 @@ target AS (
         COALESCE(st.sex, 'ALL') AS sex,
         st.minimum_age_years,
         st.maximum_age_years
-    FROM stg_trials st
-    WHERE UPPER(st.nct_id) = UPPER($nct_id)
+    FROM stg_registry_trials st
+    LEFT JOIN stg_registry_trial_snapshots sm
+        ON COALESCE(st.snapshot_id, st.ingestion_run_id) = sm.ingestion_run_id
+    WHERE NOT EXISTS (SELECT 1 FROM stg_registry_trial_snapshots)
+       OR (
+           sm.ingestion_run_id IS NOT NULL
+           AND sm.status = 'success'
+           AND sm.profile IN ('full_catalog', 'full-catalog', 'default')
+           AND (sm.condition IS NULL OR trim(sm.condition) = '')
+       )
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY st.nct_id
-        ORDER BY st.snapshot_timestamp_utc DESC, st.ingestion_run_id DESC
+        ORDER BY
+            COALESCE(sm.started_at_utc, st.snapshot_timestamp_utc) DESC,
+            st.snapshot_timestamp_utc DESC,
+            COALESCE(st.snapshot_id, st.ingestion_run_id) DESC
     ) = 1
 ),
+target AS (
+    SELECT *
+    FROM active_trials
+    WHERE UPPER(nct_id) = UPPER($nct_id)
+),
 target_conditions AS (
-    SELECT DISTINCT tc.condition_group
-    FROM stg_trial_conditions tc
-    WHERE UPPER(tc.nct_id) = UPPER($nct_id)
-      AND tc.condition_group IS NOT NULL
+    SELECT DISTINCT
+        pcm.preset_id,
+        pcm.condition_group
+    FROM int_registry_preset_condition_mapping pcm
+    INNER JOIN target tg
+        ON pcm.nct_id = tg.nct_id
+       AND pcm.snapshot_id = tg.effective_run_key
+    WHERE pcm.condition_group IS NOT NULL
+    UNION
+    SELECT DISTINCT
+        '__direct__' AS preset_id,
+        tc.condition_group
+    FROM stg_registry_trial_conditions tc
+    INNER JOIN target tg
+        ON tc.nct_id = tg.nct_id
+       AND COALESCE(tc.snapshot_id, tc.ingestion_run_id) = tg.effective_run_key
+    WHERE tc.condition_group IS NOT NULL
 ),
 target_mesh AS (
     SELECT DISTINCT m.mesh_id, m.is_ancestor
-    FROM stg_trial_condition_mesh m
-    WHERE UPPER(m.nct_id) = UPPER($nct_id)
-      AND m.mesh_id IS NOT NULL
+    FROM stg_registry_trial_condition_mesh m
+    INNER JOIN target tg
+        ON m.nct_id = tg.nct_id
+       AND COALESCE(m.snapshot_id, m.ingestion_run_id) = tg.effective_run_key
+    WHERE m.mesh_id IS NOT NULL
 ),
 target_interventions AS (
     SELECT DISTINCT ti.intervention_type
-    FROM stg_trial_interventions ti
-    WHERE UPPER(ti.nct_id) = UPPER($nct_id)
-      AND ti.intervention_type IS NOT NULL
+    FROM stg_registry_trial_interventions ti
+    INNER JOIN target tg
+        ON ti.nct_id = tg.nct_id
+       AND COALESCE(ti.snapshot_id, ti.ingestion_run_id) = tg.effective_run_key
+    WHERE ti.intervention_type IS NOT NULL
+),
+latest_site_states AS (
+    SELECT DISTINCT
+        s.nct_id,
+        s.state_normalized
+    FROM fct_registry_trial_site s
+    INNER JOIN (
+        SELECT
+            nct_id,
+            MAX(snapshot_date) AS max_snapshot_date
+        FROM fct_registry_trial_site
+        GROUP BY nct_id
+    ) ls
+        ON s.nct_id = ls.nct_id
+       AND (s.snapshot_date IS NOT DISTINCT FROM ls.max_snapshot_date)
+    WHERE s.state_normalized IS NOT NULL
 ),
 target_states AS (
     SELECT DISTINCT s.state_normalized
-    FROM fct_trial_site s
+    FROM latest_site_states s
     WHERE UPPER(s.nct_id) = UPPER($nct_id)
-      AND s.state_normalized IS NOT NULL
 ),
 condition_group_matches AS (
-    SELECT DISTINCT tc.nct_id, 1 AS has_same_condition
-    FROM stg_trial_conditions tc
+    SELECT DISTINCT pcm.nct_id, 1 AS has_same_condition
+    FROM int_registry_preset_condition_mapping pcm
+    INNER JOIN active_trials act
+        ON pcm.nct_id = act.nct_id
+       AND pcm.snapshot_id = act.effective_run_key
     INNER JOIN target_conditions tcond
-        ON tc.condition_group = tcond.condition_group
+        ON pcm.preset_id = tcond.preset_id
+       AND pcm.condition_group = tcond.condition_group
+    WHERE UPPER(pcm.nct_id) != UPPER($nct_id)
+    UNION
+    SELECT DISTINCT tc.nct_id, 1 AS has_same_condition
+    FROM stg_registry_trial_conditions tc
+    INNER JOIN active_trials act
+        ON tc.nct_id = act.nct_id
+       AND COALESCE(tc.snapshot_id, tc.ingestion_run_id) = act.effective_run_key
+    INNER JOIN target_conditions tcond
+        ON tcond.preset_id = '__direct__'
+       AND tc.condition_group = tcond.condition_group
     WHERE UPPER(tc.nct_id) != UPPER($nct_id)
 ),
 mesh_matches AS (
     SELECT DISTINCT
         m.nct_id,
         CASE WHEN NOT tm.is_ancestor AND NOT m.is_ancestor THEN 2 ELSE 1 END AS mesh_match_depth
-    FROM stg_trial_condition_mesh m
+    FROM stg_registry_trial_condition_mesh m
+    INNER JOIN active_trials act
+        ON m.nct_id = act.nct_id
+       AND COALESCE(m.snapshot_id, m.ingestion_run_id) = act.effective_run_key
     INNER JOIN target_mesh tm
         ON m.mesh_id = tm.mesh_id
     WHERE UPPER(m.nct_id) != UPPER($nct_id)
@@ -94,33 +161,25 @@ candidate_pool AS (
 candidate_trials AS (
     SELECT
         cp.nct_id,
+        act.effective_run_key,
         cp.has_same_condition,
-        st.phase_normalized,
-        st.study_type,
-        st.allocation,
-        st.primary_purpose,
-        st.enrollment_count,
-        CASE
-            WHEN st.enrollment_count IS NULL THEN NULL
-            WHEN st.enrollment_count < 50 THEN 'small'
-            WHEN st.enrollment_count <= 200 THEN 'medium'
-            ELSE 'large'
-        END AS enrollment_band,
-        st.healthy_volunteers,
-        COALESCE(st.sex, 'ALL') AS sex,
-        st.minimum_age_years,
-        st.maximum_age_years,
-        CASE WHEN st.phase_normalized = tg.phase_normalized THEN 1 ELSE 0 END AS phase_match,
+        act.phase_normalized,
+        act.study_type,
+        act.allocation,
+        act.primary_purpose,
+        act.enrollment_count,
+        act.enrollment_band,
+        act.healthy_volunteers,
+        act.sex,
+        act.minimum_age_years,
+        act.maximum_age_years,
+        CASE WHEN act.phase_normalized = tg.phase_normalized THEN 1 ELSE 0 END AS phase_match,
         cp.has_same_condition AS cond_match,
         cp.mesh_match_depth
     FROM candidate_pool cp
-    INNER JOIN stg_trials st
-        ON cp.nct_id = st.nct_id
+    INNER JOIN active_trials act
+        ON cp.nct_id = act.nct_id
     CROSS JOIN target tg
-    QUALIFY ROW_NUMBER() OVER (
-        PARTITION BY cp.nct_id
-        ORDER BY st.snapshot_timestamp_utc DESC, st.ingestion_run_id DESC
-    ) = 1
 ),
 capped_candidates AS (
     SELECT *
@@ -136,7 +195,7 @@ candidate_dim AS (
         dt.current_phase AS phase,
         dt.current_lead_sponsor AS lead_sponsor,
         COALESCE(dt.registry_url, 'https://clinicaltrials.gov/study/' || dt.nct_id) AS registry_url
-    FROM dim_trial dt
+    FROM dim_registry_trial dt
     INNER JOIN capped_candidates cc ON dt.nct_id = cc.nct_id
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY dt.nct_id
@@ -161,27 +220,29 @@ scored AS (
         ROUND(w.w_same_phase * (CASE WHEN cc.phase_normalized = tg.phase_normalized THEN 1 ELSE 0 END), 4) AS weighted_same_phase,
 
         CASE WHEN EXISTS (
-            SELECT 1 FROM fct_trial_site s
+            SELECT 1 FROM latest_site_states s
             INNER JOIN target_states ts ON s.state_normalized = ts.state_normalized
             WHERE s.nct_id = cc.nct_id
         ) THEN 1 ELSE 0 END AS geography_overlap,
         w.w_geography_overlap AS weight_geography_overlap,
         ROUND(w.w_geography_overlap * (CASE WHEN EXISTS (
-            SELECT 1 FROM fct_trial_site s
+            SELECT 1 FROM latest_site_states s
             INNER JOIN target_states ts ON s.state_normalized = ts.state_normalized
             WHERE s.nct_id = cc.nct_id
         ) THEN 1 ELSE 0 END), 4) AS weighted_geography_overlap,
 
         CASE WHEN EXISTS (
-            SELECT 1 FROM stg_trial_interventions i
+            SELECT 1 FROM stg_registry_trial_interventions i
             INNER JOIN target_interventions ti ON i.intervention_type = ti.intervention_type
             WHERE i.nct_id = cc.nct_id
+              AND COALESCE(i.snapshot_id, i.ingestion_run_id) = cc.effective_run_key
         ) THEN 1 ELSE 0 END AS intervention_type_overlap,
         w.w_intervention_type_overlap AS weight_intervention_type_overlap,
         ROUND(w.w_intervention_type_overlap * (CASE WHEN EXISTS (
-            SELECT 1 FROM stg_trial_interventions i
+            SELECT 1 FROM stg_registry_trial_interventions i
             INNER JOIN target_interventions ti ON i.intervention_type = ti.intervention_type
             WHERE i.nct_id = cc.nct_id
+              AND COALESCE(i.snapshot_id, i.ingestion_run_id) = cc.effective_run_key
         ) THEN 1 ELSE 0 END), 4) AS weighted_intervention_type_overlap,
 
         CASE WHEN cc.study_type = tg.study_type

@@ -381,3 +381,41 @@ def test_patient_ui_displays_banner_for_verbatim_concept(tmp_path: Path) -> None
         assert "RareConditionXyz" in html
 
     mgr.close()
+
+
+def test_conditions_unassigned_scope_isolated_from_presets(tmp_path: Path) -> None:
+    """Unassigned conditions appear in unassigned scope and are excluded from named presets."""
+    import duckdb
+
+    db_file = tmp_path / "unassigned_conditions.duckdb"
+    _init_fixture_database(db_file)
+
+    con = duckdb.connect(str(db_file))
+    con.execute("""
+    INSERT INTO dim_registry_condition VALUES
+    ('ck_unassigned', 'D006973', 'hypertension',
+     'Hypertension', 'Hypertension', 'D006973',
+     false, 'mesh', false, 'mesh', 1);
+    INSERT INTO bridge_registry_trial_condition VALUES
+    ('btk_unassigned', md5('NCT00000009'), 'ck_unassigned', 'NCT00000009', 'D006973',
+     'Hypertension', 'D006973', false, 'mesh', false, 'mesh', 1);
+    INSERT INTO bridge_preset_trial VALUES
+    ('pt9_unassigned', 'unassigned', 'NCT00000009', md5('NCT00000009'), 'snap_20260901', 'run_01',
+     '2026-09-01', '2026-09-01 12:00:00Z', true, 'unassigned', true);
+    """)
+    con.close()
+
+    mgr = DuckDBWarehouseManager(db_file)
+    container = APIContainer(warehouse=mgr)
+    app = create_app(container=container)
+    with TestClient(app) as client:
+        adrd_resp = client.get("/v1/conditions?indication_profile_id=adrd")
+        assert adrd_resp.status_code == 200
+        adrd_names = [item["condition_name"] for item in adrd_resp.json()["items"]]
+        assert "Hypertension" not in adrd_names
+
+        unassigned_resp = client.get("/v1/conditions?indication_profile_id=unassigned")
+        assert unassigned_resp.status_code == 200
+        unassigned_names = [item["condition_name"] for item in unassigned_resp.json()["items"]]
+        assert "Hypertension" in unassigned_names
+    mgr.close()

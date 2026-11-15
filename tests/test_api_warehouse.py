@@ -39,12 +39,11 @@ def _init_fixture_database(db_path: Path) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(db_path))
 
-    # 1. Marts tables
+    # 1. Marts tables (canonical registry grain)
     con.execute("""
-    CREATE TABLE dim_trial (
-        trial_key VARCHAR,
+    CREATE TABLE dim_registry_trial (
+        registry_trial_key VARCHAR,
         nct_id VARCHAR,
-        indication_profile_id VARCHAR,
         registry_url VARCHAR,
         current_brief_title VARCHAR,
         current_overall_status VARCHAR,
@@ -72,19 +71,28 @@ def _init_fixture_database(db_path: Path) -> None:
         gender_based BOOLEAN,
         gender_description VARCHAR,
         accepts_healthy_volunteers BOOLEAN,
+        current_intervention_model VARCHAR,
+        current_masking VARCHAR,
+        has_placebo_arm BOOLEAN,
+        why_stopped VARCHAR,
+        brief_summary VARCHAR,
+        primary_outcome_time_frame VARCHAR,
         age_bounds_valid_flag BOOLEAN,
         age_bounds_contradictory_flag BOOLEAN,
         has_unspecified_min_age BOOLEAN,
         has_unspecified_max_age BOOLEAN,
         healthy_volunteers_unknown_flag BOOLEAN,
-        sex_eligibility_unknown_flag BOOLEAN
+        sex_eligibility_unknown_flag BOOLEAN,
+        has_derived_mesh BOOLEAN,
+        snapshot_id VARCHAR,
+        ingestion_run_id VARCHAR
     );
 
-    CREATE TABLE fct_trial_snapshot (
+    CREATE TABLE fct_registry_trial_snapshot (
         snapshot_key VARCHAR,
-        trial_key VARCHAR,
+        registry_trial_key VARCHAR,
         nct_id VARCHAR,
-        indication_profile_id VARCHAR,
+        snapshot_id VARCHAR,
         ingestion_run_id VARCHAR,
         snapshot_date DATE,
         snapshot_timestamp_utc TIMESTAMP,
@@ -103,18 +111,18 @@ def _init_fixture_database(db_path: Path) -> None:
         record_quality_flag VARCHAR,
         first_seen_snapshot_date DATE,
         days_since_first_seen INTEGER,
-        condition_group_count INTEGER,
+        condition_node_count INTEGER,
         site_count_us INTEGER,
         record_hash VARCHAR,
         current_record_flag BOOLEAN
     );
 
-    CREATE TABLE fct_trial_site (
+    CREATE TABLE fct_registry_trial_site (
         trial_site_key VARCHAR,
-        trial_key VARCHAR,
+        registry_trial_key VARCHAR,
         site_key VARCHAR,
         nct_id VARCHAR,
-        indication_profile_id VARCHAR,
+        snapshot_id VARCHAR,
         ingestion_run_id VARCHAR,
         snapshot_date DATE,
         facility_name VARCHAR,
@@ -130,13 +138,13 @@ def _init_fixture_database(db_path: Path) -> None:
     );
 
     -- 2. Staging tables (snapshot_timestamp_utc and retrieved_at_utc are naive TIMESTAMP in dbt)
-    CREATE TABLE stg_trials (
+    CREATE TABLE stg_registry_trials (
+        registry_trial_key VARCHAR,
         ingestion_run_id VARCHAR,
         snapshot_id VARCHAR,
         retrieved_at_utc TIMESTAMP,
         raw_page_reference VARCHAR,
         raw_study_ordinal BIGINT,
-        indication_profile_id VARCHAR,
         snapshot_timestamp_utc TIMESTAMP,
         snapshot_date DATE,
         nct_id VARCHAR,
@@ -147,11 +155,19 @@ def _init_fixture_database(db_path: Path) -> None:
         last_known_status VARCHAR,
         status_verified_date_raw VARCHAR,
         has_expanded_access BOOLEAN,
+        start_date_raw VARCHAR,
         start_date DATE,
+        primary_completion_date_raw VARCHAR,
         primary_completion_date DATE,
+        primary_completion_date_type VARCHAR,
+        completion_date_type VARCHAR,
+        completion_date_raw VARCHAR,
         completion_date DATE,
+        study_first_post_date_raw VARCHAR,
         study_first_post_date DATE,
+        results_first_post_date_raw VARCHAR,
         results_first_post_date DATE,
+        last_update_post_date_raw VARCHAR,
         last_update_post_date DATE,
         phase_raw VARCHAR,
         phase_normalized VARCHAR,
@@ -185,13 +201,13 @@ def _init_fixture_database(db_path: Path) -> None:
         record_quality_flag VARCHAR
     );
 
-    CREATE TABLE stg_trial_locations (
+    CREATE TABLE stg_registry_trial_locations (
+        registry_trial_key VARCHAR,
         ingestion_run_id VARCHAR,
         snapshot_id VARCHAR,
         retrieved_at_utc TIMESTAMP,
         raw_page_reference VARCHAR,
         raw_study_ordinal BIGINT,
-        indication_profile_id VARCHAR,
         nct_id VARCHAR,
         location_ordinal BIGINT,
         facility_name VARCHAR,
@@ -211,21 +227,24 @@ def _init_fixture_database(db_path: Path) -> None:
         source_json_hash VARCHAR
     );
 
-    CREATE TABLE stg_trial_conditions (
+    CREATE TABLE stg_registry_trial_conditions (
+        registry_trial_key VARCHAR,
         ingestion_run_id VARCHAR,
-        indication_profile_id VARCHAR,
+        snapshot_id VARCHAR,
         nct_id VARCHAR,
         condition_raw VARCHAR,
         condition_normalized VARCHAR,
         condition_group VARCHAR,
         dementia_relevance_flag BOOLEAN,
-        mapping_confidence DOUBLE,
+        mapping_confidence VARCHAR,
+        mapping_source VARCHAR,
         source_json_hash VARCHAR
     );
 
-    CREATE TABLE stg_trial_sponsors (
+    CREATE TABLE stg_registry_trial_sponsors (
+        registry_trial_key VARCHAR,
         ingestion_run_id VARCHAR,
-        indication_profile_id VARCHAR,
+        snapshot_id VARCHAR,
         nct_id VARCHAR,
         sponsor_name VARCHAR,
         sponsor_role VARCHAR,
@@ -234,9 +253,10 @@ def _init_fixture_database(db_path: Path) -> None:
         source_json_hash VARCHAR
     );
 
-    CREATE TABLE stg_trial_interventions (
+    CREATE TABLE stg_registry_trial_interventions (
+        registry_trial_key VARCHAR,
         ingestion_run_id VARCHAR,
-        indication_profile_id VARCHAR,
+        snapshot_id VARCHAR,
         nct_id VARCHAR,
         intervention_name VARCHAR,
         intervention_type VARCHAR,
@@ -245,9 +265,10 @@ def _init_fixture_database(db_path: Path) -> None:
         source_json_hash VARCHAR
     );
 
-    CREATE TABLE stg_trial_arms (
+    CREATE TABLE stg_registry_trial_arms (
+        registry_trial_key VARCHAR,
         ingestion_run_id VARCHAR,
-        indication_profile_id VARCHAR,
+        snapshot_id VARCHAR,
         nct_id VARCHAR,
         arm_ordinal BIGINT,
         arm_label VARCHAR,
@@ -257,15 +278,33 @@ def _init_fixture_database(db_path: Path) -> None:
         source_json_hash VARCHAR
     );
 
-    CREATE TABLE stg_trial_condition_mesh (
+    CREATE TABLE stg_registry_trial_condition_mesh (
+        registry_trial_key VARCHAR,
         ingestion_run_id VARCHAR,
-        indication_profile_id VARCHAR,
+        snapshot_id VARCHAR,
         nct_id VARCHAR,
         mesh_id VARCHAR,
         mesh_term VARCHAR,
         is_ancestor BOOLEAN,
         branch VARCHAR,
         source_json_hash VARCHAR
+    );
+
+    CREATE TABLE stg_registry_trial_snapshots (
+        ingestion_run_id VARCHAR,
+        query_hash VARCHAR,
+        condition VARCHAR,
+        mode VARCHAR,
+        status VARCHAR,
+        started_at_utc TIMESTAMP,
+        ended_at_utc TIMESTAMP,
+        snapshot_date DATE,
+        page_count INTEGER,
+        record_count INTEGER,
+        total_count_reported INTEGER,
+        quarantined_record_count INTEGER,
+        profile VARCHAR,
+        error VARCHAR
     );
 
     CREATE TABLE similarity_score_weights (
@@ -286,9 +325,8 @@ def _init_fixture_database(db_path: Path) -> None:
     ('enrollment_band_match', 0.10,
      'Trials fall in the same enrollment size band (small/medium/large)');
 
-    CREATE TABLE dim_condition (
-        condition_key VARCHAR,
-        indication_profile_id VARCHAR,
+    CREATE TABLE dim_registry_condition (
+        registry_condition_key VARCHAR,
         node_id VARCHAR,
         condition_normalized VARCHAR,
         condition_display_name VARCHAR,
@@ -301,12 +339,11 @@ def _init_fixture_database(db_path: Path) -> None:
         trial_count INTEGER
     );
 
-    CREATE TABLE bridge_trial_condition (
-        trial_condition_key VARCHAR,
-        trial_key VARCHAR,
-        condition_key VARCHAR,
+    CREATE TABLE bridge_registry_trial_condition (
+        registry_trial_condition_key VARCHAR,
+        registry_trial_key VARCHAR,
+        registry_condition_key VARCHAR,
         nct_id VARCHAR,
-        indication_profile_id VARCHAR,
         node_id VARCHAR,
         condition_group VARCHAR,
         mesh_id VARCHAR,
@@ -316,107 +353,152 @@ def _init_fixture_database(db_path: Path) -> None:
         mapping_confidence VARCHAR,
         source_condition_count BIGINT
     );
+
+    CREATE TABLE bridge_preset_trial (
+        preset_trial_key VARCHAR,
+        preset_id VARCHAR,
+        nct_id VARCHAR,
+        registry_trial_key VARCHAR,
+        snapshot_id VARCHAR,
+        ingestion_run_id VARCHAR,
+        snapshot_date DATE,
+        snapshot_timestamp_utc TIMESTAMP,
+        is_unassigned BOOLEAN,
+        membership_scope VARCHAR,
+        current_record_flag BOOLEAN
+    );
+
+    CREATE TABLE int_registry_preset_condition_mapping (
+        preset_id VARCHAR,
+        snapshot_id VARCHAR,
+        snapshot_date DATE,
+        nct_id VARCHAR,
+        condition_group VARCHAR,
+        dementia_relevance_flag BOOLEAN,
+        mapping_confidence VARCHAR,
+        mapping_source VARCHAR,
+        source_condition_count BIGINT
+    );
     """)
 
-    # Populate Sample Trials in dim_trial (strictly matching real dbt schema)
+    # Populate authoritative complete full-catalog snapshot manifest
     con.execute("""
-    INSERT INTO dim_trial VALUES
+    INSERT INTO stg_registry_trial_snapshots VALUES
+    ('snap_20260901', 'q_01', null, 'incremental', 'success',
+     '2026-09-01 12:00:00Z', '2026-09-01 12:30:00Z', '2026-09-01',
+     1, 4, 4, 0, 'full_catalog', null);
+    """)
+
+    # Populate Sample Trials in dim_registry_trial (strictly matching real dbt schema)
+    con.execute("""
+    INSERT INTO dim_registry_trial VALUES
     (
-        'key1', 'NCT00000001', 'adrd', 'https://clinicaltrials.gov/study/NCT00000001',
+        md5('NCT00000001'), 'NCT00000001', 'https://clinicaltrials.gov/study/NCT00000001',
         'Phase 3 Trial of Novel Tau Therapy in Alzheimer Disease',
         'RECRUITING', 'PHASE3', 'INTERVENTIONAL',
         'NeuroPharm Inc', 'neuropharm inc', '2024-01-10', '2027-01-10', '2027-06-10', '2024-01-01',
         350, 'ESTIMATED', false, 'ok', '2026-09-01', '2026-09-01', true,
         '55 Years', '85 Years', 55.0, 85.0, ['ADULT', 'OLDER_ADULT'], 'ALL',
-        false, null, false, true, false, false, false, false, false
+        false, null, false, 'PARALLEL', 'DOUBLE', true,
+        'Study halted after the interim futility review.',
+        'Phase 3 trial of an investigational tau-targeted therapy.', '78 weeks',
+        true, false, false, false, false, false, true, 'snap_20260901', 'run_01'
     ),
     (
-        'key2', 'NCT00000002', 'adrd', 'https://clinicaltrials.gov/study/NCT00000002',
+        md5('NCT00000002'), 'NCT00000002', 'https://clinicaltrials.gov/study/NCT00000002',
         'Phase 2 Monoclonal Antibody in Mild Cognitive Impairment',
         'ACTIVE_NOT_RECRUITING', 'PHASE2', 'INTERVENTIONAL',
         'Cedar Cognitive Institute', 'cedar cognitive institute',
         '2023-06-01', '2026-12-01', '2027-01-01', '2023-05-15',
         120, 'ACTUAL', false, 'ok', '2026-09-01', '2026-09-01', true,
         '60 Years', null, 60.0, null, ['OLDER_ADULT'], 'FEMALE',
-        false, null, true, true, false, false, true, false, false
+        false, null, true, 'PARALLEL', 'NONE', false, null, null, '12 months',
+        true, false, false, true, false, false, true, 'snap_20260901', 'run_01'
     ),
     (
-        'key3', 'NCT00000003', 'oncology_nsclc', 'https://clinicaltrials.gov/study/NCT00000003',
+        md5('NCT00000003'), 'NCT00000003', 'https://clinicaltrials.gov/study/NCT00000003',
         'Targeted Kinase Inhibitor in Advanced Non-Small Cell Lung Cancer',
         'COMPLETED', 'PHASE3', 'INTERVENTIONAL',
         'OncoTarget Corp', 'oncotarget corp',
         '2022-03-15', '2025-03-15', '2025-06-15', '2022-03-01',
         500, 'ACTUAL', true, 'ok', '2026-09-01', '2026-09-01', true,
         null, null, null, null, ['ADULT', 'OLDER_ADULT'], 'ALL',
-        false, null, false, true, false, true, true, false, false
+        false, null, false, 'PARALLEL', null, false, null, null, '6 months',
+        true, false, true, true, false, false, true, 'snap_20260901', 'run_01'
     ),
     (
-        'key4', 'NCT00000004', 'adrd', 'https://clinicaltrials.gov/study/NCT00000004',
+        md5('NCT00000004'), 'NCT00000004', 'https://clinicaltrials.gov/study/NCT00000004',
         'Early Safety of Neural Stimulation Device in Parkinson Disease',
         'RECRUITING', 'PHASE1', 'INTERVENTIONAL',
         'BioGenix Labs', 'biogenix labs',
         '2025-01-01', '2026-08-01', '2026-10-01', '2024-12-15',
         40, 'ESTIMATED', false, 'ok', '2026-09-01', '2026-09-01', true,
         '18 Years', '50 Years', 18.0, 50.0, ['ADULT'], 'MALE',
-        false, null, true, true, false, false, false, false, false
+        false, null, true, 'SINGLE_GROUP', null, false, null, null, null,
+        true, false, false, false, false, false, true, 'snap_20260901', 'run_01'
     );
     """)
 
-    # Populate fct_trial_snapshot
+    # Populate fct_registry_trial_snapshot
     con.execute("""
-    INSERT INTO fct_trial_snapshot VALUES
-    ('snap_k1', 'key1', 'NCT00000001', 'adrd', 'run_01', '2026-09-01', '2026-09-01 12:00:00Z',
+    INSERT INTO fct_registry_trial_snapshot VALUES
+    ('snap_k1', md5('NCT00000001'), 'NCT00000001', 'snap_20260901', 'run_01',
+     '2026-09-01', '2026-09-01 12:00:00Z',
      'RECRUITING', null, false, true, false, 'PHASE3', 'INTERVENTIONAL', 350,
      'NeuroPharm Inc', 'neuropharm inc', false, '2024-01-01', 'ok', '2026-09-01',
-     0, 1, 1, 'h1', true),
-    ('snap_k2', 'key2', 'NCT00000002', 'adrd', 'run_01', '2026-09-01', '2026-09-01 12:00:00Z',
+     0, 4, 2, 'h1', true),
+    ('snap_k2', md5('NCT00000002'), 'NCT00000002', 'snap_20260901', 'run_01',
+     '2026-09-01', '2026-09-01 12:00:00Z',
      'ACTIVE_NOT_RECRUITING', null, false, false, false, 'PHASE2', 'INTERVENTIONAL', 120,
      'Cedar Cognitive Institute', 'cedar cognitive institute', false,
      '2023-05-15', 'ok', '2026-09-01',
-     0, 1, 1, 'h2', true),
-    ('snap_k3', 'key3', 'NCT00000003', 'oncology_nsclc', 'run_01',
+     0, 2, 1, 'h2', true),
+    ('snap_k3', md5('NCT00000003'), 'NCT00000003', 'snap_20260901', 'run_01',
      '2026-09-01', '2026-09-01 12:00:00Z',
      'COMPLETED', null, false, false, false, 'PHASE3', 'INTERVENTIONAL', 500,
      'OncoTarget Corp', 'oncotarget corp', true, '2022-03-01', 'ok', '2026-09-01',
-     0, 1, 0, 'h3', true),
-    ('snap_k4', 'key4', 'NCT00000004', 'adrd', 'run_01', '2026-09-01', '2026-09-01 12:00:00Z',
+     0, 3, 0, 'h3', true),
+    ('snap_k4', md5('NCT00000004'), 'NCT00000004', 'snap_20260901', 'run_01',
+     '2026-09-01', '2026-09-01 12:00:00Z',
      'RECRUITING', null, false, true, false, 'PHASE1', 'INTERVENTIONAL', 40,
      'BioGenix Labs', 'biogenix labs', false, '2024-12-15', 'ok', '2026-09-01',
-     0, 1, 1, 'h4', true);
+     0, 2, 1, 'h4', true);
     """)
 
-    # Populate fct_trial_site
+    # Populate fct_registry_trial_site
     con.execute("""
-    INSERT INTO fct_trial_site VALUES
-    ('site_k1', 'key1', 'site1', 'NCT00000001', 'adrd', 'run_01', '2026-09-01',
+    INSERT INTO fct_registry_trial_site VALUES
+    ('site_k1', md5('NCT00000001'), 'site1', 'NCT00000001', 'snap_20260901', 'run_01', '2026-09-01',
      'UCSF Memory and Aging Center', 'ucsf memory and aging center',
      'San Francisco', 'san francisco', 'CA', '94143', 'RECRUITING',
      'RECRUITING', 'PHASE3', 'neuropharm inc'),
-    ('site_k2', 'key1', 'site2', 'NCT00000001', 'adrd', 'run_01', '2026-09-01',
+    ('site_k2', md5('NCT00000001'), 'site2', 'NCT00000001', 'snap_20260901', 'run_01', '2026-09-01',
      'Mass General Hospital', 'mass general hospital',
      'Boston', 'boston', 'MA', '02114', 'RECRUITING',
      'RECRUITING', 'PHASE3', 'neuropharm inc'),
-    ('site_k3', 'key2', 'site3', 'NCT00000002', 'adrd', 'run_01', '2026-09-01',
+    ('site_k3', md5('NCT00000002'), 'site3', 'NCT00000002', 'snap_20260901', 'run_01', '2026-09-01',
      'Duke Health Clinic', 'duke health clinic',
      'Durham', 'durham', 'NC', '27710', 'ACTIVE_NOT_RECRUITING',
      'ACTIVE_NOT_RECRUITING', 'PHASE2', 'cedar cognitive institute'),
-    ('site_k4', 'key4', 'site4', 'NCT00000004', 'adrd', 'run_01', '2026-09-01',
+    ('site_k4', md5('NCT00000004'), 'site4', 'NCT00000004', 'snap_20260901', 'run_01', '2026-09-01',
      'UCLA Health Center', 'ucla health center',
      'Los Angeles', 'los angeles', 'CA', '90095', 'RECRUITING',
      'RECRUITING', 'PHASE1', 'biogenix labs');
     """)
 
-    # Populate stg_trials
+    # Populate stg_registry_trials
     con.execute("""
-    INSERT INTO stg_trials VALUES
+    INSERT INTO stg_registry_trials VALUES
     (
-        'run_01', 'snap_20260901', '2026-09-01 12:00:00Z', 'page=00001.json', 1, 'adrd',
+        md5('NCT00000001'), 'run_01', 'snap_20260901', '2026-09-01 12:00:00Z', 'page=00001.json', 1,
         '2026-09-01 12:00:00Z', '2026-09-01', 'NCT00000001',
         'Phase 3 Trial of Novel Tau Therapy in Alzheimer Disease',
         'A Randomized, Double-Blind, Placebo-Controlled Phase 3 Study'
         ' of Tau-Targeted Therapy',
         'INTERVENTIONAL', 'RECRUITING', null, '2026-06', false,
-        '2024-01-10', '2027-01-10', '2027-06-10', '2024-01-01', null, '2026-06-15',
+        '2024-01-10', '2024-01-10', '2027-01-10', '2027-01-10', 'ESTIMATED',
+        'ESTIMATED', '2027-06-10', '2027-06-10', '2024-01-01', '2024-01-01',
+        null, null, '2026-06-15', '2026-06-15',
         'Phase 3', 'PHASE3', 350, 'ESTIMATED', 'RANDOMIZED', 'TREATMENT',
         'PARALLEL', 'DOUBLE', true, 'Study halted after the interim futility review.',
         'Phase 3 trial of an investigational tau-targeted therapy.',
@@ -428,12 +510,14 @@ def _init_fixture_database(db_path: Path) -> None:
         false, 'hash_nct01', 'ok'
     ),
     (
-        'run_01', 'snap_20260901', '2026-09-01 12:00:00Z', 'page=00001.json', 2, 'adrd',
+        md5('NCT00000002'), 'run_01', 'snap_20260901', '2026-09-01 12:00:00Z', 'page=00001.json', 2,
         '2026-09-01 12:00:00Z', '2026-09-01', 'NCT00000002',
         'Phase 2 Monoclonal Antibody in Mild Cognitive Impairment',
         'Evaluation of Cognitive Preservation with Monoclonal Antibody',
         'INTERVENTIONAL', 'ACTIVE_NOT_RECRUITING', null, '2026-05', false,
-        '2023-06-01', '2026-12-01', '2027-01-01', '2023-05-15', null, '2026-05-10',
+        '2023-06-01', '2023-06-01', '2026-12-01', '2026-12-01', 'ESTIMATED',
+        'ESTIMATED', '2027-01-01', '2027-01-01', '2023-05-15', '2023-05-15',
+        null, null, '2026-05-10', '2026-05-10',
         'Phase 2', 'PHASE2', 120, 'ACTUAL', 'RANDOMIZED', 'TREATMENT',
         'PARALLEL', 'NONE', false, null, null, '12 months',
         'Cedar Cognitive Institute', 'cedar cognitive institute', 'PRINCIPAL_INVESTIGATOR', true,
@@ -442,12 +526,14 @@ def _init_fixture_database(db_path: Path) -> None:
         false, 'hash_nct02', 'ok'
     ),
     (
-        'run_01', 'snap_20260901', '2026-09-01 12:00:00Z', 'page=00001.json', 3, 'oncology_nsclc',
+        md5('NCT00000003'), 'run_01', 'snap_20260901', '2026-09-01 12:00:00Z', 'page=00001.json', 3,
         '2026-09-01 12:00:00Z', '2026-09-01', 'NCT00000003',
         'Targeted Kinase Inhibitor in Advanced Non-Small Cell Lung Cancer',
         'Open-Label Phase 3 Study of Kinase Inhibitor in Stage IV NSCLC',
         'INTERVENTIONAL', 'COMPLETED', null, '2026-04', false,
-        '2022-03-15', '2025-03-15', '2025-06-15', '2022-03-01', '2025-07-01', '2026-04-01',
+        '2022-03-15', '2022-03-15', '2025-03-15', '2025-03-15', 'ACTUAL',
+        'ACTUAL', '2025-06-15', '2025-06-15', '2022-03-01', '2022-03-01',
+        '2025-07-01', '2025-07-01', '2026-04-01', '2026-04-01',
         'Phase 3', 'PHASE3', 500, 'ACTUAL', 'NON_RANDOMIZED', 'TREATMENT',
         'PARALLEL', null, false, null, null, '6 months',
         'OncoTarget Corp', 'oncotarget corp', 'SPONSOR', false,
@@ -456,12 +542,14 @@ def _init_fixture_database(db_path: Path) -> None:
         true, 'hash_nct03', 'ok'
     ),
     (
-        'run_01', 'snap_20260901', '2026-09-01 12:00:00Z', 'page=00001.json', 4, 'adrd',
+        md5('NCT00000004'), 'run_01', 'snap_20260901', '2026-09-01 12:00:00Z', 'page=00001.json', 4,
         '2026-09-01 12:00:00Z', '2026-09-01', 'NCT00000004',
         'Early Safety of Neural Stimulation Device in Parkinson Disease',
         'First-in-Human Feasibility of Deep Brain Stimulation Array',
         'INTERVENTIONAL', 'RECRUITING', null, '2026-07', false,
-        '2025-01-01', '2026-08-01', '2026-10-01', '2024-12-15', null, '2026-07-01',
+        '2025-01-01', '2025-01-01', '2026-08-01', '2026-08-01', 'ESTIMATED',
+        'ESTIMATED', '2026-10-01', '2026-10-01', '2024-12-15', '2024-12-15',
+        null, null, '2026-07-01', '2026-07-01',
         'Phase 1', 'PHASE1', 40, 'ESTIMATED', 'NON_RANDOMIZED', 'DEVICE_FEASIBILITY',
         'SINGLE_GROUP', null, false, null, null, null,
         'BioGenix Labs', 'biogenix labs', 'SPONSOR_INVESTIGATOR', true,
@@ -473,27 +561,27 @@ def _init_fixture_database(db_path: Path) -> None:
 
     # Populate Locations (San Francisco, Boston, Durham, Los Angeles)
     con.execute("""
-    INSERT INTO stg_trial_locations VALUES
-    ('run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
-     'page=00001.json', 1, 'adrd', 'NCT00000001', 1,
+    INSERT INTO stg_registry_trial_locations VALUES
+    (md5('NCT00000001'), 'run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
+     'page=00001.json', 1, 'NCT00000001', 1,
      'UCSF Memory and Aging Center', 'ucsf memory and aging center',
      'San Francisco', 'san francisco',
      'CA', 'CA', '94143', 'United States', 'US',
      37.7631, -122.4578, 'RECRUITING', true, true, 'h1'),
-    ('run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
-     'page=00001.json', 1, 'adrd', 'NCT00000001', 2,
+    (md5('NCT00000001'), 'run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
+     'page=00001.json', 1, 'NCT00000001', 2,
      'Mass General Hospital', 'mass general hospital',
      'Boston', 'boston',
      'MA', 'MA', '02114', 'United States', 'US',
      42.3629, -71.0694, 'RECRUITING', true, true, 'h2'),
-    ('run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
-     'page=00001.json', 2, 'adrd', 'NCT00000002', 1,
+    (md5('NCT00000002'), 'run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
+     'page=00001.json', 2, 'NCT00000002', 1,
      'Duke Health Clinic', 'duke health clinic',
      'Durham', 'durham',
      'NC', 'NC', '27710', 'United States', 'US',
      35.9940, -78.8986, 'ACTIVE_NOT_RECRUITING', true, true, 'h3'),
-    ('run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
-     'page=00001.json', 4, 'adrd', 'NCT00000004', 1,
+    (md5('NCT00000004'), 'run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
+     'page=00001.json', 4, 'NCT00000004', 1,
      'UCLA Health Center', 'ucla health center',
      'Los Angeles', 'los angeles',
      'CA', 'CA', '90095', 'United States', 'US',
@@ -502,111 +590,144 @@ def _init_fixture_database(db_path: Path) -> None:
 
     # Conditions
     con.execute("""
-    INSERT INTO stg_trial_conditions VALUES
-    ('run_01', 'adrd', 'NCT00000001', 'Alzheimer Disease',
-     'alzheimer disease', 'Alzheimer Disease', true, 1.0, 'hc1'),
-    ('run_01', 'adrd', 'NCT00000001', 'Dementia',
-     'dementia', 'Alzheimer Disease', true, 0.9, 'hc2'),
-    ('run_01', 'adrd', 'NCT00000002', 'Mild Cognitive Impairment',
-     'mild cognitive impairment', 'Alzheimer Disease', true, 0.95, 'hc3'),
-    ('run_01', 'oncology_nsclc', 'NCT00000003', 'Non-Small Cell Lung Cancer',
-     'non-small cell lung cancer', 'Lung Cancer', false, 1.0, 'hc4'),
-    ('run_01', 'adrd', 'NCT00000004', 'Parkinson Disease',
-     'parkinson disease', 'Movement Disorders', false, 0.8, 'hc5');
+    INSERT INTO stg_registry_trial_conditions VALUES
+    (md5('NCT00000001'), 'run_01', 'snap_20260901', 'NCT00000001', 'Alzheimer Disease',
+     'alzheimer disease', 'Alzheimer Disease', true, '1.0', 'yaml_overlay', 'hc1'),
+    (md5('NCT00000001'), 'run_01', 'snap_20260901', 'NCT00000001', 'Dementia',
+     'dementia', 'Alzheimer Disease', true, '0.9', 'yaml_overlay', 'hc2'),
+    (md5('NCT00000002'), 'run_01', 'snap_20260901', 'NCT00000002', 'Mild Cognitive Impairment',
+     'mild cognitive impairment', 'Alzheimer Disease', true, '0.95', 'yaml_overlay', 'hc3'),
+    (md5('NCT00000003'), 'run_01', 'snap_20260901', 'NCT00000003', 'Non-Small Cell Lung Cancer',
+     'non-small cell lung cancer', 'Lung Cancer', false, '1.0', 'yaml_overlay', 'hc4'),
+    (md5('NCT00000004'), 'run_01', 'snap_20260901', 'NCT00000004', 'Parkinson Disease',
+     'parkinson disease', 'Movement Disorders', false, '0.8', 'yaml_overlay', 'hc5');
     """)
 
     # Sponsors
     con.execute("""
-    INSERT INTO stg_trial_sponsors VALUES
-    ('run_01', 'adrd', 'NCT00000001', 'NeuroPharm Inc',
+    INSERT INTO stg_registry_trial_sponsors VALUES
+    (md5('NCT00000001'), 'run_01', 'snap_20260901', 'NCT00000001', 'NeuroPharm Inc',
      'lead_sponsor', 'INDUSTRY', 'neuropharm inc', 'hs1'),
-    ('run_01', 'adrd', 'NCT00000001', 'National Institute on Aging',
+    (md5('NCT00000001'), 'run_01', 'snap_20260901', 'NCT00000001', 'National Institute on Aging',
      'collaborator', 'NIH', 'national institute on aging', 'hs2'),
-    ('run_01', 'adrd', 'NCT00000002', 'Cedar Cognitive Institute',
+    (md5('NCT00000002'), 'run_01', 'snap_20260901', 'NCT00000002', 'Cedar Cognitive Institute',
      'lead_sponsor', 'OTHER', 'cedar cognitive institute', 'hs3'),
-    ('run_01', 'oncology_nsclc', 'NCT00000003', 'OncoTarget Corp',
+    (md5('NCT00000003'), 'run_01', 'snap_20260901', 'NCT00000003', 'OncoTarget Corp',
      'lead_sponsor', 'INDUSTRY', 'oncotarget corp', 'hs4'),
-    ('run_01', 'adrd', 'NCT00000004', 'BioGenix Labs',
+    (md5('NCT00000004'), 'run_01', 'snap_20260901', 'NCT00000004', 'BioGenix Labs',
      'lead_sponsor', 'NIH', 'biogenix labs', 'hs5');
     """)
 
     # Interventions
     con.execute("""
-    INSERT INTO stg_trial_interventions VALUES
-    ('run_01', 'adrd', 'NCT00000001', 'Tau-001', 'DRUG',
+    INSERT INTO stg_registry_trial_interventions VALUES
+    (md5('NCT00000001'), 'run_01', 'snap_20260901', 'NCT00000001', 'Tau-001', 'DRUG',
      'Investigational anti-tau small molecule', 'tau-001', 'hi1'),
-    ('run_01', 'adrd', 'NCT00000002', 'CogniMab', 'BIOLOGICAL',
+    (md5('NCT00000002'), 'run_01', 'snap_20260901', 'NCT00000002', 'CogniMab', 'BIOLOGICAL',
      'Monoclonal antibody targeting amyloid oligomers', 'cognimab', 'hi2'),
-    ('run_01', 'oncology_nsclc', 'NCT00000003', 'Kinase-X', 'DRUG',
+    (md5('NCT00000003'), 'run_01', 'snap_20260901', 'NCT00000003', 'Kinase-X', 'DRUG',
      'Oral tyrosine kinase inhibitor', 'kinase-x', 'hi3'),
-    ('run_01', 'adrd', 'NCT00000004', 'NeuroStim DBS', 'DEVICE',
+    (md5('NCT00000004'), 'run_01', 'snap_20260901', 'NCT00000004', 'NeuroStim DBS', 'DEVICE',
      'Deep brain stimulation micro-electrode array', 'neurostim dbs', 'hi4');
     """)
 
     # Arm groups (registry text verbatim; NCT00000001 carries a placebo comparator)
     con.execute("""
-    INSERT INTO stg_trial_arms VALUES
-    ('run_01', 'adrd', 'NCT00000001', 0, 'Tau-001', 'EXPERIMENTAL',
+    INSERT INTO stg_registry_trial_arms VALUES
+    (md5('NCT00000001'), 'run_01', 'snap_20260901', 'NCT00000001', 0, 'Tau-001', 'EXPERIMENTAL',
      'Investigational anti-tau small molecule', ['Drug: Tau-001'], 'ha1'),
-    ('run_01', 'adrd', 'NCT00000001', 1, 'Placebo', 'PLACEBO_COMPARATOR',
-     'Matching placebo administered intrathecally', ['Drug: Placebo'], 'ha2'),
-    ('run_01', 'adrd', 'NCT00000002', 0, 'CogniMab', 'EXPERIMENTAL',
+    (md5('NCT00000001'), 'run_01', 'snap_20260901', 'NCT00000001', 1, 'Placebo',
+     'PLACEBO_COMPARATOR', 'Matching placebo administered intrathecally', ['Drug: Placebo'], 'ha2'),
+    (md5('NCT00000002'), 'run_01', 'snap_20260901', 'NCT00000002', 0, 'CogniMab', 'EXPERIMENTAL',
      null, ['Drug: CogniMab'], 'ha3');
     """)
 
     # MeSH condition rows with ancestor closure (Issue #52 & #68)
     con.execute("""
-    INSERT INTO stg_trial_condition_mesh VALUES
-    ('run_01', 'adrd', 'NCT00000001', 'D000544', 'Alzheimer Disease', false, null, 'hm1'),
-    ('run_01', 'adrd', 'NCT00000001', 'D003704', 'Dementia', true, null, 'hm2'),
-    ('run_01', 'adrd', 'NCT00000001', 'D001927', 'Brain Diseases', true, null, 'hm3'),
-    ('run_01', 'adrd', 'NCT00000001', 'D008569', 'Memory Disorders', true, null, 'hm11'),
-    ('run_01', 'adrd', 'NCT00000002', 'D060825', 'Cognitive Dysfunction', false, null, 'hm4'),
-    ('run_01', 'adrd', 'NCT00000002', 'D003072', 'Cognition Disorders', true, null, 'hm5'),
-    ('run_01', 'oncology_nsclc', 'NCT00000003', 'D002289',
-     'Carcinoma, Non-Small-Cell Lung', false, null, 'hm6'),
-    ('run_01', 'oncology_nsclc', 'NCT00000003', 'D008175', 'Lung Neoplasms', true, null, 'hm7'),
-    ('run_01', 'oncology_nsclc', 'NCT00000003', 'D009369', 'Neoplasms', true, null, 'hm8'),
-    ('run_01', 'adrd', 'NCT00000004', 'D010300', 'Parkinson Disease', false, null, 'hm9'),
-    ('run_01', 'adrd', 'NCT00000004', 'D019636',
-     'Neurodegenerative Diseases', true, null, 'hm10');
+    INSERT INTO stg_registry_trial_condition_mesh VALUES
+    (md5('NCT00000001'), 'run_01', 'snap_20260901', 'NCT00000001',
+     'D000544', 'Alzheimer Disease', false, null, 'hm1'),
+    (md5('NCT00000001'), 'run_01', 'snap_20260901', 'NCT00000001',
+     'D003704', 'Dementia', true, null, 'hm2'),
+    (md5('NCT00000001'), 'run_01', 'snap_20260901', 'NCT00000001',
+     'D001927', 'Brain Diseases', true, null, 'hm3'),
+    (md5('NCT00000001'), 'run_01', 'snap_20260901', 'NCT00000001',
+     'D008569', 'Memory Disorders', true, null, 'hm11'),
+    (md5('NCT00000002'), 'run_01', 'snap_20260901', 'NCT00000002',
+     'D060825', 'Cognitive Dysfunction', false, null, 'hm4'),
+    (md5('NCT00000002'), 'run_01', 'snap_20260901', 'NCT00000002',
+     'D003072', 'Cognition Disorders', true, null, 'hm5'),
+    (md5('NCT00000003'), 'run_01', 'snap_20260901', 'NCT00000003',
+     'D002289', 'Carcinoma, Non-Small-Cell Lung', false, null, 'hm6'),
+    (md5('NCT00000003'), 'run_01', 'snap_20260901', 'NCT00000003',
+     'D008175', 'Lung Neoplasms', true, null, 'hm7'),
+    (md5('NCT00000003'), 'run_01', 'snap_20260901', 'NCT00000003',
+     'D009369', 'Neoplasms', true, null, 'hm8'),
+    (md5('NCT00000004'), 'run_01', 'snap_20260901', 'NCT00000004',
+     'D010300', 'Parkinson Disease', false, null, 'hm9'),
+    (md5('NCT00000004'), 'run_01', 'snap_20260901', 'NCT00000004',
+     'D019636', 'Neurodegenerative Diseases', true, null, 'hm10');
     """)
 
     con.execute("""
-    INSERT INTO dim_condition VALUES
-    ('ck1', 'adrd', 'D000544', 'alzheimer disease', 'Alzheimer Disease',
+    INSERT INTO dim_registry_condition VALUES
+    ('ck1', 'D000544', 'alzheimer disease', 'Alzheimer Disease',
      'Alzheimer Disease', 'D000544', false, 'mesh', true, '1.0', 1),
-    ('ck2', 'adrd', 'D003704', 'dementia', 'Dementia',
+    ('ck2', 'D003704', 'dementia', 'Dementia',
      'Dementia', 'D003704', true, 'mesh', true, '1.0', 1),
-    ('ck3', 'adrd', 'D060825', 'cognitive dysfunction', 'Cognitive Dysfunction',
+    ('ck3', 'D060825', 'cognitive dysfunction', 'Cognitive Dysfunction',
      'Cognitive Dysfunction', 'D060825', false, 'mesh', true, '1.0', 1),
-    ('ck4', 'oncology_nsclc', 'D002289', 'carcinoma, non-small-cell lung',
+    ('ck4', 'D002289', 'carcinoma, non-small-cell lung',
      'Carcinoma, Non-Small-Cell Lung', 'Non-Small Cell Lung Cancer', 'D002289',
      false, 'mesh', false, '1.0', 1),
-    ('ck5', 'oncology_nsclc', 'D008175', 'lung neoplasms', 'Lung Neoplasms',
+    ('ck5', 'D008175', 'lung neoplasms', 'Lung Neoplasms',
      'Lung Neoplasms', 'D008175', true, 'mesh', false, '1.0', 1),
-    ('ck6', 'adrd', 'D010300', 'parkinson disease', 'Parkinson Disease',
+    ('ck6', 'D010300', 'parkinson disease', 'Parkinson Disease',
      'Parkinson Disease', 'D010300', false, 'mesh', false, '1.0', 1),
-    ('ck7', 'adrd', 'D008569', 'memory disorders', 'Memory Disorders',
+    ('ck7', 'D008569', 'memory disorders', 'Memory Disorders',
      'Memory Disorders', 'D008569', true, 'mesh', true, '1.0', 1);
     """)
 
     con.execute("""
-    INSERT INTO bridge_trial_condition VALUES
-    ('btk1', 'key1', 'ck1', 'NCT00000001', 'adrd', 'D000544',
+    INSERT INTO bridge_registry_trial_condition VALUES
+    ('btk1', md5('NCT00000001'), 'ck1', 'NCT00000001', 'D000544',
      'Alzheimer Disease', 'D000544', false, 'mesh', true, '1.0', 1),
-    ('btk2', 'key1', 'ck2', 'NCT00000001', 'adrd', 'D003704',
+    ('btk2', md5('NCT00000001'), 'ck2', 'NCT00000001', 'D003704',
      'Dementia', 'D003704', true, 'mesh', true, '1.0', 1),
-    ('btk3', 'key2', 'ck3', 'NCT00000002', 'adrd', 'D060825',
+    ('btk3', md5('NCT00000002'), 'ck3', 'NCT00000002', 'D060825',
      'Cognitive Dysfunction', 'D060825', false, 'mesh', true, '1.0', 1),
-    ('btk4', 'key3', 'ck4', 'NCT00000003', 'oncology_nsclc', 'D002289',
+    ('btk4', md5('NCT00000003'), 'ck4', 'NCT00000003', 'D002289',
      'Carcinoma, Non-Small-Cell Lung', 'D002289', false, 'mesh', false, '1.0', 1),
-    ('btk5', 'key3', 'ck5', 'NCT00000003', 'oncology_nsclc', 'D008175',
+    ('btk5', md5('NCT00000003'), 'ck5', 'NCT00000003', 'D008175',
      'Lung Neoplasms', 'D008175', true, 'mesh', false, '1.0', 1),
-    ('btk6', 'key4', 'ck6', 'NCT00000004', 'adrd', 'D010300',
+    ('btk6', md5('NCT00000004'), 'ck6', 'NCT00000004', 'D010300',
      'Parkinson Disease', 'D010300', false, 'mesh', false, '1.0', 1),
-    ('btk7', 'key1', 'ck7', 'NCT00000001', 'adrd', 'D008569',
+    ('btk7', md5('NCT00000001'), 'ck7', 'NCT00000001', 'D008569',
      'Memory Disorders', 'D008569', true, 'mesh', true, '1.0', 1);
+    """)
+
+    con.execute("""
+    INSERT INTO bridge_preset_trial VALUES
+    ('pt1', 'adrd', 'NCT00000001', md5('NCT00000001'), 'snap_20260901', 'run_01',
+     '2026-09-01', '2026-09-01 12:00:00Z', false, 'preset', true),
+    ('pt2', 'adrd', 'NCT00000002', md5('NCT00000002'), 'snap_20260901', 'run_01',
+     '2026-09-01', '2026-09-01 12:00:00Z', false, 'preset', true),
+    ('pt3', 'oncology_nsclc', 'NCT00000003', md5('NCT00000003'), 'snap_20260901', 'run_01',
+     '2026-09-01', '2026-09-01 12:00:00Z', false, 'preset', true),
+    ('pt4', 'adrd', 'NCT00000004', md5('NCT00000004'), 'snap_20260901', 'run_01',
+     '2026-09-01', '2026-09-01 12:00:00Z', false, 'preset', true);
+    """)
+
+    con.execute("""
+    INSERT INTO int_registry_preset_condition_mapping VALUES
+    ('adrd', 'snap_20260901', '2026-09-01', 'NCT00000001',
+     'Alzheimer Disease', true, '1.0', 'yaml_overlay', 2),
+    ('adrd', 'snap_20260901', '2026-09-01', 'NCT00000002',
+     'Alzheimer Disease', true, '0.95', 'yaml_overlay', 1),
+    ('oncology_nsclc', 'snap_20260901', '2026-09-01', 'NCT00000003',
+     'Lung Cancer', false, '1.0', 'yaml_overlay', 1),
+    ('adrd', 'snap_20260901', '2026-09-01', 'NCT00000004',
+     'Movement Disorders', false, '0.8', 'yaml_overlay', 1);
     """)
 
     con.close()
@@ -679,7 +800,7 @@ def test_connection_pool_thread_safety(warehouse_db: Path) -> None:
             for _ in range(5):
                 with pool.connection() as conn:
                     row = conn.execute(
-                        "SELECT nct_id FROM dim_trial ORDER BY nct_id LIMIT 1"
+                        "SELECT nct_id FROM dim_registry_trial ORDER BY nct_id LIMIT 1"
                     ).fetchone()
                     assert row is not None
                     time.sleep(0.01)
@@ -746,7 +867,7 @@ def test_readiness_readyz_missing_database(tmp_path: Path) -> None:
 def test_readiness_readyz_missing_required_table(tmp_path: Path) -> None:
     db_file = tmp_path / "incomplete.duckdb"
     con = duckdb.connect(str(db_file))
-    con.execute("CREATE TABLE dim_trial (nct_id VARCHAR);")
+    con.execute("CREATE TABLE dim_registry_trial (nct_id VARCHAR);")
     con.close()
 
     container = APIContainer(warehouse_path=db_file)
@@ -971,7 +1092,8 @@ def test_keyset_pagination_with_null_dates_across_all_date_sorts(tmp_path: Path)
     con = duckdb.connect(str(db_file))
 
     con.execute("""
-    CREATE TABLE dim_trial (
+    CREATE TABLE dim_registry_trial (
+        registry_trial_key VARCHAR,
         nct_id VARCHAR,
         current_brief_title VARCHAR,
         current_overall_status VARCHAR,
@@ -985,22 +1107,26 @@ def test_keyset_pagination_with_null_dates_across_all_date_sorts(tmp_path: Path)
         accepts_healthy_volunteers BOOLEAN,
         std_age_groups VARCHAR[],
         registry_url VARCHAR,
-        latest_seen_snapshot_date DATE
+        latest_seen_snapshot_date DATE,
+        snapshot_id VARCHAR,
+        ingestion_run_id VARCHAR
     );
 
-    CREATE TABLE fct_trial_snapshot (
+    CREATE TABLE fct_registry_trial_snapshot (
         nct_id VARCHAR,
         snapshot_date DATE,
         snapshot_timestamp_utc TIMESTAMP,
         current_record_flag BOOLEAN
     );
 
-    CREATE TABLE fct_trial_site (
+    CREATE TABLE fct_registry_trial_site (
         nct_id VARCHAR,
+        state_normalized VARCHAR,
+        snapshot_date DATE,
         facility_name VARCHAR
     );
 
-    CREATE TABLE stg_trials (
+    CREATE TABLE stg_registry_trials (
         nct_id VARCHAR,
         ingestion_run_id VARCHAR,
         snapshot_id VARCHAR,
@@ -1009,9 +1135,10 @@ def test_keyset_pagination_with_null_dates_across_all_date_sorts(tmp_path: Path)
         last_update_post_date DATE
     );
 
-    CREATE TABLE stg_trial_locations (
+    CREATE TABLE stg_registry_trial_locations (
         nct_id VARCHAR,
         ingestion_run_id VARCHAR,
+        snapshot_id VARCHAR,
         location_ordinal BIGINT,
         facility_name VARCHAR,
         city VARCHAR,
@@ -1024,32 +1151,36 @@ def test_keyset_pagination_with_null_dates_across_all_date_sorts(tmp_path: Path)
         location_status VARCHAR
     );
 
-    CREATE TABLE stg_trial_conditions (
+    CREATE TABLE stg_registry_trial_conditions (
         nct_id VARCHAR,
         ingestion_run_id VARCHAR,
+        snapshot_id VARCHAR,
         condition_raw VARCHAR,
         condition_group VARCHAR,
         condition_normalized VARCHAR
     );
 
-    CREATE TABLE stg_trial_sponsors (
+    CREATE TABLE stg_registry_trial_sponsors (
         nct_id VARCHAR,
         ingestion_run_id VARCHAR,
+        snapshot_id VARCHAR,
         sponsor_name VARCHAR,
         sponsor_role VARCHAR,
         sponsor_class VARCHAR
     );
 
-    CREATE TABLE stg_trial_interventions (
+    CREATE TABLE stg_registry_trial_interventions (
         nct_id VARCHAR,
         ingestion_run_id VARCHAR,
+        snapshot_id VARCHAR,
         intervention_name VARCHAR,
         intervention_type VARCHAR
     );
 
-    CREATE TABLE stg_trial_arms (
+    CREATE TABLE stg_registry_trial_arms (
         nct_id VARCHAR,
         ingestion_run_id VARCHAR,
+        snapshot_id VARCHAR,
         arm_ordinal BIGINT
     );
     """)
@@ -1067,18 +1198,20 @@ def test_keyset_pagination_with_null_dates_across_all_date_sorts(tmp_path: Path)
         s_date_sql = f"'{s_date}'" if s_date else "NULL"
         u_date_sql = f"'{u_date}'" if u_date else "NULL"
         con.execute(f"""
-        INSERT INTO dim_trial (
-            nct_id, current_brief_title, current_overall_status, current_phase,
-            current_study_type, current_lead_sponsor, start_date, registry_url,
-            latest_seen_snapshot_date
+        INSERT INTO dim_registry_trial (
+            registry_trial_key, nct_id, current_brief_title, current_overall_status,
+            current_phase, current_study_type, current_lead_sponsor, start_date,
+            registry_url, latest_seen_snapshot_date, snapshot_id, ingestion_run_id
         ) VALUES (
-            '{nct}', 'Title {nct}', 'RECRUITING', 'PHASE3',
-            'INTERVENTIONAL', 'Sponsor', {s_date_sql}, 'https://url', '2026-09-01'
+            md5('{nct}'), '{nct}', 'Title {nct}', 'RECRUITING',
+            'PHASE3', 'INTERVENTIONAL', 'Sponsor', {s_date_sql},
+            'https://url', '2026-09-01', 'snap_01', 'run_01'
         );
 
-        INSERT INTO fct_trial_snapshot VALUES ('{nct}', '2026-09-01', '2026-09-01 12:00:00Z', true);
+        INSERT INTO fct_registry_trial_snapshot
+        VALUES ('{nct}', '2026-09-01', '2026-09-01 12:00:00Z', true);
 
-        INSERT INTO stg_trials (
+        INSERT INTO stg_registry_trials (
             nct_id, ingestion_run_id, snapshot_id, snapshot_timestamp_utc,
             snapshot_date, last_update_post_date
         ) VALUES (
@@ -1234,7 +1367,9 @@ def test_warehouse_trial_detail_null_placebo_stays_unknown(
 ) -> None:
     """A pre-feature row (NULL flag) must not surface as "no placebo"."""
     con = duckdb.connect(str(warehouse_db))
-    con.execute("update stg_trials set has_placebo_arm = null where nct_id = 'NCT00000002'")
+    con.execute(
+        "update stg_registry_trials set has_placebo_arm = null where nct_id = 'NCT00000002'"
+    )
     con.close()
     resp = client_warehouse.get("/v1/trials/NCT00000002")
     assert resp.status_code == 200
@@ -1248,7 +1383,7 @@ def test_warehouse_detail_sections_multi_item(
     """Issue #67: bulleted multi-item criteria split into inclusion/exclusion."""
     con = duckdb.connect(str(warehouse_db))
     con.execute(
-        "UPDATE stg_trials SET eligibility_criteria_text = ? WHERE nct_id = 'NCT00000004'",
+        "UPDATE stg_registry_trials SET eligibility_criteria_text = ? WHERE nct_id = 'NCT00000004'",
         [
             "Key Inclusion Criteria:\n\n"
             "* Men aged 18 to 50\n"
@@ -1297,7 +1432,7 @@ def test_warehouse_detail_sections_api_payload_lossless_with_repeated_headings(
     )
     con = duckdb.connect(str(warehouse_db))
     con.execute(
-        "UPDATE stg_trials SET eligibility_criteria_text = ? WHERE nct_id = 'NCT00000004'",
+        "UPDATE stg_registry_trials SET eligibility_criteria_text = ? WHERE nct_id = 'NCT00000004'",
         [criteria],
     )
     con.close()
@@ -1360,7 +1495,7 @@ def test_warehouse_detail_sections_no_misclassification_or_group_loss(
     )
     con = duckdb.connect(str(warehouse_db))
     con.execute(
-        "UPDATE stg_trials SET eligibility_criteria_text = ? WHERE nct_id = 'NCT00000004'",
+        "UPDATE stg_registry_trials SET eligibility_criteria_text = ? WHERE nct_id = 'NCT00000004'",
         [criteria],
     )
     con.close()
@@ -1417,7 +1552,8 @@ def test_warehouse_trial_detail_null_criteria_yields_null_sections(
     """Issue #67: absent criteria text yields null sections, not empty lists."""
     con = duckdb.connect(str(warehouse_db))
     con.execute(
-        "UPDATE stg_trials SET eligibility_criteria_text = NULL WHERE nct_id = 'NCT00000001'"
+        "UPDATE stg_registry_trials SET eligibility_criteria_text = NULL "
+        "WHERE nct_id = 'NCT00000001'"
     )
     con.close()
 
@@ -1451,25 +1587,27 @@ def test_warehouse_trial_detail_invalid_nct_id(client_warehouse: TestClient) -> 
 def test_multi_ingestion_runs_child_records_not_duplicated(warehouse_db: Path) -> None:
     """Test Important I2: Child table joins must be scoped to active ingestion run."""
     con = duckdb.connect(str(warehouse_db))
-    # Insert older run_00 child rows for NCT00000001
+    # Insert older run_00 / snap_20260801 child rows for NCT00000001
     con.execute("""
-    INSERT INTO stg_trial_locations VALUES
-    ('run_00', 'snap_20260801', '2026-08-01 12:00:00Z', 'page=00001.json', 1, 'adrd',
-     'NCT00000001', 99, 'Old Duplicate Facility', 'old duplicate facility', 'Old City',
-     'old city', 'CA', 'CA', '90000', 'United States', 'US', 37.0, -122.0,
+    INSERT INTO stg_registry_trial_locations VALUES
+    (md5('NCT00000001'), 'run_00', 'snap_20260801', '2026-08-01 12:00:00Z',
+     'page=00001.json', 1, 'NCT00000001', 99,
+     'Old Duplicate Facility', 'old duplicate facility', 'Old City', 'old city',
+     'CA', 'CA', '90000', 'United States', 'US', 37.0, -122.0,
      'RECRUITING', true, true, 'h_old');
 
-    INSERT INTO stg_trial_conditions VALUES
-    ('run_00', 'adrd', 'NCT00000001', 'Old Duplicate Condition',
-     'old duplicate condition', 'Old Group', true, 1.0, 'hc_old');
+    INSERT INTO stg_registry_trial_conditions VALUES
+    (md5('NCT00000001'), 'run_00', 'snap_20260801', 'NCT00000001',
+     'Old Duplicate Condition', 'old duplicate condition', 'Old Group',
+     true, '1.0', 'yaml_overlay', 'hc_old');
 
-    INSERT INTO stg_trial_sponsors VALUES
-    ('run_00', 'adrd', 'NCT00000001', 'Old Sponsor Corp',
-     'collaborator', 'INDUSTRY', 'old sponsor corp', 'hs_old');
+    INSERT INTO stg_registry_trial_sponsors VALUES
+    (md5('NCT00000001'), 'run_00', 'snap_20260801', 'NCT00000001',
+     'Old Sponsor Corp', 'collaborator', 'INDUSTRY', 'old sponsor corp', 'hs_old');
 
-    INSERT INTO stg_trial_interventions VALUES
-    ('run_00', 'adrd', 'NCT00000001', 'Old Drug', 'DRUG',
-     'Old description', 'old drug', 'hi_old');
+    INSERT INTO stg_registry_trial_interventions VALUES
+    (md5('NCT00000001'), 'run_00', 'snap_20260801', 'NCT00000001',
+     'Old Drug', 'DRUG', 'Old description', 'old drug', 'hi_old');
     """)
     con.close()
 
@@ -1684,33 +1822,25 @@ def test_warehouse_related_trials_mesh_ancestor_blocking_and_deduplication(
     """Validate on-demand candidate blocking via MeSH ancestors and deduplication.
 
     Ensures trials are matched via direct and ancestor MeSH terms, and deduplicated
-    across multiple indication profiles.
+    across multiple preset memberships.
     """
     db_path = tmp_path / "mesh_blocking.duckdb"
     _init_fixture_database(db_path)
 
     # Insert MeSH relations: NCT00000001 (target) shares direct MeSH with NCT00000003,
-    # and ancestor with NCT00000004.
+    # and ancestor with NCT00000004. Add multi-preset membership for NCT00000002.
     con = duckdb.connect(str(db_path))
     con.execute("""
-    INSERT INTO stg_trial_condition_mesh VALUES
-    ('run_01', 'adrd', 'NCT00000001', 'D000544', 'Alzheimer Disease', false, null, 'h1'),
-    ('run_01', 'adrd', 'NCT00000001', 'D003704', 'Dementia', true, null, 'h2'),
-    ('run_01', 'oncology_nsclc', 'NCT00000003', 'D000544', 'Alzheimer Disease', false, null, 'h3'),
-    ('run_01', 'adrd', 'NCT00000004', 'D003704', 'Dementia', false, null, 'h4');
+    INSERT INTO stg_registry_trial_condition_mesh VALUES
+    (md5('NCT00000003'), 'run_01', 'snap_20260901', 'NCT00000003',
+     'D000544', 'Alzheimer Disease', false, null, 'h3'),
+    (md5('NCT00000004'), 'run_01', 'snap_20260901', 'NCT00000004',
+     'D003704', 'Dementia', false, null, 'h4');
 
-    -- Insert duplicate dim_trial row for NCT00000002 under another profile to test deduplication
-    INSERT INTO dim_trial VALUES
-    (
-        'key2_dup', 'NCT00000002', 'oncology_nsclc', 'https://clinicaltrials.gov/study/NCT00000002',
-        'Duplicate Profile Row for NCT2',
-        'ACTIVE_NOT_RECRUITING', 'PHASE2', 'INTERVENTIONAL',
-        'Cedar Cognitive Institute', 'cedar cognitive institute',
-        '2023-06-01', '2026-12-01', '2027-01-01', '2023-05-15',
-        120, 'ACTUAL', false, 'ok', '2026-09-01', '2026-09-01', true,
-        '60 Years', null, 60.0, null, ['OLDER_ADULT'], 'FEMALE',
-        false, null, true, true, false, false, true, false, false
-    );
+    -- Add second preset membership for NCT00000002 to test deduplication
+    INSERT INTO bridge_preset_trial VALUES
+    ('pt2_dup', 'oncology_nsclc', 'NCT00000002', md5('NCT00000002'), 'snap_20260901', 'run_01',
+     '2026-09-01', '2026-09-01 12:00:00Z', false, 'preset', true);
     """)
     con.close()
 
@@ -1729,4 +1859,266 @@ def test_warehouse_related_trials_mesh_ancestor_blocking_and_deduplication(
         assert "NCT00000003" in nct_ids
         # NCT00000004 admitted via MeSH ancestor match
         assert "NCT00000004" in nct_ids
+    mgr.close()
+
+
+def test_warehouse_multi_preset_deduplication_and_deterministic_provenance(
+    tmp_path: Path,
+) -> None:
+    """Trials belonging to multiple presets must appear once with deterministic provenance."""
+    db_path = tmp_path / "multi_preset.duckdb"
+    _init_fixture_database(db_path)
+
+    con = duckdb.connect(str(db_path))
+    con.execute("""
+    INSERT INTO bridge_preset_trial VALUES
+    ('pt1_onco', 'oncology_nsclc', 'NCT00000001', md5('NCT00000001'), 'snap_20260901', 'run_01',
+     '2026-09-01', '2026-09-01 12:00:00Z', false, 'preset', true);
+    """)
+    con.close()
+
+    mgr = DuckDBWarehouseManager(db_path)
+    container = APIContainer(warehouse=mgr)
+    with TestClient(create_app(container=container)) as client:
+        search_resp = client.get("/v1/trials")
+        assert search_resp.status_code == 200
+        items = search_resp.json()["items"]
+        nct_ids = [item["nct_id"] for item in items]
+        assert nct_ids.count("NCT00000001") == 1
+        assert search_resp.json()["pagination"]["total_count"] == 4
+
+        detail_resp = client.get("/v1/trials/NCT00000001")
+        assert detail_resp.status_code == 200
+        assert detail_resp.json()["provenance"]["indication_profile_id"] == "adrd"
+    mgr.close()
+
+
+def test_warehouse_unassigned_trial_inclusion_and_preset_exclusion(tmp_path: Path) -> None:
+    """Unassigned trials appear in registry search/detail and unassigned scope, never in presets."""
+    db_path = tmp_path / "unassigned.duckdb"
+    _init_fixture_database(db_path)
+
+    con = duckdb.connect(str(db_path))
+    con.execute("""
+    INSERT INTO dim_registry_trial VALUES
+    (
+        md5('NCT00000005'), 'NCT00000005', 'https://clinicaltrials.gov/study/NCT00000005',
+        'Phase 2 Study in Rare Unmapped Condition',
+        'RECRUITING', 'PHASE2', 'INTERVENTIONAL',
+        'Rare Bio Corp', 'rare bio corp',
+        '2025-02-01', '2026-10-01', '2026-11-01', '2025-01-15',
+        80, 'ESTIMATED', false, 'ok', '2026-09-01', '2026-09-01', true,
+        '18 Years', '80 Years', 18.0, 80.0, ['ADULT', 'OLDER_ADULT'], 'ALL',
+        false, null, true, 'PARALLEL', 'DOUBLE', false, null,
+        'Evaluation of Novel Compound in Unassigned Rare Disease', '24 weeks',
+        true, false, false, false, false, false, true,
+        'snap_20260901', 'run_01'
+    );
+    INSERT INTO stg_registry_trials VALUES
+    (
+        md5('NCT00000005'), 'run_01', 'snap_20260901', '2026-09-01 12:00:00Z', 'page=00001.json', 5,
+        '2026-09-01 12:00:00Z', '2026-09-01', 'NCT00000005',
+        'Phase 2 Study in Rare Unmapped Condition',
+        'Evaluation of Novel Compound in Unassigned Rare Disease',
+        'INTERVENTIONAL', 'RECRUITING', null, '2026-08', false,
+        '2025-02-01', '2025-02-01', '2026-10-01', '2026-10-01', 'ESTIMATED',
+        'ESTIMATED', '2026-11-01', '2026-11-01', '2025-01-15', '2025-01-15',
+        null, null, '2026-08-01', '2026-08-01',
+        'Phase 2', 'PHASE2', 80, 'ESTIMATED', 'RANDOMIZED', 'TREATMENT',
+        'PARALLEL', 'DOUBLE', false, null, null, '24 weeks',
+        'Rare Bio Corp', 'rare bio corp', 'SPONSOR', false,
+        '18 Years', '18 Years', 18.0, '80 Years', '80 Years', 80.0, 'ALL',
+        false, null, ['ADULT', 'OLDER_ADULT'], 'Inclusion: Adults.',
+        false, 'hash_nct05', 'ok'
+    );
+    INSERT INTO stg_registry_trial_conditions VALUES
+    (md5('NCT00000005'), 'run_01', 'snap_20260901', 'NCT00000005', 'Hypertension',
+     'hypertension', 'Hypertension', false, 'mesh', 'yaml_overlay', 'hc5_unassigned');
+    INSERT INTO dim_registry_condition VALUES
+    ('ck_unassigned', 'D006973', 'hypertension',
+     'Hypertension', 'Hypertension', 'D006973',
+     false, 'mesh', false, 'mesh', 1);
+    INSERT INTO bridge_registry_trial_condition VALUES
+    ('btk_unassigned', md5('NCT00000005'), 'ck_unassigned', 'NCT00000005', 'D006973',
+     'Hypertension', 'D006973', false, 'mesh', false, 'mesh', 1);
+    INSERT INTO bridge_preset_trial VALUES
+    ('pt5_unassigned', 'unassigned', 'NCT00000005', md5('NCT00000005'), 'snap_20260901', 'run_01',
+     '2026-09-01', '2026-09-01 12:00:00Z', true, 'unassigned', true);
+    """)
+    con.close()
+
+    mgr = DuckDBWarehouseManager(db_path)
+    container = APIContainer(warehouse=mgr)
+    with TestClient(create_app(container=container)) as client:
+        # Registry-wide search and detail expose unassigned trial with provenance='unassigned'
+        search_resp = client.get("/v1/trials")
+        assert search_resp.status_code == 200
+        assert search_resp.json()["pagination"]["total_count"] == 5
+        assert any(item["nct_id"] == "NCT00000005" for item in search_resp.json()["items"])
+
+        detail_resp = client.get("/v1/trials/NCT00000005")
+        assert detail_resp.status_code == 200
+        assert detail_resp.json()["provenance"]["indication_profile_id"] == "unassigned"
+
+        # Named preset must NOT contain the unassigned condition, whereas 'unassigned' scope does
+        adrd_conds = client.get("/v1/conditions", params={"indication_profile_id": "adrd"}).json()
+        adrd_names = [c["condition_name"] for c in adrd_conds["items"]]
+        assert "Hypertension" not in adrd_names
+
+        unassigned_conds = client.get(
+            "/v1/conditions", params={"indication_profile_id": "unassigned"}
+        ).json()
+        unassigned_names = [c["condition_name"] for c in unassigned_conds["items"]]
+        assert "Hypertension" in unassigned_names
+    mgr.close()
+
+
+def test_warehouse_snapshot_version_clock_and_run_filtering(tmp_path: Path) -> None:
+    """Version clock orders by started_at_utc and ignores failed/profile-scoped runs."""
+    db_path = tmp_path / "version_clock.duckdb"
+    _init_fixture_database(db_path)
+
+    con = duckdb.connect(str(db_path))
+    con.execute("""
+    INSERT INTO stg_registry_trial_snapshots (
+        ingestion_run_id, snapshot_date, started_at_utc, ended_at_utc, profile, condition, status
+    ) VALUES
+    ('snap_20260905_profile', '2026-09-05', '2026-09-05 12:00:00',
+     '2026-09-05 12:05:00', 'adrd', 'Alzheimer Disease', 'success'),
+    ('snap_20260906_failed', '2026-09-06', '2026-09-06 12:00:00',
+     '2026-09-06 12:05:00', 'full_catalog', null, 'failed'),
+    ('snap_20260903_valid', '2026-09-03', '2026-09-03 12:00:00',
+     '2026-09-03 12:05:00', 'full_catalog', null, 'success');
+
+    -- Newer snapshot_timestamp_utc on failed/profile runs must NOT override snap_20260903_valid
+    INSERT INTO stg_registry_trials
+    SELECT
+        registry_trial_key, 'run_profile', 'snap_20260905_profile',
+        '2026-09-05 12:00:00Z', raw_page_reference, raw_study_ordinal,
+        '2026-09-05 12:00:00Z', '2026-09-05', nct_id,
+        'PROFILE-ONLY OVERWRITE TITLE', official_title,
+        study_type, overall_status, last_known_status, status_verified_date_raw,
+        has_expanded_access, start_date_raw, start_date, primary_completion_date_raw,
+        primary_completion_date, primary_completion_date_type, completion_date_type,
+        completion_date_raw, completion_date,
+        study_first_post_date_raw, study_first_post_date, results_first_post_date_raw,
+        results_first_post_date, last_update_post_date_raw,
+        last_update_post_date, phase_raw, phase_normalized, enrollment_count,
+        enrollment_type, allocation, primary_purpose, intervention_model, masking,
+        has_placebo_arm, why_stopped, brief_summary, primary_outcome_time_frame,
+        lead_sponsor_name, lead_sponsor_normalized, responsible_party_type,
+        healthy_volunteers, minimum_age, minimum_age_raw, minimum_age_years,
+        maximum_age, maximum_age_raw, maximum_age_years, sex,
+        gender_based, gender_description, std_age_groups,
+        eligibility_criteria_text, has_results_flag, source_json_hash, record_quality_flag
+    FROM stg_registry_trials
+    WHERE nct_id = 'NCT00000001' AND ingestion_run_id = 'run_01';
+
+    INSERT INTO stg_registry_trials
+    SELECT
+        registry_trial_key, 'run_failed', 'snap_20260906_failed',
+        '2026-09-06 12:00:00Z', raw_page_reference, raw_study_ordinal,
+        '2026-09-06 12:00:00Z', '2026-09-06', nct_id,
+        'FAILED RUN OVERWRITE TITLE', official_title,
+        study_type, overall_status, last_known_status, status_verified_date_raw,
+        has_expanded_access, start_date_raw, start_date, primary_completion_date_raw,
+        primary_completion_date, primary_completion_date_type, completion_date_type,
+        completion_date_raw, completion_date,
+        study_first_post_date_raw, study_first_post_date, results_first_post_date_raw,
+        results_first_post_date, last_update_post_date_raw,
+        last_update_post_date, phase_raw, phase_normalized, enrollment_count,
+        enrollment_type, allocation, primary_purpose, intervention_model, masking,
+        has_placebo_arm, why_stopped, brief_summary, primary_outcome_time_frame,
+        lead_sponsor_name, lead_sponsor_normalized, responsible_party_type,
+        healthy_volunteers, minimum_age, minimum_age_raw, minimum_age_years,
+        maximum_age, maximum_age_raw, maximum_age_years, sex,
+        gender_based, gender_description, std_age_groups,
+        eligibility_criteria_text, has_results_flag, source_json_hash, record_quality_flag
+    FROM stg_registry_trials
+    WHERE nct_id = 'NCT00000001' AND ingestion_run_id = 'run_01';
+
+    INSERT INTO stg_registry_trials
+    SELECT
+        registry_trial_key, 'run_valid_03', 'snap_20260903_valid',
+        '2026-09-03 12:00:00Z', raw_page_reference, raw_study_ordinal,
+        '2026-09-03 12:00:00Z', '2026-09-03', nct_id,
+        'Authoritative Canonical Snapshot Title', official_title,
+        study_type, overall_status, last_known_status, status_verified_date_raw,
+        has_expanded_access, start_date_raw, start_date, primary_completion_date_raw,
+        primary_completion_date, primary_completion_date_type, completion_date_type,
+        completion_date_raw, completion_date,
+        study_first_post_date_raw, study_first_post_date, results_first_post_date_raw,
+        results_first_post_date, last_update_post_date_raw,
+        last_update_post_date, phase_raw, phase_normalized, enrollment_count,
+        enrollment_type, allocation, primary_purpose, intervention_model, masking,
+        has_placebo_arm, why_stopped, brief_summary, primary_outcome_time_frame,
+        lead_sponsor_name, lead_sponsor_normalized, responsible_party_type,
+        healthy_volunteers, minimum_age, minimum_age_raw, minimum_age_years,
+        maximum_age, maximum_age_raw, maximum_age_years, sex,
+        gender_based, gender_description, std_age_groups,
+        eligibility_criteria_text, has_results_flag, source_json_hash, record_quality_flag
+    FROM stg_registry_trials
+    WHERE nct_id = 'NCT00000001' AND ingestion_run_id = 'run_01';
+    """)
+    con.close()
+
+    mgr = DuckDBWarehouseManager(db_path)
+    readiness = mgr.check_readiness()
+    assert readiness.snapshot_id == "snap_20260903_valid"
+    assert readiness.snapshot_timestamp_utc == "2026-09-03T12:00:00Z"
+
+    detail = mgr.get_trial_detail("NCT00000001")
+    assert detail is not None
+    assert detail.study_design.allocation == "RANDOMIZED"
+    assert detail.provenance.snapshot_id == "snap_20260903_valid"
+    mgr.close()
+
+
+def test_warehouse_dbt_fixture_registry_grain_end_to_end(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """End-to-end integration: real dbt fixture build queried by DuckDBWarehouseManager & API."""
+    from datetime import UTC, datetime
+
+    from tests.fixture_warehouse import FixtureRun, build_fixture_warehouse, default_runs
+
+    fixture_root = tmp_path / "dbt_e2e"
+    runs = [
+        *default_runs(),
+        FixtureRun(
+            profile="adrd",
+            manifest_profile="full_catalog",
+            run_id="20260902T100000Z_reg01",
+            started_at=datetime(2026, 9, 2, 10, 0, tzinfo=UTC),
+            condition=None,
+            fixture_dir="bronze_snapshot",
+        ),
+    ]
+    build_fixture_warehouse(fixture_root, runs=runs)
+    db_path = fixture_root / "data" / "warehouse" / "clinical_trials.duckdb"
+    monkeypatch.chdir(fixture_root)
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(fixture_root))
+
+    mgr = DuckDBWarehouseManager(db_path)
+    readiness = mgr.check_readiness()
+    assert readiness.status == "ready"
+    container = APIContainer(warehouse=mgr)
+    with TestClient(create_app(container=container)) as client:
+        ready_resp = client.get("/readyz")
+        assert ready_resp.status_code == 200
+        assert ready_resp.json()["snapshot_id"] == "20260902T100000Z_reg01"
+
+        search_resp = client.get("/v1/trials")
+        assert search_resp.status_code == 200
+        items = search_resp.json()["items"]
+        assert len(items) > 0
+        first_nct = items[0]["nct_id"]
+
+        detail_resp = client.get(f"/v1/trials/{first_nct}")
+        assert detail_resp.status_code == 200
+        assert detail_resp.json()["nct_id"] == first_nct
+
+        related_resp = client.get(f"/v1/trials/{first_nct}/related")
+        assert related_resp.status_code == 200
+        assert related_resp.json()["target_nct_id"] == first_nct
     mgr.close()
