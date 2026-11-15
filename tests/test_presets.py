@@ -783,3 +783,331 @@ def test_the_double_count_caption_is_gone() -> None:
     captions = " ".join(str(c.value) for c in at.sidebar.caption).lower()
     assert "additive" not in captions and "counted once" not in captions
     assert "default filters" in captions
+
+
+_PHASE4A_PARITY_MODELS = {
+    "fct_trial_snapshot": "fct_registry_trial_snapshot",
+    "fct_trial_site": "fct_registry_trial_site",
+    "mart_trial_activity": "mart_registry_trial_activity",
+    "mart_site_overlap": "mart_registry_site_overlap",
+    "mart_condition_geography_trends": "mart_registry_condition_geography_trends",
+    "mart_recruiting_competition": "mart_registry_recruiting_competition",
+    "mart_feasibility_priority_queue": "mart_registry_feasibility_priority_queue",
+    "mart_baseline_demographics_coverage": "mart_registry_baseline_demographics_coverage",
+    "mart_trial_similarity": "mart_registry_trial_similarity",
+}
+
+
+@pytest.mark.parametrize(
+    ("preset_id", "mesh_entry"),
+    [
+        ("adrd", {"id": "D000544", "term": "Alzheimer Disease"}),
+        ("oncology_nsclc", {"id": "D002289", "term": "Carcinoma, Non-Small-Cell Lung"}),
+    ],
+)
+def test_phase4a_registry_marts_match_146_baseline(
+    tmp_path: Path, preset_id: str, mesh_entry: dict[str, str]
+) -> None:
+    """Phase 4a registry/preset marts match the #146 baseline for ADRD and NSCLC.
+
+    Projecting each *_registry_* mart onto the legacy baseline columns (and ignoring
+    surrogate key hashes that intentionally dropped indication_profile_id plus
+    record_hash which reflects injected derivedSection MeSH tags) yields exact
+    row counts and identical non-key cell values within baseline tolerance.
+    """
+    import os
+    from dataclasses import replace
+
+    from tests.fixture_warehouse import base_adrd_run, base_nsclc_run, build_fixture_warehouse
+
+    base = base_adrd_run() if preset_id == "adrd" else base_nsclc_run()
+    mesh = {"conditionBrowseModule": {"meshes": [mesh_entry]}}
+    run = replace(
+        base,
+        profile="full_catalog",
+        condition="",
+        study_overrides={f"NCT{i:08d}": {"derivedSection": mesh} for i in range(1, 11)},
+    )
+    root = tmp_path / f"parity_{preset_id}"
+    build_fixture_warehouse(root, runs=[run])
+    baseline = load_baseline()
+
+    start = Path.cwd()
+    os.chdir(root)
+    try:
+        with duckdb.connect(
+            str(root / "data/warehouse/clinical_trials.duckdb"), read_only=True
+        ) as con:
+            for legacy_name, reg_name in _PHASE4A_PARITY_MODELS.items():
+                expected_doc = baseline[legacy_name]
+                cols = expected_doc["columns"]
+                p_idx = cols.index("indication_profile_id")
+                ignore_cols = {
+                    c
+                    for c in cols
+                    if c.endswith("_key")
+                    and c not in ("registry_trial_key", "registry_condition_key")
+                }
+                if legacy_name == "fct_trial_snapshot":
+                    # Study JSON includes synthetic derivedSection MeSH tags so preset
+                    # selection matches in full_catalog mode, changing record_hash only.
+                    ignore_cols.add("record_hash")
+                compare_indices = [i for i, c in enumerate(cols) if c not in ignore_cols]
+
+                def sort_key(r: list[object], idx: list[int] = compare_indices) -> str:
+                    return json.dumps([r[i] for i in idx], sort_keys=True)
+
+                expected_rows = sorted(
+                    (r for r in expected_doc["rows"] if r[p_idx] == preset_id),
+                    key=sort_key,
+                )
+
+                if reg_name in ("fct_registry_trial_snapshot", "fct_registry_trial_site"):
+                    reg_cols = [
+                        r[0] for r in con.execute(f"describe main_marts.{reg_name}").fetchall()
+                    ]
+                    proj = []
+                    for c in cols:
+                        if c == "indication_profile_id":
+                            proj.append(f"'{preset_id}' as indication_profile_id")
+                        elif c == "trial_key" and c not in reg_cols:
+                            proj.append("t.registry_trial_key as trial_key")
+                        elif c == "condition_group_count":
+                            proj.append(
+                                "(select count(distinct m.condition_group) "
+                                "from main_intermediate.int_registry_preset_condition_mapping m "
+                                f"where m.preset_id = '{preset_id}' "
+                                "and m.snapshot_id = t.snapshot_id and m.nct_id = t.nct_id) "
+                                "as condition_group_count"
+                            )
+                        else:
+                            proj.append(f"t.{c}")
+                    if reg_name == "fct_registry_trial_snapshot":
+                        sql = (
+                            f"select {', '.join(proj)} from main_marts.{reg_name} t "
+                            "inner join main_marts.bridge_preset_trial b "
+                            "on b.nct_id = t.nct_id and b.snapshot_id = t.snapshot_id "
+                            f"and b.preset_id = '{preset_id}'"
+                        )
+                    else:
+                        sql = (
+                            f"select {', '.join(proj)} from main_marts.{reg_name} t "
+                            "where exists (select 1 from main_marts.bridge_preset_trial b "
+                            f"where b.nct_id = t.nct_id and b.preset_id = '{preset_id}' "
+                            "and b.current_record_flag)"
+                        )
+                else:
+                    proj = [
+                        (
+                            "preset_id as indication_profile_id"
+                            if c == "indication_profile_id"
+                            else c
+                        )
+                        for c in cols
+                    ]
+                    sql = (
+                        f"select {', '.join(proj)} from main_marts.{reg_name} "
+                        f"where preset_id = '{preset_id}'"
+                    )
+
+                def _norm(v: object) -> object:
+                    return v if v is None or isinstance(v, bool | int | float | str) else str(v)
+
+                actual_rows = sorted(
+                    ([_norm(v) for v in row] for row in con.execute(sql).fetchall()),
+                    key=sort_key,
+                )
+                assert len(actual_rows) == len(expected_rows), (
+                    f"{preset_id}/{reg_name}: {len(actual_rows)} != {len(expected_rows)}"
+                )
+                for want, got in zip(expected_rows, actual_rows, strict=True):
+                    for col_name, w, g in zip(cols, want, got, strict=True):
+                        if col_name in ignore_cols:
+                            continue
+                        assert cells_match(w, g), (
+                            f"{preset_id}/{reg_name} col {col_name}: {w!r} != {g!r}"
+                        )
+            assert (
+                con.execute(
+                    "select count(*) from main_marts.mart_registry_condition_access_rates "
+                    "where mesh_id = ?",
+                    [mesh_entry["id"]],
+                ).fetchone()[0]
+                > 0
+            )
+    finally:
+        os.chdir(start)
+
+
+def test_phase4a_canonical_observations_and_preset_isolation(
+    registry_preset_project_root: Path,
+) -> None:
+    """Canonical facts deduplicate before expanding sites/conditions; presets filter at read time.
+
+    - Profile-only pull (2026-09-22, NCT00000095, and TERMINATED override on NCT00000001)
+      is excluded from fct_registry_trial_snapshot, fct_registry_trial_site, and all
+      preset-scoped Phase 4a marts.
+    - Unassigned trial NCT00000010 is in fct_registry_trial_snapshot and excluded from
+      adrd/shared_preset analytical marts.
+    - Canonical access/prevalence marts build cleanly without indication_profile_id.
+    """
+    warehouse = registry_preset_project_root / "data/warehouse/clinical_trials.duckdb"
+    with duckdb.connect(str(warehouse), read_only=True) as con:
+        assert (
+            con.execute(
+                "select count(*) from main_marts.fct_registry_trial_snapshot "
+                "where nct_id = 'NCT00000095'"
+            ).fetchone()[0]
+            == 0
+        )
+        assert (
+            con.execute(
+                "select count(*) from main_marts.fct_registry_trial_site "
+                "where nct_id = 'NCT00000095'"
+            ).fetchone()[0]
+            == 0
+        )
+        assert con.execute(
+            "select overall_status, enrollment_count, lead_sponsor_name, current_record_flag "
+            "from main_marts.fct_registry_trial_snapshot "
+            "where nct_id = 'NCT00000001' and current_record_flag = true"
+        ).fetchall() == [("COMPLETED", 700, "Latest Sponsor", True)]
+
+        assert (
+            con.execute(
+                "select count(*) from main_marts.fct_registry_trial_snapshot "
+                "where nct_id = 'NCT00000010' and current_record_flag = true"
+            ).fetchone()[0]
+            == 1
+        )
+        for pid in ("adrd", "shared_preset"):
+            assert (
+                con.execute(
+                    "select count(*) from main_marts.mart_registry_trial_activity "
+                    "where preset_id = ?",
+                    [pid],
+                ).fetchone()[0]
+                > 0
+            )
+            assert (
+                con.execute(
+                    "select count(*) from main_marts.mart_registry_recruiting_competition "
+                    "where preset_id = ?",
+                    [pid],
+                ).fetchone()[0]
+                > 0
+            )
+            assert (
+                con.execute(
+                    "select count(*) from main_marts.mart_registry_site_overlap "
+                    "where preset_id = ?",
+                    [pid],
+                ).fetchone()[0]
+                > 0
+            )
+        assert (
+            con.execute(
+                "select count(*) from main_marts.mart_registry_trial_activity "
+                "where preset_id = 'unassigned'"
+            ).fetchone()[0]
+            == 0
+        )
+        assert (
+            con.execute(
+                "select count(*) from main_marts.mart_registry_feasibility_priority_queue "
+                "where preset_id = 'unassigned'"
+            ).fetchone()[0]
+            == 0
+        )
+
+        for access_mart in (
+            "mart_registry_condition_access_rates",
+            "mart_registry_participation_prevalence_ratio",
+            "mart_registry_trial_access_by_geo",
+            "mart_registry_trial_access_by_stratum",
+        ):
+            cols = {r[0] for r in con.execute(f"describe main_marts.{access_mart}").fetchall()}
+            assert "indication_profile_id" not in cols, access_mart
+
+
+def test_phase4a_similarity_reference_equivalence(tmp_path: Path) -> None:
+    """mart_registry_trial_similarity matches reference scoring restricted to candidates."""
+    import os
+    from dataclasses import replace
+
+    from tests.fixture_warehouse import AddedStudy, base_adrd_run, build_fixture_warehouse
+
+    mesh = {"conditionBrowseModule": {"meshes": [{"id": "D000544", "term": "Alzheimer Disease"}]}}
+    added = tuple(
+        AddedStudy(
+            nct_id=f"NCT{i:08d}",
+            clone_of="NCT00000001",
+            overall_status="RECRUITING",
+            phase="PHASE3",
+            condition="Alzheimer Disease",
+        )
+        for i in range(100, 130)
+    )
+    overrides = {"NCT00000001": {"derivedSection": mesh}, "NCT00000002": {"derivedSection": mesh}}
+    for s in added:
+        overrides[s.nct_id] = {"derivedSection": mesh}
+
+    run = replace(
+        base_adrd_run(),
+        profile="full_catalog",
+        condition="",
+        added=added,
+        study_overrides=overrides,
+    )
+    root = tmp_path / "similarity_ref"
+    build_fixture_warehouse(root, runs=[run], dbt_vars={"build_similarity_reference": True})
+    start = Path.cwd()
+    os.chdir(root)
+    try:
+        with duckdb.connect(
+            str(root / "data/warehouse/clinical_trials.duckdb"), read_only=True
+        ) as con:
+            diff_a = con.execute(
+                """
+                with expected as (
+                    select r.*
+                    from main_marts.mart_registry_trial_similarity_reference r
+                    semi join main_intermediate.int_registry_similarity_candidates c
+                        on r.preset_id = c.preset_id
+                        and r.nct_id_a = c.nct_id_a
+                        and r.nct_id_b = c.nct_id_b
+                ),
+                reranked as (
+                    select
+                        * replace (
+                            row_number() over (
+                                partition by preset_id, nct_id_a
+                                order by similarity_score desc, nct_id_b asc
+                            ) as similarity_rank
+                        )
+                    from expected
+                    qualify similarity_rank <= 25
+                )
+                select count(*) from (
+                    (
+                        select * from main_marts.mart_registry_trial_similarity
+                        except
+                        select * from reranked
+                    )
+                    union all
+                    (
+                        select * from reranked
+                        except
+                        select * from main_marts.mart_registry_trial_similarity
+                    )
+                )
+                """
+            ).fetchone()[0]
+            assert diff_a == 0
+            max_per_trial = con.execute(
+                "select max(c) from (select preset_id, nct_id_a, count(*) c "
+                "from main_marts.mart_registry_trial_similarity group by 1, 2)"
+            ).fetchone()[0]
+            assert max_per_trial == 25
+    finally:
+        os.chdir(start)
