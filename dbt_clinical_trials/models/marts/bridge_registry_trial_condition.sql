@@ -1,12 +1,12 @@
 -- Grain: one row per registry trial x condition node, from each trial's
 -- latest snapshot in the registry (matching dim_registry_trial currency).
 --
--- A node is either a taxonomy condition_group (prefix "group:", e.g. "group:unmapped")
--- or a registry MeSH browse identity (mesh id, e.g. D000544). MeSH rows carry the
--- registry-supplied ancestor closure (is_ancestor).
+-- A node is a registry MeSH browse identity (mesh id, e.g. D000544). MeSH rows
+-- carry the registry-supplied ancestor closure (is_ancestor); profile-specific
+-- taxonomy group nodes are excluded from the canonical registry condition layer.
 
 with current_trials as (
-    select nct_id, ingestion_run_id
+    select nct_id, snapshot_id
     from {{ ref('dim_registry_trial') }}
 ),
 
@@ -23,7 +23,7 @@ mesh_nodes as (
         cast(null as bigint) as source_condition_count
     from {{ ref('stg_registry_trial_condition_mesh') }} m
     inner join current_trials t
-        on m.ingestion_run_id = t.ingestion_run_id
+        on m.snapshot_id = t.snapshot_id
         and m.nct_id = t.nct_id
     group by
         m.nct_id,

@@ -22,12 +22,14 @@
 with pairs as (
     select distinct indication_profile_id, nct_id
     from {{ ref('fct_trial_snapshot') }}
+    where indication_profile_id not in ('full_catalog', 'full-catalog', 'default')
 ),
 
 current_counts as (
     select indication_profile_id, nct_id, count(*) as current_record_count
     from {{ ref('fct_trial_snapshot') }}
     where current_record_flag
+      and indication_profile_id not in ('full_catalog', 'full-catalog', 'default')
     group by 1, 2
 )
 

@@ -70,14 +70,15 @@ class FixtureRun:
     profile: str  # registry profile_id
     run_id: str
     started_at: datetime
-    condition: str
+    condition: str | None
     fixture_dir: str
     page: str = "page=00001.json"
     manifest_profile: str | None = None  # None -> same as `profile`
     status_overrides: dict[str, str] = field(default_factory=dict)
     added: tuple[AddedStudy, ...] = ()
-    study_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
+    study_overrides: dict[str, dict[str, Any] | None] = field(default_factory=dict)
     retrieved_at: str | None = None
+    updated_since: str | None = None
     final_status: str = "success"
 
     @property
@@ -281,7 +282,7 @@ def prepare_fixture_root(
                 query_hash=f"fixturequeryhash{index:02d}",
                 endpoint="https://clinicaltrials.gov/api/v2/studies",
                 condition=run.condition,
-                params={"query.cond": run.condition},
+                params={"query.cond": run.condition} if run.condition else {},
                 mode="incremental",
                 profile=run.effective_manifest_profile,
                 status="success",
@@ -290,6 +291,7 @@ def prepare_fixture_root(
                 page_count=1,
                 record_count=record_count,
                 total_count_reported=record_count,
+                updated_since_utc=run.updated_since,
             )
             write_manifest(profile_cfg.paths.bronze_manifests, manifest)
             write_summary(profile_cfg.paths.bronze_manifests, manifest)

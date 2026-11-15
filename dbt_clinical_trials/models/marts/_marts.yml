@@ -2050,8 +2050,14 @@ models:
         data_type: BOOLEAN
       - name: has_derived_mesh
         data_type: BOOLEAN
+      - name: snapshot_id
+        data_type: VARCHAR
+        description: Snapshot partition run ID containing this canonical record.
+        tests: [not_null]
       - name: ingestion_run_id
         data_type: VARCHAR
+        description: Source ingestion run ID that originally fetched this trial observation.
+        tests: [not_null]
 
   - name: dim_registry_condition
     description: One row per condition node across the whole registry (canonical registry grain).
@@ -2150,8 +2156,13 @@ models:
           - relationships:
               to: ref('dim_registry_trial')
               field: registry_trial_key
+      - name: snapshot_id
+        data_type: VARCHAR
+        description: Snapshot partition run ID containing this trial observation.
+        tests: [not_null]
       - name: ingestion_run_id
         data_type: VARCHAR
+        description: Source ingestion run ID that originally fetched this trial observation.
         tests: [not_null]
       - name: snapshot_date
         data_type: DATE

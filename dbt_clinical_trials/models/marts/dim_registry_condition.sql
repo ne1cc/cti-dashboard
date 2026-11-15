@@ -1,5 +1,5 @@
 -- One row per condition node across the whole registry (canonical registry grain).
--- A node is a MeSH browse identity (bare mesh id) or a taxonomy group ("group:<slug>").
+-- A node is a registry MeSH browse identity (bare mesh id, e.g. D000544).
 -- Grain: node_id. Primary key: registry_condition_key.
 
 select

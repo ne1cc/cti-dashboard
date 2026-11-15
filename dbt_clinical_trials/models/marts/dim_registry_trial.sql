@@ -1,24 +1,27 @@
 -- One row per NCT ID across the whole registry (canonical registry grain).
 -- Grain: nct_id. Primary key: registry_trial_key (md5 of nct_id).
 -- Follows approved version clock: source-manifest started_at_utc (UTC).
--- Only complete, successful snapshots publish.
+-- Only complete, successful whole-registry snapshots publish.
 
 with successful_snapshots as (
     select
-        ingestion_run_id,
+        ingestion_run_id as snapshot_id,
         started_at_utc,
         snapshot_date
     from {{ ref('stg_registry_trial_snapshots') }}
     where status = 'success'
+      and profile in ('full_catalog', 'full-catalog', 'default')
+      and (condition is null or trim(condition) = '')
 ),
 
 trials_with_snapshots as (
     select
-        t.*,
+        t.* exclude (snapshot_date),
+        s.snapshot_date,
         s.started_at_utc
     from {{ ref('stg_registry_trials') }} t
     inner join successful_snapshots s
-        on t.ingestion_run_id = s.ingestion_run_id
+        on t.snapshot_id = s.snapshot_id
 ),
 
 trial_timeline as (
@@ -34,7 +37,7 @@ trial_timeline as (
 distinct_latest_runs as (
     select
         t.nct_id,
-        min(t.ingestion_run_id) as ingestion_run_id,
+        min(t.snapshot_id) as snapshot_id,
         t.started_at_utc,
         t.source_json_hash
     from trials_with_snapshots t
@@ -52,7 +55,7 @@ latest_trials as (
     from trials_with_snapshots t
     inner join distinct_latest_runs r
         on t.nct_id = r.nct_id
-        and t.ingestion_run_id = r.ingestion_run_id
+        and t.snapshot_id = r.snapshot_id
 ),
 
 global_max_snapshot as (
@@ -61,12 +64,12 @@ global_max_snapshot as (
 ),
 
 mesh_extracted_runs as (
-    select distinct regexp_extract(file, 'run_id=([^.]+)\.parquet', 1) as ingestion_run_id
+    select distinct regexp_extract(file, 'run_id=([^.]+)\.parquet', 1) as snapshot_id
     from glob('data/silver/registry_trial_condition_mesh/*.parquet')
 ),
 
 current_mesh as (
-    select distinct ingestion_run_id, nct_id
+    select distinct snapshot_id, nct_id
     from {{ ref('stg_registry_trial_condition_mesh') }}
 )
 
@@ -121,16 +124,17 @@ select
     case when t.healthy_volunteers is null then true else false end as healthy_volunteers_unknown_flag,
     case when t.sex is null or upper(trim(t.sex)) in ('', 'UNKNOWN') then true else false end as sex_eligibility_unknown_flag,
     case
-        when er.ingestion_run_id is not null then case when m.nct_id is not null then true else false end
+        when er.snapshot_id is not null then case when m.nct_id is not null then true else false end
         else cast(null as boolean)
     end as has_derived_mesh,
+    t.snapshot_id,
     t.ingestion_run_id
 from latest_trials t
 inner join trial_timeline l
     on t.nct_id = l.nct_id
 cross join global_max_snapshot g
 left join mesh_extracted_runs er
-    on t.ingestion_run_id = er.ingestion_run_id
+    on t.snapshot_id = er.snapshot_id
 left join current_mesh m
-    on t.ingestion_run_id = m.ingestion_run_id
+    on t.snapshot_id = m.snapshot_id
     and t.nct_id = m.nct_id

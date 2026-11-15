@@ -5,24 +5,27 @@
 
 with successful_snapshots as (
     select
-        ingestion_run_id,
+        ingestion_run_id as snapshot_id,
         started_at_utc,
         snapshot_date
     from {{ ref('stg_registry_trial_snapshots') }}
     where status = 'success'
+      and profile in ('full_catalog', 'full-catalog', 'default')
+      and (condition is null or trim(condition) = '')
 ),
 
 trials_with_snapshots as (
     select
         t.nct_id,
+        t.snapshot_id,
         t.ingestion_run_id,
-        t.snapshot_date,
+        s.snapshot_date,
         t.snapshot_timestamp_utc,
         s.started_at_utc,
         t.source_json_hash
     from {{ ref('stg_registry_trials') }} t
     inner join successful_snapshots s
-        on t.ingestion_run_id = s.ingestion_run_id
+        on t.snapshot_id = s.snapshot_id
 ),
 
 snapshot_timeline as (
@@ -34,12 +37,11 @@ snapshot_timeline as (
     group by nct_id, snapshot_date
 ),
 
-distinct_trial_snapshots as (
+distinct_trial_runs as (
     select
         t.nct_id,
-        min(t.ingestion_run_id) as ingestion_run_id,
+        min(t.snapshot_id) as snapshot_id,
         t.snapshot_date,
-        t.snapshot_timestamp_utc,
         t.started_at_utc,
         t.source_json_hash
     from trials_with_snapshots t
@@ -50,9 +52,23 @@ distinct_trial_snapshots as (
     group by
         t.nct_id,
         t.snapshot_date,
+        t.started_at_utc,
+        t.source_json_hash
+),
+
+distinct_trial_snapshots as (
+    select
+        t.nct_id,
+        t.snapshot_id,
+        t.ingestion_run_id,
+        t.snapshot_date,
         t.snapshot_timestamp_utc,
         t.started_at_utc,
         t.source_json_hash
+    from trials_with_snapshots t
+    inner join distinct_trial_runs r
+        on t.nct_id = r.nct_id
+        and t.snapshot_id = r.snapshot_id
 ),
 
 raw_files as (
@@ -86,7 +102,7 @@ preset_mesh_mapping as (
 trial_mesh as (
     select distinct
         m.nct_id,
-        m.ingestion_run_id,
+        m.snapshot_id,
         m.mesh_id,
         m.mesh_term
     from {{ ref('stg_registry_trial_condition_mesh') }} m
@@ -97,6 +113,7 @@ preset_matches as (
         p.preset_id,
         ts.nct_id,
         ts.snapshot_date,
+        ts.snapshot_id,
         ts.ingestion_run_id,
         ts.snapshot_timestamp_utc,
         false as is_unassigned,
@@ -104,7 +121,7 @@ preset_matches as (
     from distinct_trial_snapshots ts
     inner join trial_mesh m
         on ts.nct_id = m.nct_id
-        and ts.ingestion_run_id = m.ingestion_run_id
+        and ts.snapshot_id = m.snapshot_id
     inner join preset_mesh_mapping p
         on lower(trim(m.mesh_term)) = lower(trim(p.mesh_term))
 ),
@@ -114,6 +131,7 @@ unassigned_memberships as (
         'unassigned' as preset_id,
         ts.nct_id,
         ts.snapshot_date,
+        ts.snapshot_id,
         ts.ingestion_run_id,
         ts.snapshot_timestamp_utc,
         true as is_unassigned,
@@ -146,6 +164,7 @@ select
     m.preset_id,
     m.nct_id,
     {{ generate_surrogate_key(['m.nct_id']) }} as registry_trial_key,
+    m.snapshot_id,
     m.ingestion_run_id,
     m.snapshot_date,
     m.snapshot_timestamp_utc,

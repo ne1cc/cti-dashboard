@@ -239,9 +239,9 @@ Phase 3 builds the parallel registry dimensions (`dim_registry_trial`, `dim_regi
 | Step | Table / column | Expected difference | Why |
 |------|----------------|---------------------|-----|
 | Phase 3 | Profile dimensions and baseline marts | none | Parallel additive architecture; existing legacy models (`dim_trial`, `dim_condition`, etc.) and baseline fixtures remain completely unchanged and pass. |
-| Phase 3 | `dim_registry_trial` | New mart table | Canonical registry trial dimension keyed on `registry_trial_key = md5(nct_id)` at grain `nct_id`. Version-clocked by `started_at_utc`. |
-| Phase 3 | `dim_registry_condition` | New mart table | Canonical registry condition dimension keyed on `registry_condition_key` at grain `node_id`. Aggregated across MeSH and taxonomy group nodes. |
-| Phase 3 | `bridge_registry_trial_condition` | New mart table | Canonical bridge connecting `registry_trial_key` and `nct_id` to condition `node_id` and `registry_condition_key`. |
-| Phase 3 | `bridge_preset_trial` | New mart table | Snapshot-aware preset trial membership bridge at grain `preset_id` × `nct_id` × `snapshot_date`. Includes explicit `unassigned` membership scope for unmapped/no-MeSH trials. Counts each trial once per preset and once in the registry union. |
+| Phase 3 | `dim_registry_trial` | New mart table | Canonical registry trial dimension keyed on `registry_trial_key = md5(nct_id)` at grain `nct_id`. Scoped to authoritative whole-registry snapshots (`full_catalog`), version-clocked by `started_at_utc`, and joined on `snapshot_id`. |
+| Phase 3 | `dim_registry_condition` | New mart table | Canonical registry condition dimension keyed on `registry_condition_key` at grain `node_id`. Aggregated across registry MeSH browse nodes (`mapping_source = 'mesh'`). |
+| Phase 3 | `bridge_registry_trial_condition` | New mart table | Canonical bridge connecting `registry_trial_key` and `nct_id` to MeSH condition `node_id` and `registry_condition_key` on `snapshot_id`. |
+| Phase 3 | `bridge_preset_trial` | New mart table | Snapshot-aware preset trial membership bridge at grain `preset_id` × `nct_id` × `snapshot_date` over authoritative whole-registry snapshots. Includes explicit `unassigned` membership scope for unmapped/no-MeSH trials. Counts each trial once per preset and once in the registry union. |
 | Phase 3 | `assert_preset_membership_integrity` | New singular test | Enforces preset trial uniqueness, single current record per preset/trial, mutual exclusivity between assigned presets and unassigned scope, registry completeness against `dim_registry_trial`, and referential validity. |
 

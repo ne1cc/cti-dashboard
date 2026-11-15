@@ -287,18 +287,57 @@ def test_shared_trials_keep_one_registry_identity_across_presets(
         assert len({row[3] for row in shared}) == 2
 
 
+@pytest.fixture(scope="module")
+def registry_preset_project_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Authoritative full_catalog runs plus a later profile-only pull."""
+    from dataclasses import replace
+    from datetime import timedelta
+
+    from tests.fixture_warehouse import AddedStudy, base_adrd_run, build_fixture_warehouse
+    from tests.preset_helpers import shared_trial_extra_profiles, shared_trial_runs
+
+    catalog_runs = shared_trial_runs(full_catalog=True)
+    later_profile_pull = replace(
+        base_adrd_run(),
+        profile="adrd",
+        run_id="20260922T100000Z_profile_only",
+        started_at=catalog_runs[-1].started_at + timedelta(days=7),
+        status_overrides={"NCT00000001": "TERMINATED"},
+        added=(
+            AddedStudy(
+                nct_id="NCT00000095",
+                clone_of="NCT00000001",
+                overall_status="RECRUITING",
+                condition="Alzheimer Disease",
+            ),
+        ),
+    )
+    root = tmp_path_factory.mktemp("registry_preset_trials")
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(root))
+    try:
+        build_fixture_warehouse(
+            root,
+            runs=[*catalog_runs, later_profile_pull],
+            extra_profile_yamls=shared_trial_extra_profiles(),
+        )
+        return root
+    finally:
+        monkeypatch.undo()
+
+
 def test_bridge_preset_trial_membership_and_scopes(
-    shared_trial_project_root: Path,
+    registry_preset_project_root: Path,
 ) -> None:
     """Preset membership counts each trial once per preset and once in the registry union.
 
-    Tests shared-node, no-MeSH, and distinct-snapshot cases.
+    Tests shared-node, no-MeSH, and snapshot currency across authoritative full_catalog runs.
     """
-    warehouse = shared_trial_project_root / "data/warehouse/clinical_trials.duckdb"
+    warehouse = registry_preset_project_root / "data/warehouse/clinical_trials.duckdb"
     with duckdb.connect(str(warehouse), read_only=True) as con:
         # 1. Snapshot currency case:
-        # In shared_trial_runs(), all 10 trials run through 2026-09-15.
-        # Verify current_record_flag selects the latest snapshot_date per trial
+        # In shared_trial_runs(full_catalog=True), all 10 trials run through 2026-09-15.
+        # Verify current_record_flag selects the latest authoritative snapshot_date per trial
         # and marks earlier runs false.
         nct1_current_dates = set(
             con.execute(
@@ -391,20 +430,81 @@ def test_bridge_preset_trial_membership_and_scopes(
         )
 
 
+def test_newer_profile_only_pull_does_not_shift_registry_currency(
+    registry_preset_project_root: Path,
+) -> None:
+    """A newer profile-only pull (e.g. adrd on 2026-09-22) must not shift global_max_snapshot
+    or alter active_in_latest_snapshot_flag / current_record_flag in canonical registry marts.
+    """
+    import os
+
+    warehouse = registry_preset_project_root / "data/warehouse/clinical_trials.duckdb"
+    start = Path.cwd()
+    try:
+        os.chdir(registry_preset_project_root)
+        with duckdb.connect(str(warehouse), read_only=True) as con:
+            # Verify the 2026-09-22 profile-only run exists in stg_registry_trial_snapshots
+            profile_pull = con.execute(
+                "select profile, strftime(snapshot_date, '%Y-%m-%d') "
+                "from main_staging.stg_registry_trial_snapshots "
+                "where ingestion_run_id = '20260922T100000Z_profile_only'"
+            ).fetchone()
+            assert profile_pull == ("adrd", "2026-09-22")
+
+            # Profile-only trial NCT00000095 is excluded from canonical registry marts
+            assert (
+                con.execute(
+                    "select count(*) from main_marts.dim_registry_trial "
+                    "where nct_id = 'NCT00000095'"
+                ).fetchone()[0]
+                == 0
+            )
+            assert (
+                con.execute(
+                    "select count(*) from main_marts.bridge_preset_trial "
+                    "where nct_id = 'NCT00000095'"
+                ).fetchone()[0]
+                == 0
+            )
+
+            # NCT00000001 keeps its 2026-09-15 full_catalog state (COMPLETED, not TERMINATED),
+            # and all 10 full_catalog trials remain active_in_latest_snapshot_flag = true.
+            nct1_row = con.execute(
+                "select current_overall_status, strftime(latest_seen_snapshot_date, '%Y-%m-%d'), "
+                "active_in_latest_snapshot_flag, snapshot_id "
+                "from main_marts.dim_registry_trial where nct_id = 'NCT00000001'"
+            ).fetchone()
+            assert nct1_row == ("COMPLETED", "2026-09-15", True, "20260915T100000Z_shared2")
+
+            inactive_count = con.execute(
+                "select count(*) from main_marts.dim_registry_trial "
+                "where not active_in_latest_snapshot_flag"
+            ).fetchone()[0]
+            assert inactive_count == 0
+    finally:
+        os.chdir(start)
+
+
 def test_bridge_preset_trial_distinct_snapshots(tmp_path: Path) -> None:
-    """Distinct-snapshot case: each trial's currency tracks its own latest snapshot."""
+    """Distinct-snapshot and incremental carry-forward cases in canonical registry marts."""
     from dataclasses import replace
     from datetime import UTC, datetime
 
     from tests.fixture_warehouse import (
         AddedStudy,
         base_adrd_run,
-        base_nsclc_run,
         build_fixture_warehouse,
     )
 
+    mesh = {
+        "conditionBrowseModule": {
+            "meshes": [{"id": "D000544", "term": "Alzheimer Disease"}],
+        }
+    }
+    base_catalog = replace(base_adrd_run(), profile="full_catalog", condition="")
+    # Run 1 (2026-09-01, full snapshot): includes NCT00000088 and NCT00000002 with MeSH D000544
     run1 = replace(
-        base_adrd_run(),
+        base_catalog,
         started_at=datetime(2026, 9, 1, 10, tzinfo=UTC),
         run_id="20260901T100000Z_run1",
         added=(
@@ -415,18 +515,34 @@ def test_bridge_preset_trial_distinct_snapshots(tmp_path: Path) -> None:
                 condition="Alzheimer Disease",
             ),
         ),
+        study_overrides={
+            "NCT00000002": {"derivedSection": mesh},
+            "NCT00000088": {"derivedSection": mesh},
+        },
     )
+    # Run 2 (2026-09-08, full snapshot): NCT00000088 absent; NCT00000002 observed directly
     run2 = replace(
-        base_nsclc_run(),
+        base_catalog,
         started_at=datetime(2026, 9, 8, 10, tzinfo=UTC),
         run_id="20260908T100000Z_run2",
+        study_overrides={"NCT00000002": {"derivedSection": mesh}},
+    )
+    # Run 3 (2026-09-15, incremental delta): NCT00000002 omitted from delta page and
+    # carried forward from run2 with snapshot_id=run3 and ingestion_run_id=run2.
+    run3 = replace(
+        base_catalog,
+        started_at=datetime(2026, 9, 15, 10, tzinfo=UTC),
+        run_id="20260915T100000Z_run3",
+        updated_since="2026-09-08T00:00:00Z",
+        study_overrides={"NCT00000002": None},
     )
     root = tmp_path / "distinct_snapshots_root"
-    build_fixture_warehouse(root, runs=[run1, run2])
+    build_fixture_warehouse(root, runs=[run1, run2, run3])
 
     warehouse = root / "data/warehouse/clinical_trials.duckdb"
     with duckdb.connect(str(warehouse), read_only=True) as con:
-        # NCT00000088 only exists on 2026-09-01: its current record is on 2026-09-01
+        # 1. NCT00000088 only exists on 2026-09-01: its current record in bridge_preset_trial
+        # is on 2026-09-01, while active_in_latest_snapshot_flag in dim_registry_trial is False.
         nct88_current = con.execute(
             "select distinct strftime(snapshot_date, '%Y-%m-%d') "
             "from main_marts.bridge_preset_trial "
@@ -434,21 +550,54 @@ def test_bridge_preset_trial_distinct_snapshots(tmp_path: Path) -> None:
         ).fetchall()
         assert nct88_current == [("2026-09-01",)]
 
-        # NCT00000001 exists on both dates: its current record is on 2026-09-08
-        nct1_current = con.execute(
-            "select distinct strftime(snapshot_date, '%Y-%m-%d') "
-            "from main_marts.bridge_preset_trial "
-            "where nct_id = 'NCT00000001' and current_record_flag = true"
-        ).fetchall()
-        assert nct1_current == [("2026-09-08",)]
+        nct88_dim = con.execute(
+            "select strftime(latest_seen_snapshot_date, '%Y-%m-%d'), "
+            "active_in_latest_snapshot_flag, snapshot_id, ingestion_run_id "
+            "from main_marts.dim_registry_trial where nct_id = 'NCT00000088'"
+        ).fetchone()
+        assert nct88_dim == (
+            "2026-09-01",
+            False,
+            "20260901T100000Z_run1",
+            "20260901T100000Z_run1",
+        )
 
-        # And NCT00000001 on 2026-09-01 is marked historical
-        nct1_stale = con.execute(
-            "select distinct strftime(snapshot_date, '%Y-%m-%d') "
-            "from main_marts.bridge_preset_trial "
-            "where nct_id = 'NCT00000001' and current_record_flag = false"
+        # 2. Carried-forward trial NCT00000002: carried into run3 (2026-09-15) while retaining
+        # original observation provenance ingestion_run_id = run2 (2026-09-08).
+        nct2_dim = con.execute(
+            "select strftime(first_seen_snapshot_date, '%Y-%m-%d'), "
+            "strftime(latest_seen_snapshot_date, '%Y-%m-%d'), "
+            "active_in_latest_snapshot_flag, has_derived_mesh, snapshot_id, ingestion_run_id "
+            "from main_marts.dim_registry_trial where nct_id = 'NCT00000002'"
+        ).fetchone()
+        assert nct2_dim == (
+            "2026-09-01",
+            "2026-09-15",
+            True,
+            True,
+            "20260915T100000Z_run3",
+            "20260908T100000Z_run2",
+        )
+
+        # Carried-forward MeSH rows join via snapshot_id in bridge_registry_trial_condition
+        nct2_cond = con.execute(
+            "select node_id, condition_group from main_marts.bridge_registry_trial_condition "
+            "where nct_id = 'NCT00000002'"
         ).fetchall()
-        assert nct1_stale == [("2026-09-01",)]
+        assert nct2_cond == [("D000544", "Alzheimer Disease")]
+
+        # Carried-forward row in bridge_preset_trial is current on 2026-09-15
+        nct2_bridge = con.execute(
+            "select preset_id, strftime(snapshot_date, '%Y-%m-%d'), "
+            "snapshot_id, ingestion_run_id, current_record_flag "
+            "from main_marts.bridge_preset_trial "
+            "where nct_id = 'NCT00000002' order by snapshot_date"
+        ).fetchall()
+        assert nct2_bridge == [
+            ("adrd", "2026-09-01", "20260901T100000Z_run1", "20260901T100000Z_run1", False),
+            ("adrd", "2026-09-08", "20260908T100000Z_run2", "20260908T100000Z_run2", False),
+            ("adrd", "2026-09-15", "20260915T100000Z_run3", "20260908T100000Z_run2", True),
+        ]
 
 
 def test_a_narrower_preset_reads_a_subset_of_the_nodes(
@@ -543,16 +692,17 @@ def test_same_timestamp_conflicting_payloads_fails_build(tmp_path: Path) -> None
 
     Identical payloads coalesce without error.
     """
+    import re
     from dataclasses import replace
 
+    from src.transform.build_silver_entities import CanonicalConflictError
     from tests.fixture_warehouse import (
         base_adrd_run,
-        build_dbt_fixture,
         build_fixture_warehouse,
         prepare_fixture_root,
     )
 
-    base = base_adrd_run()
+    base = replace(base_adrd_run(), profile="full_catalog", condition="")
     # 1. Identical payloads at same started_at_utc coalesce without failure
     run1 = replace(base, run_id="20260901T100000Z_run1")
     run2 = replace(base, run_id="20260901T100000Z_run2")
@@ -566,19 +716,16 @@ def test_same_timestamp_conflicting_payloads_fails_build(tmp_path: Path) -> None
         status_overrides={"NCT00000001": "COMPLETED"},
     )
     conflict_root = tmp_path / "conflict_root"
-    from src.transform.build_silver_entities import CanonicalConflictError
-
-    try:
+    with pytest.raises(CanonicalConflictError) as exc_info:
         prepare_fixture_root(conflict_root, runs=[run1, conflict_run2])
-        with pytest.raises(RuntimeError) as exc_info:
-            build_dbt_fixture(conflict_root)
-        err_msg = str(exc_info.value)
-        assert "assert_no_same_timestamp_conflicts" in err_msg
-        assert "NCT00000001" in err_msg
-    except CanonicalConflictError as exc:
-        err_msg = str(exc)
-        assert "NCT00000001" in err_msg
-        assert "20260901T100000Z_run2" in err_msg
+    err_msg = str(exc_info.value)
+    assert "NCT00000001" in err_msg
+    assert "20260901T100000Z_run1" in err_msg
+    assert "20260901T100000Z_run2" in err_msg
+    assert re.search(
+        r"run 20260901T100000Z_run2 \([0-9a-f]{64}\) vs run 20260901T100000Z_run1 \([0-9a-f]{64}\)",
+        err_msg,
+    )
 
 
 def test_a_preset_with_unknown_nodes_is_told_apart_from_an_unrefreshed_one() -> None:
