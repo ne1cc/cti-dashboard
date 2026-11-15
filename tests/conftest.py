@@ -604,6 +604,35 @@ def shared_trial_project_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.fixture(scope="session")
+def registry_preset_project_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Authoritative full_catalog runs plus a later profile-only pull."""
+    from tests.preset_helpers import shared_trial_extra_profiles, shared_trial_runs
+
+    catalog_runs = shared_trial_runs(full_catalog=True)
+    later_profile_pull = replace(
+        _base_adrd_run(),
+        profile="adrd",
+        run_id="20260922T100000Z_profile_only",
+        started_at=catalog_runs[-1].started_at + timedelta(days=7),
+        status_overrides={"NCT00000001": "TERMINATED"},
+        added=(
+            AddedStudy(
+                nct_id="NCT00000095",
+                clone_of="NCT00000001",
+                overall_status="RECRUITING",
+                condition="Alzheimer Disease",
+            ),
+        ),
+    )
+    return _build_fixture_root(
+        tmp_path_factory,
+        "registry_preset_trials",
+        [*catalog_runs, later_profile_pull],
+        extra_profile_yamls=shared_trial_extra_profiles(),
+    )
+
+
+@pytest.fixture(scope="session")
 def demographics_fixture_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """The base warehouse plus the two DEMOGRAPHICS_ADRD runs (issue #74).
 

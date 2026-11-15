@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from copy import deepcopy
-from typing import Any
+from typing import Any, Literal
 
 import pandas as pd
 
 KEY = ["indication_profile_id", "snapshot_id", "nct_id"]
+REGISTRY_KEY = ["snapshot_id", "nct_id"]
 RULE_VERSION = "competition-audit-v2"
 DISCLAIMER = (
     "Registry-derived signals support preliminary feasibility review. They do not measure "
@@ -66,10 +68,44 @@ OBSERVATION_SOURCES = {
     "coordinates_exact_share": "fct_ingestion_run and mart_location_snapshot_audit",
     "coordinates_fallback_eligible_share": "fct_ingestion_run and mart_location_snapshot_audit",
 }
+REGISTRY_OBSERVATION_SOURCES = {
+    "recent_recruiting": (
+        "mart_registry_study_snapshot_audit with predecessor selected via "
+        "int_registry_trusted_change_runs and bridge_preset_trial membership"
+    ),
+    "first_post_registered": (
+        "fct_registry_trial_snapshot scoped by bridge_preset_trial at latest snapshot"
+    ),
+    "competition": (
+        "fct_registry_trial_snapshot scoped by bridge_preset_trial at "
+        "mart_registry_recruiting_competition latest preset date"
+    ),
+    "history": "fct_registry_trial_snapshot scoped by bridge_preset_trial: per canonical snapshot",
+    "facility": (
+        "fct_registry_trial_snapshot and mart_registry_location_snapshot_audit "
+        "scoped by bridge_preset_trial"
+    ),
+    "latest_study": "dim_registry_trial scoped by bridge_preset_trial current membership",
+    "manifest_reconciled": "mart_registry_data_reliability at latest successful canonical run",
+    "usable_location_share": (
+        "mart_registry_data_reliability and mart_registry_location_snapshot_audit"
+    ),
+    "low_confidence_condition_share": (
+        "mart_registry_data_reliability and int_registry_preset_condition_mapping"
+    ),
+    "coordinates_exact_share": (
+        "mart_registry_data_reliability and mart_registry_location_snapshot_audit"
+    ),
+    "coordinates_fallback_eligible_share": (
+        "mart_registry_data_reliability and mart_registry_location_snapshot_audit"
+    ),
+}
 
 
-def _keys(frame: pd.DataFrame) -> set[tuple[Any, ...]]:
-    return set(frame[KEY].itertuples(index=False, name=None)) if not frame.empty else set()
+def _keys(frame: pd.DataFrame, key_cols: Sequence[str] = KEY) -> set[tuple[Any, ...]]:
+    if frame.empty:
+        return set()
+    return set(frame[list(key_cols)].itertuples(index=False, name=None))
 
 
 def compute_audit(
@@ -87,6 +123,8 @@ def compute_audit(
     rule_config: dict[str, Any] | None = None,
     window_start: Any = None,
     window_end: Any = None,
+    grain: Literal["auto", "profile", "registry"] = "auto",
+    source_totals: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Audit exact observations and filters before geographic/status exclusions.
 
@@ -103,6 +141,8 @@ def compute_audit(
         raise ValueError("count_status must be recruiting or all")
     if update_threshold_days < 0:
         raise ValueError("update_threshold_days must be nonnegative")
+    if grain not in {"auto", "profile", "registry"}:
+        raise ValueError("grain must be auto, profile, or registry")
     evaluated = pd.Timestamp(evaluation_time)
     if evaluated.tzinfo is None:
         raise ValueError("evaluation_time must include a UTC offset")
@@ -110,25 +150,55 @@ def compute_audit(
     event_metric = metric in {"recent_recruiting", "first_post_registered"}
     if event_metric and (window_start is None or window_end is None):
         raise ValueError("Event audit requires explicit window_start and window_end")
+    active_grain: Literal["profile", "registry"]
+    if grain == "auto":
+        has_profile_col = (
+            "indication_profile_id" in studies.columns
+            or "indication_profile_id" in observations.columns
+            or (studies.empty and observations.empty)
+        )
+        active_grain = "profile" if has_profile_col else "registry"
+    else:
+        active_grain = grain
+    active_key = KEY if active_grain == "profile" else REGISTRY_KEY
+
     evidence_columns = ["previous_status", "predecessor_snapshot_id", "predecessor_snapshot_date"]
     predecessor_studies = studies.copy()
-    selected = (
-        observations.loc[observations.indication_profile_id == profile_id]
-        if not (observations.empty)
-        else observations
-    )
-    frame = (
-        studies.loc[studies.indication_profile_id == profile_id].copy()
-        if not (studies.empty)
-        else studies.copy()
-    )
+    if active_grain == "profile":
+        selected = (
+            observations.loc[observations.indication_profile_id == profile_id]
+            if not (observations.empty)
+            else observations
+        )
+        frame = (
+            studies.loc[studies.indication_profile_id == profile_id].copy()
+            if not (studies.empty)
+            else studies.copy()
+        )
+        scoped_conditions = conditions
+    else:
+        selected = (
+            observations.loc[observations.preset_id == profile_id]
+            if not observations.empty and "preset_id" in observations.columns
+            else observations
+        )
+        frame = (
+            studies.loc[studies.preset_id == profile_id].copy()
+            if not studies.empty and "preset_id" in studies.columns
+            else studies.copy()
+        )
+        scoped_conditions = (
+            conditions.loc[conditions.preset_id == profile_id]
+            if not conditions.empty and "preset_id" in conditions.columns
+            else conditions
+        )
     if frame.empty:
         frame = frame.reindex(
             columns=list(
                 dict.fromkeys(
                     [
                         *frame.columns,
-                        *KEY,
+                        *active_key,
                         "snapshot_date",
                         "enrollment_category",
                         "enrollment_count",
@@ -140,17 +210,23 @@ def compute_audit(
     selected_snapshots = selected_snapshots.drop_duplicates()
     study_snapshots = []
     if not frame.empty:
-        frame = frame.merge(selected[KEY].drop_duplicates(), on=KEY, how="inner")
-        frame = frame.drop_duplicates(KEY)
+        frame = frame.merge(selected[active_key].drop_duplicates(), on=active_key, how="inner")
+        frame = frame.drop_duplicates(active_key)
         evidence = [column for column in evidence_columns if column in selected.columns]
         if evidence:
-            frame = frame.merge(selected[KEY + evidence].drop_duplicates(KEY), on=KEY, how="left")
+            frame = frame.merge(
+                selected[active_key + evidence].drop_duplicates(active_key),
+                on=active_key,
+                how="left",
+            )
         study_snapshots = (
             frame[["snapshot_id", "snapshot_date"]].drop_duplicates().to_dict("records")
         )
         if filters.get("conditions"):
-            matching = conditions.loc[conditions.condition_group.isin(filters["conditions"])]
-            frame = frame.merge(matching[KEY].drop_duplicates(), on=KEY, how="inner")
+            matching = scoped_conditions.loc[
+                scoped_conditions.condition_group.isin(filters["conditions"])
+            ]
+            frame = frame.merge(matching[active_key].drop_duplicates(), on=active_key, how="inner")
         for selection, column in [
             ("phases", "phase_normalized"),
             ("sponsors", "lead_sponsor_name"),
@@ -159,7 +235,7 @@ def compute_audit(
                 frame = frame.loc[frame[column].isin(filters[selection])].copy()
     scoped_locations = locations.copy()
     if not locations.empty:
-        scoped_locations = locations.merge(frame[KEY], on=KEY, how="inner")
+        scoped_locations = locations.merge(frame[active_key], on=active_key, how="inner")
     valid = (
         scoped_locations.loc[scoped_locations.usable_geography_flag.fillna(False)]
         if not (scoped_locations.empty)
@@ -185,8 +261,9 @@ def compute_audit(
     )
     if explicit_empty_facilities:
         facility = facility.iloc[:0]
-    regional_keys, facility_keys = _keys(regional), _keys(facility)
-    location_keys = _keys(scoped_locations)
+    regional_keys = _keys(regional, active_key)
+    facility_keys = _keys(facility, active_key)
+    location_keys = _keys(scoped_locations, active_key)
     unresolved_keys = set()
     if not scoped_locations.empty:
         country = scoped_locations.get(
@@ -198,13 +275,14 @@ def compute_audit(
         unresolved = ~scoped_locations.usable_geography_flag.fillna(False) & (
             us_flag.fillna(False) | country.fillna("").str.strip().eq("")
         )
-        unresolved_keys = _keys(scoped_locations.loc[unresolved])
-    condition_keys = _keys(conditions)
+        unresolved_keys = _keys(scoped_locations.loc[unresolved], active_key)
+    condition_keys = _keys(scoped_conditions, active_key)
     exact_keys = (
         _keys(
             scoped_locations.loc[
                 scoped_locations.latitude.notna() & scoped_locations.longitude.notna()
-            ]
+            ],
+            active_key,
         )
         if not scoped_locations.empty and "latitude" in scoped_locations.columns
         else set()
@@ -217,23 +295,26 @@ def compute_audit(
                     scoped_locations.zip_code.notna()
                     | (scoped_locations.city.notna() & scoped_locations.state_raw.notna())
                 )
-            ]
+            ],
+            active_key,
         )
         if not scoped_locations.empty and "zip_code" in scoped_locations.columns
         else set()
     )
     low_conf_keys = (
         _keys(
-            conditions.loc[
-                conditions.get("mapping_source", pd.Series(dtype="object")) == "text_fallback"
-            ]
+            scoped_conditions.loc[
+                scoped_conditions.get("mapping_source", pd.Series(dtype="object"))
+                == "text_fallback"
+            ],
+            active_key,
         )
-        if "mapping_source" in conditions.columns
+        if "mapping_source" in scoped_conditions.columns
         else set()
     )
     decisions = []
     for _, row in frame.iterrows():
-        key = tuple(row[col] for col in KEY)
+        key = tuple(row[col] for col in active_key)
         recruiting = pd.notna(row.overall_status) and row.overall_status == "RECRUITING"
         membership = (
             "inside"
@@ -411,6 +492,8 @@ def compute_audit(
             str(sid): enrollment_totals(group) for sid, group in included.groupby("snapshot_id")
         },
     )
+    if source_totals is not None:
+        summary["source_totals"] = deepcopy(source_totals)
     # Observation selections define scope even when audit rows are unavailable.
     # Study dates only fill dates omitted by a caller's observation frame.
     if study_snapshots:
@@ -424,11 +507,13 @@ def compute_audit(
         )
         selected_snapshots = selected_snapshots.drop(columns="study_date")
     snapshots = selected_snapshots.to_dict("records")
+    sources = REGISTRY_OBSERVATION_SOURCES if active_grain == "registry" else OBSERVATION_SOURCES
     metadata = dict(
         profile_id=profile_id,
+        grain=active_grain,
         metric=metric,
         definition=DEFINITIONS[metric],
-        observation_source=OBSERVATION_SOURCES[metric],
+        observation_source=sources[metric],
         count_status=count_status,
         filters=deepcopy(filters),
         rule_version=RULE_VERSION,
@@ -460,6 +545,7 @@ def compute_audit(
             else None
         ),
         enrollment_scope="Latest included observation per study; per-run totals separate.",
+        source_totals=deepcopy(source_totals) if source_totals is not None else None,
         disclaimer=DISCLAIMER,
         raw_reference_caveat="Raw references may no longer resolve after bronze retention pruning.",
     )
@@ -472,11 +558,7 @@ def compute_audit(
         )
         if metric == "recent_recruiting" and not predecessor_studies.empty:
             predecessor_records = {
-                (
-                    row["indication_profile_id"],
-                    row["snapshot_id"],
-                    row["nct_id"],
-                ): row
+                tuple(row[col] for col in active_key): row
                 for row in predecessor_studies.to_dict("records")
             }
             for column in [
@@ -487,7 +569,11 @@ def compute_audit(
             ]:
                 values: list[Any] = []
                 for _, event in events.iterrows():
-                    identity = (profile_id, event.get("predecessor_snapshot_id"), event.nct_id)
+                    identity = (
+                        (profile_id, event.get("predecessor_snapshot_id"), event.nct_id)
+                        if active_grain == "profile"
+                        else (event.get("predecessor_snapshot_id"), event.nct_id)
+                    )
                     row_data = predecessor_records.get(identity)
                     values.append(row_data.get(column) if row_data is not None else None)
                 events[f"predecessor_{column}"] = values

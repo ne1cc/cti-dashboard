@@ -293,6 +293,274 @@ def reconcile_profile(profile_id: str, cfg: ProjectConfig) -> list[Reconciliatio
     return bronze_silver_checks(cfg, profile_id) + warehouse_checks(cfg, profile_id)
 
 
+def _registry_silver_trial_stats(cfg: ProjectConfig, run_id: str) -> tuple[int, int] | None:
+    path = cfg.paths.silver / "registry_trials" / f"run_id={run_id}.parquet"
+    if not path.exists():
+        return None
+    row = duckdb.sql(
+        "select count(*), count(distinct nct_id) from read_parquet(?)",
+        params=[path.as_posix()],
+    ).fetchone()
+    assert row is not None
+    return int(row[0]), int(row[1])
+
+
+def _registry_silver_trial_nct_ids(cfg: ProjectConfig, run_id: str) -> set[str] | None:
+    path = cfg.paths.silver / "registry_trials" / f"run_id={run_id}.parquet"
+    if not path.exists():
+        return None
+    rows = duckdb.sql(
+        "select distinct nct_id from read_parquet(?)",
+        params=[path.as_posix()],
+    ).fetchall()
+    return {str(row[0]) for row in rows}
+
+
+def _latest_registry_success_run(cfg: ProjectConfig) -> IngestionManifest | None:
+    success_runs = _success_runs(cfg)
+    if not success_runs:
+        return None
+    # Version clock: source-manifest started_at_utc normalized to UTC, breaking ties by run ID.
+    return max(success_runs, key=lambda m: (m.started_at_utc, m.ingestion_run_id))
+
+
+def registry_bronze_silver_checks(
+    cfg: ProjectConfig, scope_id: str = "full_catalog"
+) -> list[ReconciliationCheck]:
+    """Bronze manifests vs canonical registry_trials silver Parquet."""
+    checks: list[ReconciliationCheck] = []
+
+    success_runs = _success_runs(cfg)
+    if not success_runs:
+        checks.append(
+            ReconciliationCheck(
+                profile_id=scope_id,
+                check="registry_success_runs_exist",
+                run_id=None,
+                expected=">= 1",
+                actual=0,
+                passed=False,
+                note="No complete whole-registry ingestion runs found.",
+            )
+        )
+        _log_failures("Registry bronze→silver", checks)
+        return checks
+
+    for manifest in success_runs:
+        stats = _registry_silver_trial_stats(cfg, manifest.ingestion_run_id)
+        if stats is None:
+            checks.append(
+                ReconciliationCheck(
+                    profile_id=scope_id,
+                    check="registry_silver_exists_for_success_run",
+                    run_id=manifest.ingestion_run_id,
+                    expected="registry_trials parquet present",
+                    actual="missing",
+                    passed=False,
+                    note="Run `make transform`.",
+                )
+            )
+            continue
+        rows, distinct_ncts = stats
+        expected = expected_trial_rows(
+            load_transform_stats(cfg, manifest.ingestion_run_id), manifest.record_count
+        )
+        note = ""
+        if expected is None:
+            expected, note = (
+                manifest.record_count,
+                (
+                    "No transform stats on file, so legitimate dedup or carried rows cannot be "
+                    "accounted for; rebuild with `make transform --force`."
+                ),
+            )
+        checks.append(
+            ReconciliationCheck(
+                profile_id=scope_id,
+                check="registry_bronze_manifest_vs_silver_rows",
+                run_id=manifest.ingestion_run_id,
+                expected=expected,
+                actual=rows,
+                passed=rows == expected,
+                note=note,
+            )
+        )
+        checks.append(
+            ReconciliationCheck(
+                profile_id=scope_id,
+                check="registry_silver_nct_ids_unique",
+                run_id=manifest.ingestion_run_id,
+                expected=rows,
+                actual=distinct_ncts,
+                passed=distinct_ncts == rows,
+            )
+        )
+
+    _log_failures("Registry bronze→silver", checks)
+    return checks
+
+
+def registry_warehouse_checks(
+    cfg: ProjectConfig, scope_id: str = "full_catalog"
+) -> list[ReconciliationCheck]:
+    """Canonical registry DuckDB warehouse vs the latest registry_trials silver run."""
+    checks: list[ReconciliationCheck] = []
+
+    warehouse = cfg.paths.duckdb
+    if not warehouse.exists():
+        checks.append(
+            ReconciliationCheck(
+                profile_id=scope_id,
+                check="registry_warehouse_exists",
+                run_id=None,
+                expected=str(warehouse),
+                actual="missing",
+                passed=False,
+                note="Run `make dbt-run`.",
+            )
+        )
+        _log_failures("Registry warehouse", checks)
+        return checks
+
+    con = duckdb.connect(str(warehouse), read_only=True)
+    try:
+        latest = _latest_registry_success_run(cfg)
+        silver_ids = (
+            _registry_silver_trial_nct_ids(cfg, latest.ingestion_run_id) if latest else None
+        )
+        dim_rows = con.execute("select nct_id from main_marts.dim_registry_trial").fetchall()
+        flag_row = con.execute(
+            "select count(*) from main_marts.fct_registry_trial_snapshot where current_record_flag"
+        ).fetchone()
+        assert flag_row is not None
+        current_flags = int(flag_row[0])
+        bridge_rows = con.execute(
+            "select distinct nct_id from main_marts.bridge_preset_trial where current_record_flag"
+        ).fetchall()
+        sim_row = con.execute(
+            "select count(*) from main_marts.mart_registry_trial_similarity"
+        ).fetchone()
+        assert sim_row is not None
+        similarity_rows = int(sim_row[0])
+    finally:
+        con.close()
+
+    dim_ids = {str(row[0]) for row in dim_rows}
+    bridge_ids = {str(row[0]) for row in bridge_rows}
+    if silver_ids is None or latest is None:
+        checks.append(
+            ReconciliationCheck(
+                profile_id=scope_id,
+                check="registry_warehouse_covers_latest_silver",
+                run_id=latest.ingestion_run_id if latest else None,
+                expected="a complete registry_trials silver run",
+                actual="none found",
+                passed=False,
+                note="Run `make transform` for the whole-registry capture.",
+            )
+        )
+    else:
+        missing = sorted(silver_ids - dim_ids)
+        checks.append(
+            ReconciliationCheck(
+                profile_id=scope_id,
+                check="registry_warehouse_covers_latest_silver",
+                run_id=latest.ingestion_run_id,
+                expected=len(silver_ids),
+                actual=len(silver_ids) - len(missing),
+                passed=not missing,
+                note=(
+                    f"Not in dim_registry_trial: {', '.join(missing[:5])}"
+                    f"{' …' if len(missing) > 5 else ''}"
+                    if missing
+                    else ""
+                ),
+            )
+        )
+
+    unbridged = sorted(dim_ids - bridge_ids)
+    checks.append(
+        ReconciliationCheck(
+            profile_id=scope_id,
+            check="registry_warehouse_preset_bridge_covers_trials",
+            run_id=latest.ingestion_run_id if latest else None,
+            expected=len(dim_ids),
+            actual=len(dim_ids) - len(unbridged),
+            passed=not unbridged,
+            note=(
+                f"Current trials absent from bridge_preset_trial (including unassigned): "
+                f"{', '.join(unbridged[:5])}{' …' if len(unbridged) > 5 else ''}"
+                if unbridged
+                else ""
+            ),
+        )
+    )
+    checks.append(
+        ReconciliationCheck(
+            profile_id=scope_id,
+            check="registry_warehouse_one_current_record_per_trial",
+            run_id=None,
+            expected=len(dim_ids),
+            actual=current_flags,
+            passed=current_flags <= len(dim_ids),
+            note="Current snapshot records cannot exceed known canonical trials.",
+        )
+    )
+    checks.append(
+        ReconciliationCheck(
+            profile_id=scope_id,
+            check="registry_warehouse_has_trials",
+            run_id=None,
+            expected=">= 1",
+            actual=len(dim_ids),
+            passed=len(dim_ids) > 0,
+            note="dim_registry_trial holds no canonical trial rows." if not dim_ids else "",
+        )
+    )
+    if current_flags >= 2:
+        checks.append(
+            ReconciliationCheck(
+                profile_id=scope_id,
+                check="registry_warehouse_has_similar_trials",
+                run_id=None,
+                expected=">= 1",
+                actual=similarity_rows,
+                passed=similarity_rows > 0,
+                note=(
+                    f"{current_flags} current trials in dim_registry_trial but "
+                    "mart_registry_trial_similarity is empty."
+                    if similarity_rows == 0
+                    else ""
+                ),
+            )
+        )
+    _log_failures("Registry warehouse", checks)
+    return checks
+
+
+def reconcile_registry(
+    cfg: ProjectConfig, scope_id: str = "full_catalog"
+) -> list[ReconciliationCheck]:
+    """Both layers for the canonical whole-registry grain."""
+    return registry_bronze_silver_checks(cfg, scope_id) + registry_warehouse_checks(cfg, scope_id)
+
+
+def run_registry_reconciliation() -> list[ReconciliationCheck]:
+    """Cross-layer reconciliation checks at canonical registry grain."""
+    registry_profile = get_registry().registry_wide()
+    checks = reconcile_registry(registry_profile.config, scope_id=registry_profile.profile_id)
+    failed = [c for c in checks if not c.passed]
+    if failed:
+        logger.warning(
+            "Registry reconciliation: {} of {} checks FAILED.",
+            len(failed),
+            len(checks),
+        )
+    else:
+        logger.info("All {} registry reconciliation checks passed.", len(checks))
+    return checks
+
+
 def run_reconciliation() -> list[ReconciliationCheck]:
     """All cross-layer checks, one profile at a time (public API).
 

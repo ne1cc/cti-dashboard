@@ -17,7 +17,7 @@ from loguru import logger
 from src.config import ProjectConfig, get_config
 from src.ingest.snapshot_manifest import load_manifests
 from src.profiles import get_registry
-from src.quality.reconciliation import run_reconciliation
+from src.quality.reconciliation import run_reconciliation, run_registry_reconciliation
 from src.quality.schema_drift import check_drift
 from src.utils.dates import utc_now_iso
 
@@ -55,6 +55,12 @@ def _reliability_rows(cfg: ProjectConfig) -> list[dict[str, Any]]:
         return []
     con = duckdb.connect(str(cfg.paths.duckdb), read_only=True)
     try:
+        exists = con.execute(
+            "select count(*) from information_schema.tables "
+            "where table_schema = 'main_marts' and table_name = 'mart_data_reliability'"
+        ).fetchone()
+        if not exists or exists[0] == 0:
+            return []
         cursor = con.execute(
             """
             select indication_profile_id, ingestion_run_id, snapshot_date, status, page_count,
@@ -70,6 +76,58 @@ def _reliability_rows(cfg: ProjectConfig) -> list[dict[str, Any]]:
         )
         columns = [d[0] for d in cursor.description]
         return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
+    finally:
+        con.close()
+
+
+def _registry_reliability_rows(cfg: ProjectConfig) -> list[dict[str, Any]]:
+    if not cfg.paths.duckdb.exists():
+        return []
+    con = duckdb.connect(str(cfg.paths.duckdb), read_only=True)
+    try:
+        exists = con.execute(
+            "select count(*) from information_schema.tables "
+            "where table_schema = 'main_marts' and table_name = 'mart_registry_data_reliability'"
+        ).fetchone()
+        if not exists or exists[0] == 0:
+            return []
+        cursor = con.execute(
+            """
+            select preset_id, membership_scope, ingestion_run_id, snapshot_date, status,
+                   page_count, manifest_record_count, source_trial_row_count,
+                   source_fetched_trial_row_count, trial_row_count,
+                   manifest_reconciled_flag, unique_nct_flag,
+                   quarantined_record_count, flagged_record_share,
+                   usable_location_share, source_usable_location_share,
+                   coordinates_exact_share, coordinates_fallback_eligible_share,
+                   low_confidence_condition_share
+            from main_marts.mart_registry_data_reliability
+            order by snapshot_date desc, ingestion_run_id desc, preset_id asc
+            """
+        )
+        columns = [d[0] for d in cursor.description]
+        return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
+    finally:
+        con.close()
+
+
+def _has_registry_pipeline_artifacts(cfg: ProjectConfig) -> bool:
+    try:
+        reg_cfg = get_registry().registry_wide().config
+    except KeyError:
+        return False
+    reg_silver_dir = reg_cfg.paths.silver / "registry_trials"
+    if reg_silver_dir.exists() and any(reg_silver_dir.glob("run_id=*.parquet")):
+        return True
+    if not cfg.paths.duckdb.exists():
+        return False
+    con = duckdb.connect(str(cfg.paths.duckdb), read_only=True)
+    try:
+        exists = con.execute(
+            "select count(*) from information_schema.tables "
+            "where table_schema = 'main_marts' and table_name = 'dim_registry_trial'"
+        ).fetchone()
+        return bool(exists and exists[0] > 0)
     finally:
         con.close()
 
@@ -141,8 +199,58 @@ def build_report(cfg: ProjectConfig | None = None, output_path: Path | None = No
     else:
         lines.append("_Warehouse not built yet — run `make dbt-run` first._")
 
+    registry_reliability = _registry_reliability_rows(cfg)
+    if registry_reliability:
+        lines += ["", "## Registry-grain reliability & preset coverage", ""]
+        reg_headers = [
+            "preset",
+            "scope",
+            "run",
+            "snapshot date",
+            "status",
+            "manifest records",
+            "source trials",
+            "source fetched",
+            "preset trials",
+            "reconciled",
+            "unique NCT",
+            "flagged share",
+            "preset usable loc. share",
+            "source usable loc. share",
+            "low-confidence cond. share",
+        ]
+        lines.append("| " + " | ".join(reg_headers) + " |")
+        lines.append("|" + " --- |" * len(reg_headers))
+        for row in registry_reliability:
+            lines.append(
+                "| "
+                + " | ".join(
+                    _fmt(row[key])
+                    for key in (
+                        "preset_id",
+                        "membership_scope",
+                        "ingestion_run_id",
+                        "snapshot_date",
+                        "status",
+                        "manifest_record_count",
+                        "source_trial_row_count",
+                        "source_fetched_trial_row_count",
+                        "trial_row_count",
+                        "manifest_reconciled_flag",
+                        "unique_nct_flag",
+                        "flagged_record_share",
+                        "usable_location_share",
+                        "source_usable_location_share",
+                        "low_confidence_condition_share",
+                    )
+                )
+                + " |"
+            )
+
     lines += ["", "## Cross-layer reconciliation", ""]
-    checks = run_reconciliation()
+    checks = list(run_reconciliation())
+    if _has_registry_pipeline_artifacts(cfg):
+        checks.extend(run_registry_reconciliation())
     lines.append("| check | profile | run | expected | actual | passed | note |")
     lines.append("| --- | --- | --- | --- | --- | --- | --- |")
     for check in checks:

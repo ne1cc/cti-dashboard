@@ -1620,7 +1620,7 @@ def test_marts_contracts_enforced(fixture_project_root: Path) -> None:
         if node["resource_type"] == "model"
         and node["original_file_path"].startswith("models/marts/")
     }
-    assert len(marts) == 44
+    assert len(marts) == 50
     for name, node in marts.items():
         assert node["contract"]["enforced"] is True, name
         assert {c["name"] for c in node["columns"].values()}, name
@@ -1677,6 +1677,12 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
         "mart_registry_feasibility_priority_queue",
         "mart_registry_baseline_demographics_coverage",
         "mart_registry_trial_similarity",
+        "mart_registry_data_reliability",
+        "mart_registry_study_snapshot_audit",
+        "mart_registry_location_snapshot_audit",
+        "mart_registry_trial_change_events",
+        "mart_registry_early_stop_transparency",
+        "mart_registry_results_posting_transparency",
     }
     trial_grain = {m["name"] for m in doc["models"] if m["name"] not in global_dims}
     # Membership, not just cardinality: a pin on len() alone stays green if a

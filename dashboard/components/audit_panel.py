@@ -6,14 +6,20 @@ import hashlib
 from collections.abc import Iterable, Sequence
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pandas as pd
 import streamlit as st
 import yaml
 
 from components import data
-from components.audit import DEFINITIONS, DISCLAIMER, compute_audit, export_audit
+from components.audit import (
+    DEFINITIONS,
+    DISCLAIMER,
+    REGISTRY_OBSERVATION_SOURCES,
+    compute_audit,
+    export_audit,
+)
 from components.formatting import format_phase
 from src.presets import Preset
 from src.utils.paths import project_root
@@ -45,38 +51,72 @@ PRIORITY_DERIVED_RULES = (
     "remain warehouse calculations."
 )
 
+_PROFILE_MODEL_PATHS = [
+    "dbt_project.yml",
+    "models/marts/mart_recruiting_competition.sql",
+    "models/marts/mart_feasibility_priority_queue.sql",
+    "models/marts/mart_condition_geography_trends.sql",
+    "models/marts/mart_site_overlap.sql",
+    "models/intermediate/int_sponsor_concentration.sql",
+    "models/intermediate/int_trial_status_history.sql",
+]
 
-def active_rules(profile_id: str) -> dict[str, Any]:
+_REGISTRY_MODEL_PATHS = [
+    "dbt_project.yml",
+    "models/marts/dim_registry_trial.sql",
+    "models/marts/bridge_preset_trial.sql",
+    "models/marts/fct_registry_trial_snapshot.sql",
+    "models/marts/mart_registry_recruiting_competition.sql",
+    "models/marts/mart_registry_feasibility_priority_queue.sql",
+    "models/marts/mart_registry_condition_geography_trends.sql",
+    "models/marts/mart_registry_site_overlap.sql",
+    "models/marts/mart_registry_data_reliability.sql",
+    "models/marts/mart_registry_study_snapshot_audit.sql",
+    "models/marts/mart_registry_location_snapshot_audit.sql",
+    "models/marts/mart_registry_trial_change_events.sql",
+    "models/intermediate/int_registry_trusted_change_runs.sql",
+]
+
+
+def active_rules(
+    profile_id: str,
+    *,
+    grain: Literal["profile", "registry"] = "profile",
+) -> dict[str, Any]:
     """Identify the active configuration; do not claim historical rule identity."""
+    if grain not in {"profile", "registry"}:
+        raise ValueError("grain must be profile or registry")
     root = project_root()
-    profile = yaml.safe_load((root / f"config/profiles/{profile_id}.yml").read_text())
-    paths = {
-        "taxonomy": profile["profile"]["taxonomy"],
-        "geography": "config/geography_rules.yml",
-    }
+    profile_file = root / f"config/profiles/{profile_id}.yml"
+    paths: dict[str, str] = {"geography": "config/geography_rules.yml"}
+    if profile_file.exists():
+        profile = yaml.safe_load(profile_file.read_text()) or {}
+        taxonomy = (profile.get("profile") or {}).get("taxonomy")
+        if taxonomy:
+            paths["taxonomy"] = str(taxonomy)
+        if grain == "registry":
+            paths["preset_config"] = f"config/profiles/{profile_id}.yml"
+    elif grain == "profile":
+        raise FileNotFoundError(profile_file)
     model_root = Path(__file__).resolve().parents[2] / "dbt_clinical_trials"
-    model_paths = [
-        "dbt_project.yml",
-        "models/marts/mart_recruiting_competition.sql",
-        "models/marts/mart_feasibility_priority_queue.sql",
-        "models/marts/mart_condition_geography_trends.sql",
-        "models/marts/mart_site_overlap.sql",
-        "models/intermediate/int_sponsor_concentration.sql",
-        "models/intermediate/int_trial_status_history.sql",
-    ]
+    model_paths = _PROFILE_MODEL_PATHS if grain == "profile" else _REGISTRY_MODEL_PATHS
+    model_key = "derived_model_rules" if grain == "profile" else "registry_model_rules"
     return {
-        "derived_model_rules": {
+        model_key: {
             path: hashlib.sha256((model_root / path).read_bytes()).hexdigest()
             for path in model_paths
+            if (model_root / path).exists()
         },
         **{
             name: {"path": path, "sha256": hashlib.sha256((root / path).read_bytes()).hexdigest()}
             for name, path in paths.items()
+            if (root / path).exists()
         },
         "metric_rules": {
             "path": "dashboard/components/audit.py",
             "sha256": hashlib.sha256(Path(__file__).with_name("audit.py").read_bytes()).hexdigest(),
         },
+        "grain": grain,
         "rule_scope": "Active configuration; historical configuration identity is not recorded.",
     }
 
@@ -104,6 +144,16 @@ def build_display_audit(
     filters = dict(filters)
     if (context or {}).get("empty_facility_selection"):
         filters["facility_restriction_applied"] = True
+    requested_grain = (context or {}).get("grain")
+    if requested_grain in {"profile", "registry"}:
+        active_grain: Literal["profile", "registry"] = requested_grain
+    else:
+        has_profile_col = (
+            "indication_profile_id" in studies.columns
+            or "indication_profile_id" in observations.columns
+            or (studies.empty and observations.empty)
+        )
+        active_grain = "profile" if has_profile_col else "registry"
     result = compute_audit(
         studies,
         locations,
@@ -117,11 +167,18 @@ def build_display_audit(
         update_threshold_days=update_threshold_days,
         window_start=(context or {}).get("growth_window_start"),
         window_end=(context or {}).get("growth_window_end"),
-        rule_config={**active_rules(profile_id), "display_context": context or {}},
+        grain=active_grain,
+        source_totals=(context or {}).get("source_totals"),
+        rule_config={
+            **active_rules(profile_id, grain=active_grain),
+            "display_context": context or {},
+        },
     )
     if (context or {}).get("observation_selection") == "history":
         result["metadata"]["observation_source"] = (
-            "int_trial_status_history: latest study observation per profile/date"
+            REGISTRY_OBSERVATION_SOURCES["history"]
+            if active_grain == "registry"
+            else "int_trial_status_history: latest study observation per profile/date"
         )
     return result
 
