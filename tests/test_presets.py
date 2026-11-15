@@ -1030,15 +1030,62 @@ def test_phase4a_canonical_observations_and_preset_isolation(
             assert "indication_profile_id" not in cols, access_mart
 
 
-def test_phase4a_similarity_reference_equivalence(tmp_path: Path) -> None:
-    """mart_registry_trial_similarity matches reference scoring restricted to candidates."""
+def _similarity_equivalence_diff(con: duckdb.DuckDBPyConnection) -> int:
+    row = con.execute(
+        """
+        with expected as (
+            select r.*
+            from main_marts.mart_registry_trial_similarity_reference r
+            semi join main_intermediate.int_registry_similarity_candidates c
+                on r.preset_id = c.preset_id
+                and r.nct_id_a = c.nct_id_a
+                and r.nct_id_b = c.nct_id_b
+        ),
+        reranked as (
+            select
+                *,
+                row_number() over (
+                    partition by preset_id, nct_id_a
+                    order by similarity_score desc, nct_id_b asc
+                ) as expected_rank
+            from expected
+        ),
+        expected_top25 as (
+            select * exclude (expected_rank) replace (expected_rank as similarity_rank)
+            from reranked
+            where expected_rank <= 25
+        )
+        select count(*) from (
+            (
+                select * from main_marts.mart_registry_trial_similarity
+                except
+                select * from expected_top25
+            )
+            union all
+            (
+                select * from expected_top25
+                except
+                select * from main_marts.mart_registry_trial_similarity
+            )
+        )
+        """
+    ).fetchone()
+    assert row is not None
+    return int(row[0])
+
+
+def test_phase4a_similarity_reference_equivalence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """mart_registry_trial_similarity matches complete reference restricted to candidates."""
     import os
     from dataclasses import replace
 
     from tests.fixture_warehouse import AddedStudy, base_adrd_run, build_fixture_warehouse
 
     mesh = {"conditionBrowseModule": {"meshes": [{"id": "D000544", "term": "Alzheimer Disease"}]}}
-    added = tuple(
+    # Case 1: >25 valid same-phase candidates verify top-25 cap & exact equivalence.
+    added_candidates = tuple(
         AddedStudy(
             nct_id=f"NCT{i:08d}",
             clone_of="NCT00000001",
@@ -1048,66 +1095,473 @@ def test_phase4a_similarity_reference_equivalence(tmp_path: Path) -> None:
         )
         for i in range(100, 130)
     )
-    overrides = {"NCT00000001": {"derivedSection": mesh}, "NCT00000002": {"derivedSection": mesh}}
-    for s in added:
-        overrides[s.nct_id] = {"derivedSection": mesh}
-
-    run = replace(
+    overrides_1 = {
+        "NCT00000001": {"derivedSection": mesh},
+        "NCT00000002": {"derivedSection": mesh},
+        **{s.nct_id: {"derivedSection": mesh} for s in added_candidates},
+    }
+    run_1 = replace(
         base_adrd_run(),
         profile="full_catalog",
         condition="",
-        added=added,
-        study_overrides=overrides,
+        added=added_candidates,
+        study_overrides=overrides_1,
     )
-    root = tmp_path / "similarity_ref"
-    build_fixture_warehouse(root, runs=[run], dbt_vars={"build_similarity_reference": True})
+    root_1 = tmp_path / "similarity_ref_cap"
+    build_fixture_warehouse(
+        root_1,
+        runs=[run_1],
+        dbt_vars={"build_similarity_reference": True, "similarity_reference_top_n": 1000},
+    )
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(root_1))
+    start = Path.cwd()
+    os.chdir(root_1)
+    try:
+        with duckdb.connect(
+            str(root_1 / "data/warehouse/clinical_trials.duckdb"), read_only=True
+        ) as con:
+            assert _similarity_equivalence_diff(con) == 0
+            max_per_trial = con.execute(
+                "select max(c) from (select preset_id, nct_id_a, count(*) c "
+                "from main_marts.mart_registry_trial_similarity group by 1, 2)"
+            ).fetchone()[0]
+            assert max_per_trial == 25
+    finally:
+        os.chdir(start)
+
+    # Case 2: 30 higher-scoring PHASE2 noncandidates + 1 lower-scoring PHASE3 candidate
+    # proves noncandidate filtering occurs before top-25 ranking (would fail if reference
+    # were truncated at 25 before semi-joining int_registry_similarity_candidates).
+    noncandidates = tuple(
+        AddedStudy(
+            nct_id=f"NCT{i:08d}",
+            clone_of="NCT00000001",
+            overall_status="RECRUITING",
+            phase="PHASE2",
+            condition="Alzheimer Disease",
+        )
+        for i in range(100, 130)
+    )
+    valid_candidate = AddedStudy(
+        nct_id="NCT00000099",
+        clone_of="NCT00000001",
+        overall_status="RECRUITING",
+        phase="PHASE3",
+        condition="Alzheimer Disease",
+        location=("Miami Memory Center", "Miami", "FL"),
+    )
+    overrides_2 = {
+        "NCT00000001": {"derivedSection": mesh},
+        "NCT00000099": {
+            "derivedSection": mesh,
+            "designModule": {
+                "studyType": "OBSERVATIONAL",
+                "phases": ["PHASE3"],
+                "enrollmentInfo": {"count": 10, "type": "Actual"},
+            },
+            "armsInterventionsModule": {"interventions": [{"type": "BEHAVIORAL", "name": "Diet"}]},
+        },
+        **{s.nct_id: {"derivedSection": mesh} for s in noncandidates},
+    }
+    run_2 = replace(
+        base_adrd_run(),
+        profile="full_catalog",
+        condition="",
+        added=(*noncandidates, valid_candidate),
+        study_overrides=overrides_2,
+    )
+    root_2 = tmp_path / "similarity_ref_noncand"
+    build_fixture_warehouse(
+        root_2,
+        runs=[run_2],
+        dbt_vars={"build_similarity_reference": True, "similarity_reference_top_n": 1000},
+    )
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(root_2))
+    os.chdir(root_2)
+    try:
+        with duckdb.connect(
+            str(root_2 / "data/warehouse/clinical_trials.duckdb"), read_only=True
+        ) as con:
+            ref_rank = con.execute(
+                "select similarity_rank from main_marts.mart_registry_trial_similarity_reference "
+                "where preset_id = 'adrd' and nct_id_a = 'NCT00000001' "
+                "and nct_id_b = 'NCT00000099'"
+            ).fetchone()
+            assert ref_rank is not None and ref_rank[0] > 25
+            mart_row = con.execute(
+                "select similarity_rank from main_marts.mart_registry_trial_similarity "
+                "where preset_id = 'adrd' and nct_id_a = 'NCT00000001' "
+                "and nct_id_b = 'NCT00000099'"
+            ).fetchone()
+            assert mart_row is not None and mart_row[0] <= 25
+            assert _similarity_equivalence_diff(con) == 0
+    finally:
+        os.chdir(start)
+
+
+def test_phase4a_similarity_geography_does_not_borrow_older_sites(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Absent current sites remain absent; similarity must not borrow an older snapshot's states."""
+    import os
+    from dataclasses import replace
+    from datetime import timedelta
+
+    from tests.fixture_warehouse import AddedStudy, base_adrd_run, build_fixture_warehouse
+
+    mesh = {"conditionBrowseModule": {"meshes": [{"id": "D000544", "term": "Alzheimer Disease"}]}}
+    clone = AddedStudy(
+        nct_id="NCT00000099",
+        clone_of="NCT00000001",
+        overall_status="RECRUITING",
+        phase="PHASE3",
+        condition="Alzheimer Disease",
+    )
+    base = base_adrd_run()
+    run_1 = replace(
+        base,
+        profile="full_catalog",
+        condition="",
+        added=(clone,),
+        study_overrides={
+            "NCT00000001": {"derivedSection": mesh},
+            "NCT00000099": {"derivedSection": mesh},
+        },
+    )
+    run_2 = replace(
+        base,
+        profile="full_catalog",
+        condition="",
+        run_id="20260908T120000Z_fixture02",
+        started_at=base.started_at + timedelta(days=7),
+        added=(clone,),
+        study_overrides={
+            "NCT00000001": {"derivedSection": mesh, "contactsLocationsModule": {"locations": []}},
+            "NCT00000099": {"derivedSection": mesh, "contactsLocationsModule": {"locations": []}},
+        },
+    )
+    root = tmp_path / "sim_geo_removed"
+    build_fixture_warehouse(root, runs=[run_1, run_2])
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(root))
     start = Path.cwd()
     os.chdir(root)
     try:
         with duckdb.connect(
             str(root / "data/warehouse/clinical_trials.duckdb"), read_only=True
         ) as con:
-            diff_a = con.execute(
-                """
-                with expected as (
-                    select r.*
-                    from main_marts.mart_registry_trial_similarity_reference r
-                    semi join main_intermediate.int_registry_similarity_candidates c
-                        on r.preset_id = c.preset_id
-                        and r.nct_id_a = c.nct_id_a
-                        and r.nct_id_b = c.nct_id_b
-                ),
-                reranked as (
-                    select
-                        * replace (
-                            row_number() over (
-                                partition by preset_id, nct_id_a
-                                order by similarity_score desc, nct_id_b asc
-                            ) as similarity_rank
-                        )
-                    from expected
-                    qualify similarity_rank <= 25
-                )
-                select count(*) from (
-                    (
-                        select * from main_marts.mart_registry_trial_similarity
-                        except
-                        select * from reranked
-                    )
-                    union all
-                    (
-                        select * from reranked
-                        except
-                        select * from main_marts.mart_registry_trial_similarity
-                    )
-                )
-                """
-            ).fetchone()[0]
-            assert diff_a == 0
-            max_per_trial = con.execute(
-                "select max(c) from (select preset_id, nct_id_a, count(*) c "
-                "from main_marts.mart_registry_trial_similarity group by 1, 2)"
-            ).fetchone()[0]
-            assert max_per_trial == 25
+            assert (
+                con.execute(
+                    "select site_count_us from main_marts.fct_registry_trial_snapshot "
+                    "where nct_id = 'NCT00000001' and current_record_flag"
+                ).fetchone()[0]
+                == 0
+            )
+            states = con.execute(
+                "select nct_id, states "
+                "from main_intermediate.int_registry_trial_comparability_features "
+                "where preset_id = 'adrd' and nct_id in ('NCT00000001', 'NCT00000099') "
+                "order by nct_id"
+            ).fetchall()
+            assert states == [("NCT00000001", []), ("NCT00000099", [])]
+            geo_row = con.execute(
+                "select geography_overlap, weighted_geography_overlap "
+                "from main_marts.mart_registry_trial_similarity "
+                "where preset_id = 'adrd' and nct_id_a = 'NCT00000001' "
+                "and nct_id_b = 'NCT00000099'"
+            ).fetchone()
+            assert geo_row == (0, 0.0)
+    finally:
+        os.chdir(start)
+
+
+def test_phase4a_empty_current_preset_does_not_resurrect_historical_members(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When a current authoritative preset has zero members, latest marts stay empty."""
+    import os
+    from dataclasses import replace
+    from datetime import timedelta
+
+    from tests.fixture_warehouse import base_adrd_run, build_fixture_warehouse
+
+    mesh = {"conditionBrowseModule": {"meshes": [{"id": "D000544", "term": "Alzheimer Disease"}]}}
+    no_mesh = {"conditionBrowseModule": {"meshes": []}}
+    base = base_adrd_run()
+    run_1 = replace(
+        base,
+        profile="full_catalog",
+        condition="",
+        study_overrides={f"NCT{i:08d}": {"derivedSection": mesh} for i in range(1, 11)},
+    )
+    run_2 = replace(
+        base,
+        profile="full_catalog",
+        condition="",
+        run_id="20260908T120000Z_fixture02",
+        started_at=base.started_at + timedelta(days=7),
+        study_overrides={
+            f"NCT{i:08d}": {
+                "derivedSection": no_mesh,
+                "conditionsModule": {"conditions": []},
+            }
+            for i in range(1, 11)
+        },
+    )
+    root = tmp_path / "empty_current_preset"
+    build_fixture_warehouse(root, runs=[run_1, run_2])
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(root))
+    start = Path.cwd()
+    os.chdir(root)
+    try:
+        with duckdb.connect(
+            str(root / "data/warehouse/clinical_trials.duckdb"), read_only=True
+        ) as con:
+            bridge = con.execute(
+                "select preset_id, count(*) from main_marts.bridge_preset_trial "
+                "where current_record_flag group by 1 order by 1"
+            ).fetchall()
+            assert bridge == [("unassigned", 10)]
+            assert (
+                con.execute(
+                    "select count(*) from main_marts.mart_registry_feasibility_priority_queue "
+                    "where preset_id = 'adrd'"
+                ).fetchone()[0]
+                == 0
+            )
+            assert (
+                con.execute(
+                    "select count(*) from main_marts.mart_registry_baseline_demographics_coverage "
+                    "where preset_id = 'adrd'"
+                ).fetchone()[0]
+                == 0
+            )
+    finally:
+        os.chdir(start)
+
+
+def test_phase4a_access_and_prevalence_marts_numerical_and_isolation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Populated numerical verification and isolation for the 4 MeSH access/prevalence marts."""
+    import csv
+    import os
+    from datetime import timedelta
+
+    from tests.conftest import FIXTURE_SNAPSHOT_DAY
+    from tests.fixture_warehouse import AddedStudy, FixtureRun, build_fixture_warehouse
+
+    # 1. Access rates, geo access, and stratum access over populated access_geo fixture.
+    gaz_dir = ROOT / "tests" / "fixtures" / "access_geo" / "gazetteer"
+    monkeypatch.setenv("CTI_GAZETTEER_DIR", str(gaz_dir))
+    nsclc_mesh = {
+        "conditionBrowseModule": {
+            "meshes": [{"id": "D002289", "term": "Carcinoma, Non-Small-Cell Lung"}]
+        }
+    }
+    nsclc_study = AddedStudy(
+        nct_id="NCT99720098",
+        clone_of="NCT99720001",
+        overall_status="RECRUITING",
+        condition="Non-Small Cell Lung Cancer",
+        location=("Johns Hopkins Hospital", "Baltimore", "MD"),
+    )
+    unassigned_study = AddedStudy(
+        nct_id="NCT99720099",
+        clone_of="NCT99720001",
+        overall_status="RECRUITING",
+        condition="Unspecified Condition",
+        location=("Austin Site", "Austin", "TX"),
+    )
+    access_run_1 = FixtureRun(
+        profile="full_catalog",
+        run_id="20260901T150000Z_access1",
+        started_at=FIXTURE_SNAPSHOT_DAY + timedelta(hours=15),
+        condition="",
+        fixture_dir="access_geo",
+    )
+    access_run_2 = FixtureRun(
+        profile="full_catalog",
+        run_id="20260908T150000Z_access2",
+        started_at=FIXTURE_SNAPSHOT_DAY + timedelta(days=7, hours=15),
+        condition="",
+        fixture_dir="access_geo",
+        added=(nsclc_study, unassigned_study),
+        study_overrides={
+            "NCT99720098": {"derivedSection": nsclc_mesh},
+            "NCT99720099": {"derivedSection": {"conditionBrowseModule": {"meshes": []}}},
+        },
+    )
+    # Profile-only run on later date must not override canonical MeSH access marts.
+    access_profile_override = FixtureRun(
+        profile="adrd",
+        run_id="20260915T150000Z_access_profile_only",
+        started_at=FIXTURE_SNAPSHOT_DAY + timedelta(days=14, hours=15),
+        condition="Alzheimer Disease",
+        fixture_dir="access_geo",
+        status_overrides={"NCT99720001": "TERMINATED"},
+    )
+    access_root = tmp_path / "access_4a"
+    build_fixture_warehouse(access_root, runs=[access_run_1, access_run_2, access_profile_override])
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(access_root))
+    start = Path.cwd()
+    os.chdir(access_root)
+    try:
+        with duckdb.connect(
+            str(access_root / "data/warehouse/clinical_trials.duckdb"), read_only=True
+        ) as con:
+            # Condition access rates: exact per-100k and per-1k-est-cases math,
+            # with unassigned TX excluded.
+            assert (
+                con.execute(
+                    "select count(*) from main_marts.mart_registry_condition_access_rates "
+                    "where state_code = 'TX'"
+                ).fetchone()[0]
+                == 0
+            )
+            adrd_md = con.execute(
+                "select recruiting_trial_count, population, recruiting_trials_per_100k, "
+                "burden_denominator_available, estimated_cases, recruiting_trials_per_1k_est_cases "
+                "from main_marts.mart_registry_condition_access_rates "
+                "where mesh_id = 'D000544' and state_code = 'MD'"
+            ).fetchone()
+            assert adrd_md is not None
+            assert adrd_md[0] == 1
+            assert adrd_md[2] == pytest.approx(round(100000.0 * 1 / adrd_md[1], 4))
+            assert adrd_md[3] is False
+            assert adrd_md[4] is None and adrd_md[5] is None
+
+            nsclc_md = con.execute(
+                "select recruiting_trial_count, population, recruiting_trials_per_100k, "
+                "burden_denominator_available, estimated_cases, recruiting_trials_per_1k_est_cases "
+                "from main_marts.mart_registry_condition_access_rates "
+                "where mesh_id = 'D002289' and state_code = 'MD'"
+            ).fetchone()
+            assert nsclc_md is not None
+            assert nsclc_md[0] == 1 and nsclc_md[3] is True and nsclc_md[4] > 0
+            assert nsclc_md[5] == pytest.approx(round(1000.0 * 1 / nsclc_md[4], 4))
+
+            # Geo access: Baltimore exact match, ring counts, and ancestor D003704 rollup.
+            balt = con.execute(
+                "select sites_total, sites_exact, sites_zip_approx, sites_city_approx, "
+                "sites_excluded, exact_coordinate_share, coverage_confidence, "
+                "within_25mi, within_50mi, within_100mi "
+                "from main_marts.mart_registry_trial_access_by_geo "
+                "where mesh_id = 'D000544' and county_fips = '24510'"
+            ).fetchone()
+            assert balt == (4, 1, 1, 1, 1, pytest.approx(1 / 3, abs=1e-4), "low", True, True, True)
+            assert con.execute(
+                "select sites_total, sites_exact from main_marts.mart_registry_trial_access_by_geo "
+                "where mesh_id = 'D003704' and county_fips = '10003'"
+            ).fetchone() == (5, 2)
+
+            # Stratum access: exact population share ratios & radius monotonicity.
+            overall = con.execute(
+                "select population, population_within_25mi, population_within_50mi, "
+                "population_within_100mi, share_within_25mi, share_within_50mi, share_within_100mi "
+                "from main_marts.mart_registry_trial_access_by_stratum "
+                "where mesh_id = 'D000544' and stratum_type = 'overall' and stratum_value = 'all'"
+            ).fetchone()
+            assert overall is not None
+            pop, p25, p50, p100, s25, s50, s100 = overall
+            assert 0 < p25 <= p50 <= p100 <= pop
+            assert s25 == pytest.approx(round(p25 / pop, 4))
+            assert s50 == pytest.approx(round(p50 / pop, 4))
+            assert s100 == pytest.approx(round(p100 / pop, 4))
+    finally:
+        os.chdir(start)
+
+    # 2. Participation-to-prevalence ratio over populated bronze_snapshot_ratio fixture.
+    unassigned_ratio = AddedStudy(
+        nct_id="NCT99750099",
+        clone_of="NCT99750011",
+        overall_status="COMPLETED",
+        condition="Unspecified Condition",
+    )
+    ratio_run_1 = FixtureRun(
+        profile="full_catalog",
+        run_id="20260901T150000Z_ratio1",
+        started_at=FIXTURE_SNAPSHOT_DAY + timedelta(hours=15),
+        condition="",
+        fixture_dir="bronze_snapshot_ratio",
+    )
+    ratio_run_2 = FixtureRun(
+        profile="full_catalog",
+        run_id="20260908T150000Z_ratio2",
+        started_at=FIXTURE_SNAPSHOT_DAY + timedelta(days=7, hours=15),
+        condition="",
+        fixture_dir="bronze_snapshot_ratio",
+        added=(unassigned_ratio,),
+        study_overrides={
+            "NCT99750099": {"derivedSection": {"conditionBrowseModule": {"meshes": []}}},
+        },
+    )
+    ratio_profile_override = FixtureRun(
+        profile="adrd",
+        run_id="20260915T150000Z_ratio_profile_only",
+        started_at=FIXTURE_SNAPSHOT_DAY + timedelta(days=14, hours=15),
+        condition="Alzheimer Disease",
+        fixture_dir="bronze_snapshot_ratio",
+        status_overrides={"NCT99750011": "TERMINATED"},
+    )
+    ratio_root = tmp_path / "ratio_4a"
+    build_fixture_warehouse(ratio_root, runs=[ratio_run_1, ratio_run_2, ratio_profile_override])
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(ratio_root))
+
+    with (ROOT / "dbt_clinical_trials/seeds/burden_demographic_share.csv").open(
+        encoding="utf-8", newline=""
+    ) as f:
+        burden_rows = list(csv.DictReader(f))
+    burden_sex = {
+        r["group_label"]: int(r["annual_cases"]) for r in burden_rows if r["dimension"] == "sex"
+    }
+    expected_female_burden = burden_sex["Female"] / (burden_sex["Female"] + burden_sex["Male"])
+
+    os.chdir(ratio_root)
+    try:
+        with duckdb.connect(
+            str(ratio_root / "data/warehouse/clinical_trials.duckdb"), read_only=True
+        ) as con:
+            female = con.execute(
+                "select group_participants, dimension_participants, participation_share, "
+                "burden_share, participation_prevalence_ratio, ratio_ci_low, ratio_ci_high, "
+                "comparison_basis "
+                "from main_marts.mart_registry_participation_prevalence_ratio "
+                "where mesh_id = 'D002289' and time_window = '2020-2024' "
+                "and dimension = 'sex' and group_label = 'Female'"
+            ).fetchone()
+            assert female is not None
+            assert female[0] == 239 and female[1] == 577
+            assert female[2] == pytest.approx(239 / 577)
+            assert female[3] == pytest.approx(expected_female_burden)
+            assert female[4] == pytest.approx((239 / 577) / expected_female_burden)
+            assert female[5] < female[4] < female[6]
+            assert female[7] == "participation_vs_burden"
+
+            eth = con.execute(
+                "select trials_reporting_dimension_count, reporting_trials_share, "
+                "group_participants, dimension_participants, low_n_flag "
+                "from main_marts.mart_registry_participation_prevalence_ratio "
+                "where mesh_id = 'D002289' and time_window = '2020-2024' "
+                "and dimension = 'ethnicity' and group_label = 'Hispanic or Latino'"
+            ).fetchone()
+            assert eth == (4, pytest.approx(4 / 5), 23, 492, True)
+
+            suppressed = con.execute(
+                "select suppressed_flag, group_trial_count, group_participants, "
+                "participation_prevalence_ratio "
+                "from main_marts.mart_registry_participation_prevalence_ratio "
+                "where mesh_id = 'D002289' and time_window = '2015-2019' "
+                "and dimension = 'sex' and group_label = 'Female'"
+            ).fetchone()
+            assert suppressed == (True, 2, None, None)
+
+            adrd_female = con.execute(
+                "select comparison_basis, burden_denominator_available, "
+                "group_participants, low_n_flag "
+                "from main_marts.mart_registry_participation_prevalence_ratio "
+                "where mesh_id = 'D000544' and time_window = '2020-2024' "
+                "and dimension = 'sex' and group_label = 'Female'"
+            ).fetchone()
+            assert adrd_female == ("participant_composition_only", False, 145, True)
     finally:
         os.chdir(start)

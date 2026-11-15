@@ -1,16 +1,12 @@
 -- Feasibility Review Priority Queue (Registry Segments, per preset).
 -- Grain: preset_id x condition_group x state x phase at that preset's latest snapshot.
 with latest_snapshot as (
-    select
-        b.preset_id,
-        max(f.snapshot_date) as snapshot_date
+    select max(f.snapshot_date) as snapshot_date
     from {{ ref('fct_registry_trial_snapshot') }} f
     inner join {{ ref('bridge_preset_trial') }} b
         on f.nct_id = b.nct_id
         and f.snapshot_date = b.snapshot_date
         and f.snapshot_id = b.snapshot_id
-    where not b.is_unassigned
-    group by 1
 ),
 
 preset_history as (
@@ -28,7 +24,7 @@ preset_history as (
     group by 1
 ),
 
--- Preset-scoped location completeness over the preset's latest snapshot
+-- Preset-scoped location completeness over the current authoritative snapshot
 -- (canonical observation per trial before expanding location rows).
 preset_location_reliability as (
     select
@@ -39,8 +35,7 @@ preset_location_reliability as (
         ) }} as usable_location_share
     from {{ ref('bridge_preset_trial') }} b
     inner join latest_snapshot ls
-        on b.preset_id = ls.preset_id
-        and b.snapshot_date = ls.snapshot_date
+        on b.snapshot_date = ls.snapshot_date
     inner join {{ ref('int_registry_trial_status_history') }} h
         on b.nct_id = h.nct_id
         and b.snapshot_date = h.snapshot_date
@@ -55,7 +50,7 @@ preset_location_reliability as (
 competition as (
     select c.*
     from {{ ref('mart_registry_recruiting_competition') }} c
-    inner join latest_snapshot ls using (preset_id, snapshot_date)
+    inner join latest_snapshot ls using (snapshot_date)
 ),
 
 overlapping_trials as (
@@ -68,8 +63,7 @@ overlapping_trials as (
         and f.snapshot_date = b.snapshot_date
         and f.snapshot_id = b.snapshot_id
     inner join latest_snapshot ls
-        on b.preset_id = ls.preset_id
-        and f.snapshot_date = ls.snapshot_date
+        on f.snapshot_date = ls.snapshot_date
     inner join {{ ref('mart_registry_site_overlap') }} o
         on o.preset_id = b.preset_id
         and o.snapshot_date = f.snapshot_date
@@ -77,6 +71,7 @@ overlapping_trials as (
         and coalesce(o.city_normalized, '') = coalesce(f.city_normalized, '')
         and o.state_normalized = f.state_normalized
     where o.repeated_site_participation_flag
+      and not b.is_unassigned
 ),
 
 segment_trials as (
@@ -95,7 +90,7 @@ segment_trials as (
             'count(distinct a.nct_id)',
         ) }} as record_quality_ok_share
     from {{ ref('int_registry_condition_geography_activity') }} a
-    inner join latest_snapshot ls using (preset_id, snapshot_date)
+    inner join latest_snapshot ls using (snapshot_date)
     left join overlapping_trials ot
         on a.nct_id = ot.nct_id
         and a.preset_id = ot.preset_id

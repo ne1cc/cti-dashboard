@@ -71,29 +71,15 @@ interventions as (
     group by 1, 2
 ),
 
-latest_site_snapshot as (
-    select
-        b.preset_id,
-        max(f.snapshot_date) as snapshot_date
-    from {{ ref('fct_registry_trial_site') }} f
-    inner join {{ ref('bridge_preset_trial') }} b
-        on f.nct_id = b.nct_id
-        and f.snapshot_date = b.snapshot_date
-    group by 1
-),
-
 geography as (
     select
-        b.preset_id,
+        c.preset_id,
         f.nct_id,
         list(distinct f.state_normalized) as states
     from {{ ref('fct_registry_trial_site') }} f
-    inner join {{ ref('bridge_preset_trial') }} b
-        on f.nct_id = b.nct_id
-        and f.snapshot_date = b.snapshot_date
-    inner join latest_site_snapshot ls
-        on b.preset_id = ls.preset_id
-        and f.snapshot_date = ls.snapshot_date
+    inner join current_trials c
+        on f.snapshot_id = c.snapshot_id
+        and f.nct_id = c.nct_id
     where f.state_normalized is not null
     group by 1, 2
 )

@@ -1,16 +1,12 @@
 -- Baseline-demographics coverage per preset, condition group, and completion year.
 -- Grain: preset_id x condition_group x completion_year.
-with latest_preset_snapshots as (
-    select
-        b.preset_id,
-        max(h.snapshot_date) as snapshot_date
+with latest_authoritative_snapshot as (
+    select max(h.snapshot_date) as snapshot_date
     from {{ ref('bridge_preset_trial') }} b
     inner join {{ ref('int_registry_trial_status_history') }} h
         on b.nct_id = h.nct_id
         and b.snapshot_date = h.snapshot_date
         and b.snapshot_id = h.snapshot_id
-    where not b.is_unassigned
-    group by 1
 ),
 
 trial_scope as (
@@ -21,9 +17,8 @@ trial_scope as (
         t.completion_date,
         m.condition_group
     from {{ ref('bridge_preset_trial') }} b
-    inner join latest_preset_snapshots l
-        on b.preset_id = l.preset_id
-        and b.snapshot_date = l.snapshot_date
+    inner join latest_authoritative_snapshot l
+        on b.snapshot_date = l.snapshot_date
     inner join {{ ref('int_registry_trial_status_history') }} h
         on b.nct_id = h.nct_id
         and b.snapshot_date = h.snapshot_date
@@ -35,7 +30,8 @@ trial_scope as (
         on b.preset_id = m.preset_id
         and h.snapshot_id = m.snapshot_id
         and h.nct_id = m.nct_id
-    where t.overall_status = 'COMPLETED'
+    where not b.is_unassigned
+      and t.overall_status = 'COMPLETED'
       and t.has_results_flag
 ),
 
