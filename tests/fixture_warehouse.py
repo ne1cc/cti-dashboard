@@ -333,6 +333,8 @@ def build_dbt_fixture(
     *,
     dbt_vars: dict[str, object] | None = None,
     target_path: Path | None = None,
+    select: tuple[str, ...] = (),
+    exclude: tuple[str, ...] = (),
 ) -> None:
     """Runs dbt build against the prepared fixture root."""
     build_command = [
@@ -347,6 +349,10 @@ def build_dbt_fixture(
         "--target-path",
         str(target_path or (root / "dbt_target")),
     ]
+    if select:
+        build_command += ["--select", *select]
+    if exclude:
+        build_command += ["--exclude", *exclude]
     if dbt_vars:
         build_command += ["--vars", json.dumps(dbt_vars)]
     result = subprocess.run(

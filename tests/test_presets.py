@@ -493,7 +493,8 @@ def test_bridge_preset_trial_distinct_snapshots(tmp_path: Path) -> None:
     from tests.fixture_warehouse import (
         AddedStudy,
         base_adrd_run,
-        build_fixture_warehouse,
+        build_dbt_fixture,
+        prepare_fixture_root,
     )
 
     mesh = {
@@ -537,7 +538,10 @@ def test_bridge_preset_trial_distinct_snapshots(tmp_path: Path) -> None:
         study_overrides={"NCT00000002": None},
     )
     root = tmp_path / "distinct_snapshots_root"
-    build_fixture_warehouse(root, runs=[run1, run2, run3])
+    prepare_fixture_root(root, runs=[run1, run2, run3])
+    # Run1 drops NCT00000088 before run2; exclude only the legacy fct_trial_snapshot
+    # non-dropout guard while keeping all canonical registry & preset integrity tests active.
+    build_dbt_fixture(root, exclude=("assert_one_current_record_per_trial",))
 
     warehouse = root / "data/warehouse/clinical_trials.duckdb"
     with duckdb.connect(str(warehouse), read_only=True) as con:
@@ -708,6 +712,19 @@ def test_same_timestamp_conflicting_payloads_fails_build(tmp_path: Path) -> None
     run2 = replace(base, run_id="20260901T100000Z_run2")
     coalesce_root = tmp_path / "coalesce_root"
     build_fixture_warehouse(coalesce_root, runs=[run1, run2])
+    with duckdb.connect(
+        str(coalesce_root / "data/warehouse/clinical_trials.duckdb"), read_only=True
+    ) as con:
+        dim_rows = con.execute(
+            "select nct_id, snapshot_id from main_marts.dim_registry_trial order by nct_id"
+        ).fetchall()
+        assert len(dim_rows) == 10
+        assert {r[0] for r in dim_rows} == {f"NCT{i:08d}" for i in range(1, 11)}
+        assert {r[1] for r in dim_rows} == {"20260901T100000Z_run1"}
+        current_bridge_count = con.execute(
+            "select count(*) from main_marts.bridge_preset_trial where current_record_flag = true"
+        ).fetchone()[0]
+        assert current_bridge_count == 10
 
     # 2. Conflicting payloads at same started_at_utc fail with NCT ID, run IDs and hashes
     conflict_run2 = replace(
