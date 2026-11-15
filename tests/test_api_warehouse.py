@@ -1862,6 +1862,64 @@ def test_warehouse_related_trials_mesh_ancestor_blocking_and_deduplication(
     mgr.close()
 
 
+def test_warehouse_related_trials_ignores_stale_and_non_authoritative_runs(
+    tmp_path: Path,
+) -> None:
+    """Related query respects dim_registry_trial current snapshot and ignores failed/stale runs."""
+    db_path = tmp_path / "related_runs.duckdb"
+    _init_fixture_database(db_path)
+
+    con = duckdb.connect(str(db_path))
+    con.execute("""
+    INSERT INTO stg_registry_trial_snapshots (
+        ingestion_run_id, snapshot_date, started_at_utc, ended_at_utc, profile, condition, status
+    ) VALUES
+    ('snap_20260801_stale', '2026-08-01', '2026-08-01 12:00:00',
+     '2026-08-01 12:05:00', 'full_catalog', null, 'success'),
+    ('snap_20260906_failed', '2026-09-06', '2026-09-06 12:00:00',
+     '2026-09-06 12:05:00', 'full_catalog', null, 'failed');
+
+    -- Stale run MeSH match on NCT00000003 (dim_registry_trial points at snap_20260901)
+    INSERT INTO stg_registry_trial_condition_mesh VALUES
+    (md5('NCT00000003'), 'run_stale', 'snap_20260801_stale', 'NCT00000003',
+     'D000544', 'Alzheimer Disease', false, null, 'h3_stale');
+
+    -- Failed run changing NCT00000002 phase to PHASE3 must be ignored
+    INSERT INTO stg_registry_trials
+    SELECT
+        registry_trial_key, 'run_failed', 'snap_20260906_failed',
+        '2026-09-06 12:00:00Z', raw_page_reference, raw_study_ordinal,
+        '2026-09-06 12:00:00Z', '2026-09-06', nct_id,
+        brief_title, official_title, study_type, overall_status, last_known_status,
+        status_verified_date_raw, has_expanded_access, start_date_raw, start_date,
+        primary_completion_date_raw, primary_completion_date, primary_completion_date_type,
+        completion_date_type, completion_date_raw, completion_date,
+        study_first_post_date_raw, study_first_post_date, results_first_post_date_raw,
+        results_first_post_date, last_update_post_date_raw, last_update_post_date,
+        'PHASE3', 'PHASE3', enrollment_count, enrollment_type, allocation,
+        primary_purpose, intervention_model, masking, has_placebo_arm, why_stopped,
+        brief_summary, primary_outcome_time_frame, lead_sponsor_name,
+        lead_sponsor_normalized, responsible_party_type, healthy_volunteers,
+        minimum_age, minimum_age_raw, minimum_age_years, maximum_age, maximum_age_raw,
+        maximum_age_years, sex, gender_based, gender_description, std_age_groups,
+        eligibility_criteria_text, has_results_flag, source_json_hash, record_quality_flag
+    FROM stg_registry_trials
+    WHERE nct_id = 'NCT00000002' AND snapshot_id = 'snap_20260901';
+    """)
+    con.close()
+
+    mgr = DuckDBWarehouseManager(db_path)
+    container = APIContainer(warehouse=mgr)
+    with TestClient(create_app(container=container)) as client:
+        resp = client.get("/v1/trials/NCT00000001/related", params={"limit": 25})
+        assert resp.status_code == 200
+        items = {item["nct_id"]: item for item in resp.json()["related_trials"]}
+        assert "NCT00000002" in items
+        assert items["NCT00000002"]["comparability_factors"]["same_phase"]["matched"] is False
+        assert "NCT00000003" not in items
+    mgr.close()
+
+
 def test_warehouse_multi_preset_deduplication_and_deterministic_provenance(
     tmp_path: Path,
 ) -> None:

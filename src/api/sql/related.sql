@@ -14,7 +14,7 @@ WITH weights AS (
         MAX(CASE WHEN component = 'enrollment_band_match' THEN weight END) AS w_enrollment_band_match
     FROM similarity_score_weights
 ),
-active_trials AS (
+target AS (
     SELECT
         st.nct_id,
         COALESCE(st.snapshot_id, st.ingestion_run_id) AS effective_run_key,
@@ -36,13 +36,16 @@ active_trials AS (
     FROM stg_registry_trials st
     LEFT JOIN stg_registry_trial_snapshots sm
         ON COALESCE(st.snapshot_id, st.ingestion_run_id) = sm.ingestion_run_id
-    WHERE NOT EXISTS (SELECT 1 FROM stg_registry_trial_snapshots)
-       OR (
-           sm.ingestion_run_id IS NOT NULL
-           AND sm.status = 'success'
-           AND sm.profile IN ('full_catalog', 'full-catalog', 'default')
-           AND (sm.condition IS NULL OR trim(sm.condition) = '')
-       )
+    WHERE UPPER(st.nct_id) = UPPER($nct_id)
+      AND (
+          NOT EXISTS (SELECT 1 FROM stg_registry_trial_snapshots)
+          OR (
+              sm.ingestion_run_id IS NOT NULL
+              AND sm.status = 'success'
+              AND sm.profile IN ('full_catalog', 'full-catalog', 'default')
+              AND (sm.condition IS NULL OR trim(sm.condition) = '')
+          )
+      )
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY st.nct_id
         ORDER BY
@@ -51,10 +54,12 @@ active_trials AS (
             COALESCE(st.snapshot_id, st.ingestion_run_id) DESC
     ) = 1
 ),
-target AS (
-    SELECT *
-    FROM active_trials
-    WHERE UPPER(nct_id) = UPPER($nct_id)
+current_trials AS (
+    SELECT
+        dt.nct_id,
+        COALESCE(dt.snapshot_id, dt.ingestion_run_id) AS effective_run_key
+    FROM dim_registry_trial dt
+    WHERE UPPER(dt.nct_id) != UPPER($nct_id)
 ),
 target_conditions AS (
     SELECT DISTINCT
@@ -113,73 +118,109 @@ target_states AS (
     WHERE UPPER(s.nct_id) = UPPER($nct_id)
 ),
 condition_group_matches AS (
-    SELECT DISTINCT pcm.nct_id, 1 AS has_same_condition
+    SELECT DISTINCT
+        pcm.nct_id,
+        ct.effective_run_key,
+        1 AS has_same_condition
     FROM int_registry_preset_condition_mapping pcm
-    INNER JOIN active_trials act
-        ON pcm.nct_id = act.nct_id
-       AND pcm.snapshot_id = act.effective_run_key
+    INNER JOIN current_trials ct
+        ON pcm.nct_id = ct.nct_id
+       AND (ct.effective_run_key IS NULL OR pcm.snapshot_id = ct.effective_run_key)
     INNER JOIN target_conditions tcond
         ON pcm.preset_id = tcond.preset_id
        AND pcm.condition_group = tcond.condition_group
-    WHERE UPPER(pcm.nct_id) != UPPER($nct_id)
     UNION
-    SELECT DISTINCT tc.nct_id, 1 AS has_same_condition
+    SELECT DISTINCT
+        tc.nct_id,
+        ct.effective_run_key,
+        1 AS has_same_condition
     FROM stg_registry_trial_conditions tc
-    INNER JOIN active_trials act
-        ON tc.nct_id = act.nct_id
-       AND COALESCE(tc.snapshot_id, tc.ingestion_run_id) = act.effective_run_key
+    INNER JOIN current_trials ct
+        ON tc.nct_id = ct.nct_id
+       AND (
+           ct.effective_run_key IS NULL
+           OR COALESCE(tc.snapshot_id, tc.ingestion_run_id) = ct.effective_run_key
+       )
     INNER JOIN target_conditions tcond
         ON tcond.preset_id = '__direct__'
        AND tc.condition_group = tcond.condition_group
-    WHERE UPPER(tc.nct_id) != UPPER($nct_id)
 ),
 mesh_matches AS (
     SELECT DISTINCT
         m.nct_id,
+        ct.effective_run_key,
         CASE WHEN NOT tm.is_ancestor AND NOT m.is_ancestor THEN 2 ELSE 1 END AS mesh_match_depth
     FROM stg_registry_trial_condition_mesh m
-    INNER JOIN active_trials act
-        ON m.nct_id = act.nct_id
-       AND COALESCE(m.snapshot_id, m.ingestion_run_id) = act.effective_run_key
+    INNER JOIN current_trials ct
+        ON m.nct_id = ct.nct_id
+       AND (
+           ct.effective_run_key IS NULL
+           OR COALESCE(m.snapshot_id, m.ingestion_run_id) = ct.effective_run_key
+       )
     INNER JOIN target_mesh tm
         ON m.mesh_id = tm.mesh_id
-    WHERE UPPER(m.nct_id) != UPPER($nct_id)
-      AND NOT (tm.is_ancestor AND m.is_ancestor)
+    WHERE NOT (tm.is_ancestor AND m.is_ancestor)
 ),
 candidate_pool AS (
     SELECT
         nct_id,
+        MAX(effective_run_key) AS effective_run_key,
         MAX(has_same_condition) AS has_same_condition,
         MAX(mesh_match_depth) AS mesh_match_depth
     FROM (
-        SELECT nct_id, has_same_condition, 0 AS mesh_match_depth FROM condition_group_matches
+        SELECT nct_id, effective_run_key, has_same_condition, 0 AS mesh_match_depth FROM condition_group_matches
         UNION ALL
-        SELECT nct_id, 0 AS has_same_condition, mesh_match_depth FROM mesh_matches
+        SELECT nct_id, effective_run_key, 0 AS has_same_condition, mesh_match_depth FROM mesh_matches
     )
     GROUP BY nct_id
 ),
 candidate_trials AS (
     SELECT
         cp.nct_id,
-        act.effective_run_key,
+        COALESCE(st.snapshot_id, st.ingestion_run_id) AS effective_run_key,
         cp.has_same_condition,
-        act.phase_normalized,
-        act.study_type,
-        act.allocation,
-        act.primary_purpose,
-        act.enrollment_count,
-        act.enrollment_band,
-        act.healthy_volunteers,
-        act.sex,
-        act.minimum_age_years,
-        act.maximum_age_years,
-        CASE WHEN act.phase_normalized = tg.phase_normalized THEN 1 ELSE 0 END AS phase_match,
+        st.phase_normalized,
+        st.study_type,
+        st.allocation,
+        st.primary_purpose,
+        st.enrollment_count,
+        CASE
+            WHEN st.enrollment_count IS NULL THEN NULL
+            WHEN st.enrollment_count < 50 THEN 'small'
+            WHEN st.enrollment_count <= 200 THEN 'medium'
+            ELSE 'large'
+        END AS enrollment_band,
+        st.healthy_volunteers,
+        COALESCE(st.sex, 'ALL') AS sex,
+        st.minimum_age_years,
+        st.maximum_age_years,
+        CASE WHEN st.phase_normalized = tg.phase_normalized THEN 1 ELSE 0 END AS phase_match,
         cp.has_same_condition AS cond_match,
         cp.mesh_match_depth
     FROM candidate_pool cp
-    INNER JOIN active_trials act
-        ON cp.nct_id = act.nct_id
+    INNER JOIN stg_registry_trials st
+        ON cp.nct_id = st.nct_id
+       AND (
+           cp.effective_run_key IS NULL
+           OR COALESCE(st.snapshot_id, st.ingestion_run_id) = cp.effective_run_key
+       )
+    LEFT JOIN stg_registry_trial_snapshots sm
+        ON COALESCE(st.snapshot_id, st.ingestion_run_id) = sm.ingestion_run_id
     CROSS JOIN target tg
+    WHERE NOT EXISTS (SELECT 1 FROM stg_registry_trial_snapshots)
+       OR (
+           sm.ingestion_run_id IS NOT NULL
+           AND sm.status = 'success'
+           AND sm.profile IN ('full_catalog', 'full-catalog', 'default')
+           AND (sm.condition IS NULL OR trim(sm.condition) = '')
+       )
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY cp.nct_id
+        ORDER BY
+            COALESCE(sm.started_at_utc, st.snapshot_timestamp_utc) DESC,
+            st.snapshot_timestamp_utc DESC,
+            COALESCE(st.snapshot_id, st.ingestion_run_id) DESC
+    ) = 1
 ),
 capped_candidates AS (
     SELECT *
