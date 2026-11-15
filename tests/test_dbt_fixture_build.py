@@ -113,6 +113,19 @@ MARTS_WITH_PROFILE_SCOPED_WINDOWS = [
     "mart_trial_access_by_geo",
 ]
 
+REGISTRY_MARTS_WITH_PRESET_WINDOWS = {
+    "mart_registry_condition_geography_trends",
+    "mart_registry_recruiting_competition",
+    "mart_registry_trial_similarity",
+    "mart_registry_trial_similarity_reference",
+}
+
+REGISTRY_MARTS_WITH_ENTITY_WINDOWS = {
+    "fct_registry_trial_site",
+    "mart_registry_participation_prevalence_ratio",
+    "mart_registry_trial_access_by_geo",
+}
+
 _SQL_COMMENT_RE = re.compile(r"--[^\n]*|\{#.*?#\}", re.DOTALL)
 _OVER_KEYWORD_RE = re.compile(r"\bover\b", re.IGNORECASE)
 _PARTITION_BY_RE = re.compile(r"\bpartition\s+by\b", re.IGNORECASE)
@@ -1472,10 +1485,15 @@ def test_window_frames_partition_by_profile() -> None:
         for path in marts.glob("*.sql")
         if _OVER_KEYWORD_RE.search(_strip_sql_comments(path.read_text(encoding="utf-8")))
     }
-    assert windowed <= set(MARTS_WITH_PROFILE_SCOPED_WINDOWS), (
+    all_guarded = (
+        set(MARTS_WITH_PROFILE_SCOPED_WINDOWS)
+        | REGISTRY_MARTS_WITH_PRESET_WINDOWS
+        | REGISTRY_MARTS_WITH_ENTITY_WINDOWS
+    )
+    assert windowed <= all_guarded, (
         "models/marts/ carries windows this guard never reads: "
-        f"{sorted(windowed - set(MARTS_WITH_PROFILE_SCOPED_WINDOWS))} -- name them "
-        "in MARTS_WITH_PROFILE_SCOPED_WINDOWS or make the frame global on purpose"
+        f"{sorted(windowed - all_guarded)} -- name them "
+        "in MARTS_WITH_PROFILE_SCOPED_WINDOWS or REGISTRY_MARTS_WITH_*_WINDOWS"
     )
     for model in MARTS_WITH_PROFILE_SCOPED_WINDOWS:
         sql = (marts / f"{model}.sql").read_text(encoding="utf-8")
@@ -1485,6 +1503,21 @@ def test_window_frames_partition_by_profile() -> None:
                 assert "indication_profile_id" in frame, (
                     f"{model}: frame partitions without the profile: 'over ({frame.strip()})'"
                 )
+    for model in sorted(REGISTRY_MARTS_WITH_PRESET_WINDOWS):
+        sql = (marts / f"{model}.sql").read_text(encoding="utf-8")
+        for frame in _window_frames(sql, model):
+            assert frame.strip(), f"{model}: unbounded frame 'over ()' normalizes across presets"
+            if _PARTITION_BY_RE.search(frame):
+                assert "preset_id" in frame, (
+                    f"{model}: frame partitions without preset_id: 'over ({frame.strip()})'"
+                )
+    for model in sorted(REGISTRY_MARTS_WITH_ENTITY_WINDOWS):
+        sql = (marts / f"{model}.sql").read_text(encoding="utf-8")
+        for frame in _window_frames(sql, model):
+            assert frame.strip(), f"{model}: unbounded frame 'over ()'"
+            assert "indication_profile_id" not in frame, (
+                f"{model}: canonical registry mart must not partition by indication_profile_id"
+            )
 
 
 def test_mart_data_reliability_reconciles(fixture_project_root: Path) -> None:
@@ -1587,7 +1620,7 @@ def test_marts_contracts_enforced(fixture_project_root: Path) -> None:
         if node["resource_type"] == "model"
         and node["original_file_path"].startswith("models/marts/")
     }
-    assert len(marts) == 31
+    assert len(marts) == 44
     for name, node in marts.items():
         assert node["contract"]["enforced"] is True, name
         assert {c["name"] for c in node["columns"].values()}, name
@@ -1631,6 +1664,19 @@ def test_every_trial_grain_mart_contracts_the_profile() -> None:
         "dim_registry_condition",
         "bridge_registry_trial_condition",
         "bridge_preset_trial",
+        "fct_registry_trial_snapshot",
+        "fct_registry_trial_site",
+        "mart_registry_condition_access_rates",
+        "mart_registry_participation_prevalence_ratio",
+        "mart_registry_trial_access_by_geo",
+        "mart_registry_trial_access_by_stratum",
+        "mart_registry_site_overlap",
+        "mart_registry_trial_activity",
+        "mart_registry_condition_geography_trends",
+        "mart_registry_recruiting_competition",
+        "mart_registry_feasibility_priority_queue",
+        "mart_registry_baseline_demographics_coverage",
+        "mart_registry_trial_similarity",
     }
     trial_grain = {m["name"] for m in doc["models"] if m["name"] not in global_dims}
     # Membership, not just cardinality: a pin on len() alone stays green if a

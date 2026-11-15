@@ -2181,3 +2181,742 @@ models:
       - name: current_record_flag
         data_type: BOOLEAN
         tests: [not_null]
+
+  - name: fct_registry_trial_snapshot
+    description: One canonical observation per NCT ID per complete authoritative snapshot date.
+    contract:
+      enforced: true
+    columns:
+      - name: snapshot_key
+        data_type: VARCHAR
+        tests: [not_null, unique]
+      - name: registry_trial_key
+        data_type: VARCHAR
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_registry_trial')
+              field: registry_trial_key
+      - name: nct_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: snapshot_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: ingestion_run_id
+        data_type: VARCHAR
+      - name: snapshot_date
+        data_type: DATE
+        tests: [not_null]
+      - name: snapshot_timestamp_utc
+        data_type: TIMESTAMP
+      - name: overall_status
+        data_type: VARCHAR
+      - name: previous_status
+        data_type: VARCHAR
+      - name: status_changed_from_previous_snapshot_flag
+        data_type: BOOLEAN
+      - name: entered_recruiting_flag
+        data_type: BOOLEAN
+      - name: left_recruiting_flag
+        data_type: BOOLEAN
+      - name: phase_normalized
+        data_type: VARCHAR
+      - name: study_type
+        data_type: VARCHAR
+      - name: enrollment_count
+        data_type: INTEGER
+      - name: lead_sponsor_name
+        data_type: VARCHAR
+      - name: lead_sponsor_normalized
+        data_type: VARCHAR
+      - name: has_results_flag
+        data_type: BOOLEAN
+      - name: study_first_post_date
+        data_type: DATE
+      - name: record_quality_flag
+        data_type: VARCHAR
+      - name: first_seen_snapshot_date
+        data_type: DATE
+      - name: days_since_first_seen
+        data_type: BIGINT
+      - name: condition_node_count
+        data_type: BIGINT
+      - name: site_count_us
+        data_type: BIGINT
+      - name: record_hash
+        data_type: VARCHAR
+      - name: current_record_flag
+        data_type: BOOLEAN
+
+  - name: fct_registry_trial_site
+    description: One row per canonical trial x listed U.S. facility x snapshot date.
+    contract:
+      enforced: true
+    columns:
+      - name: trial_site_key
+        data_type: VARCHAR
+        tests: [not_null, unique]
+      - name: registry_trial_key
+        data_type: VARCHAR
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_registry_trial')
+              field: registry_trial_key
+      - name: site_key
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: nct_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: snapshot_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: ingestion_run_id
+        data_type: VARCHAR
+      - name: snapshot_date
+        data_type: DATE
+        tests: [not_null]
+      - name: facility_name
+        data_type: VARCHAR
+      - name: facility_normalized
+        data_type: VARCHAR
+      - name: city
+        data_type: VARCHAR
+      - name: city_normalized
+        data_type: VARCHAR
+      - name: state_normalized
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: zip_code
+        data_type: VARCHAR
+      - name: location_status
+        data_type: VARCHAR
+      - name: trial_overall_status
+        data_type: VARCHAR
+      - name: phase_normalized
+        data_type: VARCHAR
+      - name: lead_sponsor_normalized
+        data_type: VARCHAR
+
+  - name: mart_registry_condition_access_rates
+    description: Population-adjusted access by MeSH condition node and U.S. state at canonical registry grain.
+    contract:
+      enforced: true
+    columns:
+      - name: mesh_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: registry_condition_key
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: condition_label
+        data_type: VARCHAR
+      - name: state_code
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: recruiting_trial_count
+        data_type: BIGINT
+        tests: [not_null]
+      - name: population
+        data_type: BIGINT
+      - name: population_source
+        data_type: VARCHAR
+      - name: population_vintage
+        data_type: VARCHAR
+      - name: recruiting_trials_per_100k
+        data_type: DOUBLE
+      - name: burden_source
+        data_type: VARCHAR
+      - name: burden_measure
+        data_type: VARCHAR
+      - name: burden_vintage
+        data_type: VARCHAR
+      - name: burden_denominator_available
+        data_type: BOOLEAN
+        tests: [not_null]
+      - name: estimated_cases
+        data_type: DOUBLE
+      - name: recruiting_trials_per_1k_est_cases
+        data_type: DOUBLE
+      - name: denominator_label
+        data_type: VARCHAR
+        tests: [not_null]
+
+  - name: mart_registry_participation_prevalence_ratio
+    description: Participation-to-prevalence ratio at canonical registry grain (mesh_id x window x dimension x group).
+    contract:
+      enforced: true
+    columns:
+      - name: ratio_key
+        data_type: VARCHAR
+        tests: [not_null, unique]
+      - name: mesh_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: registry_condition_key
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: condition_label
+        data_type: VARCHAR
+      - name: window_start_year
+        data_type: BIGINT
+        tests: [not_null]
+      - name: window_end_year
+        data_type: BIGINT
+        tests: [not_null]
+      - name: time_window
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: dimension
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: group_label
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: trials_in_window_count
+        data_type: BIGINT
+      - name: trials_reporting_dimension_count
+        data_type: BIGINT
+      - name: reporting_trials_share
+        data_type: DOUBLE
+      - name: group_trial_count
+        data_type: BIGINT
+      - name: group_participants
+        data_type: BIGINT
+      - name: dimension_participants
+        data_type: BIGINT
+      - name: participation_share
+        data_type: DOUBLE
+      - name: participation_share_ci_low
+        data_type: DOUBLE
+      - name: participation_share_ci_high
+        data_type: DOUBLE
+      - name: burden_share
+        data_type: DOUBLE
+      - name: participation_prevalence_ratio
+        data_type: DOUBLE
+      - name: ratio_ci_low
+        data_type: DOUBLE
+      - name: ratio_ci_high
+        data_type: DOUBLE
+      - name: low_n_flag
+        data_type: BOOLEAN
+        tests: [not_null]
+      - name: suppressed_flag
+        data_type: BOOLEAN
+        tests: [not_null]
+      - name: burden_denominator_available
+        data_type: BOOLEAN
+        tests: [not_null]
+      - name: comparison_basis
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: burden_source_id
+        data_type: VARCHAR
+      - name: burden_source
+        data_type: VARCHAR
+      - name: burden_measure
+        data_type: VARCHAR
+      - name: burden_vintage
+        data_type: VARCHAR
+      - name: burden_geography
+        data_type: VARCHAR
+      - name: burden_group_annual_cases
+        data_type: INTEGER
+      - name: denominator_label
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: contributing_nct_ids
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: interpretation_note
+        data_type: VARCHAR
+        tests: [not_null]
+
+  - name: mart_registry_trial_access_by_geo
+    description: Geographic access to open trial sites by MeSH condition node and county at canonical registry grain.
+    contract:
+      enforced: true
+    columns:
+      - name: mesh_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: registry_condition_key
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: condition_label
+        data_type: VARCHAR
+      - name: county_fips
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: county_name
+        data_type: VARCHAR
+      - name: state_code
+        data_type: VARCHAR
+      - name: population
+        data_type: BIGINT
+      - name: population_vintage
+        data_type: VARCHAR
+      - name: svi_quartile
+        data_type: INTEGER
+      - name: ruca_group
+        data_type: VARCHAR
+      - name: ruca_group_pop_share
+        data_type: DOUBLE
+      - name: nearest_site_miles
+        data_type: DOUBLE
+      - name: sites_within_25mi
+        data_type: BIGINT
+        tests: [not_null]
+      - name: sites_within_50mi
+        data_type: BIGINT
+        tests: [not_null]
+      - name: sites_within_100mi
+        data_type: BIGINT
+        tests: [not_null]
+      - name: within_25mi
+        data_type: BOOLEAN
+        tests: [not_null]
+      - name: within_50mi
+        data_type: BOOLEAN
+        tests: [not_null]
+      - name: within_100mi
+        data_type: BOOLEAN
+        tests: [not_null]
+      - name: sites_total
+        data_type: BIGINT
+        tests: [not_null]
+      - name: sites_exact
+        data_type: BIGINT
+        tests: [not_null]
+      - name: sites_zip_approx
+        data_type: BIGINT
+        tests: [not_null]
+      - name: sites_city_approx
+        data_type: BIGINT
+        tests: [not_null]
+      - name: sites_excluded
+        data_type: BIGINT
+        tests: [not_null]
+      - name: exact_coordinate_share
+        data_type: DOUBLE
+      - name: coverage_confidence
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: access_basis
+        data_type: VARCHAR
+        tests: [not_null]
+
+  - name: mart_registry_trial_access_by_stratum
+    description: Access shares by rural-urban group and SVI quartile at canonical registry grain.
+    contract:
+      enforced: true
+    columns:
+      - name: mesh_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: registry_condition_key
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: condition_label
+        data_type: VARCHAR
+      - name: stratum_type
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: stratum_value
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: county_count
+        data_type: BIGINT
+        tests: [not_null]
+      - name: population
+        data_type: BIGINT
+      - name: population_within_25mi
+        data_type: BIGINT
+        tests: [not_null]
+      - name: population_within_50mi
+        data_type: BIGINT
+        tests: [not_null]
+      - name: population_within_100mi
+        data_type: BIGINT
+        tests: [not_null]
+      - name: share_within_25mi
+        data_type: DOUBLE
+      - name: share_within_50mi
+        data_type: DOUBLE
+      - name: share_within_100mi
+        data_type: DOUBLE
+      - name: sites_total
+        data_type: BIGINT
+        tests: [not_null]
+      - name: sites_exact
+        data_type: BIGINT
+        tests: [not_null]
+      - name: sites_zip_approx
+        data_type: BIGINT
+        tests: [not_null]
+      - name: sites_city_approx
+        data_type: BIGINT
+        tests: [not_null]
+      - name: sites_excluded
+        data_type: BIGINT
+        tests: [not_null]
+      - name: coverage_confidence
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: access_basis
+        data_type: VARCHAR
+        tests: [not_null]
+
+  - name: mart_registry_site_overlap
+    description: Facility-level trial overlap per snapshot, per preset over canonical registry observations.
+    contract:
+      enforced: true
+    columns:
+      - name: preset_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: snapshot_date
+        data_type: DATE
+        tests: [not_null]
+      - name: facility_normalized
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: city_normalized
+        data_type: VARCHAR
+      - name: state_normalized
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: facility_name
+        data_type: VARCHAR
+      - name: city
+        data_type: VARCHAR
+      - name: listed_trial_count
+        data_type: BIGINT
+      - name: recruiting_trial_count
+        data_type: BIGINT
+      - name: sponsor_count
+        data_type: BIGINT
+      - name: phase_mix
+        data_type: VARCHAR
+      - name: repeated_site_participation_flag
+        data_type: BOOLEAN
+
+  - name: mart_registry_trial_activity
+    description: Segment-level trial activity per snapshot, per preset over canonical registry observations.
+    contract:
+      enforced: true
+    columns:
+      - name: preset_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: snapshot_date
+        data_type: DATE
+        tests: [not_null]
+      - name: condition_group
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: state_normalized
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: phase_normalized
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: overall_status
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: trial_count
+        data_type: BIGINT
+      - name: sponsor_count
+        data_type: BIGINT
+      - name: listed_site_count
+        data_type: HUGEINT
+      - name: entered_recruiting_count
+        data_type: BIGINT
+      - name: left_recruiting_count
+        data_type: BIGINT
+      - name: dementia_relevant_trial_count
+        data_type: BIGINT
+      - name: flagged_record_count
+        data_type: BIGINT
+      - name: registry_condition_key
+        data_type: VARCHAR
+        tests: [not_null]
+
+  - name: mart_registry_condition_geography_trends
+    description: Monthly condition x geography trend view per preset over canonical registry observations.
+    contract:
+      enforced: true
+    columns:
+      - name: preset_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: activity_month
+        data_type: TIMESTAMP
+        tests: [not_null]
+      - name: condition_group
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: registry_condition_key
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: state_normalized
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: trial_count
+        data_type: BIGINT
+      - name: recruiting_trial_count
+        data_type: BIGINT
+      - name: newly_registered_in_month
+        data_type: BIGINT
+      - name: sponsor_count
+        data_type: BIGINT
+      - name: recruiting_trial_count_3m_avg
+        data_type: DOUBLE
+      - name: recruiting_count_3m_baseline
+        data_type: BIGINT
+      - name: observed_history_days
+        data_type: BIGINT
+      - name: recruiting_growth_3m
+        data_type: DOUBLE
+      - name: population
+        data_type: BIGINT
+      - name: population_source
+        data_type: VARCHAR
+      - name: population_vintage
+        data_type: VARCHAR
+      - name: recruiting_trials_per_100k
+        data_type: DOUBLE
+
+  - name: mart_registry_recruiting_competition
+    description: Potential competition signal per recruiting segment, per preset over canonical registry observations.
+    contract:
+      enforced: true
+    columns:
+      - name: preset_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: snapshot_date
+        data_type: DATE
+        tests: [not_null]
+      - name: condition_group
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: state_normalized
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: phase_normalized
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: recruiting_trial_count
+        data_type: BIGINT
+      - name: listed_site_count
+        data_type: HUGEINT
+      - name: entered_recruiting_count
+        data_type: BIGINT
+      - name: newly_registered_90d
+        data_type: BIGINT
+      - name: observed_history_days
+        data_type: BIGINT
+      - name: recruiting_count_90d_baseline
+        data_type: BIGINT
+      - name: new_recruiting_30d
+        data_type: HUGEINT
+      - name: new_recruiting_90d
+        data_type: HUGEINT
+      - name: recruiting_growth_90d
+        data_type: DOUBLE
+      - name: sponsor_count
+        data_type: BIGINT
+      - name: top_sponsor_share
+        data_type: DOUBLE
+      - name: sponsor_hhi
+        data_type: DOUBLE
+      - name: density_percentile
+        data_type: DOUBLE
+      - name: competition_signal_band
+        data_type: VARCHAR
+      - name: registry_condition_key
+        data_type: VARCHAR
+        tests: [not_null]
+
+  - name: mart_registry_feasibility_priority_queue
+    description: Feasibility review priority queue per preset over canonical registry observations.
+    contract:
+      enforced: true
+    columns:
+      - name: priority_queue_key
+        data_type: VARCHAR
+        tests: [not_null, unique]
+      - name: snapshot_date
+        data_type: DATE
+      - name: latest_snapshot_date
+        data_type: DATE
+      - name: preset_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: condition_group
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: registry_condition_key
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: state_normalized
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: phase_normalized
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: recruiting_trial_count
+        data_type: BIGINT
+      - name: active_recruiting_trials
+        data_type: BIGINT
+      - name: listed_site_count
+        data_type: HUGEINT
+      - name: new_recruiting_90d
+        data_type: HUGEINT
+      - name: newly_registered_90d
+        data_type: BIGINT
+      - name: has_multi_snapshot_history
+        data_type: BOOLEAN
+      - name: observed_history_days
+        data_type: BIGINT
+      - name: sponsor_count
+        data_type: BIGINT
+      - name: distinct_sponsors
+        data_type: BIGINT
+      - name: top_sponsor_share
+        data_type: DOUBLE
+      - name: sponsor_hhi
+        data_type: DOUBLE
+      - name: competition_signal_band
+        data_type: VARCHAR
+      - name: site_overlap_share
+        data_type: DOUBLE
+      - name: site_overlap_rate
+        data_type: DOUBLE
+      - name: record_quality_ok_share
+        data_type: DOUBLE
+      - name: operational_completeness_share
+        data_type: DOUBLE
+      - name: priority_explanation
+        data_type: VARCHAR
+      - name: interpretation_note
+        data_type: VARCHAR
+        tests: [not_null]
+
+  - name: mart_registry_baseline_demographics_coverage
+    description: Baseline demographics coverage per preset, condition group, and completion year.
+    contract:
+      enforced: true
+    columns:
+      - name: preset_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: condition_group
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: completion_year
+        data_type: BIGINT
+      - name: trials_with_results_count
+        data_type: BIGINT
+        tests: [not_null]
+      - name: reports_sex_count
+        data_type: BIGINT
+        tests: [not_null]
+      - name: reports_age_count
+        data_type: BIGINT
+        tests: [not_null]
+      - name: reports_race_count
+        data_type: BIGINT
+        tests: [not_null]
+      - name: reports_ethnicity_count
+        data_type: BIGINT
+        tests: [not_null]
+      - name: ambiguous_combined_trials_count
+        data_type: BIGINT
+        tests: [not_null]
+      - name: reports_sex_share
+        data_type: DOUBLE
+      - name: reports_age_share
+        data_type: DOUBLE
+      - name: reports_race_share
+        data_type: DOUBLE
+      - name: reports_ethnicity_share
+        data_type: DOUBLE
+      - name: ambiguous_combined_share
+        data_type: DOUBLE
+      - name: registry_condition_key
+        data_type: VARCHAR
+        tests: [not_null]
+
+  - name: mart_registry_trial_similarity
+    description: Deterministic trial-pair comparability per preset over canonical registry observations.
+    contract:
+      enforced: true
+    columns:
+      - name: trial_similarity_key
+        data_type: VARCHAR
+        tests: [not_null, unique]
+      - name: preset_id
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: nct_id_a
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: nct_id_b
+        data_type: VARCHAR
+        tests: [not_null]
+      - name: similarity_score
+        data_type: DOUBLE
+        tests: [not_null]
+      - name: similarity_rank
+        data_type: BIGINT
+        tests: [not_null]
+      - name: same_condition
+        data_type: INTEGER
+      - name: weight_same_condition
+        data_type: DOUBLE
+      - name: weighted_same_condition
+        data_type: DOUBLE
+      - name: same_phase
+        data_type: INTEGER
+      - name: weight_same_phase
+        data_type: DOUBLE
+      - name: weighted_same_phase
+        data_type: DOUBLE
+      - name: geography_overlap
+        data_type: INTEGER
+      - name: weight_geography_overlap
+        data_type: DOUBLE
+      - name: weighted_geography_overlap
+        data_type: DOUBLE
+      - name: intervention_type_overlap
+        data_type: INTEGER
+      - name: weight_intervention_type_overlap
+        data_type: DOUBLE
+      - name: weighted_intervention_type_overlap
+        data_type: DOUBLE
+      - name: study_design_match
+        data_type: INTEGER
+      - name: weight_study_design_match
+        data_type: DOUBLE
+      - name: weighted_study_design_match
+        data_type: DOUBLE
+      - name: eligibility_compatible
+        data_type: INTEGER
+      - name: weight_eligibility_compatible
+        data_type: DOUBLE
+      - name: weighted_eligibility_compatible
+        data_type: DOUBLE
+      - name: enrollment_band_match
+        data_type: INTEGER
+      - name: weight_enrollment_band_match
+        data_type: DOUBLE
+      - name: weighted_enrollment_band_match
+        data_type: DOUBLE
+      - name: similarity_explanation
+        data_type: VARCHAR
+

@@ -25,3 +25,24 @@ models:
       - name: nct_id_b
         description: The other side of the pair.
         tests: [not_null]
+
+  - name: int_registry_similarity_candidates
+    description: >
+      Bounded candidate pairs for mart_registry_trial_similarity: pairs within a
+      preset that share at least one (condition group, phase) token whose per-preset
+      trial frequency is below var('similarity_max_token_df'), emitted in both
+      orientations over canonical registry observations.
+    columns:
+      - name: candidate_pair_key
+        description: Surrogate key over preset_id x nct_id_a x nct_id_b.
+        tests: [not_null, unique]
+      - name: preset_id
+        description: Preset scope whose trial membership produced the pair.
+        tests: [not_null]
+      - name: nct_id_a
+        description: First side of the pair.
+        tests: [not_null]
+      - name: nct_id_b
+        description: Second side of the pair.
+        tests: [not_null]
+
