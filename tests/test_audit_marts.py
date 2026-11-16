@@ -403,3 +403,61 @@ def test_registry_reliability_and_audit_preset_denominators_and_unassigned(
     ).read_text(encoding="utf-8")
     assert "mart_registry_data_reliability" in trend_sql
     assert "over (" not in trend_sql.lower()
+
+
+def test_registry_reliability_same_day_runs_keep_complete_preset_denominators(
+    tmp_path: Path,
+) -> None:
+    """Two successful full_catalog runs on the same UTC day keep complete preset counts."""
+    from dataclasses import replace
+    from datetime import UTC, datetime
+
+    import duckdb
+
+    from tests.fixture_warehouse import base_adrd_run, build_fixture_warehouse
+
+    adrd_mesh = {
+        "conditionBrowseModule": {"meshes": [{"id": "D000544", "term": "Alzheimer Disease"}]}
+    }
+    no_mesh = {"conditionBrowseModule": {"meshes": []}}
+    overrides = {
+        "NCT00000001": {"derivedSection": adrd_mesh},
+        "NCT00000002": {"derivedSection": adrd_mesh},
+        **{f"NCT{i:08d}": {"derivedSection": no_mesh} for i in range(3, 11)},
+    }
+    base = base_adrd_run()
+    run1 = replace(
+        base,
+        profile="full_catalog",
+        condition="",
+        run_id="20260915T100000Z_sameday1",
+        started_at=datetime(2026, 9, 15, 10, 0, tzinfo=UTC),
+        study_overrides=overrides,
+    )
+    run2 = replace(
+        base,
+        profile="full_catalog",
+        condition="",
+        run_id="20260915T140000Z_sameday2",
+        started_at=datetime(2026, 9, 15, 14, 0, tzinfo=UTC),
+        study_overrides=overrides,
+    )
+    root = tmp_path / "same_day_reliability"
+    build_fixture_warehouse(root, runs=[run1, run2])
+    with duckdb.connect(str(root / "data/warehouse/clinical_trials.duckdb"), read_only=True) as con:
+        rows = con.execute(
+            "select ingestion_run_id, preset_id, membership_scope, "
+            "source_trial_row_count, trial_row_count, source_location_row_count, "
+            "location_row_count, source_condition_row_count, condition_row_count "
+            "from main_marts.mart_registry_data_reliability "
+            "order by ingestion_run_id, preset_id"
+        ).fetchall()
+        assert len(rows) == 4
+        for run_id in ("20260915T100000Z_sameday1", "20260915T140000Z_sameday2"):
+            run_rows = [r for r in rows if r[0] == run_id]
+            assert [(r[1], r[2], r[3], r[4], r[5]) for r in run_rows] == [
+                ("adrd", "preset", 10, 2, 16),
+                ("unassigned", "unassigned", 10, 8, 16),
+            ]
+            assert sum(r[6] for r in run_rows) == run_rows[0][5]
+            assert sum(r[8] for r in run_rows) == run_rows[0][7]

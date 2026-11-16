@@ -390,55 +390,70 @@ def test_registry_transparency_marts_preset_vs_source_totals_and_baseline_parity
         assert (row[11], row[12], row[13]) == (1, 1, 2)
         assert "NCT00000081" not in row[14] and "NCT00000082" not in row[14]
 
-        # 3. Direct equivalence between legacy and canonical marts for identical ADRD single-run
-        adrd_only_run = replace(
-            base,
-            profile="full_catalog",
-            condition="",
-            study_overrides={f"NCT{i:08d}": {"derivedSection": adrd_mesh} for i in range(1, 11)},
-        )
-        adrd_legacy_run = replace(
-            base,
-            run_id=base.run_id + "_leg",
-            started_at=base.started_at + timedelta(seconds=1),
-            study_overrides={f"NCT{i:08d}": {"derivedSection": adrd_mesh} for i in range(1, 11)},
-        )
-        parity_root = tmp_path / "parity_transparency"
-        build_fixture_warehouse(parity_root, runs=[adrd_only_run, adrd_legacy_run])
-        with duckdb.connect(
-            str(parity_root / "data/warehouse/clinical_trials.duckdb"), read_only=True
-        ) as pcon:
-            leg_early = pcon.execute(
-                "select condition_group, sponsor_class, stopped_year, overall_status, "
-                "why_stopped, stopped_trial_count, contributing_nct_ids "
-                "from main_marts.mart_early_stop_transparency "
-                "where indication_profile_id = 'adrd' "
-                "order by 1, 2, 3, 4, 5"
-            ).fetchall()
-            reg_early = pcon.execute(
-                "select condition_group, sponsor_class, stopped_year, overall_status, "
-                "why_stopped, stopped_trial_count, contributing_nct_ids "
-                "from main_marts.mart_registry_early_stop_transparency where preset_id = 'adrd' "
-                "order by 1, 2, 3, 4, 5"
-            ).fetchall()
-            assert reg_early == leg_early
+        # 3. Direct equivalence between legacy and canonical marts for ADRD & NSCLC single-runs
+        parity_cases = [
+            ("adrd", adrd_mesh, base),
+            ("oncology_nsclc", nsclc_mesh, base_nsclc_run()),
+        ]
+        for preset_id, mesh_payload, preset_base in parity_cases:
+            reg_run = replace(
+                preset_base,
+                profile="full_catalog",
+                condition="",
+                study_overrides={
+                    f"NCT{i:08d}": {"derivedSection": mesh_payload} for i in range(1, 11)
+                },
+            )
+            leg_run = replace(
+                preset_base,
+                run_id=preset_base.run_id + "_leg",
+                started_at=preset_base.started_at + timedelta(seconds=1),
+                study_overrides={
+                    f"NCT{i:08d}": {"derivedSection": mesh_payload} for i in range(1, 11)
+                },
+            )
+            parity_root = tmp_path / f"parity_transparency_{preset_id}"
+            build_fixture_warehouse(parity_root, runs=[reg_run, leg_run])
+            with duckdb.connect(
+                str(parity_root / "data/warehouse/clinical_trials.duckdb"), read_only=True
+            ) as pcon:
+                leg_early = pcon.execute(
+                    "select condition_group, sponsor_class, stopped_year, overall_status, "
+                    "why_stopped, stopped_trial_count, contributing_nct_ids "
+                    "from main_marts.mart_early_stop_transparency "
+                    "where indication_profile_id = ? "
+                    "order by 1, 2, 3, 4, 5",
+                    [preset_id],
+                ).fetchall()
+                reg_early = pcon.execute(
+                    "select condition_group, sponsor_class, stopped_year, overall_status, "
+                    "why_stopped, stopped_trial_count, contributing_nct_ids "
+                    "from main_marts.mart_registry_early_stop_transparency where preset_id = ? "
+                    "order by 1, 2, 3, 4, 5",
+                    [preset_id],
+                ).fetchall()
+                assert len(reg_early) > 0
+                assert reg_early == leg_early
 
-            leg_res = pcon.execute(
-                "select sponsor_class, lead_sponsor, total_completed_trials, "
-                "total_terminated_trials, total_evaluable_trials, "
-                "results_posted_evaluable_count, results_overdue_count, results_posted_rate, "
-                "ci_lower, ci_upper, results_overdue_rate, is_ranked, evaluable_nct_ids, "
-                "contributing_nct_ids, overdue_nct_ids, posted_nct_ids "
-                "from main_marts.mart_results_posting_transparency "
-                "where indication_profile_id = 'adrd' order by 1, 2"
-            ).fetchall()
-            reg_res = pcon.execute(
-                "select sponsor_class, lead_sponsor, total_completed_trials, "
-                "total_terminated_trials, total_evaluable_trials, "
-                "results_posted_evaluable_count, results_overdue_count, results_posted_rate, "
-                "ci_lower, ci_upper, results_overdue_rate, is_ranked, evaluable_nct_ids, "
-                "contributing_nct_ids, overdue_nct_ids, posted_nct_ids "
-                "from main_marts.mart_registry_results_posting_transparency "
-                "where preset_id = 'adrd' order by 1, 2"
-            ).fetchall()
-            assert reg_res == leg_res
+                leg_res = pcon.execute(
+                    "select sponsor_class, lead_sponsor, total_completed_trials, "
+                    "total_terminated_trials, total_evaluable_trials, "
+                    "results_posted_evaluable_count, results_overdue_count, results_posted_rate, "
+                    "ci_lower, ci_upper, results_overdue_rate, is_ranked, evaluable_nct_ids, "
+                    "contributing_nct_ids, overdue_nct_ids, posted_nct_ids "
+                    "from main_marts.mart_results_posting_transparency "
+                    "where indication_profile_id = ? order by 1, 2",
+                    [preset_id],
+                ).fetchall()
+                reg_res = pcon.execute(
+                    "select sponsor_class, lead_sponsor, total_completed_trials, "
+                    "total_terminated_trials, total_evaluable_trials, "
+                    "results_posted_evaluable_count, results_overdue_count, results_posted_rate, "
+                    "ci_lower, ci_upper, results_overdue_rate, is_ranked, evaluable_nct_ids, "
+                    "contributing_nct_ids, overdue_nct_ids, posted_nct_ids "
+                    "from main_marts.mart_registry_results_posting_transparency "
+                    "where preset_id = ? order by 1, 2",
+                    [preset_id],
+                ).fetchall()
+                assert len(reg_res) > 0
+                assert reg_res == leg_res

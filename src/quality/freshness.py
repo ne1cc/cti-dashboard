@@ -302,11 +302,15 @@ def _collect_success() -> Success:
             captured_at_utc=latest.started_at_utc,
             row_counts=counts,
         )
-    registry_result = _collect_registry_capture()
     registry_capture: Capture | None = None
-    if registry_result is not None:
-        registry_capture, reg_checks_count = registry_result
-        total += reg_checks_count
+    try:
+        registry_result = _collect_registry_capture()
+    except (ValueError, KeyError, duckdb.Error) as exc:
+        print(f"warning: canonical registry capture skipped: {exc}", file=sys.stderr)
+    else:
+        if registry_result is not None:
+            registry_capture, reg_checks_count = registry_result
+            total += reg_checks_count
     return Success(
         pipeline_completed_at_utc=utc_now(),
         source_api_version="v2",

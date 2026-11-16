@@ -487,3 +487,54 @@ def test_registry_capture_recorded_and_validated_when_built(
     payload["last_success"]["registry"]["row_counts"]["dim_registry_trial"] = 0
     write_marker(freshness, payload)
     assert freshness.status()["ok"] is False
+
+
+def test_registry_capture_failure_does_not_block_profile_freshness(
+    freshness, accepted_root, capsys
+) -> None:
+    """An un-rebuilt or failing full_catalog run warns without failing profile freshness."""
+    reg_profile = get_registry().registry_wide()
+    cfg = reg_profile.config
+    reg_run_id = "20261019T120000Z_full_catalog"
+    write_manifest(
+        cfg.paths.bronze_manifests,
+        IngestionManifest(
+            ingestion_run_id=reg_run_id,
+            query_hash="fixture",
+            endpoint="https://clinicaltrials.gov/api/v2/studies",
+            params={},
+            profile="full_catalog",
+            status="success",
+            started_at_utc=NOW - timedelta(days=4),
+            ended_at_utc=NOW - timedelta(days=4) + timedelta(minutes=1),
+            page_count=1,
+            record_count=1,
+        ),
+    )
+    # No silver/registry_trials parquet written for reg_run_id -> reconcile_registry fails
+    with duckdb.connect(str(accepted_root)) as con:
+        con.execute(
+            "create table main_marts.dim_registry_trial "
+            "(registry_trial_key varchar, nct_id varchar)"
+        )
+        con.execute(
+            "create table main_marts.fct_registry_trial_snapshot "
+            "(snapshot_id varchar, nct_id varchar, current_record_flag boolean)"
+        )
+        con.execute(
+            "create table main_marts.bridge_preset_trial "
+            "(preset_id varchar, nct_id varchar, current_record_flag boolean)"
+        )
+        con.execute(
+            "create table main_marts.mart_registry_trial_similarity "
+            "(preset_id varchar, nct_id_a varchar, nct_id_b varchar)"
+        )
+
+    assert freshness.main(["--record-success"]) == 0
+    err = capsys.readouterr().err
+    assert "canonical registry capture skipped" in err
+    payload = json.loads(freshness.marker_path().read_text())
+    assert payload["attempt_status"] == "success"
+    assert payload["last_success"]["registry"] is None
+    assert freshness.status()["ok"] is True
+    assert freshness.status("registry")["ok"] is False

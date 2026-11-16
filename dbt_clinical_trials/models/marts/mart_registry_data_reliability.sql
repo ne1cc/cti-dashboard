@@ -3,8 +3,9 @@
 --
 -- Distinguishes source ingestion completeness (manifest reconciliation and
 -- source-wide trial/location/condition totals across the authoritative
--- whole-registry run) from each preset's membership denominator (bridge_preset_trial,
--- including the explicit 'unassigned' scope for no-MeSH/unmapped trials).
+-- whole-registry run) from each run's per-snapshot preset membership
+-- denominator (including the explicit 'unassigned' scope for no-MeSH/unmapped
+-- trials, computed at snapshot_id grain so same-day runs stay independent).
 -- Runs without preset memberships (e.g. failed or bronze-only runs) appear once
 -- under preset_id = '__source__' with membership_scope = 'source_only'.
 with runs as (
@@ -55,12 +56,144 @@ source_condition_stats as (
     group by 1
 ),
 
+successful_runs as (
+    select ingestion_run_id as snapshot_id
+    from runs
+    where status = 'success'
+),
+
+run_trials as (
+    select
+        t.snapshot_id,
+        t.nct_id
+    from {{ ref('stg_registry_trials') }} t
+    inner join successful_runs sr
+        on t.snapshot_id = sr.snapshot_id
+),
+
+profile_files as (
+    select
+        rf.filename,
+        string_agg(
+            regexp_replace(u.line, '#.*', ''),
+            chr(10) order by u.line_no
+        ) as clean_content
+    from read_text('config/profiles/*.yml') rf,
+        unnest(string_split(rf.content, chr(10))) with ordinality as u(line, line_no)
+    group by rf.filename
+),
+
+profile_meta as (
+    select
+        regexp_extract(
+            clean_content,
+            'profile:[^\n]*\n(?:[ \t]+.*\n)*?[ \t]+id:[ \t]*([a-zA-Z0-9_]+)',
+            1
+        ) as preset_id,
+        regexp_extract(
+            clean_content,
+            'mesh_terms:[^\n]*\n((?:[ \t]+-[^\n]*\n)+)',
+            1
+        ) as terms_block,
+        coalesce(
+            nullif(
+                regexp_extract(
+                    replace(
+                        trim(
+                            both '"'' ' from regexp_extract(
+                                clean_content,
+                                'profile:[^\n]*\n(?:[ \t]+.*\n)*?[ \t]+taxonomy:[ \t]*([^\n]+)',
+                                1
+                            )
+                        ),
+                        '\',
+                        '/'
+                    ),
+                    '(config/[^/]+)$',
+                    1
+                ),
+                ''
+            ),
+            trim(
+                both '"'' ' from regexp_extract(
+                    clean_content,
+                    'profile:[^\n]*\n(?:[ \t]+.*\n)*?[ \t]+taxonomy:[ \t]*([^\n]+)',
+                    1
+                )
+            )
+        ) as taxonomy_path
+    from profile_files
+),
+
+preset_mesh_lines as (
+    select
+        preset_id,
+        unnest(string_split(terms_block, chr(10))) as line
+    from profile_meta
+    where terms_block is not null and terms_block != ''
+),
+
+preset_mesh_mapping as (
+    select
+        preset_id,
+        trim(both '"'' ' from regexp_extract(line, '-[ \t]*(.*)', 1)) as mesh_term
+    from preset_mesh_lines
+    where regexp_extract(line, '-[ \t]*(.*)', 1) != ''
+),
+
+trial_mesh as (
+    select distinct
+        m.snapshot_id,
+        m.nct_id,
+        m.mesh_term
+    from {{ ref('stg_registry_trial_condition_mesh') }} m
+    inner join successful_runs sr
+        on m.snapshot_id = sr.snapshot_id
+),
+
+run_preset_matches as (
+    select distinct
+        p.preset_id,
+        rt.snapshot_id,
+        rt.nct_id,
+        false as is_unassigned,
+        'preset' as membership_scope
+    from run_trials rt
+    inner join trial_mesh m
+        on rt.snapshot_id = m.snapshot_id
+        and rt.nct_id = m.nct_id
+    inner join preset_mesh_mapping p
+        on lower(trim(m.mesh_term)) = lower(trim(p.mesh_term))
+),
+
+run_unassigned_memberships as (
+    select
+        'unassigned' as preset_id,
+        rt.snapshot_id,
+        rt.nct_id,
+        true as is_unassigned,
+        'unassigned' as membership_scope
+    from run_trials rt
+    where not exists (
+        select 1
+        from run_preset_matches pm
+        where pm.snapshot_id = rt.snapshot_id
+          and pm.nct_id = rt.nct_id
+    )
+),
+
+run_memberships as (
+    select * from run_preset_matches
+    union all
+    select * from run_unassigned_memberships
+),
+
 run_presets as (
     select distinct
         snapshot_id as ingestion_run_id,
         preset_id,
         membership_scope
-    from {{ ref('bridge_preset_trial') }}
+    from run_memberships
 ),
 
 run_scopes as (
@@ -83,7 +216,7 @@ preset_trial_stats as (
         count(*) filter (where t.enrollment_count is null) as missing_enrollment_count,
         count(*) filter (where t.start_date is null) as missing_start_date_count,
         count(*) filter (where t.lead_sponsor_normalized is null) as missing_lead_sponsor_count
-    from {{ ref('bridge_preset_trial') }} b
+    from run_memberships b
     inner join {{ ref('stg_registry_trials') }} t
         on b.snapshot_id = t.snapshot_id
         and b.nct_id = t.nct_id
@@ -109,7 +242,7 @@ preset_location_stats as (
                   )
               )
         ) as coordinates_fallback_eligible_count
-    from {{ ref('bridge_preset_trial') }} b
+    from run_memberships b
     inner join {{ ref('stg_registry_trial_locations') }} l
         on b.snapshot_id = l.snapshot_id
         and b.nct_id = l.nct_id
@@ -127,7 +260,7 @@ preset_mapped_condition_stats as (
                 0
             ) as bigint
         ) as low_confidence_condition_count
-    from {{ ref('int_registry_preset_condition_mapping') }}
+    from {{ ref('int_registry_run_preset_condition_mapping') }}
     group by 1, 2
 ),
 
@@ -137,7 +270,7 @@ unassigned_condition_stats as (
         b.preset_id,
         count(*) as condition_row_count,
         cast(0 as bigint) as low_confidence_condition_count
-    from {{ ref('bridge_preset_trial') }} b
+    from run_memberships b
     inner join {{ ref('stg_registry_trial_conditions') }} c
         on b.snapshot_id = c.snapshot_id
         and b.nct_id = c.nct_id
