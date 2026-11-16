@@ -608,6 +608,9 @@ def test_registry_report_renders_reliability_table_and_runs_reconciliation(
         "| registry_warehouse_has_similar_trials | full_catalog | \u2014 | >= 1 | 0 | no |" in text
     )
     # 11 of 12 checks pass; only registry_warehouse_has_similar_trials fails because
-    # shared_trial_runs has only one PHASE3 and one PHASE2 ADRD trial.
+    # shared_trial_runs has only one PHASE3 and one PHASE2 ADRD trial (non-blocking until phase 5).
+    assert "**1/1 reconciliation checks passed.**" in text
+    assert "**10/11 registry reconciliation checks passed (non-blocking until phase 5).**" in text
     assert report.checks_total == 12
-    assert report.checks_failed == 1
+    assert report.checks_failed == 0
+    assert report.registry_checks_failed == 1

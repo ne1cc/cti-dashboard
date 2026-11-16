@@ -674,6 +674,34 @@ def test_quality_report_exits_zero_when_every_check_passes(project_root_tmp, mon
     assert "2/2 reconciliation checks passed" in text
 
 
+def test_quality_report_exits_zero_when_only_registry_check_fails(project_root_tmp, monkeypatch):
+    """Registry reconciliation failures warn without blocking legacy `make pipeline`."""
+    failing_registry = ReconciliationCheck(
+        profile_id="full_catalog",
+        check="registry_warehouse_covers_latest_silver",
+        run_id="r_reg",
+        expected=10,
+        actual=0,
+        passed=False,
+        note="warehouse not yet rebuilt",
+    )
+    monkeypatch.setattr(
+        "src.quality.data_quality_report._has_registry_pipeline_artifacts", lambda _cfg: True
+    )
+    monkeypatch.setattr(
+        "src.quality.data_quality_report.run_registry_reconciliation", lambda: [failing_registry]
+    )
+
+    code, text = _quality_report_exit(project_root_tmp, monkeypatch, [_check(passed=True)])
+
+    assert code == 0
+    assert "1/1 reconciliation checks passed." in text
+    assert "0/1 registry reconciliation checks passed (non-blocking until phase 5)." in text
+    assert (
+        "| registry_warehouse_covers_latest_silver | full_catalog | r_reg | 10 | 0 | no |" in text
+    )
+
+
 def test_cli_parser_transform_profile_accepts_indication():
     parser = build_parser()
     args = parser.parse_args(["transform", "--profile", "oncology_nsclc"])

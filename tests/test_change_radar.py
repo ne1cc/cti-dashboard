@@ -287,3 +287,50 @@ def test_registry_change_radar_events_untrusted_exclusion_and_persistence(
     baseline_events = load_baseline()["mart_trial_change_events"]["rows"]
     assert json.loads(json.dumps(baseline_events)) == []
     assert _rows(single_root, f"select count(*) from {REG_EVENTS}") == [(0,)]
+
+
+def test_registry_change_radar_matches_legacy_multi_run_events(
+    tmp_path: Path, change_radar_root: Path
+) -> None:
+    """Multi-run parity: preset-scoped canonical Change Radar equals legacy mart rows."""
+    from dataclasses import replace
+
+    from tests.conftest import change_radar_runs
+
+    mesh = {"conditionBrowseModule": {"meshes": [{"id": "D000544", "term": "Alzheimer Disease"}]}}
+    base_overrides = {f"NCT{i:08d}": {"derivedSection": mesh} for i in range(1, 10)}
+    reg_runs = []
+    for run in change_radar_runs():
+        merged = {**base_overrides, **run.study_overrides}
+        for nct, patch in run.study_overrides.items():
+            if nct in base_overrides:
+                merged[nct] = {**base_overrides[nct], **patch}
+        reg_runs.append(
+            replace(
+                run,
+                profile="full_catalog",
+                condition="",
+                study_overrides=merged,
+            )
+        )
+
+    reg_root = tmp_path / "registry_radar_parity"
+    build_fixture_warehouse(reg_root, runs=reg_runs)
+
+    parity_cols = (
+        f"{COLS}, before_ingestion_run_id, after_ingestion_run_id, "
+        "before_observed_at_utc, after_observed_at_utc"
+    )
+    legacy_rows = _rows(
+        change_radar_root,
+        f"select {parity_cols} from {EVENTS} order by nct_id, event_type, field_name",
+    )
+    registry_rows = _rows(
+        reg_root,
+        f"select {parity_cols} from {REG_EVENTS} e "
+        "where exists (select 1 from main_marts.bridge_preset_trial b "
+        "where b.nct_id = e.nct_id and b.snapshot_id = e.after_ingestion_run_id "
+        "and b.preset_id = 'adrd') order by nct_id, event_type, field_name",
+    )
+    assert len(legacy_rows) == 5
+    assert registry_rows == legacy_rows
