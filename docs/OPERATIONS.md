@@ -336,7 +336,9 @@ Only the registry's configured `refreshable()` set is required. A success
 requires a complete successful manifest and an accepted current warehouse run
 for every required profile, along with passing existing reconciliation checks.
 The supervisor invokes the writer only after the full pipeline, including dbt
-tests and the quality-report gate, succeeds. A failed attempt retains the
+tests and the quality-report gate, succeeds. The report also lists registry
+reconciliation checks, but they are report-only (logged as a warning, never
+failing the gate) until phase 5 retires the profile checks. A failed attempt retains the
 previous `last_success`; an interrupted attempt remains `running` and fails
 freshness verification. Reusing an old capture may complete the pipeline
 successfully but cannot reset capture age. Missing, malformed, future-dated,

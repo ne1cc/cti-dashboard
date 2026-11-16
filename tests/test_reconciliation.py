@@ -614,3 +614,4 @@ def test_registry_report_renders_reliability_table_and_runs_reconciliation(
     assert report.checks_total == 12
     assert report.checks_failed == 0
     assert report.registry_checks_failed == 1
+    assert 0 < report.registry_checks_total < report.checks_total
