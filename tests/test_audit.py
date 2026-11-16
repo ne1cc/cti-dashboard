@@ -559,3 +559,70 @@ def test_real_first_post_registered_source_boundary(event_readers):
     event = json.loads(audit.export_audit(result))["events"][0]
     assert event["study_first_post_date_raw"] == "2026-06-03"
     assert event["event_date"].startswith("2026-06-03")
+
+
+def test_registry_grain_compute_audit_preset_scope_and_source_totals():
+    """compute_audit handles registry grain (snapshot_id, nct_id), preset scope, source totals."""
+    studies, locations, conditions, observations = inputs()
+    reg_studies = studies.drop(columns=["indication_profile_id"])
+    reg_locations = locations.drop(columns=["indication_profile_id"])
+    reg_conditions = conditions.drop(columns=["indication_profile_id"]).assign(preset_id="adrd")
+    # Include an unassigned study F (no condition row for adrd preset) and another preset's row
+    extra_study = reg_studies.iloc[[0]].copy().assign(nct_id="F", overall_status="RECRUITING")
+    other_cond = reg_conditions.iloc[[0]].copy().assign(nct_id="F", preset_id="oncology_nsclc")
+    reg_studies = pd.concat([reg_studies, extra_study], ignore_index=True)
+    reg_conditions = pd.concat([reg_conditions, other_cond], ignore_index=True)
+    reg_obs = pd.concat(
+        [
+            observations.drop(columns=["indication_profile_id"]).assign(preset_id="adrd"),
+            pd.DataFrame([{"snapshot_id": "run", "nct_id": "F", "preset_id": "oncology_nsclc"}]),
+        ],
+        ignore_index=True,
+    )
+
+    source_totals = {"eligible_studies": 6, "unassigned_studies": 1}
+    result = audit.compute_audit(
+        reg_studies,
+        reg_locations,
+        reg_conditions,
+        profile_id="adrd",
+        observations=reg_obs,
+        filters={"states": ["CA"]},
+        evaluation_time="2026-09-02T10:00:00Z",
+        source_totals=source_totals,
+    )
+    assert result["metadata"]["grain"] == "registry"
+    assert (
+        result["metadata"]["observation_source"]
+        == audit.REGISTRY_OBSERVATION_SOURCES["competition"]
+    )
+    assert result["metadata"]["source_totals"] == source_totals
+    assert result["summary"]["source_totals"] == source_totals
+    assert result["summary"]["eligible_studies"] == 5
+    assert result["contributors"] == ["A"]
+    assert "indication_profile_id" not in result["studies"].columns
+
+    # Event audit in registry mode resolves predecessor on (predecessor_snapshot_id, nct_id)
+    ev_studies, ev_locations, ev_conditions, ev_obs = event_inputs()
+    pred_row = ev_studies.iloc[[1]].copy().assign(snapshot_id="before-window", raw_study_ordinal=7)
+    ev_studies = pd.concat([ev_studies, pred_row], ignore_index=True).drop(
+        columns=["indication_profile_id"]
+    )
+    ev_locations = ev_locations.drop(columns=["indication_profile_id"])
+    ev_conditions = ev_conditions.drop(columns=["indication_profile_id"]).assign(preset_id="adrd")
+    ev_obs = ev_obs.drop(columns=["indication_profile_id"]).assign(preset_id="adrd")
+    ev_result = audit.compute_audit(
+        ev_studies,
+        ev_locations,
+        ev_conditions,
+        profile_id="adrd",
+        observations=ev_obs,
+        filters={},
+        metric="recent_recruiting",
+        window_start="2026-06-03",
+        window_end="2026-09-01",
+        evaluation_time="2026-09-02T10:00:00Z",
+    )
+    assert ev_result["metadata"]["grain"] == "registry"
+    assert ev_result["contributors"] == ["D"]
+    assert int(ev_result["events"].iloc[0]["predecessor_raw_study_ordinal"]) == 7

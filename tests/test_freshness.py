@@ -405,3 +405,136 @@ def test_publish_copies_only_a_verified_success(freshness):
     write_marker(freshness, payload)
     assert freshness.main(["--publish"]) == 1
     assert not freshness.published_marker_path().exists()
+
+
+def test_registry_capture_recorded_and_validated_when_built(
+    freshness, accepted_root, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Freshness collects and validates canonical registry captures alongside profile captures."""
+    reg_profile = get_registry().registry_wide()
+    cfg = reg_profile.config
+    reg_run_id = "20261020T120000Z_full_catalog"
+    write_manifest(
+        cfg.paths.bronze_manifests,
+        IngestionManifest(
+            ingestion_run_id=reg_run_id,
+            query_hash="fixture",
+            endpoint="https://clinicaltrials.gov/api/v2/studies",
+            params={},
+            profile="full_catalog",
+            status="success",
+            started_at_utc=NOW - timedelta(days=3),
+            ended_at_utc=NOW - timedelta(days=3) + timedelta(minutes=1),
+            page_count=1,
+            record_count=1,
+        ),
+    )
+    reg_silver = cfg.paths.silver / "registry_trials" / f"run_id={reg_run_id}.parquet"
+    reg_silver.parent.mkdir(parents=True, exist_ok=True)
+    with duckdb.connect(str(accepted_root)) as con:
+        con.execute(
+            "copy (select 'NCT00000001' as nct_id) to ? (format parquet)",
+            [str(reg_silver)],
+        )
+        con.execute(
+            "create table main_marts.dim_registry_trial "
+            "(registry_trial_key varchar, nct_id varchar)"
+        )
+        con.execute(
+            "insert into main_marts.dim_registry_trial values (md5('NCT00000001'), 'NCT00000001')"
+        )
+        con.execute(
+            "create table main_marts.fct_registry_trial_snapshot "
+            "(snapshot_id varchar, nct_id varchar, current_record_flag boolean)"
+        )
+        con.execute(
+            "insert into main_marts.fct_registry_trial_snapshot values (?, 'NCT00000001', true)",
+            [reg_run_id],
+        )
+        con.execute(
+            "create table main_marts.bridge_preset_trial "
+            "(preset_id varchar, nct_id varchar, current_record_flag boolean)"
+        )
+        con.execute(
+            "insert into main_marts.bridge_preset_trial values ('adrd', 'NCT00000001', true)"
+        )
+        con.execute(
+            "create table main_marts.mart_registry_trial_similarity "
+            "(preset_id varchar, nct_id_a varchar, nct_id_b varchar)"
+        )
+
+    assert freshness.main(["--record-success"]) == 0
+    payload = json.loads(freshness.marker_path().read_text())
+    reg_capture = payload["last_success"]["registry"]
+    assert reg_capture is not None
+    assert reg_capture["run_id"] == reg_run_id
+    assert reg_capture["row_counts"] == {
+        "dim_registry_trial": 1,
+        "fct_registry_trial_snapshot": 1,
+        "bridge_preset_trial": 1,
+        "mart_registry_trial_similarity": 0,
+    }
+    assert freshness.status("registry")["ok"] is True
+    assert freshness.status("full_catalog")["ok"] is True
+
+    # Stale registry capture (> 10d) fails aggregate status and registry status
+    monkeypatch.setattr(freshness, "utc_now", lambda: NOW + timedelta(days=8))
+    assert freshness.status("registry")["ok"] is False
+    assert freshness.status()["ok"] is False
+
+    # Missing registry capture count rejects marker validation
+    monkeypatch.setattr(freshness, "utc_now", lambda: NOW)
+    payload["last_success"]["registry"]["row_counts"]["dim_registry_trial"] = 0
+    write_marker(freshness, payload)
+    assert freshness.status()["ok"] is False
+
+
+def test_registry_capture_failure_does_not_block_profile_freshness(
+    freshness, accepted_root, capsys
+) -> None:
+    """An un-rebuilt or failing full_catalog run warns without failing profile freshness."""
+    reg_profile = get_registry().registry_wide()
+    cfg = reg_profile.config
+    reg_run_id = "20261019T120000Z_full_catalog"
+    write_manifest(
+        cfg.paths.bronze_manifests,
+        IngestionManifest(
+            ingestion_run_id=reg_run_id,
+            query_hash="fixture",
+            endpoint="https://clinicaltrials.gov/api/v2/studies",
+            params={},
+            profile="full_catalog",
+            status="success",
+            started_at_utc=NOW - timedelta(days=4),
+            ended_at_utc=NOW - timedelta(days=4) + timedelta(minutes=1),
+            page_count=1,
+            record_count=1,
+        ),
+    )
+    # No silver/registry_trials parquet written for reg_run_id -> reconcile_registry fails
+    with duckdb.connect(str(accepted_root)) as con:
+        con.execute(
+            "create table main_marts.dim_registry_trial "
+            "(registry_trial_key varchar, nct_id varchar)"
+        )
+        con.execute(
+            "create table main_marts.fct_registry_trial_snapshot "
+            "(snapshot_id varchar, nct_id varchar, current_record_flag boolean)"
+        )
+        con.execute(
+            "create table main_marts.bridge_preset_trial "
+            "(preset_id varchar, nct_id varchar, current_record_flag boolean)"
+        )
+        con.execute(
+            "create table main_marts.mart_registry_trial_similarity "
+            "(preset_id varchar, nct_id_a varchar, nct_id_b varchar)"
+        )
+
+    assert freshness.main(["--record-success"]) == 0
+    err = capsys.readouterr().err
+    assert "canonical registry capture skipped" in err
+    payload = json.loads(freshness.marker_path().read_text())
+    assert payload["attempt_status"] == "success"
+    assert payload["last_success"]["registry"] is None
+    assert freshness.status()["ok"] is True
+    assert freshness.status("registry")["ok"] is False

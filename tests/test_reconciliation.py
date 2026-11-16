@@ -465,3 +465,149 @@ def test_report_drift_section_is_the_registry_runs(project_root_tmp, monkeypatch
     assert f"Run checked: `{runs[registry.registry_wide().profile_id]}`" in body
     assert "Status: **drift_detected**" in body
     assert sentinel in body
+
+
+def _seed_registry_warehouse(
+    cfg,
+    dim_ncts: set[str],
+    *,
+    bridge_ncts: set[str] | None = None,
+    similarity_rows: int = 1,
+) -> None:
+    import duckdb
+
+    cfg.paths.duckdb.parent.mkdir(parents=True, exist_ok=True)
+    with duckdb.connect(str(cfg.paths.duckdb)) as con:
+        con.execute("create schema if not exists main_marts")
+        con.execute("drop table if exists main_marts.dim_registry_trial")
+        con.execute("drop table if exists main_marts.fct_registry_trial_snapshot")
+        con.execute("drop table if exists main_marts.bridge_preset_trial")
+        con.execute("drop table if exists main_marts.mart_registry_trial_similarity")
+        if dim_ncts:
+            vals = ", ".join(f"('{n}', md5('{n}'))" for n in sorted(dim_ncts))
+            con.execute(
+                f"create table main_marts.dim_registry_trial as from values {vals} "
+                "as t(nct_id, registry_trial_key)"
+            )
+        else:
+            con.execute(
+                "create table main_marts.dim_registry_trial "
+                "(nct_id varchar, registry_trial_key varchar)"
+            )
+        con.execute(
+            "create table main_marts.fct_registry_trial_snapshot as "
+            "select nct_id, true as current_record_flag from main_marts.dim_registry_trial"
+        )
+        b_ncts = dim_ncts if bridge_ncts is None else bridge_ncts
+        if b_ncts:
+            bvals = ", ".join(f"('adrd', '{n}', true)" for n in sorted(b_ncts))
+            con.execute(
+                f"create table main_marts.bridge_preset_trial as from values {bvals} "
+                "as t(preset_id, nct_id, current_record_flag)"
+            )
+        else:
+            con.execute(
+                "create table main_marts.bridge_preset_trial "
+                "(preset_id varchar, nct_id varchar, current_record_flag boolean)"
+            )
+        con.execute(
+            "create table main_marts.mart_registry_trial_similarity "
+            "(preset_id varchar, nct_id_a varchar, nct_id_b varchar)"
+        )
+        con.execute(
+            "insert into main_marts.mart_registry_trial_similarity "
+            "select 'adrd', 'NCT00000001', 'NCT00000002' from range(?)",
+            [similarity_rows],
+        )
+
+
+def test_registry_bronze_silver_and_warehouse_reconciliation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Canonical registry reconciliation checks registry_trials and warehouse coverage."""
+    from src.quality.reconciliation import (
+        reconcile_registry,
+        registry_bronze_silver_checks,
+        registry_warehouse_checks,
+    )
+
+    monkeypatch.setattr("src.transform.build_silver_entities.FLUSH_ROWS", 1)
+    cfg = _build_deduped_run(tmp_path, "r_reg_dedup")
+
+    bs_checks = {c.check: c for c in registry_bronze_silver_checks(cfg, "full_catalog")}
+    assert bs_checks["registry_bronze_manifest_vs_silver_rows"].expected == 2
+    assert bs_checks["registry_bronze_manifest_vs_silver_rows"].actual == 2
+    assert bs_checks["registry_bronze_manifest_vs_silver_rows"].passed
+    assert bs_checks["registry_silver_nct_ids_unique"].passed
+    assert all(c.profile_id == "full_catalog" for c in bs_checks.values())
+
+    # Full warehouse coverage passes (including retained history)
+    _seed_registry_warehouse(cfg, {"NCT00000001", "NCT00000002", "NCT00000099"})
+    wh_checks = {c.check: c for c in registry_warehouse_checks(cfg, "full_catalog")}
+    assert all(c.passed for c in wh_checks.values())
+    assert len(reconcile_registry(cfg, "full_catalog")) == len(bs_checks) + len(wh_checks)
+
+    # Missing trial from dim_registry_trial fails registry_warehouse_covers_latest_silver
+    _seed_registry_warehouse(cfg, {"NCT00000002"})
+    wh_missing = {c.check: c for c in registry_warehouse_checks(cfg, "full_catalog")}
+    assert not wh_missing["registry_warehouse_covers_latest_silver"].passed
+    assert "NCT00000001" in wh_missing["registry_warehouse_covers_latest_silver"].note
+
+    # Trial missing from bridge_preset_trial fails registry_warehouse_preset_bridge_covers_trials
+    _seed_registry_warehouse(cfg, {"NCT00000001", "NCT00000002"}, bridge_ncts={"NCT00000001"})
+    wh_unbridged = {c.check: c for c in registry_warehouse_checks(cfg, "full_catalog")}
+    assert not wh_unbridged["registry_warehouse_preset_bridge_covers_trials"].passed
+    assert "NCT00000002" in wh_unbridged["registry_warehouse_preset_bridge_covers_trials"].note
+
+    # Similarity floor triggers at >= 2 current trials when mart_registry_trial_similarity is empty
+    _seed_registry_warehouse(cfg, {"NCT00000001", "NCT00000002"}, similarity_rows=0)
+    wh_nosim = {c.check: c for c in registry_warehouse_checks(cfg, "full_catalog")}
+    assert not wh_nosim["registry_warehouse_has_similar_trials"].passed
+
+
+def test_registry_report_renders_reliability_table_and_runs_reconciliation(
+    registry_preset_project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """data_quality_report renders the registry reliability table and runs reconciliation."""
+    from types import SimpleNamespace
+
+    from src.profiles import load_profile, load_shared_paths
+    from src.quality.data_quality_report import build_report
+    from src.quality.reconciliation import ReconciliationCheck
+
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(registry_preset_project_root))
+    reg_profile = load_profile(
+        registry_preset_project_root / "config/profiles/full_catalog.yml",
+        shared=load_shared_paths(),
+    )
+    stub_registry = SimpleNamespace(registry_wide=lambda: reg_profile)
+    monkeypatch.setattr("src.quality.data_quality_report.get_registry", lambda: stub_registry)
+    monkeypatch.setattr("src.quality.reconciliation.get_registry", lambda: stub_registry)
+    monkeypatch.setattr(
+        "src.quality.data_quality_report.run_reconciliation",
+        lambda: [
+            ReconciliationCheck(
+                profile_id="adrd",
+                check="warehouse_covers_latest_silver",
+                run_id="r1",
+                expected=1,
+                actual=1,
+                passed=True,
+            )
+        ],
+    )
+    report = build_report(reg_profile.config, output_path=tmp_path / "reg_report.md")
+    text = report.path.read_text(encoding="utf-8")
+    assert "## Registry-grain reliability & preset coverage" in text
+    assert "| adrd | preset |" in text
+    assert "| shared_preset | preset |" in text
+    assert "| unassigned | unassigned |" in text
+    assert "registry_bronze_manifest_vs_silver_rows | full_catalog" in text
+    assert "registry_warehouse_preset_bridge_covers_trials | full_catalog" in text
+    assert (
+        "| registry_warehouse_has_similar_trials | full_catalog | \u2014 | >= 1 | 0 | no |" in text
+    )
+    # 11 of 12 checks pass; only registry_warehouse_has_similar_trials fails because
+    # shared_trial_runs has only one PHASE3 and one PHASE2 ADRD trial.
+    assert report.checks_total == 12
+    assert report.checks_failed == 1

@@ -46,3 +46,77 @@ models:
         description: Second side of the pair.
         tests: [not_null]
 
+  - name: int_registry_trusted_change_runs
+    description: >
+      Run-trust gate for canonical registry Change Radar: authoritative complete
+      whole-registry runs (status = 'success', whole-registry profile, no condition
+      filter) that were newly fetched, ordered by started_at_utc UTC.
+    columns:
+      - name: ingestion_run_id
+        description: Trusted canonical registry ingestion run identifier.
+        tests: [not_null, unique]
+      - name: observed_at_utc
+        description: Run start timestamp (UTC version clock).
+        tests: [not_null]
+      - name: previous_ingestion_run_id
+        description: Prior trusted whole-registry ingestion run identifier, if any.
+      - name: previous_observed_at_utc
+        description: Version clock timestamp of the prior trusted run.
+
+  - name: int_registry_trial_outcome_sets
+    description: >
+      Canonical registry grain primary + secondary outcome set hash and summary
+      per snapshot_id x nct_id.
+    columns:
+      - name: registry_trial_key
+        tests: [not_null]
+      - name: snapshot_id
+        tests: [not_null]
+      - name: ingestion_run_id
+        tests: [not_null]
+      - name: nct_id
+        tests: [not_null]
+      - name: outcome_count
+        tests: [not_null]
+      - name: outcome_set_hash
+        tests: [not_null]
+      - name: outcome_summary
+        tests: [not_null]
+
+  - name: int_registry_trial_outcome_changes
+    description: >
+      Consecutive trusted whole-registry run pairs where a trial's outcome set hash
+      changed.
+    columns:
+      - name: registry_trial_key
+        tests: [not_null]
+      - name: nct_id
+        tests: [not_null]
+      - name: previous_ingestion_run_id
+        tests: [not_null]
+      - name: ingestion_run_id
+        tests: [not_null]
+      - name: before_outcome_set_hash
+        tests: [not_null]
+      - name: after_outcome_set_hash
+        tests: [not_null]
+
+  - name: int_registry_run_preset_condition_mapping
+    description: >
+      Per-run preset YAML taxonomy condition-group mapping at snapshot_id grain
+      so same-day full_catalog runs preserve independent reliability denominators.
+    columns:
+      - name: preset_id
+        tests: [not_null]
+      - name: snapshot_id
+        tests: [not_null]
+      - name: nct_id
+        tests: [not_null]
+      - name: condition_group
+        tests: [not_null]
+      - name: mapping_confidence
+        tests: [not_null]
+      - name: source_condition_count
+        tests: [not_null]
+
+

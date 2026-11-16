@@ -401,3 +401,46 @@ def test_provenance_drawer_study_decisions_tables(warehouse):
     assert "brief_title" in decisions.columns
     assert "included_flag" in decisions.columns
     assert "exclusion_reason" in decisions.columns
+
+
+def test_audit_panel_registry_grain_rules_and_build_display_audit(
+    warehouse, monkeypatch: pytest.MonkeyPatch
+):
+    """active_rules and build_display_audit support canonical registry grain & source_totals."""
+    from components import audit_panel
+
+    rules = audit_panel.active_rules("adrd", grain="registry")
+    assert rules["grain"] == "registry"
+    assert "registry_model_rules" in rules
+    assert "models/marts/mart_registry_data_reliability.sql" in rules["registry_model_rules"]
+    assert "models/marts/dim_registry_trial.sql" in rules["registry_model_rules"]
+    assert rules["preset_config"]["path"] == "config/profiles/adrd.yml"
+
+    preset = preset_for("adrd")
+    obs = data.metric_audit_observations(preset, "competition")
+    ids = obs.snapshot_id.unique().tolist()
+    reg_studies = data.audit_studies(preset, ids).drop(columns=["indication_profile_id"])
+    reg_locations = data.audit_locations(preset, ids).drop(columns=["indication_profile_id"])
+    reg_conditions = (
+        data.audit_condition_mapping(preset)
+        .drop(columns=["indication_profile_id"])
+        .assign(preset_id="adrd")
+    )
+    reg_obs = obs.drop(columns=["indication_profile_id"]).assign(preset_id="adrd")
+
+    monkeypatch.setattr(data, "audit_studies", lambda p, sids: reg_studies)
+    monkeypatch.setattr(data, "audit_locations", lambda p, sids: reg_locations)
+    monkeypatch.setattr(data, "audit_condition_mapping", lambda p: reg_conditions)
+
+    res = build_display_audit(
+        preset,
+        reg_obs,
+        {"states": ["NC"]},
+        context={"source_totals": {"eligible_studies": 10}, "observation_selection": "history"},
+    )
+    assert res["metadata"]["grain"] == "registry"
+    assert res["metadata"]["rule_config"]["grain"] == "registry"
+    assert "registry_model_rules" in res["metadata"]["rule_config"]
+    assert res["summary"]["source_totals"] == {"eligible_studies": 10}
+    obs_source = res["metadata"]["observation_source"]
+    assert "mart_registry_" in obs_source or "fct_registry_" in obs_source

@@ -246,3 +246,214 @@ def test_no_failure_categorization_in_marts(fixture_project_root: Path) -> None:
                 assert forbidden not in col, f"Forbidden column found: {col}"
     finally:
         con.close()
+
+
+def test_registry_transparency_marts_preset_vs_source_totals_and_baseline_parity(
+    tmp_path: Path,
+) -> None:
+    """Phase 4b transparency marts keep preset denominators, source totals, and legacy parity."""
+    from dataclasses import replace
+    from datetime import UTC, datetime, timedelta
+
+    from tests.fixture_warehouse import (
+        AddedStudy,
+        base_adrd_run,
+        base_nsclc_run,
+        build_fixture_warehouse,
+    )
+
+    adrd_mesh = {
+        "conditionBrowseModule": {"meshes": [{"id": "D000544", "term": "Alzheimer Disease"}]}
+    }
+    nsclc_mesh = {
+        "conditionBrowseModule": {
+            "meshes": [{"id": "D002289", "term": "Carcinoma, Non-Small-Cell Lung"}]
+        }
+    }
+    # Add an unassigned terminated trial by NeuroPharm Inc (no MeSH) + an evaluable completed trial
+    # by NeuroPharm Inc (no MeSH) so source_total_* > preset_total_* is observable.
+    unassigned_stopped = AddedStudy(
+        nct_id="NCT00000081",
+        clone_of="NCT00000006",
+        overall_status="TERMINATED",
+        condition="Unspecified Condition",
+        sponsor="NeuroPharm Inc",
+    )
+    unassigned_completed = AddedStudy(
+        nct_id="NCT00000082",
+        clone_of="NCT00000003",
+        overall_status="COMPLETED",
+        condition="Unspecified Condition",
+        sponsor="NeuroPharm Inc",
+    )
+    nsclc_stopped = AddedStudy(
+        nct_id="NCT00000083",
+        clone_of="NCT00000006",
+        overall_status="SUSPENDED",
+        condition="Non-Small Cell Lung Cancer",
+        sponsor="Pacific Oncology Institute",
+    )
+    overrides = {
+        **{f"NCT{i:08d}": {"derivedSection": adrd_mesh} for i in range(1, 11)},
+        "NCT00000081": {
+            "derivedSection": {"conditionBrowseModule": {"meshes": []}},
+            "conditionsModule": {"conditions": []},
+            "statusModule": {
+                "overallStatus": "TERMINATED",
+                "whyStopped": "Low accrual",
+                "primaryCompletionDateStruct": {"date": "2024-01-01"},
+            },
+        },
+        "NCT00000082": {
+            "derivedSection": {"conditionBrowseModule": {"meshes": []}},
+            "conditionsModule": {"conditions": []},
+            "statusModule": {
+                "overallStatus": "COMPLETED",
+                "primaryCompletionDateStruct": {"date": "2024-01-01"},
+            },
+        },
+        "NCT00000083": {
+            "derivedSection": nsclc_mesh,
+            "statusModule": {
+                "overallStatus": "SUSPENDED",
+                "whyStopped": "Safety hold",
+                "primaryCompletionDateStruct": {"date": "2024-06-01"},
+            },
+        },
+        "NCT00000006": {
+            "derivedSection": adrd_mesh,
+            "statusModule": {
+                "overallStatus": "SUSPENDED",
+                "whyStopped": "Safety hold",
+                "primaryCompletionDateStruct": {"date": "2024-06-01"},
+            },
+        },
+    }
+    base = base_adrd_run()
+    catalog_run = replace(
+        base,
+        profile="full_catalog",
+        condition="",
+        added=(unassigned_stopped, unassigned_completed, nsclc_stopped),
+        study_overrides=overrides,
+    )
+    # Profile-only pull on later day must not pollute canonical transparency marts
+    profile_only = replace(
+        base_nsclc_run(),
+        run_id="20260908T110000Z_profile_only",
+        started_at=datetime(2026, 9, 8, 11, tzinfo=UTC),
+        status_overrides={"NCT00000001": "TERMINATED"},
+    )
+    root = tmp_path / "registry_transparency"
+    build_fixture_warehouse(root, runs=[catalog_run, profile_only])
+
+    with duckdb.connect(str(root / "data/warehouse/clinical_trials.duckdb"), read_only=True) as con:
+        # 1. Early stop: preset excludes unassigned; source totals include all stopped trials
+        assert (
+            con.execute(
+                "select count(*) from main_marts.mart_registry_early_stop_transparency "
+                "where preset_id = 'unassigned'"
+            ).fetchone()[0]
+            == 0
+        )
+        early_rows = con.execute(
+            "select preset_id, condition_group, overall_status, why_stopped, "
+            "stopped_trial_count, source_stopped_trial_count, source_total_stopped_trials, "
+            "contributing_nct_ids "
+            "from main_marts.mart_registry_early_stop_transparency "
+            "order by preset_id, overall_status, condition_group"
+        ).fetchall()
+        # Registry has 5 distinct stopped trials (NCT06/07/08 adrd, NCT81 unmapped, NCT83 nsclc)
+        assert all(r[6] == 5 for r in early_rows)
+        # NCT00000006 (adrd) and NCT00000083 (nsclc) share stratum (INDUSTRY, 2024, SUSPENDED)
+        adrd_susp = [r for r in early_rows if r[0] == "adrd" and r[2] == "SUSPENDED"][0]
+        assert adrd_susp[4] == 1  # preset stopped_trial_count
+        assert adrd_susp[5] == 2  # source_stopped_trial_count across adrd + nsclc
+        assert adrd_susp[7] == "NCT00000006"
+
+        # 2. Results posting: preset excludes unassigned NCT00000081/82; source_total_* keeps them
+        res_rows = con.execute(
+            "select preset_id, lead_sponsor, total_completed_trials, total_terminated_trials, "
+            "total_evaluable_trials, results_posted_evaluable_count, results_overdue_count, "
+            "results_posted_rate, ci_lower, ci_upper, is_ranked, "
+            "source_total_completed_trials, source_total_terminated_trials, "
+            "source_total_evaluable_trials, contributing_nct_ids "
+            "from main_marts.mart_registry_results_posting_transparency "
+            "where lead_sponsor = 'NeuroPharm Inc'"
+        ).fetchall()
+        assert len(res_rows) == 1
+        row = res_rows[0]
+        assert row[0] == "adrd"
+        # Preset has NCT00000006 (SUSPENDED, not completed/terminated) + NCT00000001/10 (RECRUITING)
+        assert (row[2], row[3], row[4]) == (0, 0, 0)
+        # Source adds unassigned NCT00000082 (COMPLETED) & NCT00000081 (TERMINATED), PCD 2024-01-01
+        assert (row[11], row[12], row[13]) == (1, 1, 2)
+        assert "NCT00000081" not in row[14] and "NCT00000082" not in row[14]
+
+        # 3. Direct equivalence between legacy and canonical marts for ADRD & NSCLC single-runs
+        parity_cases = [
+            ("adrd", adrd_mesh, base),
+            ("oncology_nsclc", nsclc_mesh, base_nsclc_run()),
+        ]
+        for preset_id, mesh_payload, preset_base in parity_cases:
+            reg_run = replace(
+                preset_base,
+                profile="full_catalog",
+                condition="",
+                study_overrides={
+                    f"NCT{i:08d}": {"derivedSection": mesh_payload} for i in range(1, 11)
+                },
+            )
+            leg_run = replace(
+                preset_base,
+                run_id=preset_base.run_id + "_leg",
+                started_at=preset_base.started_at + timedelta(seconds=1),
+                study_overrides={
+                    f"NCT{i:08d}": {"derivedSection": mesh_payload} for i in range(1, 11)
+                },
+            )
+            parity_root = tmp_path / f"parity_transparency_{preset_id}"
+            build_fixture_warehouse(parity_root, runs=[reg_run, leg_run])
+            with duckdb.connect(
+                str(parity_root / "data/warehouse/clinical_trials.duckdb"), read_only=True
+            ) as pcon:
+                leg_early = pcon.execute(
+                    "select condition_group, sponsor_class, stopped_year, overall_status, "
+                    "why_stopped, stopped_trial_count, contributing_nct_ids "
+                    "from main_marts.mart_early_stop_transparency "
+                    "where indication_profile_id = ? "
+                    "order by 1, 2, 3, 4, 5",
+                    [preset_id],
+                ).fetchall()
+                reg_early = pcon.execute(
+                    "select condition_group, sponsor_class, stopped_year, overall_status, "
+                    "why_stopped, stopped_trial_count, contributing_nct_ids "
+                    "from main_marts.mart_registry_early_stop_transparency where preset_id = ? "
+                    "order by 1, 2, 3, 4, 5",
+                    [preset_id],
+                ).fetchall()
+                assert len(reg_early) > 0
+                assert reg_early == leg_early
+
+                leg_res = pcon.execute(
+                    "select sponsor_class, lead_sponsor, total_completed_trials, "
+                    "total_terminated_trials, total_evaluable_trials, "
+                    "results_posted_evaluable_count, results_overdue_count, results_posted_rate, "
+                    "ci_lower, ci_upper, results_overdue_rate, is_ranked, evaluable_nct_ids, "
+                    "contributing_nct_ids, overdue_nct_ids, posted_nct_ids "
+                    "from main_marts.mart_results_posting_transparency "
+                    "where indication_profile_id = ? order by 1, 2",
+                    [preset_id],
+                ).fetchall()
+                reg_res = pcon.execute(
+                    "select sponsor_class, lead_sponsor, total_completed_trials, "
+                    "total_terminated_trials, total_evaluable_trials, "
+                    "results_posted_evaluable_count, results_overdue_count, results_posted_rate, "
+                    "ci_lower, ci_upper, results_overdue_rate, is_ranked, evaluable_nct_ids, "
+                    "contributing_nct_ids, overdue_nct_ids, posted_nct_ids "
+                    "from main_marts.mart_registry_results_posting_transparency "
+                    "where preset_id = ? order by 1, 2",
+                    [preset_id],
+                ).fetchall()
+                assert len(reg_res) > 0
+                assert reg_res == leg_res

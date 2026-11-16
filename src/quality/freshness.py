@@ -17,12 +17,18 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from src.ingest.snapshot_manifest import load_manifests
 from src.profiles import get_registry, load_shared_paths
-from src.quality.reconciliation import reconcile_profile
+from src.quality.reconciliation import reconcile_profile, reconcile_registry
 from src.utils.dates import utc_now
 from src.utils.paths import project_root
 
 Count = Annotated[int, Field(strict=True, ge=0)]
 TABLES = ("dim_trial", "fct_trial_snapshot", "mart_trial_similarity")
+REGISTRY_TABLES = (
+    "dim_registry_trial",
+    "fct_registry_trial_snapshot",
+    "bridge_preset_trial",
+    "mart_registry_trial_similarity",
+)
 
 
 class Capture(BaseModel):
@@ -48,6 +54,7 @@ class Success(BaseModel):
     source_release_at_utc: None
     profiles: dict[str, Capture]
     reconciliation: Reconciliation
+    registry: Capture | None = None
 
 
 class Marker(BaseModel):
@@ -135,6 +142,17 @@ def _verify_success(marker: Marker) -> Success:
             or capture.row_counts["fct_trial_snapshot"] == 0
         ):
             raise ValueError(f"Missing warehouse counts for {pid}")
+    if success.registry is not None:
+        reg_capture = success.registry
+        if reg_capture.captured_at_utc > success.pipeline_completed_at_utc:
+            raise ValueError("Invalid or future capture timestamp for canonical registry")
+        if (
+            set(reg_capture.row_counts) != set(REGISTRY_TABLES)
+            or reg_capture.row_counts["dim_registry_trial"] == 0
+            or reg_capture.row_counts["fct_registry_trial_snapshot"] == 0
+            or reg_capture.row_counts["bridge_preset_trial"] == 0
+        ):
+            raise ValueError("Missing canonical registry warehouse counts")
     return success
 
 
@@ -155,18 +173,89 @@ def status(profile_id: str | None = None) -> dict[str, Any]:
         success = _verify_success(marker)
         if marker.attempt_status != "success":
             result["errors"].append(f"Latest refresh attempt is {marker.attempt_status}")
-        profiles = [profile_id] if profile_id is not None else list(success.profiles)
-        for pid in profiles:
-            capture = success.profiles[pid]
-            age_days = (utc_now() - capture.captured_at_utc).total_seconds() / 86400
+        if profile_id in {"registry", "full_catalog"}:
+            if success.registry is None:
+                raise KeyError(profile_id)
+            age_days = (utc_now() - success.registry.captured_at_utc).total_seconds() / 86400
             if age_days > max_days:
                 result["errors"].append(
-                    f"{pid} capture is stale ({age_days:.2f} days > {max_days:g})"
+                    f"registry capture is stale ({age_days:.2f} days > {max_days:g})"
                 )
+        else:
+            profiles = [profile_id] if profile_id is not None else list(success.profiles)
+            for pid in profiles:
+                capture = success.profiles[pid]
+                age_days = (utc_now() - capture.captured_at_utc).total_seconds() / 86400
+                if age_days > max_days:
+                    result["errors"].append(
+                        f"{pid} capture is stale ({age_days:.2f} days > {max_days:g})"
+                    )
+            if profile_id is None and success.registry is not None:
+                reg_age_days = (
+                    utc_now() - success.registry.captured_at_utc
+                ).total_seconds() / 86400
+                if reg_age_days > max_days:
+                    result["errors"].append(
+                        f"registry capture is stale ({reg_age_days:.2f} days > {max_days:g})"
+                    )
         result["ok"] = not result["errors"]
     except (OSError, ValueError, KeyError) as exc:
         result["errors"].append(f"Freshness unknown: {exc}")
     return result
+
+
+def _collect_registry_capture() -> tuple[Capture, int] | None:
+    """Collect canonical registry-grain capture & reconciliation count when built."""
+    try:
+        registry_profile = get_registry().registry_wide()
+    except KeyError:
+        return None
+    cfg = registry_profile.config
+    if not cfg.paths.duckdb.exists():
+        return None
+    with duckdb.connect(str(cfg.paths.duckdb), read_only=True) as con:
+        exists = con.execute(
+            "select count(*) from information_schema.tables "
+            "where table_schema = 'main_marts' and table_name = 'dim_registry_trial'"
+        ).fetchone()
+        if not exists or exists[0] == 0:
+            return None
+        manifests = load_manifests(cfg.paths.bronze_manifests)
+        success_manifests = [m for m in manifests if m.status == "success"]
+        if not success_manifests:
+            return None
+        latest = max(success_manifests, key=lambda m: (m.started_at_utc, m.ingestion_run_id))
+        if latest.ended_at_utc is None:
+            raise ValueError("Missing ended_at_utc for canonical registry capture")
+        if (
+            latest.started_at_utc.tzinfo is None
+            or latest.ended_at_utc.tzinfo is None
+            or not latest.started_at_utc <= latest.ended_at_utc <= utc_now()
+        ):
+            raise ValueError("Invalid capture timestamps for canonical registry")
+        reg_checks = reconcile_registry(cfg, scope_id=registry_profile.profile_id)
+        if not reg_checks or any(not check.passed for check in reg_checks):
+            raise ValueError("Reconciliation failed for canonical registry")
+        counts = {}
+        for table in REGISTRY_TABLES:
+            row = con.execute(f"select count(*) from main_marts.{table}").fetchone()
+            assert row is not None
+            counts[table] = int(row[0])
+        accepted = con.execute(
+            "select count(*) from main_marts.fct_registry_trial_snapshot "
+            "where snapshot_id = ? and current_record_flag",
+            [latest.ingestion_run_id],
+        ).fetchone()
+        if not accepted or accepted[0] == 0:
+            raise ValueError("Latest canonical registry capture was not published")
+    return (
+        Capture(
+            run_id=latest.ingestion_run_id,
+            captured_at_utc=latest.started_at_utc,
+            row_counts=counts,
+        ),
+        len(reg_checks),
+    )
 
 
 def _collect_success() -> Success:
@@ -213,12 +302,22 @@ def _collect_success() -> Success:
             captured_at_utc=latest.started_at_utc,
             row_counts=counts,
         )
+    registry_capture: Capture | None = None
+    try:
+        registry_result = _collect_registry_capture()
+    except (ValueError, KeyError, duckdb.Error) as exc:
+        print(f"warning: canonical registry capture skipped: {exc}", file=sys.stderr)
+    else:
+        if registry_result is not None:
+            registry_capture, reg_checks_count = registry_result
+            total += reg_checks_count
     return Success(
         pipeline_completed_at_utc=utc_now(),
         source_api_version="v2",
         source_release_at_utc=None,
         profiles=captures,
         reconciliation=Reconciliation(checks_total=total, checks_failed=0),
+        registry=registry_capture,
     )
 
 
