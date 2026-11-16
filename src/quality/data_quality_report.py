@@ -38,6 +38,7 @@ class Report:
     path: Path
     checks_total: int
     checks_failed: int
+    registry_checks_failed: int = 0
 
 
 def _fmt(value: object) -> str:
@@ -248,9 +249,11 @@ def build_report(cfg: ProjectConfig | None = None, output_path: Path | None = No
             )
 
     lines += ["", "## Cross-layer reconciliation", ""]
-    checks = list(run_reconciliation())
-    if _has_registry_pipeline_artifacts(cfg):
-        checks.extend(run_registry_reconciliation())
+    legacy_checks = list(run_reconciliation())
+    registry_checks = (
+        list(run_registry_reconciliation()) if _has_registry_pipeline_artifacts(cfg) else []
+    )
+    checks = [*legacy_checks, *registry_checks]
     lines.append("| check | profile | run | expected | actual | passed | note |")
     lines.append("| --- | --- | --- | --- | --- | --- | --- |")
     for check in checks:
@@ -259,9 +262,28 @@ def build_report(cfg: ProjectConfig | None = None, output_path: Path | None = No
             f"| {c['check']} | {c['profile_id']} | {_fmt(c['run_id'])}"
             f" | {_fmt(c['expected'])} | {_fmt(c['actual'])} | {_fmt(c['passed'])} | {c['note']} |"
         )
-    failed = sum(1 for c in checks if not c.passed)
+    # Registry reconciliation stays additive and non-blocking until phase 5
+    # replaces legacy profile checks; otherwise un-rebuilt warehouses or
+    # retained full_catalog runs would fail `make pipeline` before `--record-success`.
+    legacy_failed = sum(1 for c in legacy_checks if not c.passed)
+    registry_failed = sum(1 for c in registry_checks if not c.passed)
     lines.append("")
-    lines.append(f"**{len(checks) - failed}/{len(checks)} reconciliation checks passed.**")
+    lines.append(
+        f"**{len(legacy_checks) - legacy_failed}/{len(legacy_checks)} "
+        "reconciliation checks passed.**"
+    )
+    if registry_checks:
+        lines.append(
+            f"**{len(registry_checks) - registry_failed}/{len(registry_checks)} "
+            "registry reconciliation checks passed (non-blocking until phase 5).**"
+        )
+        if registry_failed:
+            logger.warning(
+                "Registry reconciliation: {}/{} checks failed (non-blocking until phase 5); see {}",
+                registry_failed,
+                len(registry_checks),
+                output,
+            )
 
     lines += ["", "## Schema drift", ""]
     # Pages live only in the registry-wide run's tree; a preset's derived run
@@ -299,4 +321,9 @@ def build_report(cfg: ProjectConfig | None = None, output_path: Path | None = No
 
     output.write_text("\n".join(lines), encoding="utf-8")
     logger.info("Data quality report written to {}", output)
-    return Report(path=output, checks_total=len(checks), checks_failed=failed)
+    return Report(
+        path=output,
+        checks_total=len(checks),
+        checks_failed=legacy_failed,
+        registry_checks_failed=registry_failed,
+    )
