@@ -16,11 +16,13 @@ candidate pairs, re-ranked by the same order. Anything weaker (sampling,
 thresholds) would let a scoring change hide behind a discovery change.
 """
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
 import pytest
 
+from tests.fixture_warehouse import FixtureRun, build_fixture_warehouse
 from tests.test_dbt_fixture_build import _rows
 
 # The mart contract's columns, in model order: the equivalence compare is a
@@ -321,5 +323,216 @@ def test_on_demand_similarity_equals_mart_scoring(
                 expected_score, expected_explanation = mart_rows[item.nct_id]
                 assert item.similarity_score == pytest.approx(expected_score, abs=1e-4)
                 assert item.comparability_factors.explanation_summary == expected_explanation
+    finally:
+        mgr.close()
+
+
+def test_on_demand_registry_similarity_equals_mart_scoring(
+    registry_similarity_project_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Canonical registry related.sql scoring matches mart_registry_trial_similarity.
+
+    Asserts:
+    1. The canonical registry branch runs (_LEGACY_RELATED_SQL is never executed and
+       dim_registry_trial is non-empty).
+    2. Exact parity between related.sql and mart_registry_trial_similarity for all pairs
+       present in the registry mart (covering pair sharing condition + state, pair sharing
+       condition with disjoint states, and trial with no sites).
+    3. Handles pairs sharing only state and phase via MeSH ancestor candidate discovery
+       (NCT00000005) with same_condition=False and geography_overlap=True.
+    """
+    from src.api.warehouse import DuckDBWarehouseManager
+
+    monkeypatch.chdir(registry_similarity_project_root)
+    # Poison _LEGACY_RELATED_SQL: if the legacy fallback branch is taken, the test fails loudly.
+    monkeypatch.setattr(
+        "src.api.warehouse._LEGACY_RELATED_SQL",
+        "SELECT 'legacy branch must not execute in registry mode'; SYNTAX ERROR;",
+    )
+    warehouse = registry_similarity_project_root / "data" / "warehouse" / "clinical_trials.duckdb"
+    mgr = DuckDBWarehouseManager(warehouse)
+    try:
+        with duckdb.connect(str(warehouse), read_only=True) as conn:
+            # Assert registry branch requirement: dim_registry_trial is non-empty
+            reg_count = conn.execute(
+                "SELECT count(*) FROM main_marts.dim_registry_trial"
+            ).fetchone()
+            assert reg_count is not None and reg_count[0] > 0
+
+            # Target NCT00000001 (ADRD Phase 3 in CA)
+            raw_mart_rows = conn.execute(
+                """
+                select nct_id_b, similarity_score, similarity_explanation
+                from main_marts.mart_registry_trial_similarity
+                where nct_id_a = 'NCT00000001'
+                """
+            ).fetchall()
+            mart_rows = {r[0]: (r[1], r[2]) for r in raw_mart_rows}
+
+        # Verify mart has expected coverage:
+        # NCT00000002: shared condition + shared state CA
+        # NCT00000007: shared condition, different state FL
+        # NCT00000008: shared condition, no sites
+        assert "NCT00000002" in mart_rows
+        assert "NCT00000007" in mart_rows
+        assert "NCT00000008" in mart_rows
+
+        res = mgr.get_related_trials("NCT00000001", limit=25)
+        assert res is not None
+        assert len(res.related_trials) > 0
+        assert set(mart_rows) <= {i.nct_id for i in res.related_trials}
+
+        # For pairs in mart_registry_trial_similarity, score and explanation match
+        for item in res.related_trials:
+            if item.nct_id in mart_rows:
+                expected_score, expected_explanation = mart_rows[item.nct_id]
+                assert item.similarity_score == pytest.approx(expected_score, abs=1e-4)
+                assert item.comparability_factors.explanation_summary == expected_explanation
+
+        # Verify all 7 scoring components are exercised across mart pairs
+        by_nct = {item.nct_id: item for item in res.related_trials}
+        item_02 = by_nct["NCT00000002"]
+        assert item_02.comparability_factors.intervention_type_overlap.matched is True
+        assert item_02.comparability_factors.study_design_match.matched is True
+        assert by_nct["NCT00000007"].comparability_factors.enrollment_band_match.matched is True
+
+        # Also verify NCT00000005: shares only state CA + phase (via MeSH ancestor discovery)
+        assert "NCT00000005" in by_nct
+        item_05 = by_nct["NCT00000005"]
+        assert item_05.comparability_factors.same_condition.matched is False
+        assert item_05.comparability_factors.geography_overlap.matched is True
+        assert "overlapping U.S. states" in item_05.comparability_factors.explanation_summary
+
+        # Check target with no sites (NCT00000008) matches mart
+        res_no_sites = mgr.get_related_trials("NCT00000008", limit=25)
+        assert res_no_sites is not None
+        with duckdb.connect(str(warehouse), read_only=True) as conn:
+            raw_mart_08 = conn.execute(
+                """
+                select nct_id_b, similarity_score, similarity_explanation
+                from main_marts.mart_registry_trial_similarity
+                where nct_id_a = 'NCT00000008'
+                """
+            ).fetchall()
+            mart_rows_08 = {r[0]: (r[1], r[2]) for r in raw_mart_08}
+        assert len(mart_rows_08) > 0
+        assert set(mart_rows_08) <= {i.nct_id for i in res_no_sites.related_trials}
+        for item in res_no_sites.related_trials:
+            if item.nct_id in mart_rows_08:
+                expected_score, expected_explanation = mart_rows_08[item.nct_id]
+                assert item.similarity_score == pytest.approx(expected_score, abs=1e-4)
+                assert item.comparability_factors.explanation_summary == expected_explanation
+    finally:
+        mgr.close()
+
+
+def test_on_demand_registry_similarity_ignores_older_snapshot_sites(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Geography uses the trial's current snapshot_id, not an older snapshot's U.S. sites."""
+    from src.api.warehouse import DuckDBWarehouseManager
+
+    mesh_adrd = {
+        "conditionBrowseModule": {
+            "meshes": [{"id": "D000544", "term": "Alzheimer Disease"}],
+            "ancestors": [{"id": "D001523", "term": "Mental Disorders"}],
+        }
+    }
+    common_01 = {
+        "derivedSection": mesh_adrd,
+        "designModule": {"phases": ["PHASE3"]},
+    }
+    old_overrides = {
+        "NCT00000001": common_01,
+        "NCT00000007": {
+            "derivedSection": mesh_adrd,
+            "designModule": {"phases": ["PHASE3"]},
+            "conditionsModule": {"conditions": ["Alzheimer Disease"]},
+            "contactsLocationsModule": {
+                "locations": [
+                    {
+                        "facility": "UCSF",
+                        "city": "San Francisco",
+                        "state": "California",
+                        "country": "United States",
+                    }
+                ]
+            },
+        },
+    }
+    new_overrides = {
+        "NCT00000001": common_01,
+        "NCT00000007": {
+            "derivedSection": mesh_adrd,
+            "designModule": {"phases": ["PHASE3"]},
+            "conditionsModule": {"conditions": ["Alzheimer Disease"]},
+            "contactsLocationsModule": {"locations": []},
+        },
+    }
+    root = build_fixture_warehouse(
+        tmp_path / "geo_snapshot_drop",
+        runs=[
+            FixtureRun(
+                profile="full_catalog",
+                run_id="20260901T120000Z_old_sites",
+                started_at=datetime(2026, 9, 1, 12, tzinfo=UTC),
+                condition="",
+                fixture_dir="bronze_snapshot",
+                study_overrides=old_overrides,
+            ),
+            FixtureRun(
+                profile="full_catalog",
+                run_id="20260902T120000Z_dropped_sites",
+                started_at=datetime(2026, 9, 2, 12, tzinfo=UTC),
+                condition="",
+                fixture_dir="bronze_snapshot",
+                study_overrides=new_overrides,
+            ),
+        ],
+    )
+
+    monkeypatch.chdir(root)
+    warehouse = root / "data" / "warehouse" / "clinical_trials.duckdb"
+    mgr = DuckDBWarehouseManager(warehouse)
+    try:
+        with duckdb.connect(str(warehouse), read_only=True) as conn:
+            older_sites = conn.execute(
+                """
+                select count(*)
+                from main_marts.fct_registry_trial_site
+                where nct_id = 'NCT00000007'
+                  and state_normalized = 'CA'
+                """
+            ).fetchone()
+            assert older_sites is not None and older_sites[0] == 1
+
+            mart_row = conn.execute(
+                """
+                select geography_overlap, similarity_score, similarity_explanation
+                from main_marts.mart_registry_trial_similarity
+                where nct_id_a = 'NCT00000001'
+                  and nct_id_b = 'NCT00000007'
+                """
+            ).fetchone()
+            assert mart_row is not None
+            assert mart_row[0] == 0
+
+        # Candidate NCT00000007 dropped U.S. sites in current snapshot: must not match CA.
+        res_01 = mgr.get_related_trials("NCT00000001", limit=25)
+        assert res_01 is not None
+        item_07 = next(i for i in res_01.related_trials if i.nct_id == "NCT00000007")
+        assert item_07.comparability_factors.geography_overlap.matched is False
+        assert "overlapping U.S. states" not in item_07.comparability_factors.explanation_summary
+        assert item_07.similarity_score == pytest.approx(mart_row[1], abs=1e-4)
+        assert item_07.comparability_factors.explanation_summary == mart_row[2]
+
+        # Target NCT00000007 dropped U.S. sites in current snapshot: target_states must be empty.
+        res_07 = mgr.get_related_trials("NCT00000007", limit=25)
+        assert res_07 is not None
+        item_01 = next(i for i in res_07.related_trials if i.nct_id == "NCT00000001")
+        assert item_01.comparability_factors.geography_overlap.matched is False
+        assert "overlapping U.S. states" not in item_01.comparability_factors.explanation_summary
     finally:
         mgr.close()

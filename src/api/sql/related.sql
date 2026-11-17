@@ -96,26 +96,13 @@ target_interventions AS (
        AND COALESCE(ti.snapshot_id, ti.ingestion_run_id) = tg.effective_run_key
     WHERE ti.intervention_type IS NOT NULL
 ),
-latest_site_states AS (
-    SELECT DISTINCT
-        s.nct_id,
-        s.state_normalized
-    FROM fct_registry_trial_site s
-    INNER JOIN (
-        SELECT
-            nct_id,
-            MAX(snapshot_date) AS max_snapshot_date
-        FROM fct_registry_trial_site
-        GROUP BY nct_id
-    ) ls
-        ON s.nct_id = ls.nct_id
-       AND (s.snapshot_date IS NOT DISTINCT FROM ls.max_snapshot_date)
-    WHERE s.state_normalized IS NOT NULL
-),
 target_states AS (
     SELECT DISTINCT s.state_normalized
-    FROM latest_site_states s
-    WHERE UPPER(s.nct_id) = UPPER($nct_id)
+    FROM fct_registry_trial_site s
+    INNER JOIN target tg
+        ON s.nct_id = tg.nct_id
+       AND COALESCE(s.snapshot_id, s.ingestion_run_id) = tg.effective_run_key
+    WHERE s.state_normalized IS NOT NULL
 ),
 condition_group_matches AS (
     SELECT DISTINCT
@@ -228,6 +215,16 @@ capped_candidates AS (
     ORDER BY phase_match DESC, cond_match DESC, mesh_match_depth DESC, nct_id ASC
     LIMIT 250
 ),
+candidate_site_states AS (
+    SELECT DISTINCT
+        s.nct_id,
+        s.state_normalized
+    FROM fct_registry_trial_site s
+    INNER JOIN capped_candidates cc
+        ON s.nct_id = cc.nct_id
+       AND COALESCE(s.snapshot_id, s.ingestion_run_id) = cc.effective_run_key
+    WHERE s.state_normalized IS NOT NULL
+),
 candidate_dim AS (
     SELECT
         dt.nct_id,
@@ -261,13 +258,13 @@ scored AS (
         ROUND(w.w_same_phase * (CASE WHEN cc.phase_normalized = tg.phase_normalized THEN 1 ELSE 0 END), 4) AS weighted_same_phase,
 
         CASE WHEN EXISTS (
-            SELECT 1 FROM latest_site_states s
+            SELECT 1 FROM candidate_site_states s
             INNER JOIN target_states ts ON s.state_normalized = ts.state_normalized
             WHERE s.nct_id = cc.nct_id
         ) THEN 1 ELSE 0 END AS geography_overlap,
         w.w_geography_overlap AS weight_geography_overlap,
         ROUND(w.w_geography_overlap * (CASE WHEN EXISTS (
-            SELECT 1 FROM latest_site_states s
+            SELECT 1 FROM candidate_site_states s
             INNER JOIN target_states ts ON s.state_normalized = ts.state_normalized
             WHERE s.nct_id = cc.nct_id
         ) THEN 1 ELSE 0 END), 4) AS weighted_geography_overlap,
