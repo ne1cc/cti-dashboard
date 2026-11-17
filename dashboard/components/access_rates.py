@@ -27,7 +27,7 @@ def rate_view(frame: pd.DataFrame, per_case: bool) -> tuple[pd.DataFrame, str, s
     """Return (rows to show, rate column, denominator caption) for one condition.
 
     Args:
-        frame: Rows of ``mart_condition_access_rates`` for one profile and condition.
+        frame: Rows of ``mart_registry_condition_access_rates`` for one preset and condition.
         per_case: True when the user asked for the per-estimated-case rate.
     """
     population_caption = _population_caption(frame)

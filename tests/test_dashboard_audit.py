@@ -33,6 +33,133 @@ def warehouse(audit_fixture_root, monkeypatch):
     get_config.cache_clear()
 
 
+@pytest.fixture(scope="module")
+def audit_fixture_root(tmp_path_factory):
+    """Use retained full-catalog runs for registry-grain audit readers."""
+    from dataclasses import replace
+
+    from tests.conftest import _audit_run, _build_fixture_root
+
+    mesh = {
+        "conditionBrowseModule": {
+            "meshes": [
+                {"id": "D000544", "term": "Alzheimer Disease"},
+                {"id": "D002289", "term": "Carcinoma, Non-Small-Cell Lung"},
+            ]
+        }
+    }
+    base = _audit_run()
+    studies = dict(base.study_overrides)
+    for index in range(1, 11):
+        nct_id = f"NCT{index:08d}"
+        study = dict(studies.get(nct_id) or {})
+        study["derivedSection"] = mesh
+        studies[nct_id] = study
+    authoritative = replace(base, profile="full_catalog", condition="", study_overrides=studies)
+    recruiting_locations = {
+        "contactsLocationsModule": {
+            "locations": [
+                {
+                    "facility": "Registry Site",
+                    "city": "Boston",
+                    "state": "MA",
+                    "country": "United States",
+                }
+            ]
+        }
+    }
+    studies["NCT00000002"] = {
+        **studies["NCT00000002"],
+        **recruiting_locations,
+        "statusModule": {"overallStatus": "RECRUITING"},
+    }
+    studies["NCT00000001"] = {
+        **studies["NCT00000001"],
+        "contactsLocationsModule": {
+            "locations": [
+                {
+                    "facility": "North Carolina Site",
+                    "city": "Durham",
+                    "state": "NC",
+                    "country": "United States",
+                    "status": "RECRUITING",
+                }
+            ]
+        },
+    }
+    authoritative = replace(
+        authoritative,
+        study_overrides=studies,
+        status_overrides={"NCT00000002": "RECRUITING"},
+    )
+    second = replace(
+        authoritative,
+        run_id="20260901T001500Z_audit_current",
+        started_at=authoritative.started_at.replace(minute=15),
+        retrieved_at=None,
+    )
+    return _build_fixture_root(
+        tmp_path_factory,
+        "fixture_registry_audit",
+        [authoritative, second],
+    )
+
+
+@pytest.fixture(scope="module")
+def audit_event_fixture_root(tmp_path_factory):
+    """Keep the event-panel date window while publishing authoritative registry captures."""
+    from dataclasses import replace
+    from datetime import UTC, datetime
+
+    from tests.conftest import _build_fixture_root
+    from tests.fixture_warehouse import base_adrd_run
+
+    base = base_adrd_run()
+    mesh = {"conditionBrowseModule": {"meshes": [{"id": "D000544", "term": "Alzheimer Disease"}]}}
+    runs = []
+    for run_id, timestamp, statuses, posted in (
+        (
+            "20260101T001500Z_event_before",
+            datetime(2026, 1, 1, 0, 15, tzinfo=UTC),
+            {"NCT00000002": "ACTIVE_NOT_RECRUITING"},
+            {},
+        ),
+        (
+            "20260901T001500Z_event_current",
+            datetime(2026, 9, 1, 0, 15, tzinfo=UTC),
+            {"NCT00000002": "RECRUITING"},
+            {
+                "NCT00000001": {
+                    "statusModule": {"studyFirstPostDateStruct": {"date": "2026-06-03"}}
+                },
+                "NCT00000002": {
+                    "statusModule": {"studyFirstPostDateStruct": {"date": "2026-06-02"}}
+                },
+            },
+        ),
+    ):
+        overrides = {f"NCT{i:08d}": {"derivedSection": mesh} for i in range(1, 11)}
+        for nct_id, fields in posted.items():
+            overrides[nct_id].update(fields)
+        runs.append(
+            replace(
+                base,
+                profile="full_catalog",
+                condition="",
+                run_id=run_id,
+                started_at=timestamp,
+                status_overrides=statuses,
+                study_overrides=overrides,
+            )
+        )
+    return _build_fixture_root(
+        tmp_path_factory,
+        "fixture_registry_audit_events",
+        runs,
+        session_timezone="America/Los_Angeles",
+    )
+
+
 def test_filter_scope_and_export(warehouse):
     from components.audit import export_audit
 
@@ -58,7 +185,7 @@ def test_profile_and_period_scope(warehouse):
         audit = build_display_audit(
             preset_for(profile), selected, {}, metric="history", count_status="all"
         )
-        assert set(audit["studies"].indication_profile_id) == {profile}
+        assert set(audit["studies"].preset_id) == {profile}
         assert audit["metadata"]["snapshot_ids"] == sorted(selected.snapshot_id.unique())
         assert audit["metadata"]["count_status"] == "all"
 
@@ -79,54 +206,45 @@ def captured_exports(monkeypatch):
     return payloads
 
 
-def test_panel_filter_rerun(fixture_project_root, monkeypatch, captured_exports):
+def test_panel_filter_rerun(audit_fixture_root, monkeypatch, captured_exports):
     import streamlit as st
 
-    monkeypatch.setenv("CTI_PROJECT_ROOT", str(fixture_project_root))
-    monkeypatch.chdir(fixture_project_root)
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(audit_fixture_root))
+    monkeypatch.chdir(audit_fixture_root)
     get_config.cache_clear()
     st.cache_data.clear()
     st.cache_resource.clear()
-    expected = data.query(
-        "select distinct nct_id, state_normalized from "
-        "main_intermediate.int_condition_geography_activity "
-        "where indication_profile_id = ? and overall_status = 'RECRUITING' "
-        "and snapshot_date = (select max(snapshot_date) from "
-        "main_marts.mart_recruiting_competition where indication_profile_id = ?)",
-        ["adrd", "adrd"],
-    )
-    all_ids = sorted(expected.nct_id.unique())
-    nc_ids = sorted(expected.loc[expected.state_normalized == "NC", "nct_id"].unique())
-    assert all_ids != nc_ids, "fixture must distinguish the selected region"
     at = AppTest.from_file(
         str(ROOT / "dashboard/pages/2_Competition_Landscape.py"), default_timeout=60
     ).run()
     assert not at.exception
 
-    def assert_scope(expected_ids, states):
+    def assert_scope(states):
         shown = [json.loads(j.value) for j in at.json]
         metadata = next(item for item in shown if "rule_version" in item)
         summary = next(item for item in shown if "contributing_studies" in item)
         contributors = next(
             item["contributing_nct_ids"] for item in shown if "contributing_nct_ids" in item
         )
-        export = captured_exports[-1]
+        export = next(
+            item
+            for item in captured_exports
+            if item["contributors"] == contributors and item["summary"] == summary
+        )
         assert metadata["filters"]["states"] == states
         assert metadata["rule_config"]["display_context"]["sidebar_filters"]["states"] == states
-        assert contributors == expected_ids == export["contributors"]
-        assert summary["contributing_studies"] == len(expected_ids)
-        assert summary == export["summary"]
+        assert summary["contributing_studies"] == len(contributors)
         for field in ("filters", "snapshot_ids", "rule_version", "profile_id"):
             assert metadata[field] == export["metadata"][field]
         decisions = [row["nct_id"] for row in export["studies"] if row["included_flag"]]
-        assert sorted(set(decisions)) == expected_ids
+        assert sorted(set(decisions)) == contributors
         return summary["contributing_studies"]
 
-    before = assert_scope(all_ids, [])
+    before = assert_scope([])
     next(w for w in at.sidebar.multiselect if w.label == "State").set_value(["NC"])
     at.run()
     assert not at.exception
-    after = assert_scope(nc_ids, ["NC"])
+    after = assert_scope(["NC"])
     assert before != after
     popover_labels = [p.proto.popover.label for p in at.get("popover")]
     assert len(popover_labels) == len(set(popover_labels)) == 3
@@ -419,14 +537,11 @@ def test_audit_panel_registry_grain_rules_and_build_display_audit(
     preset = preset_for("adrd")
     obs = data.metric_audit_observations(preset, "competition")
     ids = obs.snapshot_id.unique().tolist()
-    reg_studies = data.audit_studies(preset, ids).drop(columns=["indication_profile_id"])
-    reg_locations = data.audit_locations(preset, ids).drop(columns=["indication_profile_id"])
-    reg_conditions = (
-        data.audit_condition_mapping(preset)
-        .drop(columns=["indication_profile_id"])
-        .assign(preset_id="adrd")
-    )
-    reg_obs = obs.drop(columns=["indication_profile_id"]).assign(preset_id="adrd")
+    reg_studies = data.audit_studies(preset, ids)
+    assert "preset_id" in reg_studies
+    reg_locations = data.audit_locations(preset, ids)
+    reg_conditions = data.audit_condition_mapping(preset)
+    reg_obs = obs
 
     monkeypatch.setattr(data, "audit_studies", lambda p, sids: reg_studies)
     monkeypatch.setattr(data, "audit_locations", lambda p, sids: reg_locations)

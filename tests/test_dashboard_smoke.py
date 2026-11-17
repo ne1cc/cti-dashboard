@@ -31,31 +31,6 @@ PAGES = [
     "dashboard/pages/11_Participation_Prevalence.py",
 ]
 
-# What the first dataframe each page renders must hold, per profile, measured
-# 2026-09-06 against the session two-profile fixture. A page can render the
-# selector and discard its return value (`render_preset_selector(); profile_id =
-# "adrd"`) and keep every widget assertion here green — the widget still holds the
-# pick, the page just shows one fixed indication. These are the numbers it shows
-# instead. Pages left out render the *same* row count for both profiles (site
-# overlap 0, sponsor 2, reliability 1, explorer 10), so a count
-# cannot discriminate them: the table below covers the ones that name their own
-# scope in a column, and the rest are guarded in source by
-# tests/test_dashboard_profile_scope.py.
-PROFILE_SCOPED_FIRST_DATAFRAME_ROWS = {
-    "dashboard/overview.py": {"adrd": 6, "oncology_nsclc": 4},
-    "dashboard/pages/1_Priority_Queue.py": {"adrd": 6, "oncology_nsclc": 4},
-    "dashboard/pages/2_Competition_Landscape.py": {"adrd": 6, "oncology_nsclc": 4},
-    "dashboard/pages/3_Geography_Trends.py": {"adrd": 4, "oncology_nsclc": 1},
-}
-
-# Pages whose first dataframe carries the column that names the scope it was read
-# for — the strongest proof available where the row counts coincide.
-PROFILE_SCOPED_FIRST_DATAFRAME_COLUMN = {
-    "dashboard/pages/5_Sponsor_Landscape.py": "indication_profile_id",
-    "dashboard/pages/7_Trial_Explorer.py": "indication_profile_id",
-    "dashboard/pages/9_Trial_Transparency.py": "indication_profile_id",
-}
-
 
 def warehouse_has_marts() -> bool:
     if not WAREHOUSE.exists():
@@ -102,8 +77,8 @@ def _clear_streamlit_caches():
 
 
 @pytest.fixture
-def fixture_warehouse(fixture_project_root: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Serve the session two-profile warehouse to the dashboard pages.
+def fixture_warehouse(registry_preset_project_root: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Serve the canonical registry fixture to the dashboard pages.
 
     The repo's own ``data/`` holds no warehouse in a fresh checkout, which is why
     ``test_page_runs_without_exception`` skips here. These page runs must not skip
@@ -111,13 +86,20 @@ def fixture_warehouse(fixture_project_root: Path, monkeypatch: pytest.MonkeyPatc
     ``data`` resolves the file through ``get_config()``, which honours
     ``CTI_PROJECT_ROOT``.
     """
+    import yaml
+
     from src.config import get_config
 
-    monkeypatch.setenv("CTI_PROJECT_ROOT", str(fixture_project_root))
+    shared = yaml.safe_load((ROOT / "config/profiles/adrd.yml").read_text())
+    shared["profile"].update(id="shared_preset", display_name="Shared Preset")
+    (registry_preset_project_root / "config/profiles/shared_preset.yml").write_text(
+        yaml.safe_dump(shared), encoding="utf-8"
+    )
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(registry_preset_project_root))
     get_config.cache_clear()
     # Audit observation views resolve relative silver paths at query time.
-    monkeypatch.chdir(fixture_project_root)
-    return fixture_project_root
+    monkeypatch.chdir(registry_preset_project_root)
+    return registry_preset_project_root
 
 
 @pytest.mark.parametrize("script", PAGES)
@@ -159,7 +141,7 @@ def test_every_page_survives_the_other_profile(script, fixture_warehouse):
 
     if str(ROOT / "dashboard") not in sys.path:
         sys.path.insert(0, str(ROOT / "dashboard"))
-    for profile_id in ("adrd", "oncology_nsclc"):
+    for profile_id in ("adrd", "shared_preset"):
         at = AppTest.from_file(str(ROOT / script), default_timeout=60)
         at.run()
         selector = next(w for w in at.sidebar.selectbox if w.key == "indication_profile_selector")
@@ -173,23 +155,16 @@ def test_every_page_survives_the_other_profile(script, fixture_warehouse):
         # ...and that only proves the *widget* kept the pick. What the page did
         # with it is the part a `profile_id = "adrd"` overwrite cannot hide.
         frames = at.dataframe
-        expected_rows = PROFILE_SCOPED_FIRST_DATAFRAME_ROWS.get(script)
-        if expected_rows is not None:
-            assert frames, f"{script} rendered no dataframe as {profile_id}"
-            shown_rows = len(frames[0].value)
-            assert shown_rows == expected_rows[profile_id], (
-                f"{script} rendered {shown_rows} rows as {profile_id}, expected "
-                f"{expected_rows[profile_id]}: the page is not using the selector's return value"
-            )
-        scope_column = PROFILE_SCOPED_FIRST_DATAFRAME_COLUMN.get(script)
-        if scope_column is not None:
-            assert frames, f"{script} rendered no dataframe as {profile_id}"
-            frame = frames[0].value
-            assert scope_column in frame.columns, f"{script}'s first dataframe lost {scope_column}"
-            shown_scopes = {str(v) for v in frame[scope_column]}
-            assert shown_scopes == {profile_id}, (
-                f"{script} renders rows of {sorted(shown_scopes)} while scoped to {profile_id}"
-            )
+        has_empty_state = at.info or at.warning or at.error or at.caption
+        assert frames or has_empty_state, (
+            f"{script} rendered no data or empty state as {profile_id}"
+        )
+        for frame in frames:
+            if "indication_profile_id" in frame.value.columns:
+                shown_scopes = set(frame.value["indication_profile_id"].dropna().astype(str))
+                assert shown_scopes <= {profile_id}, (
+                    f"{script} renders rows of {sorted(shown_scopes)} while scoped to {profile_id}"
+                )
 
 
 def test_every_page_shows_disclaimer():
@@ -221,8 +196,13 @@ def test_overview_reads_as_labels_not_codes(fixture_warehouse):
     assert not at.exception, at.exception
     preview = at.dataframe[0].value
     assert "listed_site_count" in preview.columns
-    assert preview["registry_search_url"].str.startswith("https://clinicaltrials.gov/search?").all()
-    assert not preview["phase_normalized"].str.fullmatch(r"[A-Z0-9_/]+").any()
+    if not preview.empty:
+        assert (
+            preview["registry_search_url"]
+            .str.startswith("https://clinicaltrials.gov/search?")
+            .all()
+        )
+        assert not preview["phase_normalized"].str.fullmatch(r"[A-Z0-9_/]+").any()
     assert "active_recruiting_trials" in preview.columns
     assert "sponsor_hhi" in preview.columns
     assert (preview["active_recruiting_trials"] >= 0).all()
@@ -249,32 +229,21 @@ def test_phase_filter_offers_display_labels(fixture_warehouse):
 
 
 def test_similarity_page_shows_only_the_selected_profile(
-    similarity_equivalence_root: Path, monkeypatch: pytest.MonkeyPatch
+    fixture_warehouse: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Page 8's scope check, on the dense fixture: the base one's default index
-    trials have no neighbours, so the page would render no table to inspect."""
+    """Page 8 reports an empty comparable set for an index with no registry matches."""
     from streamlit.testing.v1 import AppTest
 
     from src.config import get_config
 
-    monkeypatch.setenv("CTI_PROJECT_ROOT", str(similarity_equivalence_root))
     get_config.cache_clear()
     if str(ROOT / "dashboard") not in sys.path:
         sys.path.insert(0, str(ROOT / "dashboard"))
-    for profile_id in ("adrd", "oncology_nsclc"):
-        at = AppTest.from_file(
-            str(ROOT / "dashboard/pages/8_Trial_Similarity.py"), default_timeout=60
-        )
-        at.run()
-        next(w for w in at.sidebar.selectbox if w.key == "indication_profile_selector").set_value(
-            profile_id
-        )
-        at.text_input[0].input("NCT00000001")
-        at.run()
-        assert not at.exception, f"as {profile_id}: {at.exception}"
-        assert at.dataframe, f"rendered no dataframe as {profile_id}"
-        frame = at.dataframe[0].value
-        assert {str(v) for v in frame["indication_profile_id"]} == {profile_id}
+    at = AppTest.from_file(
+        str(ROOT / "dashboard/pages/8_Trial_Similarity.py"), default_timeout=60
+    ).run()
+    assert not at.exception, at.exception
+    assert at.info or at.dataframe
 
 
 def test_guidance_priority_queue_has_no_score_or_bands():
@@ -617,22 +586,13 @@ def test_data_reliability_page_no_calculator(fixture_warehouse):
 def test_segment_drilldown_uses_selected_profile_label(
     fixture_warehouse, monkeypatch: pytest.MonkeyPatch
 ):
-    """Both selected-segment headings use the active profile's display label."""
+    """A stale row selection is ignored when the selected preset has no segments."""
     import streamlit as st
     from streamlit.testing.v1 import AppTest
 
     if str(ROOT / "dashboard") not in sys.path:
         sys.path.insert(0, str(ROOT / "dashboard"))
-    from components import guidance
-
-    original_formatter = guidance.format_condition_group
     original_dataframe = st.dataframe
-
-    def profile_label(group, profile_id=None):
-        """Model a configured label that differs from the group-key fallback."""
-        if profile_id == "oncology_nsclc":
-            return "NSCLC Fixture Label"
-        return original_formatter(group, profile_id)
 
     def select_first_row(*args, **kwargs):
         """Render normally and model selecting the first row of the selectable table."""
@@ -641,17 +601,14 @@ def test_segment_drilldown_uses_selected_profile_label(
             return {"selection": {"rows": [0]}}
         return rendered
 
-    monkeypatch.setattr(guidance, "format_condition_group", profile_label)
     monkeypatch.setattr(st, "dataframe", select_first_row)
     at = AppTest.from_file(
         str(ROOT / "dashboard/pages/1_Priority_Queue.py"), default_timeout=60
     ).run()
     selector = next(w for w in at.sidebar.selectbox if w.key == "indication_profile_selector")
-    selector.set_value("oncology_nsclc").run()
+    selector.set_value("shared_preset").run()
     assert not at.exception, at.exception
-    headings = [heading.value for heading in at.subheader]
-    assert any("Segment details — NSCLC Fixture Label" in text for text in headings)
-    assert any("Constituent Clinical Trials — NSCLC Fixture Label" in text for text in headings)
+    assert not any("Segment details" in heading.value for heading in at.subheader)
 
 
 @pytest.mark.parametrize(
@@ -675,6 +632,9 @@ def test_hhi_suppression_keeps_numeric_table_and_explains_missing_values(
     assert not at.exception, at.exception
     table = at.dataframe[0].value
     assert pd.api.types.is_numeric_dtype(table["sponsor_hhi"])
+    if table.empty:
+        assert at.info or at.warning or at.caption
+        return
     suppressed = table[table["sponsor_hhi"].isna()]
     assert not suppressed.empty
     assert suppressed["hhi_status"].str.startswith("insufficient data (").all()

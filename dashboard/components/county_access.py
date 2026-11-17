@@ -1,6 +1,6 @@
 """County map of straight-line access to open trial sites (Issue #73).
 
-Intent: turn ``mart_trial_access_by_geo`` (Issue #72) rows for one or two conditions into a
+Intent: turn ``mart_registry_trial_access_by_geo`` rows for one or two conditions into a
 county choropleth, the always-visible denominator / coverage / data-date / interpretation
 text, a rural "no site within 100 miles" table and a CSV with a methodology header. The
 logic is plain pandas so it is testable without Streamlit; ``render_county_access`` is the
@@ -59,7 +59,7 @@ GEOJSON = Path(__file__).resolve().parents[1] / "static" / "us_counties.geojson"
 METHODOLOGY = (
     "Straight-line (great-circle) miles from the county centroid to the nearest open site. "
     "Open site = site and trial status RECRUITING or NOT_YET_RECRUITING. Not travel time. "
-    "Source: mart_trial_access_by_geo; method and limits: docs/access_methodology.md."
+    "Source: mart_registry_trial_access_by_geo; method and limits: docs/access_methodology.md."
 )
 MEANING = (
     "**What this means:** a county marked within N miles has its centroid within N "
