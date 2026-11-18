@@ -1,4 +1,4 @@
--- Protocol detail query over warehouse staging and dimensional models.
+-- Protocol detail query over canonical registry-grain warehouse models.
 -- ADR 0065 strict compliance: zero investigator/coordinator contact PII.
 -- Directs inquiries to canonical registry via registry_contact_url.
 
@@ -9,7 +9,7 @@
 -- search.sql, so both endpoints report identical coordinates for a site.
 WITH site_fallback AS (
     SELECT
-        loc.ingestion_run_id,
+        COALESCE(loc.snapshot_id, loc.ingestion_run_id) AS effective_run_key,
         loc.nct_id,
         loc.location_ordinal,
         loc.facility_name,
@@ -33,13 +33,13 @@ WITH site_fallback AS (
             WHEN gz.zcta IS NOT NULL OR gp.state_usps IS NOT NULL THEN TRUE
             ELSE NULL
         END AS coordinate_approximate
-    FROM stg_trial_locations loc
+    FROM stg_registry_trial_locations loc
     LEFT JOIN gazetteer_zcta gz ON left(loc.zip_code, 5) = gz.zcta
     LEFT JOIN gazetteer_place gp
         ON gp.state_usps = loc.state_normalized
        AND (gp.city_name = loc.city_normalized OR gp.city_name_stripped = loc.city_normalized)
     QUALIFY row_number() OVER (
-        PARTITION BY loc.ingestion_run_id, loc.nct_id, loc.location_ordinal
+        PARTITION BY COALESCE(loc.snapshot_id, loc.ingestion_run_id), loc.nct_id, loc.location_ordinal
         ORDER BY CASE WHEN gz.zcta IS NOT NULL THEN 0 ELSE 1 END, gp.latitude, gp.longitude
     ) = 1
 )
@@ -82,9 +82,9 @@ SELECT
     st.lead_sponsor_name,
     (
         SELECT min(ts.sponsor_class)
-        FROM stg_trial_sponsors ts
+        FROM stg_registry_trial_sponsors ts
         WHERE ts.nct_id = st.nct_id
-          AND ts.ingestion_run_id = st.ingestion_run_id
+          AND COALESCE(ts.snapshot_id, ts.ingestion_run_id) = COALESCE(st.snapshot_id, st.ingestion_run_id)
           AND ts.sponsor_role = 'lead_sponsor'
     ) AS lead_sponsor_class,
     (
@@ -92,9 +92,9 @@ SELECT
             'name': ts.sponsor_name,
             'class': ts.sponsor_class
         } ORDER BY ts.sponsor_name)
-        FROM stg_trial_sponsors ts
+        FROM stg_registry_trial_sponsors ts
         WHERE ts.nct_id = st.nct_id
-          AND ts.ingestion_run_id = st.ingestion_run_id
+          AND COALESCE(ts.snapshot_id, ts.ingestion_run_id) = COALESCE(st.snapshot_id, st.ingestion_run_id)
           AND ts.sponsor_role != 'lead_sponsor'
     ) AS collaborators,
     st.responsible_party_type,
@@ -104,13 +104,44 @@ SELECT
         SELECT list({
             'condition_raw': tc.condition_raw,
             'condition_normalized': tc.condition_normalized,
-            'condition_group': tc.condition_group,
-            'mesh_id': NULL,
-            'dementia_relevance_flag': tc.dementia_relevance_flag
+            'condition_group': COALESCE(
+                tc.condition_group,
+                (
+                    SELECT min(pcm.condition_group)
+                    FROM int_registry_preset_condition_mapping pcm
+                    WHERE pcm.nct_id = st.nct_id
+                      AND pcm.snapshot_id = COALESCE(st.snapshot_id, st.ingestion_run_id)
+                ),
+                (
+                    SELECT min(m.mesh_term)
+                    FROM stg_registry_trial_condition_mesh m
+                    WHERE m.nct_id = st.nct_id
+                      AND COALESCE(m.snapshot_id, m.ingestion_run_id) = COALESCE(st.snapshot_id, st.ingestion_run_id)
+                      AND NOT m.is_ancestor
+                      AND lower(m.mesh_term) = tc.condition_normalized
+                )
+            ),
+            'mesh_id': (
+                SELECT min(m.mesh_id)
+                FROM stg_registry_trial_condition_mesh m
+                WHERE m.nct_id = st.nct_id
+                  AND COALESCE(m.snapshot_id, m.ingestion_run_id) = COALESCE(st.snapshot_id, st.ingestion_run_id)
+                  AND NOT m.is_ancestor
+                  AND lower(m.mesh_term) = tc.condition_normalized
+            ),
+            'dementia_relevance_flag': COALESCE(
+                tc.dementia_relevance_flag,
+                (
+                    SELECT bool_or(pcm.dementia_relevance_flag)
+                    FROM int_registry_preset_condition_mapping pcm
+                    WHERE pcm.nct_id = st.nct_id
+                      AND pcm.snapshot_id = COALESCE(st.snapshot_id, st.ingestion_run_id)
+                )
+            )
         } ORDER BY tc.condition_raw)
-        FROM stg_trial_conditions tc
+        FROM stg_registry_trial_conditions tc
         WHERE tc.nct_id = st.nct_id
-          AND tc.ingestion_run_id = st.ingestion_run_id
+          AND COALESCE(tc.snapshot_id, tc.ingestion_run_id) = COALESCE(st.snapshot_id, st.ingestion_run_id)
     ) AS conditions,
 
     -- Interventions
@@ -120,9 +151,9 @@ SELECT
             'intervention_name': COALESCE(ti.intervention_name, ''),
             'description': ti.intervention_description
         } ORDER BY ti.intervention_name, ti.intervention_type)
-        FROM stg_trial_interventions ti
+        FROM stg_registry_trial_interventions ti
         WHERE ti.nct_id = st.nct_id
-          AND ti.ingestion_run_id = st.ingestion_run_id
+          AND COALESCE(ti.snapshot_id, ti.ingestion_run_id) = COALESCE(st.snapshot_id, st.ingestion_run_id)
     ) AS interventions,
 
     -- Arm groups (registry text stored verbatim)
@@ -133,9 +164,9 @@ SELECT
             'description': ta.arm_description,
             'intervention_names': COALESCE(ta.intervention_names, [])
         } ORDER BY ta.arm_ordinal)
-        FROM stg_trial_arms ta
+        FROM stg_registry_trial_arms ta
         WHERE ta.nct_id = st.nct_id
-          AND ta.ingestion_run_id = st.ingestion_run_id
+          AND COALESCE(ta.snapshot_id, ta.ingestion_run_id) = COALESCE(st.snapshot_id, st.ingestion_run_id)
     ) AS arms,
 
     -- Eligibility (Issue #62)
@@ -180,19 +211,54 @@ SELECT
         } ORDER BY s.location_ordinal, s.facility_name)
         FROM site_fallback s
         WHERE s.nct_id = st.nct_id
-          AND s.ingestion_run_id = st.ingestion_run_id
+          AND s.effective_run_key = COALESCE(st.snapshot_id, st.ingestion_run_id)
     ) AS sites,
 
-    -- Provenance
-    st.ingestion_run_id,
-    st.snapshot_id,
-    CAST(COALESCE(st.snapshot_date, current_date) AS VARCHAR) AS snapshot_date,
-    strftime(timezone('UTC', COALESCE(st.snapshot_timestamp_utc, now())), '%Y-%m-%dT%H:%M:%SZ') AS snapshot_timestamp_utc,
+    -- Provenance (public compatibility mapping for indication_profile_id via preset membership)
+    COALESCE(st.ingestion_run_id, st.snapshot_id) AS ingestion_run_id,
+    COALESCE(st.snapshot_id, st.ingestion_run_id) AS snapshot_id,
+    CAST(COALESCE(sm.snapshot_date, st.snapshot_date, current_date) AS VARCHAR) AS snapshot_date,
+    strftime(
+        timezone('UTC', COALESCE(sm.started_at_utc, st.snapshot_timestamp_utc, now())),
+        '%Y-%m-%dT%H:%M:%SZ'
+    ) AS snapshot_timestamp_utc,
     COALESCE(st.source_json_hash, '') AS source_json_hash,
     COALESCE(st.record_quality_flag, 'ok') AS record_quality_flag,
     strftime(timezone('UTC', COALESCE(st.retrieved_at_utc, now())), '%Y-%m-%dT%H:%M:%SZ') AS retrieved_at_utc,
-    COALESCE(st.indication_profile_id, 'warehouse') AS indication_profile_id
+    COALESCE(
+        (
+            SELECT min(b.preset_id)
+            FROM bridge_preset_trial b
+            WHERE b.nct_id = st.nct_id
+              AND b.current_record_flag = TRUE
+              AND NOT b.is_unassigned
+        ),
+        (
+            SELECT min(b.preset_id)
+            FROM bridge_preset_trial b
+            WHERE b.nct_id = st.nct_id
+              AND b.current_record_flag = TRUE
+        ),
+        'warehouse'
+    ) AS indication_profile_id
 
-FROM stg_trials st
+FROM stg_registry_trials st
+LEFT JOIN stg_registry_trial_snapshots sm
+    ON COALESCE(st.snapshot_id, st.ingestion_run_id) = sm.ingestion_run_id
 WHERE upper(st.nct_id) = upper($nct_id)
-QUALIFY row_number() OVER (PARTITION BY st.nct_id ORDER BY st.snapshot_timestamp_utc DESC, st.ingestion_run_id DESC) = 1;
+  AND (
+      NOT EXISTS (SELECT 1 FROM stg_registry_trial_snapshots)
+      OR (
+          sm.ingestion_run_id IS NOT NULL
+          AND sm.status = 'success'
+          AND sm.profile IN ('full_catalog', 'full-catalog', 'default')
+          AND (sm.condition IS NULL OR trim(sm.condition) = '')
+      )
+  )
+QUALIFY row_number() OVER (
+    PARTITION BY st.nct_id
+    ORDER BY
+        COALESCE(sm.started_at_utc, st.snapshot_timestamp_utc) DESC,
+        st.snapshot_timestamp_utc DESC,
+        COALESCE(st.snapshot_id, st.ingestion_run_id) DESC
+) = 1;

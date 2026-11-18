@@ -1,22 +1,34 @@
--- Search trials across warehouse marts and staging tables with full parameterization.
+-- Search trials across canonical registry-grain warehouse marts and staging tables.
 -- Strictly complies with ADR 0065: zero coordinator/investigator contact PII.
 
 WITH latest_trial_run AS (
     SELECT
-        nct_id,
-        ingestion_run_id,
-        last_update_post_date,
+        st.nct_id,
+        COALESCE(st.snapshot_id, st.ingestion_run_id) AS effective_run_key,
+        st.last_update_post_date,
         ROW_NUMBER() OVER (
-            PARTITION BY nct_id 
-            ORDER BY snapshot_timestamp_utc DESC, ingestion_run_id DESC
+            PARTITION BY st.nct_id
+            ORDER BY
+                COALESCE(sm.started_at_utc, st.snapshot_timestamp_utc) DESC,
+                st.snapshot_timestamp_utc DESC,
+                COALESCE(st.snapshot_id, st.ingestion_run_id) DESC
         ) AS run_rn
-    FROM stg_trials
+    FROM stg_registry_trials st
+    LEFT JOIN stg_registry_trial_snapshots sm
+        ON COALESCE(st.snapshot_id, st.ingestion_run_id) = sm.ingestion_run_id
+    WHERE NOT EXISTS (SELECT 1 FROM stg_registry_trial_snapshots)
+       OR (
+           sm.ingestion_run_id IS NOT NULL
+           AND sm.status = 'success'
+           AND sm.profile IN ('full_catalog', 'full-catalog', 'default')
+           AND (sm.condition IS NULL OR trim(sm.condition) = '')
+       )
 ),
 
 active_trial_runs AS (
     SELECT
         nct_id,
-        ingestion_run_id,
+        effective_run_key,
         CAST(last_update_post_date AS VARCHAR) AS last_update_post_date
     FROM latest_trial_run
     WHERE run_rn = 1
@@ -37,10 +49,10 @@ distinct_trials AS (
         dt.accepts_healthy_volunteers,
         dt.std_age_groups,
         dt.registry_url,
-        atr.ingestion_run_id,
+        COALESCE(atr.effective_run_key, dt.snapshot_id, dt.ingestion_run_id) AS effective_run_key,
         atr.last_update_post_date,
         ROW_NUMBER() OVER (PARTITION BY dt.nct_id ORDER BY dt.latest_seen_snapshot_date DESC) AS trial_rn
-    FROM dim_trial dt
+    FROM dim_registry_trial dt
     LEFT JOIN active_trial_runs atr ON dt.nct_id = atr.nct_id
 ),
 
@@ -84,7 +96,7 @@ nearest_sites AS (
     FROM (
         SELECT
             loc.nct_id,
-            loc.ingestion_run_id,
+            COALESCE(loc.snapshot_id, loc.ingestion_run_id) AS effective_run_key,
             loc.location_ordinal,
             loc.facility_name,
             loc.city,
@@ -105,9 +117,10 @@ nearest_sites AS (
                 WHEN gz.zcta IS NOT NULL OR gp.state_usps IS NOT NULL THEN TRUE
                 ELSE NULL
             END AS coordinate_approximate
-        FROM stg_trial_locations loc
+        FROM stg_registry_trial_locations loc
         INNER JOIN active_trial_runs atr
-            ON loc.nct_id = atr.nct_id AND loc.ingestion_run_id = atr.ingestion_run_id
+            ON loc.nct_id = atr.nct_id
+           AND COALESCE(loc.snapshot_id, loc.ingestion_run_id) = atr.effective_run_key
         LEFT JOIN gazetteer_zcta gz ON left(loc.zip_code, 5) = gz.zcta
         LEFT JOIN gazetteer_place gp
             ON gp.state_usps = loc.state_normalized
@@ -120,7 +133,7 @@ nearest_sites AS (
               gp.state_usps IS NOT NULL
           )
         QUALIFY row_number() OVER (
-            PARTITION BY loc.ingestion_run_id, loc.nct_id, loc.location_ordinal
+            PARTITION BY COALESCE(loc.snapshot_id, loc.ingestion_run_id), loc.nct_id, loc.location_ordinal
             ORDER BY CASE WHEN gz.zcta IS NOT NULL THEN 0 ELSE 1 END, gp.latitude, gp.longitude
         ) = 1
     )
@@ -136,18 +149,18 @@ matched_candidates AS (
         dt.lead_sponsor,
         (
             SELECT min(ts.sponsor_class)
-            FROM stg_trial_sponsors ts
+            FROM stg_registry_trial_sponsors ts
             WHERE ts.nct_id = dt.nct_id
-              AND (dt.ingestion_run_id IS NULL OR ts.ingestion_run_id = dt.ingestion_run_id)
+              AND (dt.effective_run_key IS NULL OR COALESCE(ts.snapshot_id, ts.ingestion_run_id) = dt.effective_run_key)
               AND ts.sponsor_role = 'lead_sponsor'
         ) AS sponsor_class,
         dt.start_date,
         dt.last_update_post_date,
         (
             SELECT list(DISTINCT tc.condition_raw ORDER BY tc.condition_raw)
-            FROM stg_trial_conditions tc
+            FROM stg_registry_trial_conditions tc
             WHERE tc.nct_id = dt.nct_id
-              AND (dt.ingestion_run_id IS NULL OR tc.ingestion_run_id = dt.ingestion_run_id)
+              AND (dt.effective_run_key IS NULL OR COALESCE(tc.snapshot_id, tc.ingestion_run_id) = dt.effective_run_key)
         ) AS conditions,
         dt.min_age_years,
         dt.max_age_years,
@@ -196,18 +209,18 @@ matched_candidates AS (
       AND (
           $sponsor_class IS NULL OR
           EXISTS (
-              SELECT 1 FROM stg_trial_sponsors ts
+              SELECT 1 FROM stg_registry_trial_sponsors ts
               WHERE ts.nct_id = dt.nct_id
-                AND (dt.ingestion_run_id IS NULL OR ts.ingestion_run_id = dt.ingestion_run_id)
+                AND (dt.effective_run_key IS NULL OR COALESCE(ts.snapshot_id, ts.ingestion_run_id) = dt.effective_run_key)
                 AND ts.sponsor_class = $sponsor_class
           )
       )
       AND (
           $intervention_type IS NULL OR
           EXISTS (
-              SELECT 1 FROM stg_trial_interventions ti
+              SELECT 1 FROM stg_registry_trial_interventions ti
               WHERE ti.nct_id = dt.nct_id
-                AND (dt.ingestion_run_id IS NULL OR ti.ingestion_run_id = dt.ingestion_run_id)
+                AND (dt.effective_run_key IS NULL OR COALESCE(ti.snapshot_id, ti.ingestion_run_id) = dt.effective_run_key)
                 AND upper(ti.intervention_type) = upper($intervention_type)
           )
       )
@@ -215,9 +228,9 @@ matched_candidates AS (
           $cond IS NULL OR
           lower(dt.brief_title) LIKE '%' || lower($cond) || '%' ESCAPE '\' OR
           EXISTS (
-              SELECT 1 FROM stg_trial_conditions tc
+              SELECT 1 FROM stg_registry_trial_conditions tc
               WHERE tc.nct_id = dt.nct_id
-                AND (dt.ingestion_run_id IS NULL OR tc.ingestion_run_id = dt.ingestion_run_id)
+                AND (dt.effective_run_key IS NULL OR COALESCE(tc.snapshot_id, tc.ingestion_run_id) = dt.effective_run_key)
                 AND (
                     lower(tc.condition_raw) LIKE '%' || lower($cond) || '%' ESCAPE '\' OR
                     lower(tc.condition_group) LIKE '%' || lower($cond) || '%' ESCAPE '\' OR
@@ -225,9 +238,15 @@ matched_candidates AS (
                 )
           ) OR
           EXISTS (
-              SELECT 1 FROM stg_trial_condition_mesh tcm
+              SELECT 1 FROM int_registry_preset_condition_mapping pcm
+              WHERE pcm.nct_id = dt.nct_id
+                AND (dt.effective_run_key IS NULL OR pcm.snapshot_id = dt.effective_run_key)
+                AND lower(pcm.condition_group) LIKE '%' || lower($cond) || '%' ESCAPE '\'
+          ) OR
+          EXISTS (
+              SELECT 1 FROM stg_registry_trial_condition_mesh tcm
               WHERE tcm.nct_id = dt.nct_id
-                AND (dt.ingestion_run_id IS NULL OR tcm.ingestion_run_id = dt.ingestion_run_id)
+                AND (dt.effective_run_key IS NULL OR COALESCE(tcm.snapshot_id, tcm.ingestion_run_id) = dt.effective_run_key)
                 AND (
                     lower(tcm.mesh_term) = lower($cond) OR
                     lower(tcm.mesh_id) = lower($cond)
