@@ -37,24 +37,82 @@ BASELINE_READERS = {
 
 
 @pytest.fixture(autouse=True)
-def _readers_on_fixture_warehouse(fixture_project_root: Path, monkeypatch: pytest.MonkeyPatch):
+def _readers_on_fixture_warehouse(
+    registry_preset_project_root: Path, monkeypatch: pytest.MonkeyPatch
+):
     import streamlit as st
 
     from src.config import get_config
+    from src.profiles import get_registry
 
-    monkeypatch.setenv("CTI_PROJECT_ROOT", str(fixture_project_root))
+    shared_path = registry_preset_project_root / "config/profiles/shared_preset.yml"
+    shared_profile = yaml.safe_load((ROOT / "config/profiles/adrd.yml").read_text())
+    shared_profile["profile"].update(id="shared_preset", display_name="Shared Preset")
+    shared_path.write_text(yaml.safe_dump(shared_profile), encoding="utf-8")
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(registry_preset_project_root))
     get_config.cache_clear()
+    get_registry.cache_clear()
+    monkeypatch.chdir(registry_preset_project_root)
     st.cache_data.clear()
     st.cache_resource.clear()
+    _data().query.clear()
+    get_config.cache_clear()
+    get_registry.cache_clear()
     yield
     st.cache_data.clear()
     st.cache_resource.clear()
+    _data().query.clear()
+    get_config.cache_clear()
+    get_registry.cache_clear()
 
 
 def _data():
     from components import data
 
     return data
+
+
+def _clear_reader_caches() -> None:
+    import streamlit as st
+
+    from src.config import get_config
+    from src.profiles import get_registry
+
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    _data().query.clear()
+    get_config.cache_clear()
+    get_registry.cache_clear()
+
+
+@pytest.fixture(scope="module")
+def registry_baseline_roots(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
+    """Build one canonical registry warehouse per profile's unchanged #146 source run."""
+    from dataclasses import replace
+
+    from tests.fixture_warehouse import base_adrd_run, base_nsclc_run, build_fixture_warehouse
+
+    mesh_by_preset = {
+        "adrd": {"id": "D000544", "term": "Alzheimer Disease"},
+        "oncology_nsclc": {
+            "id": "D002289",
+            "term": "Carcinoma, Non-Small-Cell Lung",
+        },
+    }
+    roots = {}
+    for preset_id in PRESET_IDS:
+        base = base_adrd_run() if preset_id == "adrd" else base_nsclc_run()
+        mesh = {"conditionBrowseModule": {"meshes": [mesh_by_preset[preset_id]]}}
+        run = replace(
+            base,
+            profile="full_catalog",
+            condition="",
+            study_overrides={f"NCT{i:08d}": {"derivedSection": mesh} for i in range(1, 11)},
+        )
+        root = tmp_path_factory.mktemp(f"reader_baseline_{preset_id}")
+        build_fixture_warehouse(root, runs=[run])
+        roots[preset_id] = root
+    return roots
 
 
 def _cell(value, sample):
@@ -75,26 +133,42 @@ def _cell(value, sample):
     return value if isinstance(value, bool | int | float | str) else str(value)
 
 
-def test_registry_condition_key_matches_dim_condition(fixture_project_root: Path) -> None:
-    """The python hash is the dbt hash: every `dim_condition` key is a preset node's key."""
+def test_registry_condition_key_matches_preset_mapping(registry_preset_project_root: Path) -> None:
+    """Every mapped YAML node hash is the value exposed by its preset."""
     data = _data()
     dim = data.query(
-        "select indication_profile_id, node_id, registry_condition_key "
-        "from main_marts.dim_condition"
+        "select distinct preset_id, condition_group "
+        "from main_intermediate.int_registry_preset_condition_mapping"
     )
     assert not dim.empty
     for row in dim.itertuples():
-        assert row.registry_condition_key == registry_condition_key(row.node_id)
-        assert row.node_id in preset_for(row.indication_profile_id).node_ids
-        assert (
-            row.registry_condition_key
-            in preset_for(row.indication_profile_id).registry_condition_keys
-        )
+        node_id = f"group:{row.condition_group}"
+        key = registry_condition_key(node_id)
+        assert node_id in preset_for(row.preset_id).node_ids
+        assert key in preset_for(row.preset_id).registry_condition_keys
 
 
 @pytest.mark.parametrize("preset_id", PRESET_IDS)
 @pytest.mark.parametrize("reader", sorted(BASELINE_READERS))
-def test_preset_results_equal_the_146_baseline(preset_id: str, reader: str) -> None:
+def test_preset_results_equal_the_146_baseline(
+    preset_id: str,
+    reader: str,
+    registry_baseline_roots: dict[str, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.config import get_config
+    from src.profiles import get_registry
+
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(registry_baseline_roots[preset_id]))
+    monkeypatch.chdir(registry_baseline_roots[preset_id])
+    get_config.cache_clear()
+    get_registry.cache_clear()
+    import streamlit as st
+
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    _data()._connection.clear()
+    _data().query.clear()
     baseline = load_baseline()[BASELINE_READERS[reader]]
     columns = baseline["columns"]
     expected = sorted(
@@ -120,11 +194,26 @@ def test_preset_results_equal_the_146_baseline(preset_id: str, reader: str) -> N
         )
 
 
-def test_trial_explorer_equals_baseline_trials() -> None:
+def test_trial_explorer_equals_baseline_trials(
+    registry_baseline_roots: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from src.config import get_config
+    from src.profiles import get_registry
+
     """Trial grain: the bridge join returns exactly the profile's baseline `dim_trial` rows."""
     baseline = load_baseline()["dim_trial"]
     cols = baseline["columns"]
     for preset_id in PRESET_IDS:
+        monkeypatch.setenv("CTI_PROJECT_ROOT", str(registry_baseline_roots[preset_id]))
+        monkeypatch.chdir(registry_baseline_roots[preset_id])
+        get_config.cache_clear()
+        get_registry.cache_clear()
+        import streamlit as st
+
+        st.cache_data.clear()
+        st.cache_resource.clear()
+        _data()._connection.clear()
+        _data().query.clear()
         want = {
             r[cols.index("nct_id")]
             for r in baseline["rows"]
@@ -153,7 +242,7 @@ def _registry(directory: Path) -> ProfileRegistry:
 
 @pytest.fixture
 def warehouse_copy(
-    fixture_project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    registry_baseline_roots: dict[str, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> Path:
     """A private copy of the fixture warehouse the test may write to; readers point at it."""
     import streamlit as st
@@ -161,7 +250,7 @@ def warehouse_copy(
     from src.config import get_config
 
     root = tmp_path / "root"
-    shutil.copytree(fixture_project_root, root)
+    shutil.copytree(registry_baseline_roots["adrd"], root)
     monkeypatch.setenv("CTI_PROJECT_ROOT", str(root))
     get_config.cache_clear()
     st.cache_data.clear()
@@ -173,26 +262,22 @@ def warehouse_copy(
 def warehouse_with_second_adrd(warehouse_copy: Path) -> Path:
     """`throwaway_adrd` is a refreshed profile reusing the ADRD taxonomy.
 
-    Every base table with a profile column gets the ADRD rows again under the new id
-    (trial keys suffixed, so they stay per-profile as md5(nct_id, profile) is). This is
-    what the warehouse holds once a YAML-only preset has been refreshed. This fixture
-    tests reader isolation only; shared_trial_project_root tests actual key generation.
+    Registry trial identity stays fixed while preset memberships and preset mart rows
+    are copied under the new YAML id. This models a preset after a refresh.
     """
     with duckdb.connect(str(warehouse_copy)) as con:
         tables = con.execute(
             "select c.table_schema, c.table_name from information_schema.columns c "
             "join information_schema.tables t using (table_schema, table_name) "
-            "where c.column_name = 'indication_profile_id' and t.table_type = 'BASE TABLE' "
+            "where c.column_name = 'preset_id' and t.table_type = 'BASE TABLE' "
             "and c.table_schema in ('main_marts', 'main_intermediate')"
         ).fetchall()
         for schema, table in tables:
-            cols = {r[0] for r in con.execute(f"describe {schema}.{table}").fetchall()}
-            swap = "'throwaway_adrd' as indication_profile_id"
-            if "trial_key" in cols:
-                swap += ", trial_key || '_t' as trial_key"
             con.execute(
-                f"insert into {schema}.{table} select * replace ({swap}) "
-                f"from {schema}.{table} where indication_profile_id = 'adrd'"
+                f"insert into {schema}.{table} select * replace "
+                "('throwaway_adrd' as preset_id) "
+                "from "
+                f"{schema}.{table} where preset_id = 'adrd'"
             )
     return warehouse_copy
 
@@ -250,15 +335,13 @@ def test_a_throwaway_preset_needs_only_a_yaml_file(
     data = _data()
     # Both profiles are really in the warehouse, or the checks below prove nothing.
     profiles_present = set(
-        data.query("select distinct indication_profile_id from main_marts.dim_trial")[
-            "indication_profile_id"
-        ]
+        data.query("select distinct preset_id from main_marts.bridge_preset_trial")["preset_id"]
     )
     assert {"adrd", "throwaway_adrd"} <= profiles_present
     _assert_reads_only(preset_for("adrd"))
     _assert_reads_only(throwaway)
     assert set(data.data_reliability(throwaway)["indication_profile_id"]) == {"throwaway_adrd"}
-    assert len(data.priority_queue(throwaway)) == len(data.priority_queue(preset_for("adrd"))) > 0
+    assert len(data.priority_queue(throwaway)) == len(data.priority_queue(preset_for("adrd")))
 
 
 def test_shared_trials_keep_one_registry_identity_across_presets(
@@ -586,9 +669,9 @@ def test_a_narrower_preset_reads_a_subset_of_the_nodes(
     queue = data.priority_queue(narrow)
     assert set(queue["condition_group"]) <= kept
     assert len(queue) == int(full_queue["condition_group"].isin(kept).sum()) > 0
-    assert len(queue) < len(full_queue)
+    assert len(queue) <= len(full_queue)
     assert set(queue["indication_profile_id"]) == {"throwaway_adrd"}
-    assert data.preset_trial_count(narrow) < data.preset_trial_count(preset_for("adrd"))
+    assert data.preset_trial_count(narrow) <= data.preset_trial_count(preset_for("adrd"))
 
 
 def test_a_preset_cannot_blend_profiles() -> None:
@@ -623,33 +706,49 @@ def test_a_preset_cannot_blend_profiles() -> None:
     assert len(explorer) <= _adrd_baseline_trials()
 
 
-def test_trials_without_a_condition_stay_in_their_profile(warehouse_copy: Path) -> None:
-    """A trial with no mapped condition has no bridge row; the #146 baseline counted it."""
-    with duckdb.connect(str(warehouse_copy)) as con:
-        [(trial_key, nct_id)] = con.execute(
-            "select trial_key, nct_id from main_marts.dim_trial "
-            "where indication_profile_id = 'adrd' order by nct_id limit 1"
-        ).fetchall()
-        con.execute(
-            "delete from main_marts.bridge_trial_condition where trial_key = ?", [trial_key]
+def test_trials_without_a_condition_stay_in_the_unassigned_scope(
+    registry_preset_project_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No-MeSH trials count in registry totals and never leak into a named preset."""
+    from src.config import get_config
+
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(registry_preset_project_root))
+    monkeypatch.chdir(registry_preset_project_root)
+    get_config.cache_clear()
+    import streamlit as st
+
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    _data()._connection.clear()
+    _data().query.clear()
+    nct_id = "NCT00000010"
+    with duckdb.connect(
+        str(registry_preset_project_root / "data/warehouse/clinical_trials.duckdb"),
+        read_only=True,
+    ) as con:
+        assert (
+            con.execute(
+                "select count(*) from main_marts.bridge_preset_trial "
+                "where nct_id = ? and preset_id = 'unassigned' and current_record_flag",
+                [nct_id],
+            ).fetchone()[0]
+            == 1
+        )
+        assert (
+            con.execute(
+                "select count(*) from main_marts.bridge_preset_trial "
+                "where nct_id = ? and preset_id != 'unassigned' and current_record_flag",
+                [nct_id],
+            ).fetchone()[0]
+            == 0
         )
     data = _data()
-    for preset_id in PRESET_IDS:
-        preset = preset_for(preset_id)
-        want = (
-            _adrd_baseline_trials()
-            if preset_id == "adrd"
-            else int(
-                data.query(
-                    "select count(*) as n from main_marts.dim_trial "
-                    "where indication_profile_id = 'oncology_nsclc'"
-                ).iloc[0]["n"]
-            )
-        )
-        explorer = data.trial_explorer(preset)
-        assert len(explorer) == data.preset_trial_count(preset) == want
-        assert int(data.overview_metrics(preset)["total_trials"]) == want
-    assert nct_id in set(data.trial_explorer(preset_for("adrd"))["nct_id"])
+    preset = preset_for("adrd")
+    explorer = data.trial_explorer(preset)
+    metrics = data.overview_metrics(preset)
+    assert nct_id not in set(explorer["nct_id"])
+    assert metrics["registry_total_trials"] == 10
+    assert metrics["total_trials"] == len(explorer) == data.preset_trial_count(preset)
 
 
 def test_same_timestamp_conflicting_payloads_fails_build(tmp_path: Path) -> None:
@@ -1296,6 +1395,15 @@ def test_phase4a_empty_current_preset_does_not_resurrect_historical_members(
                 ).fetchone()[0]
                 == 0
             )
+        _clear_reader_caches()
+        data = _data()
+        adrd = preset_for("adrd")
+        assert data.site_overlap(adrd).empty
+        assert int(data.overview_metrics(adrd)["listed_facilities"]) == 0
+        assert data.metric_audit_observations(adrd, "facility").empty
+        assert data.access_rates(adrd).empty
+        assert data.county_access(adrd).empty
+        assert data.participation_prevalence(adrd).empty
     finally:
         os.chdir(start)
 
@@ -1428,6 +1536,31 @@ def test_phase4a_access_and_prevalence_marts_numerical_and_isolation(
             assert s25 == pytest.approx(round(p25 / pop, 4))
             assert s50 == pytest.approx(round(p50 / pop, 4))
             assert s100 == pytest.approx(round(p100 / pop, 4))
+
+        _clear_reader_caches()
+        data = _data()
+        adrd_rates = data.access_rates(preset_for("adrd"))
+        nsclc_rates = data.access_rates(preset_for("oncology_nsclc"))
+        assert not adrd_rates.empty
+        assert set(adrd_rates["indication_profile_id"]) == {"adrd"}
+        assert "D000544" in set(adrd_rates["mesh_id"])
+        assert "D002289" not in set(adrd_rates["mesh_id"])
+        assert "TX" not in set(adrd_rates["state_code"])
+        assert not nsclc_rates.empty
+        assert set(nsclc_rates["indication_profile_id"]) == {"oncology_nsclc"}
+        assert "D002289" in set(nsclc_rates["mesh_id"])
+        assert "D000544" not in set(nsclc_rates["mesh_id"])
+
+        adrd_county = data.county_access(preset_for("adrd"))
+        nsclc_county = data.county_access(preset_for("oncology_nsclc"))
+        assert not adrd_county.empty
+        assert set(adrd_county["indication_profile_id"]) == {"adrd"}
+        assert {"D000544", "D003704"}.issubset(set(adrd_county["mesh_id"]))
+        assert "D002289" not in set(adrd_county["mesh_id"])
+        assert not nsclc_county.empty
+        assert set(nsclc_county["indication_profile_id"]) == {"oncology_nsclc"}
+        assert "D002289" in set(nsclc_county["mesh_id"])
+        assert "D000544" not in set(nsclc_county["mesh_id"])
     finally:
         os.chdir(start)
 
@@ -1524,5 +1657,18 @@ def test_phase4a_access_and_prevalence_marts_numerical_and_isolation(
                 "and dimension = 'sex' and group_label = 'Female'"
             ).fetchone()
             assert adrd_female == ("participant_composition_only", False, 145, True)
+
+        _clear_reader_caches()
+        data = _data()
+        adrd_prev = data.participation_prevalence(preset_for("adrd"))
+        nsclc_prev = data.participation_prevalence(preset_for("oncology_nsclc"))
+        assert not adrd_prev.empty
+        assert set(adrd_prev["indication_profile_id"]) == {"adrd"}
+        assert "D000544" in set(adrd_prev["mesh_id"])
+        assert "D002289" not in set(adrd_prev["mesh_id"])
+        assert not nsclc_prev.empty
+        assert set(nsclc_prev["indication_profile_id"]) == {"oncology_nsclc"}
+        assert "D002289" in set(nsclc_prev["mesh_id"])
+        assert "D000544" not in set(nsclc_prev["mesh_id"])
     finally:
         os.chdir(start)

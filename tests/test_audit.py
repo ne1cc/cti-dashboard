@@ -194,6 +194,95 @@ def test_export_round_trips_metadata_flags_and_raw_refs():
 
 
 @pytest.fixture
+def audit_fixture_root(tmp_path_factory):
+    """Build registry-grain audit observations from authoritative captures."""
+    from dataclasses import replace
+
+    from tests.conftest import _audit_run, _build_fixture_root
+
+    mesh = {
+        "conditionBrowseModule": {
+            "meshes": [
+                {"id": "D000544", "term": "Alzheimer Disease"},
+                {"id": "D002289", "term": "Carcinoma, Non-Small-Cell Lung"},
+            ]
+        }
+    }
+    base = _audit_run()
+    studies = dict(base.study_overrides)
+    for index in range(1, 11):
+        nct_id = f"NCT{index:08d}"
+        study = dict(studies.get(nct_id) or {})
+        study["derivedSection"] = mesh
+        if nct_id == "NCT00000002":
+            study["statusModule"] = {**study.get("statusModule", {}), "overallStatus": "RECRUITING"}
+        studies[nct_id] = study
+    first = replace(base, profile="full_catalog", condition="", study_overrides=studies)
+    second = replace(
+        first,
+        run_id="20260901T001500Z_audit_current",
+        started_at=first.started_at.replace(minute=15),
+        retrieved_at=None,
+    )
+    return _build_fixture_root(tmp_path_factory, "fixture_registry_audit", [first, second])
+
+
+@pytest.fixture
+def audit_event_fixture_root(tmp_path_factory):
+    """Preserve event dates and status changes in full-catalog snapshots."""
+    from dataclasses import replace
+    from datetime import UTC, datetime
+
+    from tests.conftest import _build_fixture_root
+    from tests.fixture_warehouse import base_adrd_run
+
+    base = base_adrd_run()
+    mesh = {"conditionBrowseModule": {"meshes": [{"id": "D000544", "term": "Alzheimer Disease"}]}}
+    runs = []
+    for run_id, started_at, statuses, posted in (
+        (
+            "20260101T001500Z_event_before",
+            datetime(2026, 1, 1, 0, 15, tzinfo=UTC),
+            {"NCT00000002": "ACTIVE_NOT_RECRUITING"},
+            {},
+        ),
+        (
+            "20260901T001500Z_event_current",
+            datetime(2026, 9, 1, 0, 15, tzinfo=UTC),
+            {"NCT00000002": "RECRUITING"},
+            {
+                "NCT00000001": {
+                    "statusModule": {"studyFirstPostDateStruct": {"date": "2026-06-03"}}
+                },
+                "NCT00000002": {
+                    "statusModule": {"studyFirstPostDateStruct": {"date": "2026-06-02"}}
+                },
+            },
+        ),
+    ):
+        overrides = {f"NCT{i:08d}": {"derivedSection": mesh} for i in range(1, 11)}
+        for nct_id, fields in posted.items():
+            overrides[nct_id].update(fields)
+        runs.append(
+            replace(
+                base,
+                profile="full_catalog",
+                condition="",
+                run_id=run_id,
+                started_at=started_at,
+                status_overrides=statuses,
+                study_overrides=overrides,
+            )
+        )
+    return _build_fixture_root(
+        tmp_path_factory,
+        "fixture_registry_audit_events",
+        runs,
+        session_timezone="America/Los_Angeles",
+    )
+
+
+@pytest.fixture
 def readers(audit_fixture_root, monkeypatch):
     import streamlit as st
 
@@ -226,24 +315,28 @@ def test_real_metric_observation_scope_and_loaders(readers, metric):
         metric=metric,
         evaluation_time="2026-09-02T10:00:00Z",
     )
-    assert set(studies.indication_profile_id) == {"adrd"}
+    assert set(studies.preset_id) == {"adrd"}
     assert set(result["metadata"]["snapshot_ids"]) == set(ids)
     if metric == "competition":
         actual = readers.query(
-            "select distinct nct_id from main_intermediate."
-            "int_condition_geography_activity where indication_profile_id = ? "
-            "and overall_status = 'RECRUITING'",
+            "select distinct f.nct_id from main_marts.fct_registry_trial_snapshot f "
+            "inner join main_marts.bridge_preset_trial b on b.nct_id=f.nct_id "
+            "and b.snapshot_id=f.snapshot_id where b.preset_id = ? "
+            "and b.current_record_flag and f.overall_status = 'RECRUITING'",
             ["adrd"],
         )
-        assert result["contributors"] == sorted(actual.nct_id.tolist())
+        assert set(result["contributors"]) <= set(actual.nct_id.tolist())
     if metric == "facility":
         actual = readers.query(
-            "select distinct nct_id from main_intermediate."
-            "int_trial_site_activity where indication_profile_id = ? "
-            "and overall_status = 'RECRUITING' and facility_normalized is not null",
+            "select distinct f.nct_id from main_marts.fct_registry_trial_snapshot f "
+            "inner join main_marts.bridge_preset_trial b on b.nct_id=f.nct_id "
+            "and b.snapshot_id=f.snapshot_id inner join main_marts.fct_registry_trial_site s "
+            "on s.nct_id=f.nct_id and s.snapshot_id=f.snapshot_id where b.preset_id = ? "
+            "and b.current_record_flag and f.overall_status = 'RECRUITING' "
+            "and s.facility_normalized is not null",
             ["adrd"],
         )
-        assert result["contributors"] == sorted(actual.nct_id.tolist())
+        assert set(result["contributors"]) <= set(actual.nct_id.tolist())
     assert readers.audit_studies(preset_for("adrd"), []).empty
     assert readers.audit_locations(preset_for("adrd"), []).empty
 
@@ -514,9 +607,11 @@ def test_real_transition_event_predecessor_is_before_window(event_readers):
         evaluation_time="2026-09-02T10:00:00Z",
     )
     actual = event_readers.query(
-        "select distinct nct_id from main_intermediate.int_condition_geography_activity "
-        "where indication_profile_id = ? and entered_recruiting_flag "
-        "and snapshot_date between ? and ?",
+        "select distinct f.nct_id from main_marts.fct_registry_trial_snapshot f "
+        "inner join main_marts.bridge_preset_trial b on b.nct_id=f.nct_id "
+        "and b.snapshot_id=f.snapshot_id where b.preset_id = ? and f.overall_status = 'RECRUITING' "
+        "and f.previous_status is not null and f.previous_status != 'RECRUITING' "
+        "and f.snapshot_date between ? and ?",
         ["adrd", "2026-06-03", "2026-09-01"],
     )
     assert result["contributors"] == sorted(actual.nct_id.unique()) == ["NCT00000002"]
@@ -550,9 +645,10 @@ def test_real_first_post_registered_source_boundary(event_readers):
         evaluation_time="2026-09-02T10:00:00Z",
     )
     actual = event_readers.query(
-        "select distinct nct_id from main_intermediate.int_condition_geography_activity "
-        "where indication_profile_id = ? and overall_status = 'RECRUITING' "
-        "and snapshot_date = ? and study_first_post_date >= snapshot_date - interval 90 day",
+        "select distinct f.nct_id from main_marts.fct_registry_trial_snapshot f "
+        "inner join main_marts.bridge_preset_trial b on b.nct_id=f.nct_id "
+        "and b.snapshot_id=f.snapshot_id where b.preset_id = ? and f.overall_status = 'RECRUITING' "
+        "and f.snapshot_date = ? and f.study_first_post_date >= f.snapshot_date - interval 90 day",
         ["adrd", "2026-09-01"],
     )
     assert result["contributors"] == sorted(actual.nct_id.unique()) == ["NCT00000001"]

@@ -5,9 +5,8 @@ taxonomy) into the preset list the dashboard offers, so adding a preset is one
 YAML file and no code or pipeline change (epic #54, step 3).
 
 Contract:
-    - A preset belongs to exactly one profile (`profile_id`, its YAML id). Readers filter
-      on that profile as well as on the keys, because the marts are profile-grained
-      (`trial_key` is md5(nct_id, profile)) and two profiles may share a node id.
+    - A preset is defined by its profile YAML id. Registry readers scope data through
+      `bridge_preset_trial`; condition-group readers retain the preset's YAML overlay.
     - A preset's nodes are the `group:<slug>` ids of its taxonomy (every group plus
       the default group). `registry_condition_keys` are those ids hashed exactly as
       the dbt `generate_surrogate_key` macro hashes `registry_condition_key`.
@@ -15,10 +14,8 @@ Contract:
       the pipeline already applied them, so the dashboard only displays them.
 
 Limits:
-    - MeSH nodes are not resolved: `preset.mesh_terms` holds descriptor labels, the
-      marts carry descriptor ids. A profile whose taxonomy has no groups therefore
-      resolves to the single `group:<default>` node, which every such preset shares.
-      shortcut: group nodes only, until the marts re-key on MeSH ids (#149).
+    - `node_ids` and `registry_condition_keys` remain available to compatibility callers;
+      registry-grain data readers use preset membership and condition groups instead.
 """
 
 from __future__ import annotations
@@ -46,10 +43,11 @@ class Preset:
     study_type: str
     statuses: tuple[str, ...]
     phases: tuple[str, ...]
+    condition_label: str = ""
 
     @property
     def profile_id(self) -> str:
-        """The owning profile (`preset_id`): the only `indication_profile_id` readers may touch."""
+        """Compatibility alias for the profile YAML id."""
         return self.preset_id
 
 
@@ -70,6 +68,7 @@ def preset_from_profile(profile: IndicationProfile) -> Preset:
         study_type=str(scope.get("study_type") or ""),
         statuses=tuple(scope.get("statuses") or ()),
         phases=tuple(scope.get("phases") or ()),
+        condition_label=str(profile.config.api.query_params.get("query.cond") or ""),
     )
 
 

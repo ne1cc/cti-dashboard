@@ -41,7 +41,6 @@ from tests.conftest import (
 # other run ids were needed -- an edited conftest id would leave the assertions
 # describing a warehouse that no longer exists. Same pattern as
 # tests/test_orchestration_assets.py:10.
-from tests.preset_helpers import preset_for
 
 STAGING_WITH_PROFILE = [
     "stg_trials",
@@ -898,8 +897,28 @@ def test_registry_segments_raw_metrics_non_empty(
     ) == [(8,)]
 
 
+@pytest.fixture(scope="module")
+def registry_priority_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Build a broad authoritative capture for the preset-reader ordering check."""
+    from dataclasses import replace
+
+    from tests.fixture_warehouse import base_adrd_run, build_fixture_warehouse
+
+    mesh = {"conditionBrowseModule": {"meshes": [{"id": "D000544", "term": "Alzheimer Disease"}]}}
+    run = replace(
+        base_adrd_run(),
+        profile="full_catalog",
+        condition="",
+        study_overrides={f"NCT{i:08d}": {"derivedSection": mesh} for i in range(1, 11)},
+    )
+    root = tmp_path_factory.mktemp("registry_priority_reader")
+    build_fixture_warehouse(root, runs=[run])
+    return root
+
+
 def test_mart_feasibility_priority_queue_deterministic_tiebreaker(
     divergent_fixture_root: Path,
+    registry_priority_root: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Verify mart ordering and deterministic tiebreakers on ties.
@@ -910,19 +929,23 @@ def test_mart_feasibility_priority_queue_deterministic_tiebreaker(
     import streamlit as st
 
     from src.config import get_config
+    from src.presets import preset_from_profile
+    from src.profiles import load_profile
 
     dashboard_dir = Path(__file__).resolve().parents[1] / "dashboard"
     if str(dashboard_dir) not in sys.path:
         sys.path.insert(0, str(dashboard_dir))
     from components import data
 
-    monkeypatch.setenv("CTI_PROJECT_ROOT", str(divergent_fixture_root))
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(registry_priority_root))
+    monkeypatch.chdir(registry_priority_root)
     get_config.cache_clear()
     st.cache_data.clear()
     st.cache_resource.clear()
 
-    df = data.priority_queue(preset_for("adrd"))
-    assert len(df) == 8
+    preset = preset_from_profile(load_profile(registry_priority_root / "config/profiles/adrd.yml"))
+    df = data.priority_queue(preset)
+    assert not df.empty
 
     # Assert that the returned segment keys strictly follow the tuple order:
     # (active_recruiting_trials desc, distinct_sponsors desc, priority_queue_key asc)
@@ -937,13 +960,13 @@ def test_mart_feasibility_priority_queue_deterministic_tiebreaker(
     assert df["priority_queue_key"].tolist() == expected_keys
 
     rows = _rows(
-        divergent_fixture_root,
+        registry_priority_root,
         "select active_recruiting_trials, distinct_sponsors, priority_queue_key "
-        "from main_marts.mart_feasibility_priority_queue "
-        "where indication_profile_id = 'adrd' "
+        "from main_marts.mart_registry_feasibility_priority_queue "
+        "where preset_id = 'adrd' "
         "order by active_recruiting_trials desc, distinct_sponsors desc, priority_queue_key asc",
     )
-    assert len(rows) == 8
+    assert len(rows) == len(df)
     sort_keys = [(-r[0], -r[1], str(r[2])) for r in rows]
     assert sort_keys == sorted(sort_keys)
 

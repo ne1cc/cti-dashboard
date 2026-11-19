@@ -193,6 +193,15 @@ def mesh_warehouse(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return build_fixture_warehouse(tmp_path_factory.mktemp("mesh_warehouse"), runs=[mesh_run()])
 
 
+@pytest.fixture(scope="module")
+def registry_mesh_warehouse(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Use an authoritative capture for the registry-grain dashboard drill-through."""
+    from dataclasses import replace
+
+    run = replace(mesh_run(), profile="full_catalog", condition="")
+    return build_fixture_warehouse(tmp_path_factory.mktemp("registry_mesh_warehouse"), runs=[run])
+
+
 def query(root: Path, sql: str) -> list[tuple]:
     # Staging models are views over relative globs resolved against the
     # process cwd (same mechanism as test_dbt_fixture_build._rows).
@@ -368,12 +377,13 @@ def test_mesh_dimension_dementia_relevance_flag_is_null(mesh_warehouse: Path):
     assert bridge_rows == [(None,)]
 
 
-def test_trials_for_segment_with_mesh_rows(mesh_warehouse: Path, monkeypatch):
+def test_trials_for_segment_with_mesh_rows(registry_mesh_warehouse: Path, monkeypatch):
     # Finding 7: located fixture proves non-empty segment outputs and verifies
     # dashboard trials_for_segment works cleanly with mesh rows present.
     from dashboard.components import data
 
-    db_path = mesh_warehouse / "data/warehouse/clinical_trials.duckdb"
+    db_path = registry_mesh_warehouse / "data/warehouse/clinical_trials.duckdb"
+    monkeypatch.chdir(registry_mesh_warehouse)
     con = duckdb.connect(str(db_path), read_only=True)
     monkeypatch.setattr(data, "_connection", lambda: con)
 

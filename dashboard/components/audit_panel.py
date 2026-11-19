@@ -151,9 +151,9 @@ def build_display_audit(
         has_profile_col = (
             "indication_profile_id" in studies.columns
             or "indication_profile_id" in observations.columns
-            or (studies.empty and observations.empty)
         )
-        active_grain = "profile" if has_profile_col else "registry"
+        has_registry_col = "preset_id" in studies.columns or "preset_id" in observations.columns
+        active_grain = "profile" if has_profile_col and not has_registry_col else "registry"
     result = compute_audit(
         studies,
         locations,
@@ -309,12 +309,12 @@ def render_metric_audit(
                 observed_days = int(segments["observed_history_days"].iloc[0])
             else:
                 hist_bounds = data.query(
-                    "select min(snapshot_date) as min_date, max(snapshot_date) as max_date "
-                    "from main_intermediate.int_trial_status_history "
-                    "where indication_profile_id in (select indication_profile_id "
-                    "from main_marts.dim_condition "
-                    "where registry_condition_key in (select unnest(?)))",
-                    [list(preset.registry_condition_keys)],
+                    "select min(f.snapshot_date) as min_date, max(f.snapshot_date) as max_date "
+                    "from main_marts.fct_registry_trial_snapshot f "
+                    "inner join main_marts.bridge_preset_trial b "
+                    "on b.nct_id = f.nct_id and b.snapshot_id = f.snapshot_id "
+                    "where b.preset_id = ?",
+                    [preset.preset_id],
                 )
                 if not hist_bounds.empty and pd.notna(hist_bounds["min_date"].iloc[0]):
                     min_d = pd.to_datetime(hist_bounds["min_date"].iloc[0]).date()

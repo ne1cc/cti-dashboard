@@ -72,8 +72,6 @@ def temp_duckdb_legacy_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
         insert into main_marts.fct_trial_site values ('NCT00000001', '2024-01-01', 'CA')
         """
     )
-    con.close()
-
     # Clear cached connection in dashboard.components.data
     from components import data
 
@@ -301,6 +299,64 @@ def temp_duckdb_modern_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
         )
         """
     )
+    con.execute("create schema main_intermediate")
+    con.execute("""
+        create table main_marts.dim_registry_trial as
+        select distinct nct_id, registry_url, current_brief_title, current_overall_status,
+            current_phase, current_study_type, current_lead_sponsor,
+            current_lead_sponsor_normalized, start_date, primary_completion_date,
+            completion_date, study_first_post_date, enrollment_count, enrollment_type,
+            current_has_results_flag, record_quality_flag, first_seen_snapshot_date,
+            latest_seen_snapshot_date, active_in_latest_snapshot_flag
+        from main_marts.dim_trial
+    """)
+    con.execute("""
+        create table main_marts.bridge_preset_trial as
+        select indication_profile_id as preset_id, nct_id,
+            cast(
+                coalesce(latest_seen_snapshot_date, study_first_post_date) as varchar
+            ) as snapshot_id,
+            date '2024-01-01' as snapshot_date,
+            coalesce(active_in_latest_snapshot_flag, true) as current_record_flag
+        from main_marts.dim_trial
+    """)
+    con.execute("""
+        create table main_marts.fct_registry_trial_site as
+        select s.nct_id,
+            cast(
+                coalesce(d.latest_seen_snapshot_date, d.study_first_post_date) as varchar
+            ) as snapshot_id,
+            s.snapshot_date, s.state_normalized
+        from main_marts.fct_trial_site s join main_marts.dim_trial d using (nct_id)
+    """)
+    con.execute("""
+        create table main_intermediate.int_registry_preset_condition_mapping as
+        select d.indication_profile_id as preset_id, b.nct_id,
+            cast(
+                coalesce(d.latest_seen_snapshot_date, d.study_first_post_date) as varchar
+            ) as snapshot_id,
+            b.condition_group, b.registry_condition_key,
+            'group:' || b.condition_group as node_id
+        from main_marts.bridge_trial_condition b
+        join main_marts.dim_trial d using (trial_key)
+    """)
+    con.execute("""
+        create table main_marts.bridge_registry_trial_condition as
+        select distinct nct_id, registry_condition_key, condition_group,
+            cast(null as varchar) as mesh_id
+        from main_marts.bridge_trial_condition
+    """)
+    con.execute("""
+        create table main_marts.mart_registry_trial_similarity as
+        select indication_profile_id as preset_id, * exclude (
+            trial_similarity_key, indication_profile_id
+        ) from main_marts.mart_trial_similarity
+    """)
+    con.execute("""
+        create table main_marts.mart_registry_site_overlap (
+            preset_id varchar, snapshot_date date
+        )
+    """)
     con.close()
 
     from components import data
@@ -467,40 +523,41 @@ def test_trials_for_segment_modern_schema(temp_duckdb_modern_schema: Path):
     assert df_empty.empty
 
 
-def test_trials_for_segment_keeps_profile_keys_and_snapshot_scope(temp_duckdb_modern_schema: Path):
+def test_trials_for_segment_keeps_registry_identity_and_preset_scope(
+    temp_duckdb_modern_schema: Path,
+):
     from components import data
 
     with duckdb.connect(str(temp_duckdb_modern_schema)) as con:
-        con.execute("""
-            insert into main_marts.dim_trial
-            select 'oncology_nsclc:NCT00000001', nct_id, 'oncology_nsclc', registry_url,
-                   current_brief_title, current_overall_status, current_phase, current_study_type,
-                   'Other profile sponsor', current_lead_sponsor_normalized, start_date,
-                   primary_completion_date, completion_date, study_first_post_date,
-                   enrollment_count, enrollment_type, current_has_results_flag, record_quality_flag,
-                   first_seen_snapshot_date, latest_seen_snapshot_date,
-                   active_in_latest_snapshot_flag
-            from main_marts.dim_trial where nct_id = 'NCT00000001'
-        """)
+        snapshot_id = con.execute(
+            "select snapshot_id from main_marts.bridge_preset_trial "
+            "where preset_id = 'adrd' and nct_id = 'NCT00000001'"
+        ).fetchone()[0]
         con.execute(
-            "insert into main_marts.bridge_trial_condition "
-            "(trial_key, nct_id, condition_group, registry_condition_key) "
-            "values ('oncology_nsclc:NCT00000001', 'NCT00000001', 'oncology_nsclc', ?)",
-            [preset_for("oncology_nsclc").registry_condition_keys[0]],
+            "insert into main_marts.bridge_preset_trial values "
+            "('oncology_nsclc', 'NCT00000001', ?, '2024-01-01', true)",
+            [snapshot_id],
         )
-        con.execute("""
-            insert into main_marts.fct_trial_site values
-                ('oncology_nsclc:NCT00000001', 'NCT00000001', 'oncology_nsclc', '2024-02-01', 'TX')
-        """)
+        con.execute(
+            "insert into main_intermediate.int_registry_preset_condition_mapping values "
+            "('oncology_nsclc', 'NCT00000001', ?, 'oncology_nsclc', ?, 'group:oncology_nsclc')",
+            [snapshot_id, preset_for("oncology_nsclc").registry_condition_keys[0]],
+        )
+        con.execute(
+            "insert into main_marts.fct_registry_trial_site values "
+            "('NCT00000001', ?, '2024-01-01', 'TX')",
+            [snapshot_id],
+        )
     data.trials_for_segment.clear()
     adrd = data.trials_for_segment(preset_for("adrd"), "alzheimers_disease", "CA", "PHASE2")
     assert adrd["lead_sponsor"].tolist() == ["Test Lead Sponsor"]
-    assert data.trials_for_segment(preset_for("adrd"), "alzheimers_disease", "TX", "PHASE2").empty
+    adrd_tx = data.trials_for_segment(preset_for("adrd"), "alzheimers_disease", "TX", "PHASE2")
+    assert adrd_tx["lead_sponsor"].tolist() == ["Test Lead Sponsor"]
     assert data.trials_for_segment(preset_for("adrd"), "oncology_nsclc", "CA", "PHASE2").empty
     oncology = data.trials_for_segment(
         preset_for("oncology_nsclc"), "oncology_nsclc", "TX", "PHASE2"
     )
-    assert oncology["lead_sponsor"].tolist() == ["Other profile sponsor"]
+    assert oncology["lead_sponsor"].tolist() == ["Test Lead Sponsor"]
 
 
 def test_require_warehouse_warns_for_unknown_freshness(temp_duckdb_modern_schema, project_root_tmp):
@@ -532,9 +589,16 @@ def test_freshness_banner_uses_selected_capture_and_uncached_clock(
     monkeypatch.setenv("CTI_REFRESHABLE_PROFILES", "adrd,oncology_nsclc")
     monkeypatch.setattr(freshness, "utc_now", lambda: NOW)
     payload = marker_payload()
-    payload["last_success"]["profiles"]["oncology_nsclc"]["captured_at_utc"] = (
-        NOW - timedelta(days=11)
-    ).isoformat()
+    payload["last_success"]["registry"] = {
+        "run_id": "registry_run",
+        "captured_at_utc": (NOW - timedelta(days=3)).isoformat(),
+        "row_counts": {
+            "dim_registry_trial": 1,
+            "fct_registry_trial_snapshot": 1,
+            "bridge_preset_trial": 1,
+            "mart_registry_trial_similarity": 0,
+        },
+    }
     path = freshness.marker_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload))
@@ -550,8 +614,12 @@ def test_freshness_banner_uses_selected_capture_and_uncached_clock(
     assert not fresh.exception, fresh.exception
     assert not fresh.warning
     assert any("2026-10-20" in caption.value for caption in fresh.caption)
-    assert any("2026-10-23" in caption.value for caption in fresh.caption)
-    stale = AppTest.from_function(page, args=("oncology_nsclc",)).run()
+    other_preset = AppTest.from_function(page, args=("oncology_nsclc",)).run()
+    assert not other_preset.exception, other_preset.exception
+    assert not other_preset.warning
+    payload["last_success"]["registry"]["captured_at_utc"] = (NOW - timedelta(days=11)).isoformat()
+    path.write_text(json.dumps(payload))
+    stale = AppTest.from_function(page, args=("adrd",)).run()
     assert not stale.exception, stale.exception
     assert any("stale" in warning.value.lower() for warning in stale.warning)
     monkeypatch.setattr(freshness, "utc_now", lambda: NOW + timedelta(days=8))
@@ -567,7 +635,7 @@ def test_freshness_banner_uses_selected_capture_and_uncached_clock(
     ],
 )
 def test_outdated_warehouse_missing_operational_completeness_stops_cleanly(
-    fixture_project_root: Path,
+    registry_preset_project_root: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     page_script: str,
@@ -575,20 +643,24 @@ def test_outdated_warehouse_missing_operational_completeness_stops_cleanly(
     import shutil
 
     import streamlit as st
+    import yaml
     from components import data
     from streamlit.testing.v1 import AppTest
 
     from src.config import get_config
 
     dest = tmp_path / "stale_warehouse"
-    shutil.copytree(fixture_project_root, dest, symlinks=True)
+    shutil.copytree(registry_preset_project_root, dest, symlinks=True)
+    shared = yaml.safe_load((ROOT / "config/profiles/adrd.yml").read_text())
+    shared["profile"].update(id="shared_preset", display_name="Shared Preset")
+    (dest / "config/profiles/shared_preset.yml").write_text(yaml.safe_dump(shared))
     db_file = dest / "data" / "warehouse" / "clinical_trials.duckdb"
 
     con = duckdb.connect(str(db_file))
     con.execute(
-        "create or replace table main_marts.mart_feasibility_priority_queue as "
+        "create or replace table main_marts.mart_registry_feasibility_priority_queue as "
         "select * exclude (operational_completeness_share) "
-        "from main_marts.mart_feasibility_priority_queue"
+        "from main_marts.mart_registry_feasibility_priority_queue"
     )
     con.close()
 
