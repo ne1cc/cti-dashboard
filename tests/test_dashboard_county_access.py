@@ -9,7 +9,6 @@ quietly change.
 import csv
 import io
 import json
-import shutil
 import sys
 import tomllib
 from pathlib import Path
@@ -256,7 +255,6 @@ def test_geojson_covers_every_seeded_county():
 
 @pytest.fixture(autouse=True)
 def _clear_streamlit_caches():
-    import streamlit as st
 
     st.cache_data.clear()
     st.cache_resource.clear()
@@ -266,14 +264,21 @@ def _clear_streamlit_caches():
 
 
 @pytest.fixture
-def fixture_warehouse(fixture_project_root: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Serve the session two-profile warehouse to the dashboard pages (as the smoke tests do)."""
+def fixture_warehouse(registry_preset_project_root: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Serve the canonical registry warehouse to the dashboard pages."""
+    import yaml
+
     from src.config import get_config
 
-    monkeypatch.setenv("CTI_PROJECT_ROOT", str(fixture_project_root))
+    shared = yaml.safe_load((ROOT / "config/profiles/adrd.yml").read_text())
+    shared["profile"].update(id="shared_preset", display_name="Shared Preset")
+    (registry_preset_project_root / "config/profiles/shared_preset.yml").write_text(
+        yaml.safe_dump(shared), encoding="utf-8"
+    )
+    monkeypatch.setenv("CTI_PROJECT_ROOT", str(registry_preset_project_root))
     get_config.cache_clear()
-    monkeypatch.chdir(fixture_project_root)
-    return fixture_project_root
+    monkeypatch.chdir(registry_preset_project_root)
+    return registry_preset_project_root
 
 
 # --- page -----------------------------------------------------------------------------
@@ -283,9 +288,31 @@ def _page(monkeypatch, frame):
     from streamlit.testing.v1 import AppTest
 
     monkeypatch.setattr(data, "county_access", lambda preset: frame)
+    monkeypatch.setattr(data, "condition_geography_trends", lambda preset: _trends_frame())
     return AppTest.from_file(
         str(ROOT / "dashboard/pages/3_Geography_Trends.py"), default_timeout=60
     ).run()
+
+
+def _trends_frame():
+    return pd.DataFrame(
+        [
+            {
+                "condition_group": "alzheimers_disease",
+                "activity_month": pd.Timestamp("2026-09-01"),
+                "state_normalized": "MD",
+                "latest_snapshot_date": pd.Timestamp("2026-09-15"),
+                "trial_count": 1,
+                "recruiting_trial_count": 1,
+                "sponsor_count": 1,
+                "newly_registered_in_month": 0,
+                "recruiting_trials_per_100k": 0.1,
+                "recruiting_growth_3m": None,
+                "observed_history_days": 14,
+                "recruiting_count_3m_baseline": None,
+            }
+        ]
+    )
 
 
 def test_page_shows_context_and_compares_two_conditions(fixture_warehouse, monkeypatch):
@@ -311,18 +338,16 @@ def test_page_shows_context_and_compares_two_conditions(fixture_warehouse, monke
     assert len(csvs) == 2  # one CSV per condition
 
 
-def test_page_without_county_rows_still_explains_and_never_shows_zero(fixture_warehouse):
-    from streamlit.testing.v1 import AppTest
-
-    at = AppTest.from_file(
-        str(ROOT / "dashboard/pages/3_Geography_Trends.py"), default_timeout=60
-    ).run()
+def test_page_without_county_rows_still_explains_and_never_shows_zero(
+    fixture_warehouse, monkeypatch
+):
+    at = _page(monkeypatch, pd.DataFrame(columns=COLUMNS))
     assert not at.exception, at.exception
     assert any(i.value.startswith(ca.MEANING) and "seeded counties" in i.value for i in at.info)
     assert any("no county is shown as zero" in c.value for c in at.caption)
 
 
-def test_reader_is_profile_scoped_and_empty_mart_is_an_empty_frame(fixture_warehouse):
+def test_reader_is_preset_scoped_and_empty_mart_is_an_empty_frame(fixture_warehouse):
     from tests.preset_helpers import preset_for
 
     frame = data.county_access(preset_for("adrd"))
@@ -331,27 +356,44 @@ def test_reader_is_profile_scoped_and_empty_mart_is_an_empty_frame(fixture_wareh
 
 
 def test_reader_sql_runs_against_the_warehouse_mart(fixture_warehouse, tmp_path, monkeypatch):
-    """The reader's SQL and the component's columns, against the real mart table.
+    """The reader's SQL and the component's columns, against the real registry mart table.
 
-    The fixture mart is empty, so a copy of the warehouse gets one row built from the
-    component's own column list. A mart column rename or a reader typo fails here, not at
-    runtime on a user's page.
+    The fixture mart is empty, so a copy of the warehouse gets rows built from the
+    component's own column list (one for ADRD's MeSH node D000544 and one for an
+    unrelated node D002289). A mart column rename or a reader scoping regression fails
+    here, not at runtime on a user's page.
     """
+    import shutil
+
     import duckdb
 
+    from src.presets import registry_condition_key
     from tests.preset_helpers import preset_for
 
     copy = tmp_path / "warehouse.duckdb"
     shutil.copyfile(data.warehouse_path(), copy)
+    mart_cols = [c for c in COLUMNS if c != "indication_profile_id"] + ["registry_condition_key"]
     with duckdb.connect(str(copy)) as con:
-        mart = "main_marts.mart_trial_access_by_geo"
+        mart = "main_marts.mart_registry_trial_access_by_geo"
         present = {r[0] for r in con.execute(f"select * from {mart} limit 0").description}
-        assert set(COLUMNS) <= present, set(COLUMNS) - present
+        assert set(mart_cols) <= present, set(mart_cols) - present
         if con.execute(f"select count(*) from {mart}").fetchone()[0] == 0:
-            row = pd.DataFrame([_row("24001", "Allegany County", 60_000, "rural", None)])
-            row = row.assign(indication_profile_id=preset_for("adrd").profile_id)
-            con.register("seed_row", row)
-            columns = ", ".join(COLUMNS)
+            adrd_row = _row("24001", "Allegany County", 60_000, "rural", None, "Alzheimer Disease")
+            adrd_row["mesh_id"] = "D000544"
+            adrd_row["registry_condition_key"] = registry_condition_key("D000544")
+            other_row = _row(
+                "24001",
+                "Allegany County",
+                60_000,
+                "rural",
+                None,
+                "Carcinoma, Non-Small-Cell Lung",
+            )
+            other_row["mesh_id"] = "D002289"
+            other_row["registry_condition_key"] = registry_condition_key("D002289")
+            seed = pd.DataFrame([adrd_row, other_row])[mart_cols]
+            con.register("seed_row", seed)
+            columns = ", ".join(mart_cols)
             con.execute(f"insert into {mart} ({columns}) select {columns} from seed_row")
     monkeypatch.setattr(data, "warehouse_path", lambda: copy)
     st.cache_resource.clear()
@@ -359,7 +401,8 @@ def test_reader_sql_runs_against_the_warehouse_mart(fixture_warehouse, tmp_path,
 
     frame = data.county_access(preset_for("adrd"))
     assert set(COLUMNS) <= set(frame.columns) and not frame.empty
-    assert set(frame["indication_profile_id"]) == {preset_for("adrd").profile_id}
+    assert set(frame["indication_profile_id"]) == {"adrd"}
+    assert set(frame["mesh_id"]) == {"D000544"}
     classified = ca.classify(frame, 100)
     ca.build_figure(classified, 100, ca.METRIC_POPULATION)
     ca.access_table(classified, 100)

@@ -185,7 +185,7 @@ st.download_button(
 selected_rows = (
     queue_event.get("selection", {}).get("rows", []) if isinstance(queue_event, dict) else []
 )
-if selected_rows:
+if selected_rows and 0 <= selected_rows[0] < len(filtered):
     segment = filtered.iloc[selected_rows[0]]
     st.subheader(
         f"Segment details — {format_condition_group(segment['condition_group'], profile_id)} · "
