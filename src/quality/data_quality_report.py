@@ -39,6 +39,7 @@ class Report:
     checks_total: int
     checks_failed: int
     registry_checks_failed: int = 0
+    registry_checks_total: int = 0
 
 
 def _fmt(value: object) -> str:
@@ -326,4 +327,5 @@ def build_report(cfg: ProjectConfig | None = None, output_path: Path | None = No
         checks_total=len(checks),
         checks_failed=legacy_failed,
         registry_checks_failed=registry_failed,
+        registry_checks_total=len(registry_checks),
     )

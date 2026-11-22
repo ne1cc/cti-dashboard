@@ -258,7 +258,7 @@ def main(argv: list[str] | None = None) -> int:
             log.error(
                 "Quality report: {}/{} reconciliation checks FAILED; see {}",
                 report.checks_failed,
-                report.checks_total,
+                report.checks_total - report.registry_checks_total,
                 report.path,
             )
             return 1
