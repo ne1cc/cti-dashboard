@@ -348,7 +348,7 @@ paths:
             type: string
         - name: indication_profile_id
           in: query
-          description: Filter conditions scoped to an active indication profile (e.g. adrd, oncology_nsclc).
+          description: Filter conditions scoped to an active preset / indication profile compatibility mapping (e.g. adrd, oncology_nsclc).
           required: false
           schema:
             type: string
@@ -393,7 +393,8 @@ paths:
       summary: Retrieve comparable clinical trials and factor scoring
       description: |
         Returns the top-ranked comparable trials based on deterministic design feature scoring
-        from Gold mart `mart_trial_similarity`. Exposes individual factor weights and match status
+        over the canonical registry-grain warehouse tables (with legacy `mart_trial_similarity` fallback).
+        Exposes individual factor weights and match status
         (condition, phase, geography, intervention, study design, eligibility, enrollment band).
         This is an objective study-design comparability signal, NOT a clinical equivalence claim.
       operationId: getRelatedTrials
@@ -523,7 +524,7 @@ paths:
       parameters:
         - name: indication_profile_id
           in: query
-          description: Optional indication profile identifier filter.
+          description: Optional preset / indication profile compatibility identifier filter.
           required: false
           schema:
             type: string
@@ -1894,11 +1895,11 @@ components:
           example: 'v2'
         total_studies_tracked:
           type: integer
-          description: Rows in `dim_trial` for this profile.
+          description: Rows in `dim_registry_trial` (or legacy `dim_trial`) for this preset / profile.
           example: 1482
         row_counts:
           type: object
-          description: Warehouse mart row counts for this profile, keyed by table name.
+          description: Warehouse mart row counts for this preset / profile, keyed by table name.
           additionalProperties:
             type: integer
           example:

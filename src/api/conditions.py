@@ -183,23 +183,73 @@ def _fetch_warehouse_counts(
     try:
         pool = warehouse.pool
         with pool.acquire() as conn:
-            # Check if dim_condition exists
-            has_dim_cond = bool(
-                conn.execute(
-                    "SELECT 1 FROM information_schema.tables WHERE table_name = 'dim_condition';"
-                ).fetchone()
-            )
-            if has_dim_cond:
-                query = """
+            tables = {
+                str(row[0]).lower()
+                for row in conn.execute(
+                    "SELECT table_name FROM information_schema.tables;"
+                ).fetchall()
+            }
+            has_dim_cond = "dim_registry_condition" in tables
+            has_bridge = "bridge_registry_trial_condition" in tables
+            has_dim_trial = "dim_registry_trial" in tables
+            has_preset_bridge = "bridge_preset_trial" in tables
+
+            if indication_profile_id is None:
+                if has_dim_cond:
+                    query = """
+                    SELECT
+                        mesh_id,
+                        lower(condition_normalized) AS norm_name,
+                        sum(trial_count) AS total
+                    FROM dim_registry_condition
+                    GROUP BY mesh_id, lower(condition_normalized);
+                    """
+                    for row in conn.execute(query).fetchall():
+                        m_id, name, cnt = row
+                        count = int(cnt or 0)
+                        if m_id:
+                            mid_clean = m_id.upper()
+                            total_counts[mid_clean] = total_counts.get(mid_clean, 0) + count
+                        if name:
+                            name_clean = _clean_str(name)
+                            total_counts[name_clean] = total_counts.get(name_clean, 0) + count
+
+                if has_bridge and has_dim_trial:
+                    active_query = """
+                    SELECT
+                        b.mesh_id,
+                        lower(b.condition_group) AS term_norm,
+                        count(DISTINCT b.nct_id) AS active_cnt
+                    FROM bridge_registry_trial_condition b
+                    JOIN dim_registry_trial t ON b.registry_trial_key = t.registry_trial_key
+                    WHERE t.current_overall_status IN (
+                        'RECRUITING', 'ENROLLING_BY_INVITATION', 'ACTIVE_NOT_RECRUITING'
+                    )
+                    GROUP BY b.mesh_id, lower(b.condition_group);
+                    """
+                    for row in conn.execute(active_query).fetchall():
+                        m_id, term, cnt = row
+                        count = int(cnt or 0)
+                        if m_id:
+                            mid_clean = m_id.upper()
+                            active_counts[mid_clean] = active_counts.get(mid_clean, 0) + count
+                        if term:
+                            term_clean = _clean_str(term)
+                            active_counts[term_clean] = active_counts.get(term_clean, 0) + count
+            elif has_bridge and has_preset_bridge:
+                scoped_query = """
                 SELECT
-                    mesh_id,
-                    lower(condition_normalized) AS norm_name,
-                    sum(trial_count) AS total
-                FROM dim_condition
-                WHERE ($1 IS NULL OR indication_profile_id = $1)
-                GROUP BY mesh_id, lower(condition_normalized);
+                    b.mesh_id,
+                    lower(b.condition_group) AS norm_name,
+                    count(DISTINCT b.nct_id) AS total
+                FROM bridge_registry_trial_condition b
+                JOIN bridge_preset_trial bp
+                  ON b.nct_id = bp.nct_id
+                 AND bp.current_record_flag = TRUE
+                WHERE bp.preset_id = $1
+                GROUP BY b.mesh_id, lower(b.condition_group);
                 """
-                for row in conn.execute(query, [indication_profile_id]).fetchall():
+                for row in conn.execute(scoped_query, [indication_profile_id]).fetchall():
                     m_id, name, cnt = row
                     count = int(cnt or 0)
                     if m_id:
@@ -213,45 +263,39 @@ def _fetch_warehouse_counts(
                         if scoped_conditions is not None:
                             scoped_conditions.add(name_clean)
 
-            # Check if bridge_trial_condition and dim_trial exist for active counts
-            has_bridge = bool(
-                conn.execute(
-                    "SELECT 1 FROM information_schema.tables "
-                    "WHERE table_name = 'bridge_trial_condition';"
-                ).fetchone()
-            )
-            has_dim_trial = bool(
-                conn.execute(
-                    "SELECT 1 FROM information_schema.tables WHERE table_name = 'dim_trial';"
-                ).fetchone()
-            )
-            if has_bridge and has_dim_trial:
-                active_query = """
-                SELECT
-                    b.mesh_id,
-                    lower(b.condition_group) AS term_norm,
-                    count(DISTINCT b.nct_id) AS active_cnt
-                FROM bridge_trial_condition b
-                JOIN dim_trial t ON b.trial_key = t.trial_key
-                WHERE t.current_overall_status IN (\
-                    'RECRUITING', 'ENROLLING_BY_INVITATION', 'ACTIVE_NOT_RECRUITING'\
-                )
-                  AND ($1 IS NULL OR b.indication_profile_id = $1)
-                GROUP BY b.mesh_id, lower(b.condition_group);
-                """
-                for row in conn.execute(active_query, [indication_profile_id]).fetchall():
-                    m_id, term, cnt = row
-                    count = int(cnt or 0)
-                    if m_id:
-                        mid_clean = m_id.upper()
-                        active_counts[mid_clean] = active_counts.get(mid_clean, 0) + count
-                        if scoped_conditions is not None:
-                            scoped_conditions.add(mid_clean)
-                    if term:
-                        term_clean = _clean_str(term)
-                        active_counts[term_clean] = active_counts.get(term_clean, 0) + count
-                        if scoped_conditions is not None:
-                            scoped_conditions.add(term_clean)
+                if has_dim_trial:
+                    scoped_active_query = """
+                    SELECT
+                        b.mesh_id,
+                        lower(b.condition_group) AS term_norm,
+                        count(DISTINCT b.nct_id) AS active_cnt
+                    FROM bridge_registry_trial_condition b
+                    JOIN bridge_preset_trial bp
+                      ON b.nct_id = bp.nct_id
+                     AND bp.current_record_flag = TRUE
+                    JOIN dim_registry_trial t
+                      ON b.registry_trial_key = t.registry_trial_key
+                    WHERE t.current_overall_status IN (
+                        'RECRUITING', 'ENROLLING_BY_INVITATION', 'ACTIVE_NOT_RECRUITING'
+                    )
+                      AND bp.preset_id = $1
+                    GROUP BY b.mesh_id, lower(b.condition_group);
+                    """
+                    for row in conn.execute(
+                        scoped_active_query, [indication_profile_id]
+                    ).fetchall():
+                        m_id, term, cnt = row
+                        count = int(cnt or 0)
+                        if m_id:
+                            mid_clean = m_id.upper()
+                            active_counts[mid_clean] = active_counts.get(mid_clean, 0) + count
+                            if scoped_conditions is not None:
+                                scoped_conditions.add(mid_clean)
+                        if term:
+                            term_clean = _clean_str(term)
+                            active_counts[term_clean] = active_counts.get(term_clean, 0) + count
+                            if scoped_conditions is not None:
+                                scoped_conditions.add(term_clean)
     except Exception as err:
         logger.debug("Failed querying warehouse condition counts: %s", err)
 

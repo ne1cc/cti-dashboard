@@ -38,7 +38,8 @@ def client(warehouse_path: Path) -> Generator[TestClient, None, None]:
 def _set_criteria(path: Path, text: str) -> None:
     con = duckdb.connect(str(path))
     con.execute(
-        "UPDATE stg_trials SET eligibility_criteria_text = ? WHERE nct_id = 'NCT00000001'", [text]
+        "UPDATE stg_registry_trials SET eligibility_criteria_text = ? WHERE nct_id = 'NCT00000001'",
+        [text],
     )
     con.close()
 
@@ -111,7 +112,7 @@ def test_detail_page_has_no_eligibility_claim_when_related_trials_are_eligibilit
 ):
     con = duckdb.connect(str(warehouse_path))
     con.execute(
-        "UPDATE stg_trials SET sex = 'ALL', healthy_volunteers = false, "
+        "UPDATE stg_registry_trials SET sex = 'ALL', healthy_volunteers = false, "
         "minimum_age_years = 18, maximum_age_years = 80"
     )
     con.close()

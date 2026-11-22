@@ -227,9 +227,9 @@ def test_live_backend_unknown_postal_code_returns_400() -> None:
 def _add_seattle_site_without_geopoint(warehouse_db: Path) -> None:
     con = duckdb.connect(str(warehouse_db))
     con.execute("""
-    INSERT INTO stg_trial_locations VALUES
-    ('run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
-     'page=00001.json', 1, 'adrd', 'NCT00000004', 2,
+    INSERT INTO stg_registry_trial_locations VALUES
+    (md5('NCT00000004'), 'run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
+     'page=00001.json', 1, 'NCT00000004', 2,
      'Seattle Neuro Site', 'seattle neuro site',
      'Seattle', 'seattle',
      'WA', 'WA', '98101', 'United States', 'US',
@@ -273,9 +273,9 @@ def test_city_centroid_fallback_when_zip_missing(
 ) -> None:
     con = duckdb.connect(str(warehouse_db))
     con.execute("""
-    INSERT INTO stg_trial_locations VALUES
-    ('run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
-     'page=00001.json', 1, 'adrd', 'NCT00000002', 2,
+    INSERT INTO stg_registry_trial_locations VALUES
+    (md5('NCT00000002'), 'run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
+     'page=00001.json', 1, 'NCT00000002', 2,
      'Boston Second Campus', 'boston second campus',
      'Boston', 'boston',
      'MA', 'MA', NULL, 'United States', 'US',
@@ -297,9 +297,9 @@ def test_site_without_any_coordinates_excluded_from_radius(
 ) -> None:
     con = duckdb.connect(str(warehouse_db))
     con.execute("""
-    INSERT INTO stg_trial_locations VALUES
-    ('run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
-     'page=00001.json', 1, 'oncology_nsclc', 'NCT00000003', 1,
+    INSERT INTO stg_registry_trial_locations VALUES
+    (md5('NCT00000003'), 'run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
+     'page=00001.json', 1, 'NCT00000003', 1,
      'Mystery Site', 'mystery site',
      'Nowhere', 'nowhere',
      'ZZ', 'UNKNOWN', NULL, 'United States', 'US',
@@ -331,9 +331,9 @@ def test_non_recruiting_site_never_nearest(
 ) -> None:
     con = duckdb.connect(str(warehouse_db))
     con.execute("""
-    INSERT INTO stg_trial_locations VALUES
-    ('run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
-     'page=00001.json', 1, 'adrd', 'NCT00000001', 3,
+    INSERT INTO stg_registry_trial_locations VALUES
+    (md5('NCT00000001'), 'run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
+     'page=00001.json', 1, 'NCT00000001', 3,
      'SF Inactive Annex', 'sf inactive annex',
      'San Francisco', 'san francisco',
      'CA', 'CA', '94143', 'United States', 'US',
@@ -354,9 +354,9 @@ def test_site_with_unknown_status_excluded(
 ) -> None:
     con = duckdb.connect(str(warehouse_db))
     con.execute("""
-    INSERT INTO stg_trial_locations VALUES
-    ('run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
-     'page=00001.json', 1, 'adrd', 'NCT00000001', 4,
+    INSERT INTO stg_registry_trial_locations VALUES
+    (md5('NCT00000001'), 'run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
+     'page=00001.json', 1, 'NCT00000001', 4,
      'SF Status Unknown', 'sf status unknown',
      'San Francisco', 'san francisco',
      'CA', 'CA', '94143', 'United States', 'US',
@@ -381,22 +381,22 @@ def test_postal_code_plus_condition_sorts_by_distance_by_default(
     # -updated order is the reverse of distance order and the default-sort
     # assertion below actually discriminates the distance behavior.
     con.execute("""
-    INSERT INTO stg_trial_locations VALUES
-    ('run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
-     'page=00001.json', 1, 'adrd', 'NCT00000002', 2,
+    INSERT INTO stg_registry_trial_locations VALUES
+    (md5('NCT00000002'), 'run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
+     'page=00001.json', 1, 'NCT00000002', 2,
      'East Bay Memory Clinic', 'east bay memory clinic',
      'Oakland', 'oakland',
      'CA', 'CA', '94612', 'United States', 'US',
      37.8044, -122.2712, 'RECRUITING', true, true, 'h10');
     """)
     con.execute(
-        "UPDATE stg_trials SET last_update_post_date = DATE '2026-07-01'"
+        "UPDATE stg_registry_trials SET last_update_post_date = DATE '2026-07-01'"
         " WHERE nct_id = 'NCT00000002'"
     )
     con.execute("""
-    INSERT INTO stg_trial_conditions VALUES
-    ('run_01', 'adrd', 'NCT00000002', 'Dementia',
-     'dementia', 'Alzheimer Disease', true, 0.9, 'hc6');
+    INSERT INTO stg_registry_trial_conditions VALUES
+    (md5('NCT00000002'), 'run_01', 'snap_20260901', 'NCT00000002', 'Dementia',
+     'dementia', 'Alzheimer Disease', true, 0.9, 'yaml_overlay', 'hc6');
     """)
     con.close()
     resp = client_gazetteer_warehouse.get("/v1/trials?postal_code=94143&radius_mi=50&cond=dementia")
@@ -430,9 +430,9 @@ def test_ambiguous_city_name_resolves_one_fixed_centroid(
     as detail.sql), never to whichever twin is closest to the user."""
     con = duckdb.connect(str(warehouse_db))
     con.execute("""
-    INSERT INTO stg_trial_locations VALUES
-    ('run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
-     'page=00001.json', 1, 'adrd', 'NCT00000002', 2,
+    INSERT INTO stg_registry_trial_locations VALUES
+    (md5('NCT00000002'), 'run_01', 'snap_20260901', '2026-09-01 12:00:00Z',
+     'page=00001.json', 1, 'NCT00000002', 2,
      'Springfield Clinic', 'springfield clinic',
      'Springfield', 'springfield',
      'TX', 'TX', NULL, 'United States', 'US',

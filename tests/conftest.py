@@ -4,6 +4,7 @@ import subprocess
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -1132,3 +1133,113 @@ def change_radar_runs() -> list[FixtureRun]:
 @pytest.fixture
 def change_radar_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return _build_fixture_root(tmp_path_factory, "fixture_change_radar", change_radar_runs())
+
+
+# --- Registry-grain similarity parity fixture (issue #173 / PR #188) ----------
+def _registry_similarity_runs() -> list[FixtureRun]:
+    """Small canonical full_catalog run covering similarity comparability factors.
+
+    Populates mart_registry_trial_similarity with real rows:
+    - NCT00000001: Target trial (Phase 3, CA, 'Alzheimer Disease', MeSH D000544/D001523)
+    - NCT00000002: Pair sharing condition and state (Phase 3, CA, 'Alzheimer Disease')
+    - NCT00000007: Pair sharing condition, different state (Phase 3, FL, 'Alzheimer Disease')
+    - NCT00000008: Trial with no sites (Phase 3, locations: [], 'Alzheimer Disease')
+    - NCT00000005: Pair sharing only state (Phase 3, CA, MeSH ancestor D001523 only)
+    """
+    mesh_adrd = {
+        "conditionBrowseModule": {
+            "meshes": [{"id": "D000544", "term": "Alzheimer Disease"}],
+            "ancestors": [{"id": "D001523", "term": "Mental Disorders"}],
+        }
+    }
+    study_overrides: dict[str, Any] = {
+        "NCT00000001": {
+            "derivedSection": mesh_adrd,
+            "designModule": {
+                "phases": ["PHASE3"],
+                "designInfo": {
+                    "allocation": "RANDOMIZED",
+                    "primaryPurpose": "TREATMENT",
+                },
+            },
+        },
+        "NCT00000002": {
+            "derivedSection": mesh_adrd,
+            "designModule": {"phases": ["PHASE3"]},
+            "conditionsModule": {"conditions": ["Alzheimer Disease"]},
+            "armsInterventionsModule": {
+                "interventions": [{"name": "Donepezil 10mg", "type": "Drug"}]
+            },
+            "contactsLocationsModule": {
+                "locations": [
+                    {
+                        "facility": "UCSF",
+                        "city": "San Francisco",
+                        "state": "California",
+                        "country": "United States",
+                    }
+                ]
+            },
+        },
+        "NCT00000007": {
+            "derivedSection": mesh_adrd,
+            "designModule": {"phases": ["PHASE3"]},
+            "conditionsModule": {"conditions": ["Alzheimer Disease"]},
+            "contactsLocationsModule": {
+                "locations": [
+                    {
+                        "facility": "Mayo",
+                        "city": "Jacksonville",
+                        "state": "Florida",
+                        "country": "United States",
+                    }
+                ]
+            },
+        },
+        "NCT00000008": {
+            "derivedSection": mesh_adrd,
+            "designModule": {"phases": ["PHASE3"]},
+            "conditionsModule": {"conditions": ["Alzheimer Disease"]},
+            "contactsLocationsModule": {"locations": []},
+        },
+        "NCT00000005": {
+            "derivedSection": {
+                "conditionBrowseModule": {
+                    "meshes": [{"id": "D001523", "term": "Mental Disorders"}],
+                    "ancestors": [],
+                }
+            },
+            "designModule": {"phases": ["PHASE3"]},
+            "conditionsModule": {"conditions": ["Cognitive Health"]},
+            "contactsLocationsModule": {
+                "locations": [
+                    {
+                        "facility": "Stanford",
+                        "city": "Palo Alto",
+                        "state": "California",
+                        "country": "United States",
+                    }
+                ]
+            },
+        },
+    }
+    return [
+        FixtureRun(
+            profile="full_catalog",
+            run_id="20260901T120000Z_reg_sim",
+            started_at=datetime(2026, 9, 1, 12, tzinfo=UTC),
+            condition="",
+            fixture_dir="bronze_snapshot",
+            study_overrides=study_overrides,
+        )
+    ]
+
+
+@pytest.fixture(scope="session")
+def registry_similarity_project_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Fixture warehouse with canonical registry-grain similarity mart rows."""
+    return _build_fixture_root(
+        tmp_path_factory,
+        "registry_similarity",
+        _registry_similarity_runs(),
+    )
